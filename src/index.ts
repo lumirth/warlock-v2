@@ -451,7 +451,7 @@ app.get('/api/course/:subject/:number', async (c) => {
     );
     const primaryInstructor = lectureSection?.meetings[0]?.instructors[0];
     const primaryInstructorName = primaryInstructor
-      ? `${primaryInstructor.lastName}, ${primaryInstructor.firstName.charAt(0)}`
+      ? `${primaryInstructor.lastName}${primaryInstructor.firstName ? `, ${primaryInstructor.firstName.charAt(0)}` : ''}`
       : null;
 
     // Upsert course
@@ -504,9 +504,9 @@ app.get('/api/course/:subject/:number', async (c) => {
         enrollmentStatus: section.enrollmentStatus,
         type: meeting?.type,
         days: meeting?.daysOfTheWeek,
-        startTime: convertTo24Hour(meeting?.start || ''),
-        endTime: convertTo24Hour(meeting?.end || ''),
-        location: meeting ? `${meeting.buildingName} ${meeting.roomNumber}`.trim() : null,
+        startTime: convertTo24Hour(meeting?.start || '') || null,
+        endTime: convertTo24Hour(meeting?.end || '') || null,
+        location: meeting ? `${meeting.buildingName} ${meeting.roomNumber}`.trim() || null : null,
         instructor: instructorName
       });
     }
@@ -531,7 +531,7 @@ app.get('/api/course/:subject/:number', async (c) => {
     });
 
   } catch (error) {
-    return c.json({ error: String(error) }, 500);
+    return c.json({ error: 'Internal server error' }, 500);
   }
 });
 
