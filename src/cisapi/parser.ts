@@ -7,6 +7,7 @@ import type {
   CISAPIInstructor,
   CISAPIGenEd
 } from './types.js';
+import { Parser } from 'htmlparser2';
 
 // Simple XML parser for Workers (no external dependencies)
 // CISAPI returns well-formed XML, so we can use regex-based parsing
@@ -224,115 +225,119 @@ export interface ParsedCascadeSection {
   instructors: { firstName: string; lastName: string }[];
 }
 
-export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade | null {
-  const subjectIdMatch = xml.match(/<ns2:subject[^>]*id="([^"]+)"/);
-  const labelMatch = xml.match(/<label>([^<]+)<\/label>/);
+export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
+  const result: ParsedSubjectCascade = { subjectId: '', subjectLabel: '', courses: [] };
+  let currentCourse: ParsedCascadeCourse | null = null;
+  let currentSection: ParsedCascadeSection | null = null;
+  let currentInstructor: { firstName: string; lastName: string } | null = null;
+  let currentText = '';
+  let inMeeting = false;
 
-  if (!subjectIdMatch) return null;
+  const parser = new Parser({
+    onopentag(name, attrs) {
+      currentText = '';
 
-  const subjectId = subjectIdMatch[1];
-  const subjectLabel = labelMatch?.[1] ?? subjectId;
-
-  const courses: ParsedCascadeCourse[] = [];
-
-  // Match cascadingCourse blocks
-  const courseBlockRegex = /<cascadingCourse[^>]*id="([^"]+)"[^>]*>[\s\S]*?<\/cascadingCourse>/g;
-  let courseMatch;
-
-  while ((courseMatch = courseBlockRegex.exec(xml)) !== null) {
-    const block = courseMatch[0];
-    const courseId = courseMatch[1];
-
-    const titleMatch = block.match(/<label>([^<]*)<\/label>/);
-    const descMatch = block.match(/<description>([^<]*)<\/description>/);
-    const creditMatch = block.match(/<creditHours>([^<]*)<\/creditHours>/);
-
-    // Parse genEd categories
-    const genEdCategories: string[] = [];
-    const genEdRegex = /<category[^>]*id="([^"]+)"/g;
-    let genEdMatch;
-    while ((genEdMatch = genEdRegex.exec(block)) !== null) {
-      genEdCategories.push(genEdMatch[1]);
-    }
-
-    // Parse sections
-    const sections = parseCascadeSections(block);
-
-    // Extract just the course number from "AAS 100" format
-    const courseNumber = courseId.split(' ').pop() ?? courseId;
-
-    courses.push({
-      id: courseNumber,
-      subject: subjectId,
-      title: titleMatch?.[1] ?? '',
-      description: descMatch?.[1]?.trim() ?? '',
-      creditHours: creditMatch?.[1] ?? '',
-      genEdCategories,
-      sections
-    });
-  }
-
-  return { subjectId, subjectLabel, courses };
-}
-
-function parseCascadeSections(courseXml: string): ParsedCascadeSection[] {
-  const sections: ParsedCascadeSection[] = [];
-
-  const sectionBlockRegex = /<section[^>]*id="([^"]+)"[^>]*>[\s\S]*?<\/section>/g;
-  let sectionMatch;
-
-  while ((sectionMatch = sectionBlockRegex.exec(courseXml)) !== null) {
-    const block = sectionMatch[0];
-    const crn = sectionMatch[1];
-
-    const sectionNumberMatch = block.match(/<sectionNumber>([^<]*)<\/sectionNumber>/);
-    const enrollmentStatusMatch = block.match(/<enrollmentStatus>([^<]*)<\/enrollmentStatus>/);
-
-    // Parse first meeting
-    const meetingMatch = block.match(/<meeting>[\s\S]*?<\/meeting>/);
-    let type = '', startTime = '', endTime = '', days = '', building = '', room = '';
-    const instructors: { firstName: string; lastName: string }[] = [];
-
-    if (meetingMatch) {
-      const meeting = meetingMatch[0];
-      const typeMatch = meeting.match(/<type[^>]*>([^<]*)<\/type>/);
-      const startMatch = meeting.match(/<start>([^<]*)<\/start>/);
-      const endMatch = meeting.match(/<end>([^<]*)<\/end>/);
-      const daysMatch = meeting.match(/<daysOfTheWeek>([^<]*)<\/daysOfTheWeek>/);
-      const buildingMatch = meeting.match(/<buildingName>([^<]*)<\/buildingName>/);
-      const roomMatch = meeting.match(/<roomNumber>([^<]*)<\/roomNumber>/);
-
-      type = typeMatch?.[1] ?? '';
-      startTime = startMatch?.[1] ?? '';
-      endTime = endMatch?.[1] ?? '';
-      days = daysMatch?.[1] ?? '';
-      building = buildingMatch?.[1] ?? '';
-      room = roomMatch?.[1] ?? '';
-
-      // Parse instructors
-      const instructorRegex = /<instructor>[\s\S]*?<firstName>([^<]*)<\/firstName>[\s\S]*?<lastName>([^<]*)<\/lastName>[\s\S]*?<\/instructor>/g;
-      let instructorMatch;
-      while ((instructorMatch = instructorRegex.exec(meeting)) !== null) {
-        instructors.push({
-          firstName: instructorMatch[1],
-          lastName: instructorMatch[2]
-        });
+      if (name === 'ns2:subject') {
+        result.subjectId = attrs.id || '';
       }
-    }
+      if (name === 'cascadingCourse') {
+        const courseId = (attrs.id || '').split(' ').pop() ?? attrs.id;
+        currentCourse = {
+          id: courseId,
+          subject: result.subjectId,
+          title: '',
+          description: '',
+          creditHours: '',
+          genEdCategories: [],
+          sections: []
+        };
+        result.courses.push(currentCourse);
+      }
+      if (name === 'detailedSection' && currentCourse) {
+        currentSection = {
+          crn: attrs.id || '',
+          sectionNumber: '',
+          enrollmentStatus: '',
+          type: '',
+          startTime: '',
+          endTime: '',
+          daysOfTheWeek: '',
+          buildingName: '',
+          roomNumber: '',
+          instructors: []
+        };
+        currentCourse.sections.push(currentSection);
+      }
+      if (name === 'meeting') {
+        inMeeting = true;
+      }
+      if (name === 'instructor' && currentSection) {
+        currentInstructor = { firstName: '', lastName: '' };
+      }
+      if (name === 'category' && currentCourse && attrs.id) {
+        currentCourse.genEdCategories.push(attrs.id);
+      }
+    },
+    ontext(text) {
+      currentText += text;
+    },
+    onclosetag(name) {
+      const text = currentText.trim();
 
-    sections.push({
-      crn,
-      sectionNumber: sectionNumberMatch?.[1] ?? '',
-      enrollmentStatus: enrollmentStatusMatch?.[1] ?? 'Unknown',
-      type,
-      startTime: convertTo24Hour(startTime),
-      endTime: convertTo24Hour(endTime),
-      daysOfTheWeek: days,
-      buildingName: building,
-      roomNumber: room,
-      instructors
-    });
+      // Subject-level
+      if (name === 'label' && !currentCourse) {
+        result.subjectLabel = text;
+      }
+
+      // Course-level fields (when not in a section)
+      if (currentCourse && !currentSection) {
+        if (name === 'label') currentCourse.title = text;
+        if (name === 'description') currentCourse.description = text;
+        if (name === 'creditHours') currentCourse.creditHours = text;
+      }
+
+      // Section-level fields
+      if (currentSection) {
+        if (name === 'sectionNumber') currentSection.sectionNumber = text;
+        if (name === 'enrollmentStatus') currentSection.enrollmentStatus = text;
+      }
+
+      // Meeting-level fields
+      if (currentSection && inMeeting) {
+        if (name === 'type') currentSection.type = text;
+        if (name === 'start') currentSection.startTime = convertTo24Hour(text);
+        if (name === 'end') currentSection.endTime = convertTo24Hour(text);
+        if (name === 'daysOfTheWeek') currentSection.daysOfTheWeek = text;
+        if (name === 'buildingName') currentSection.buildingName = text;
+        if (name === 'roomNumber') currentSection.roomNumber = text;
+      }
+
+      // Instructor fields
+      if (currentInstructor) {
+        if (name === 'firstName') currentInstructor.firstName = text;
+        if (name === 'lastName') currentInstructor.lastName = text;
+        if (name === 'instructor' && currentSection) {
+          if (currentInstructor.lastName) {
+            currentSection.instructors.push(currentInstructor);
+          }
+          currentInstructor = null;
+        }
+      }
+
+      if (name === 'meeting') inMeeting = false;
+      if (name === 'detailedSection') currentSection = null;
+      if (name === 'cascadingCourse') currentCourse = null;
+
+      currentText = '';
+    }
+  }, { xmlMode: true });
+
+  parser.write(xml);
+  parser.end();
+
+  if (!result.subjectId) {
+    throw new Error('Invalid XML: missing subject id');
   }
 
-  return sections;
+  return result;
 }
