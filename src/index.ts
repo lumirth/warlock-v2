@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
 import { getCourseCount } from './db/index.js';
 import { CISAPIClient } from './cisapi/client.js';
+import { syncSubject } from './services/sync.js';
 
 type Bindings = {
   DB: D1Database;
@@ -59,6 +60,28 @@ app.get('/test/course/:subject/:number', async (c) => {
   try {
     const course = await client.getCourseDetail(subject, number);
     return c.json(course);
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Sync a single subject to D1
+app.post('/sync/:subject', async (c) => {
+  const { subject } = c.req.param();
+
+  const client = new CISAPIClient({
+    baseUrl: c.env.CISAPI_BASE,
+    year: c.env.CURRENT_YEAR,
+    term: c.env.CURRENT_TERM
+  });
+
+  try {
+    const result = await syncSubject(c.env.DB, client, subject, {
+      year: c.env.CURRENT_YEAR,
+      term: c.env.CURRENT_TERM
+    });
+
+    return c.json(result);
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }
