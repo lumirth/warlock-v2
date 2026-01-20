@@ -22,9 +22,12 @@ const CONFIG = {
   FRONTEND_BASE: 'https://courses.illinois.edu',
   FETCH_RETRIES: 5,
   FETCH_RETRY_DELAY_MS: 2000,
-  // WAF limit: 500 requests per 5 minutes = 1 request per 600ms minimum
-  // Using 700ms to stay safely under the limit
-  RATE_LIMIT_DELAY_MS: 700,
+  // WAF limit: 500 requests per 5 minutes = 1.67 req/sec
+  // With PARALLEL_BATCH_SIZE requests in parallel, we need to wait
+  // (PARALLEL_BATCH_SIZE / 1.67) seconds between batches
+  PARALLEL_BATCH_SIZE: 5,
+  // Delay between batches to stay under rate limit: 5 requests / 1.67 req/sec = 3 seconds
+  BATCH_DELAY_MS: 3000,
   // Backoff when rate limited (403/429) - wait 60s, then 120s, etc.
   RATE_LIMIT_BACKOFF_MS: 60000,
   START_YEAR: 2004,  // CISAPI data goes back to 2004
@@ -327,60 +330,98 @@ async function syncTerm(year: number, term: string, dryRun: boolean): Promise<{ 
   let totalCourses = 0;
   let totalSections = 0;
 
-  for (let i = 0; i < subjects.length; i++) {
-    const subject = subjects[i];
-    const progress = `[${i + 1}/${subjects.length}]`;
+  // Process subjects in parallel batches
+  for (let batchStart = 0; batchStart < subjects.length; batchStart += CONFIG.PARALLEL_BATCH_SIZE) {
+    const batch = subjects.slice(batchStart, batchStart + CONFIG.PARALLEL_BATCH_SIZE);
+    const batchNum = Math.floor(batchStart / CONFIG.PARALLEL_BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(subjects.length / CONFIG.PARALLEL_BATCH_SIZE);
 
-    try {
-      const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
-      const xml = await fetchWithRetry(url);
-      const { courses, sections } = parseSubjectCascade(xml, subject);
+    // Process batch in parallel
+    const results = await Promise.all(batch.map(async (subject, idx) => {
+      const globalIdx = batchStart + idx + 1;
+      const progress = `[${globalIdx}/${subjects.length}]`;
 
-      const now = Math.floor(Date.now() / 1000);
+      try {
+        const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
+        const xml = await fetchWithRetry(url);
+        const { courses, sections } = parseSubjectCascade(xml, subject);
 
-      for (const course of courses) {
-        const courseId = makeCourseId(subject, course.number, year, term);
-        const courseSections = sections.get(`${subject}-${course.number}`) || [];
+        const now = Math.floor(Date.now() / 1000);
+        const sqlStatements: string[] = [];
 
-        // Get primary instructor from first lecture section
-        const lectureSection = courseSections.find(s =>
-          s.type.toLowerCase().includes('lecture') || s.type.toLowerCase().includes('lec')
-        ) || courseSections[0];
-        const primaryInstructor = lectureSection?.instructors[0];
-        const primaryInstructorName = primaryInstructor
-          ? `${primaryInstructor.lastName}${primaryInstructor.firstName ? `, ${primaryInstructor.firstName.charAt(0)}` : ''}`
-          : null;
+        for (const course of courses) {
+          const courseId = makeCourseId(subject, course.number, year, term);
+          const courseSections = sections.get(`${subject}-${course.number}`) || [];
 
-        const creditHours = parseInt(course.creditHours) || null;
-
-        // Output course INSERT (idempotent via INSERT OR REPLACE)
-        if (!dryRun) {
-          console.log(`INSERT OR REPLACE INTO courses (id, subject, number, title, description, credit_hours, gened, year, term, primary_instructor, last_synced) VALUES (${escapeSQL(courseId)}, ${escapeSQL(subject)}, ${escapeSQL(course.number)}, ${escapeSQL(course.title)}, ${escapeSQL(course.description)}, ${creditHours ?? 'NULL'}, ${escapeSQL(course.gened)}, ${year}, ${escapeSQL(term)}, ${escapeSQL(primaryInstructorName)}, ${now});`);
-        }
-        totalCourses++;
-
-        // Output section INSERTs (idempotent via INSERT OR REPLACE)
-        for (const section of courseSections) {
-          const instructorName = section.instructors[0]
-            ? `${section.instructors[0].lastName}${section.instructors[0].firstName ? `, ${section.instructors[0].firstName.charAt(0)}` : ''}`
+          // Get primary instructor from first lecture section
+          const lectureSection = courseSections.find(s =>
+            s.type.toLowerCase().includes('lecture') || s.type.toLowerCase().includes('lec')
+          ) || courseSections[0];
+          const primaryInstructor = lectureSection?.instructors[0];
+          const primaryInstructorName = primaryInstructor
+            ? `${primaryInstructor.lastName}${primaryInstructor.firstName ? `, ${primaryInstructor.firstName.charAt(0)}` : ''}`
             : null;
-          const location = `${section.buildingName} ${section.roomNumber}`.trim() || null;
 
+          const creditHours = parseInt(course.creditHours) || null;
+
+          // Collect SQL statements
           if (!dryRun) {
-            console.log(`INSERT OR REPLACE INTO sections (crn, course_id, section_number, status, type, days, start_time, end_time, location, instructor, last_synced) VALUES (${escapeSQL(section.crn)}, ${escapeSQL(courseId)}, ${escapeSQL(section.sectionNumber)}, ${escapeSQL(section.enrollmentStatus)}, ${escapeSQL(section.type)}, ${escapeSQL(section.daysOfTheWeek)}, ${escapeSQL(section.startTime || null)}, ${escapeSQL(section.endTime || null)}, ${escapeSQL(location)}, ${escapeSQL(instructorName)}, ${now});`);
+            sqlStatements.push(`INSERT OR REPLACE INTO courses (id, subject, number, title, description, credit_hours, gened, year, term, primary_instructor, last_synced) VALUES (${escapeSQL(courseId)}, ${escapeSQL(subject)}, ${escapeSQL(course.number)}, ${escapeSQL(course.title)}, ${escapeSQL(course.description)}, ${creditHours ?? 'NULL'}, ${escapeSQL(course.gened)}, ${year}, ${escapeSQL(term)}, ${escapeSQL(primaryInstructorName)}, ${now});`);
           }
-          totalSections++;
+
+          for (const section of courseSections) {
+            const instructorName = section.instructors[0]
+              ? `${section.instructors[0].lastName}${section.instructors[0].firstName ? `, ${section.instructors[0].firstName.charAt(0)}` : ''}`
+              : null;
+            const location = `${section.buildingName} ${section.roomNumber}`.trim() || null;
+
+            if (!dryRun) {
+              sqlStatements.push(`INSERT OR REPLACE INTO sections (crn, course_id, section_number, status, type, days, start_time, end_time, location, instructor, last_synced) VALUES (${escapeSQL(section.crn)}, ${escapeSQL(courseId)}, ${escapeSQL(section.sectionNumber)}, ${escapeSQL(section.enrollmentStatus)}, ${escapeSQL(section.type)}, ${escapeSQL(section.daysOfTheWeek)}, ${escapeSQL(section.startTime || null)}, ${escapeSQL(section.endTime || null)}, ${escapeSQL(location)}, ${escapeSQL(instructorName)}, ${now});`);
+            }
+          }
         }
+
+        return {
+          subject,
+          progress,
+          success: true,
+          coursesCount: courses.length,
+          sectionsCount: sections.size,
+          sqlStatements
+        };
+      } catch (error) {
+        const errorMsg = `${year}/${term}/${subject}: ${error}`;
+        stats.failedSubjects.push(errorMsg);
+        return {
+          subject,
+          progress,
+          success: false,
+          coursesCount: 0,
+          sectionsCount: 0,
+          sqlStatements: [],
+          error: String(error)
+        };
       }
+    }));
 
-      console.error(`${progress} ${subject}: ${courses.length} courses, ${sections.size} with sections`);
+    // Output results in order (to maintain deterministic SQL output)
+    for (const result of results) {
+      if (result.success) {
+        for (const sql of result.sqlStatements) {
+          console.log(sql);
+        }
+        totalCourses += result.coursesCount;
+        totalSections += result.sectionsCount;
+        console.error(`${result.progress} ${result.subject}: ${result.coursesCount} courses, ${result.sectionsCount} with sections`);
+      } else {
+        console.error(`${result.progress} [ERROR] ${result.subject}: ${result.error}`);
+      }
+    }
 
-      // Rate limit: wait a bit between subjects
-      await new Promise(r => setTimeout(r, CONFIG.RATE_LIMIT_DELAY_MS));
-    } catch (error) {
-      const errorMsg = `${year}/${term}/${subject}: ${error}`;
-      stats.failedSubjects.push(errorMsg);
-      console.error(`${progress} [ERROR] ${subject}: ${error}`);
+    // Rate limit: wait between batches (not between individual requests)
+    if (batchStart + CONFIG.PARALLEL_BATCH_SIZE < subjects.length) {
+      console.error(`  [batch ${batchNum}/${totalBatches}] waiting ${CONFIG.BATCH_DELAY_MS}ms for rate limit...`);
+      await new Promise(r => setTimeout(r, CONFIG.BATCH_DELAY_MS));
     }
   }
 
