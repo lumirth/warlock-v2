@@ -1,12 +1,14 @@
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { CISAPIClient } from '../cisapi/client.js';
 import { upsertCourse, upsertSection, makeCourseId, type Course, type Section } from '../db/index.js';
 import { convertTo24Hour } from '../cisapi/parser.js';
+import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js';
 
 export interface SyncResult {
   subject: string;
   coursesProcessed: number;
   sectionsProcessed: number;
+  embeddingsGenerated: number;
   errors: string[];
   durationMs: number;
 }
@@ -20,13 +22,16 @@ export async function syncSubject(
   db: D1Database,
   client: CISAPIClient,
   subjectId: string,
-  options: SyncOptions
+  options: SyncOptions,
+  vectorize?: VectorizeIndex,
+  ai?: Ai
 ): Promise<SyncResult> {
   const startTime = Date.now();
   const result: SyncResult = {
     subject: subjectId,
     coursesProcessed: 0,
     sectionsProcessed: 0,
+    embeddingsGenerated: 0,
     errors: [],
     durationMs: 0
   };
@@ -85,6 +90,25 @@ export async function syncSubject(
 
         await upsertCourse(db, courseData);
         result.coursesProcessed++;
+
+        // Generate and store embedding if vectorize and AI are available
+        if (vectorize && ai) {
+          try {
+            const embeddingData: CourseEmbeddingData = {
+              id: courseId,
+              subject: subjectId,
+              number: course.id,
+              title: detail.label,
+              description: detail.description || null,
+              gened,
+              primary_instructor: primaryInstructorName
+            };
+            await upsertCourseEmbedding(vectorize, ai, embeddingData);
+            result.embeddingsGenerated++;
+          } catch (embError) {
+            result.errors.push(`Embedding error for ${courseId}: ${String(embError)}`);
+          }
+        }
 
         // Upsert sections
         for (const section of detail.sections) {

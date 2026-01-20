@@ -1,11 +1,14 @@
 import { Hono } from 'hono';
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { getCourseCount } from './db/index.js';
 import { CISAPIClient } from './cisapi/client.js';
 import { syncSubject } from './services/sync.js';
+import { searchCourses } from './services/embeddings.js';
 
 type Bindings = {
   DB: D1Database;
+  VECTORIZE: VectorizeIndex;
+  AI: Ai;
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
   CISAPI_BASE: string;
@@ -79,9 +82,24 @@ app.post('/sync/:subject', async (c) => {
     const result = await syncSubject(c.env.DB, client, subject, {
       year: c.env.CURRENT_YEAR,
       term: c.env.CURRENT_TERM
-    });
+    }, c.env.VECTORIZE, c.env.AI);
 
     return c.json(result);
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Semantic search endpoint
+app.get('/search/semantic', async (c) => {
+  const query = c.req.query('q');
+  if (!query) {
+    return c.json({ error: 'Missing query parameter q' }, 400);
+  }
+
+  try {
+    const results = await searchCourses(c.env.VECTORIZE, c.env.AI, query, 20);
+    return c.json({ results });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }

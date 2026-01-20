@@ -12,3 +12,10 @@ CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 binding = "DB"
 database_name = "course-search-db"
 database_id = "ae2bcf8a-c988-4e93-81a7-0c96c089e5d6"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "course-embeddings"
+
+[ai]
+binding = "AI"
