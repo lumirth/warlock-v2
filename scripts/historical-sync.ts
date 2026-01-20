@@ -27,7 +27,7 @@ const CONFIG = {
   RATE_LIMIT_DELAY_MS: 700,
   // Backoff when rate limited (403/429) - wait 60s, then 120s, etc.
   RATE_LIMIT_BACKOFF_MS: 60000,
-  START_YEAR: 2015,
+  START_YEAR: 2004,  // CISAPI data goes back to 2004
 } as const;
 
 const BROWSER_HEADERS = {
