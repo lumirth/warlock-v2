@@ -105,3 +105,34 @@ CREATE INDEX IF NOT EXISTS idx_sections_instructor ON sections(instructor);
 CREATE INDEX IF NOT EXISTS idx_sections_time ON sections(start_time);
 CREATE INDEX IF NOT EXISTS idx_gpa_course ON gpa_stats(subject, number);
 CREATE INDEX IF NOT EXISTS idx_rmp_expires ON rmp_cache(expires_at);
+
+-- Full-text search with trigram tokenizer
+CREATE VIRTUAL TABLE IF NOT EXISTS courses_fts USING fts5(
+    subject,
+    number,
+    title,
+    description,
+    primary_instructor,
+    gened,
+    content='courses',
+    content_rowid='rowid',
+    tokenize='trigram'
+);
+
+-- Triggers to keep FTS in sync
+CREATE TRIGGER IF NOT EXISTS courses_fts_insert AFTER INSERT ON courses BEGIN
+    INSERT INTO courses_fts(rowid, subject, number, title, description, primary_instructor, gened)
+    VALUES (new.rowid, new.subject, new.number, new.title, new.description, new.primary_instructor, new.gened);
+END;
+
+CREATE TRIGGER IF NOT EXISTS courses_fts_delete AFTER DELETE ON courses BEGIN
+    INSERT INTO courses_fts(courses_fts, rowid, subject, number, title, description, primary_instructor, gened)
+    VALUES('delete', old.rowid, old.subject, old.number, old.title, old.description, old.primary_instructor, old.gened);
+END;
+
+CREATE TRIGGER IF NOT EXISTS courses_fts_update AFTER UPDATE ON courses BEGIN
+    INSERT INTO courses_fts(courses_fts, rowid, subject, number, title, description, primary_instructor, gened)
+    VALUES('delete', old.rowid, old.subject, old.number, old.title, old.description, old.primary_instructor, old.gened);
+    INSERT INTO courses_fts(rowid, subject, number, title, description, primary_instructor, gened)
+    VALUES (new.rowid, new.subject, new.number, new.title, new.description, new.primary_instructor, new.gened);
+END;
