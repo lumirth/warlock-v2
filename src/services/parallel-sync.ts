@@ -1,9 +1,10 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
-import { upsertCourse, upsertSection, makeCourseId, type Course, type Section } from '../db/index.js';
+import { upsertCourse, upsertSection } from '../db/index.js';
 import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js';
 import { getRateLimiter } from './rate-limiter.js';
 import { browserFetch } from '../http/browser-fetch.js';
+import { fromSubjectCascade } from '../transforms/course.js';
 
 export interface ParallelSyncConfig {
   cisapiBase: string;
@@ -84,85 +85,33 @@ async function saveSubjectData(
   vectorize?: VectorizeIndex,
   ai?: Ai
 ): Promise<{ coursesCount: number; sectionsCount: number }> {
+  const coursesWithSections = fromSubjectCascade(parsed, year, term);
   let coursesCount = 0;
   let sectionsCount = 0;
-  const now = Math.floor(Date.now() / 1000);
 
-  for (const course of parsed.courses) {
-    const courseId = makeCourseId(parsed.subjectId, course.id, year, term);
-
-    const firstSection = course.sections.find(s =>
-      s.type.toLowerCase().includes('lecture') || s.type.toLowerCase().includes('lec')
-    ) ?? course.sections[0];
-
-    const primaryInstructor = firstSection?.instructors[0];
-    const primaryInstructorName = primaryInstructor
-      ? `${primaryInstructor.lastName}, ${primaryInstructor.firstName.charAt(0)}`
-      : null;
-
-    const creditHours = parseInt(course.creditHours) || null;
-
-    const courseData: Omit<Course, 'created_at' | 'updated_at'> = {
-      id: courseId,
-      subject: parsed.subjectId,
-      number: course.id,
-      title: course.title,
-      description: course.description || null,
-      credit_hours: creditHours,
-      gened: course.genEdCategories[0] ?? null,
-      year,
-      term,
-      avg_gpa: null,
-      gpa_sample_size: null,
-      primary_instructor: primaryInstructorName,
-      primary_instructor_rmp: null,
-      difficulty_score: null,
-      quality_score: null,
-      last_synced: now
-    };
-
-    await upsertCourse(db, courseData);
+  for (const { course, sections } of coursesWithSections) {
+    await upsertCourse(db, course);
     coursesCount++;
 
     if (vectorize && ai) {
       try {
         const embeddingData: CourseEmbeddingData = {
-          id: courseId,
-          subject: parsed.subjectId,
-          number: course.id,
+          id: course.id,
+          subject: course.subject,
+          number: course.number,
           title: course.title,
-          description: course.description || null,
-          gened: course.genEdCategories[0] ?? null,
-          primary_instructor: primaryInstructorName
+          description: course.description,
+          gened: course.gened,
+          primary_instructor: course.primary_instructor
         };
         await upsertCourseEmbedding(vectorize, ai, embeddingData);
       } catch (e) {
-        console.error(`Embedding error for ${courseId}:`, e);
+        console.error(`Embedding error for ${course.id}:`, e);
       }
     }
 
-    for (const section of course.sections) {
-      const instructorName = section.instructors[0]
-        ? `${section.instructors[0].lastName}, ${section.instructors[0].firstName.charAt(0)}`
-        : null;
-
-      const sectionData: Section = {
-        crn: section.crn,
-        course_id: courseId,
-        section_number: section.sectionNumber || null,
-        status: section.enrollmentStatus || null,
-        type: section.type || null,
-        days: section.daysOfTheWeek || null,
-        start_time: section.startTime || null,
-        end_time: section.endTime || null,
-        location: `${section.buildingName} ${section.roomNumber}`.trim() || null,
-        instructor: instructorName,
-        instructor_rmp: null,
-        instructor_gpa: null,
-        last_synced: now
-      };
-
-      await upsertSection(db, sectionData);
+    for (const section of sections) {
+      await upsertSection(db, section);
       sectionsCount++;
     }
   }
