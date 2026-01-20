@@ -7,6 +7,8 @@ import { getRateLimiter } from './rate-limiter.js';
 export interface ParallelSyncConfig {
   cisapiBase: string;
   concurrency: number;
+  offset?: number;
+  limit?: number;
 }
 
 export interface SubjectSyncResult {
@@ -30,6 +32,12 @@ export interface TermSyncResult {
   durationMs: number;
   rateLimitHits: number;
   staleDataWarning?: string;
+  pagination?: {
+    total: number;
+    offset: number;
+    limit: number;
+    hasMore: boolean;
+  };
 }
 
 async function fetchSubjectCascade(
@@ -205,7 +213,14 @@ export async function syncTerm(
   const startTime = Date.now();
   const termId = `${year}-${term}`;
 
-  const subjects = await getSubjectsForTerm(config, year, term);
+  const allSubjects = await getSubjectsForTerm(config, year, term);
+  const totalSubjects = allSubjects.length;
+
+  // Apply pagination - default to 20 subjects per request to stay well under Workers subrequest limit
+  const offset = config.offset ?? 0;
+  const limit = config.limit ?? 20;
+  const subjects = allSubjects.slice(offset, offset + limit);
+  const hasMore = offset + limit < totalSubjects;
 
   const results: SubjectSyncResult[] = [];
   let rateLimitHits = 0;
@@ -276,6 +291,12 @@ export async function syncTerm(
     failedSubjects: results.filter(r => !r.success).length,
     durationMs: Date.now() - startTime,
     rateLimitHits,
-    staleDataWarning: staleWarning ?? undefined
+    staleDataWarning: staleWarning ?? undefined,
+    pagination: {
+      total: totalSubjects,
+      offset,
+      limit,
+      hasMore
+    }
   };
 }

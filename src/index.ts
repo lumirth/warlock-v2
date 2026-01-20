@@ -238,10 +238,14 @@ app.get('/admin/terms', async (c) => {
 // Sync a specific term
 app.post('/admin/sync/:year/:term', async (c) => {
   const { year, term } = c.req.param();
+  const offset = parseInt(c.req.query('offset') || '0');
+  const limit = parseInt(c.req.query('limit') || '20');
 
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
     concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
+    offset,
+    limit,
   };
 
   try {
@@ -275,7 +279,7 @@ app.post('/admin/sync/:year/:term', async (c) => {
   }
 });
 
-// Sync all active terms
+// Sync all active terms (paginated - caller should iterate with offset/limit)
 app.post('/admin/sync-active', async (c) => {
   const activeTerms = await getTermsByStatus(c.env.DB, 'active');
 
@@ -283,9 +287,14 @@ app.post('/admin/sync-active', async (c) => {
     return c.json({ message: 'No active terms found. Run /admin/discover-terms first.' });
   }
 
+  const offset = parseInt(c.req.query('offset') || '0');
+  const limit = parseInt(c.req.query('limit') || '20');
+
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
     concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
+    offset,
+    limit,
   };
 
   const results = [];
