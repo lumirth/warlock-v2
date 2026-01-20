@@ -125,6 +125,11 @@ export async function getCourseCount(db: D1Database): Promise<number> {
   return result?.count ?? 0;
 }
 
+export async function getSectionCount(db: D1Database): Promise<number> {
+  const result = await db.prepare('SELECT COUNT(*) as count FROM sections').first<{ count: number }>();
+  return result?.count ?? 0;
+}
+
 export async function upsertTermState(
   db: D1Database,
   termState: Omit<TermState, 'created_at' | 'updated_at'>
