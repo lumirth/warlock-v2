@@ -3,6 +3,7 @@ import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { CISAPIClient } from '../cisapi/client.js';
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm } from '../services/parallel-sync.js';
+import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
 
 type Bindings = {
@@ -102,7 +103,9 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
         : null,
     });
 
-    return c.json(result);
+    const warnings = validateSyncResult(result);
+
+    return c.json({ ...result, warnings });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }
@@ -136,7 +139,9 @@ syncRoutes.post('/admin/sync-active', async (c) => {
       c.env.VECTORIZE,
       c.env.AI
     );
-    results.push(result);
+
+    const warnings = validateSyncResult(result);
+    results.push({ ...result, warnings });
 
     await upsertTermState(c.env.DB, {
       ...termState,
