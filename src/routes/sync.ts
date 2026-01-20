@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { CISAPIClient } from '../cisapi/client.js';
-import { syncSubject } from '../services/sync.js';
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm } from '../services/parallel-sync.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
@@ -22,28 +21,6 @@ type Bindings = {
 };
 
 export const syncRoutes = new Hono<{ Bindings: Bindings }>();
-
-// Sync a single subject to D1
-syncRoutes.post('/sync/:subject', async (c) => {
-  const { subject } = c.req.param();
-
-  const client = new CISAPIClient({
-    baseUrl: c.env.CISAPI_BASE,
-    year: c.env.CURRENT_YEAR,
-    term: c.env.CURRENT_TERM
-  });
-
-  try {
-    const result = await syncSubject(c.env.DB, client, subject, {
-      year: c.env.CURRENT_YEAR,
-      term: c.env.CURRENT_TERM
-    }, c.env.VECTORIZE, c.env.AI);
-
-    return c.json(result);
-  } catch (error) {
-    return c.json({ error: String(error) }, 500);
-  }
-});
 
 // Term discovery endpoint
 syncRoutes.post('/admin/discover-terms', async (c) => {

@@ -6,32 +6,258 @@
  * that can be executed against D1.
  *
  * Usage:
- *   npx tsx scripts/historical-sync.ts > historical-data.sql
+ *   npx tsx scripts/historical-sync.ts > historical-data.sql 2> historical-sync.log
  *   wrangler d1 execute course-search-db --remote --file=historical-data.sql
  *
  * Options:
- *   --start-year=YYYY  Start year (default: 2015)
+ *   --start-year=YYYY  Start year (default: 2004)
  *   --end-year=YYYY    End year (default: current year)
  *   --term=TERM        Only sync specific term (e.g., spring, fall)
  *   --dry-run          Don't output SQL, just show what would be synced
+ *   --fresh            Ignore checkpoint, start fresh
+ *
+ * Resume:
+ *   The script saves progress to historical-sync-checkpoint.json after each batch.
+ *   If interrupted, simply re-run the same command to resume where you left off.
+ *   Use --fresh to ignore the checkpoint and start over.
  */
+
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Configuration
 const CONFIG = {
   CISAPI_BASE: 'https://courses.illinois.edu/cisapp/explorer',
   FRONTEND_BASE: 'https://courses.illinois.edu',
-  FETCH_RETRIES: 5,
-  FETCH_RETRY_DELAY_MS: 2000,
-  // WAF limit: 500 requests per 5 minutes = 1.67 req/sec
-  // With PARALLEL_BATCH_SIZE requests in parallel, we need to wait
-  // (PARALLEL_BATCH_SIZE / 1.67) seconds between batches
-  PARALLEL_BATCH_SIZE: 5,
-  // Delay between batches to stay under rate limit: 5 requests / 1.67 req/sec = 3 seconds
-  BATCH_DELAY_MS: 3000,
-  // Backoff when rate limited (403/429) - wait 60s, then 120s, etc.
-  RATE_LIMIT_BACKOFF_MS: 60000,
-  START_YEAR: 2004,  // CISAPI data goes back to 2004
+  // ROBUST BURST STRATEGY:
+  // 1. Limit concurrent connections to avoid overwhelming network/server
+  // 2. Blast up to MAX_CONCURRENT requests, queue the rest
+  // 3. When rate limited, pause ALL requests, wait for window, resume
+  // 4. Retry failed requests in subsequent batches
+  MAX_CONCURRENT: 50,           // Max simultaneous connections
+  BATCH_SIZE: 500,              // Process 500 items per batch (queued through pool)
+  RATE_LIMIT_WINDOW_MS: 5 * 60 * 1000,  // WAF uses 5-minute rolling window
+  RATE_LIMIT_BUFFER_MS: 15 * 1000,      // Safety buffer after window expires
+  NETWORK_TIMEOUT_MS: 30000,    // 30s timeout per request
+  START_YEAR: 2004,
+  CHECKPOINT_FILE: 'historical-sync-checkpoint.json',
 } as const;
+
+// =============================================================================
+// CHECKPOINT SYSTEM - Resume interrupted syncs
+// =============================================================================
+
+interface Checkpoint {
+  completedItems: string[];  // "year-term-subject" keys
+  lastUpdated: string;
+}
+
+const completedSet = new Set<string>();
+
+function makeItemKey(year: number, term: string, subject: string): string {
+  return `${year}-${term}-${subject}`;
+}
+
+function loadCheckpoint(): void {
+  const checkpointPath = path.join(process.cwd(), CONFIG.CHECKPOINT_FILE);
+  try {
+    if (fs.existsSync(checkpointPath)) {
+      const data = JSON.parse(fs.readFileSync(checkpointPath, 'utf-8')) as Checkpoint;
+      for (const key of data.completedItems) {
+        completedSet.add(key);
+      }
+      console.error(`[CHECKPOINT] Loaded ${completedSet.size} completed items from checkpoint`);
+    }
+  } catch (err) {
+    console.error(`[CHECKPOINT] Could not load checkpoint: ${err}`);
+  }
+}
+
+function saveCheckpoint(): void {
+  const checkpointPath = path.join(process.cwd(), CONFIG.CHECKPOINT_FILE);
+  const checkpoint: Checkpoint = {
+    completedItems: Array.from(completedSet),
+    lastUpdated: new Date().toISOString(),
+  };
+  try {
+    fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint));
+  } catch (err) {
+    console.error(`[CHECKPOINT] Could not save checkpoint: ${err}`);
+  }
+}
+
+function markCompleted(year: number, term: string, subject: string): void {
+  completedSet.add(makeItemKey(year, term, subject));
+}
+
+function isCompleted(year: number, term: string, subject: string): boolean {
+  return completedSet.has(makeItemKey(year, term, subject));
+}
+
+function clearCheckpoint(): void {
+  const checkpointPath = path.join(process.cwd(), CONFIG.CHECKPOINT_FILE);
+  try {
+    if (fs.existsSync(checkpointPath)) {
+      fs.unlinkSync(checkpointPath);
+      console.error(`[CHECKPOINT] Cleared checkpoint file`);
+    }
+  } catch (err) {
+    console.error(`[CHECKPOINT] Could not clear checkpoint: ${err}`);
+  }
+}
+
+// =============================================================================
+// ROBUST CONNECTION POOL WITH RATE LIMIT COORDINATION
+// =============================================================================
+
+// Global state for rate limiting
+let isRateLimited = false;
+let rateLimitPromise: Promise<void> | null = null;
+let burstStartTime: number | null = null;
+
+// Semaphore for limiting concurrent connections
+let activeConnections = 0;
+const connectionQueue: Array<() => void> = [];
+
+async function acquireConnection(): Promise<void> {
+  // If rate limited, wait for that first
+  if (rateLimitPromise) {
+    await rateLimitPromise;
+  }
+
+  // If under limit, proceed immediately
+  if (activeConnections < CONFIG.MAX_CONCURRENT) {
+    activeConnections++;
+    return;
+  }
+
+  // Otherwise wait in queue
+  return new Promise<void>((resolve) => {
+    connectionQueue.push(() => {
+      activeConnections++;
+      resolve();
+    });
+  });
+}
+
+function releaseConnection(): void {
+  activeConnections--;
+  // Wake up next waiter if any
+  const next = connectionQueue.shift();
+  if (next) next();
+}
+
+function recordBurstStart(): void {
+  if (burstStartTime === null) {
+    burstStartTime = Date.now();
+  }
+}
+
+function getRateLimitWaitTime(): number {
+  const now = Date.now();
+  if (burstStartTime === null) {
+    return CONFIG.RATE_LIMIT_WINDOW_MS + CONFIG.RATE_LIMIT_BUFFER_MS;
+  }
+  const windowExpires = burstStartTime + CONFIG.RATE_LIMIT_WINDOW_MS + CONFIG.RATE_LIMIT_BUFFER_MS;
+  if (now >= windowExpires) {
+    return CONFIG.RATE_LIMIT_BUFFER_MS;
+  }
+  return windowExpires - now;
+}
+
+// Called when ANY request hits 403 - pauses ALL requests
+async function triggerRateLimitWait(): Promise<void> {
+  if (rateLimitPromise) {
+    // Already waiting, just join the existing wait
+    await rateLimitPromise;
+    return;
+  }
+
+  isRateLimited = true;
+  const waitTime = getRateLimitWaitTime();
+  const waitMin = (waitTime / 1000 / 60).toFixed(1);
+  console.error(`\n[RATE LIMIT] Blocked - pausing all requests for ${waitMin}m...`);
+
+  rateLimitPromise = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      console.error(`[RATE LIMIT] Window expired - resuming`);
+      isRateLimited = false;
+      burstStartTime = null;
+      rateLimitPromise = null;
+      resolve();
+    }, waitTime);
+  });
+
+  await rateLimitPromise;
+}
+
+// Result type for fetch operations
+type FetchResult =
+  | { ok: true; data: string }
+  | { ok: false; error: 'rate_limited' }
+  | { ok: false; error: 'network'; message: string };
+
+// Single fetch with timeout, no retries (retries handled at batch level)
+async function fetchOnce(url: string): Promise<FetchResult> {
+  await acquireConnection();
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CONFIG.NETWORK_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        headers: BROWSER_HEADERS,
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (response.status === 403 || response.status === 429) {
+        return { ok: false, error: 'rate_limited' };
+      }
+
+      if (!response.ok) {
+        return { ok: false, error: 'network', message: `HTTP ${response.status}` };
+      }
+
+      const data = await response.text();
+      return { ok: true, data };
+    } catch (err) {
+      clearTimeout(timeout);
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: 'network', message };
+    }
+  } finally {
+    releaseConnection();
+  }
+}
+
+// Fetch with coordinated rate limit handling
+async function robustFetch(url: string): Promise<string> {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    // Wait if currently rate limited
+    if (rateLimitPromise) {
+      await rateLimitPromise;
+    }
+
+    const result = await fetchOnce(url);
+
+    if (result.ok) {
+      return result.data;
+    }
+
+    if (result.error === 'rate_limited') {
+      stats.retriedRequests++;
+      await triggerRateLimitWait();
+      // Loop and retry
+      continue;
+    }
+
+    // Network error - throw to let caller handle
+    throw new Error(result.message);
+  }
+}
 
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -46,6 +272,7 @@ interface Args {
   endYear: number;
   termFilter: string | null;
   dryRun: boolean;
+  fresh: boolean;
 }
 
 function parseArgs(): Args {
@@ -56,6 +283,7 @@ function parseArgs(): Args {
   let endYear = currentYear;
   let termFilter: string | null = null;
   let dryRun = false;
+  let fresh = false;
 
   for (const arg of args) {
     if (arg.startsWith('--start-year=')) {
@@ -74,6 +302,8 @@ function parseArgs(): Args {
       termFilter = arg.split('=')[1].toLowerCase();
     } else if (arg === '--dry-run') {
       dryRun = true;
+    } else if (arg === '--fresh') {
+      fresh = true;
     } else if (arg === '--help' || arg === '-h') {
       console.log(`
 Historical Sync Script
@@ -86,6 +316,7 @@ Options:
   --end-year=YYYY    End year (default: ${currentYear})
   --term=TERM        Only sync specific term (e.g., spring, fall, summer, winter)
   --dry-run          Don't output SQL, just show what would be synced
+  --fresh            Ignore checkpoint, start fresh
   --help, -h         Show this help message
 
 Examples:
@@ -103,7 +334,7 @@ Examples:
     process.exit(1);
   }
 
-  return { startYear, endYear, termFilter, dryRun };
+  return { startYear, endYear, termFilter, dryRun, fresh };
 }
 
 // Statistics tracking
@@ -152,46 +383,22 @@ interface Section {
   instructors: { firstName: string; lastName: string }[];
 }
 
-async function fetchWithRetry(url: string): Promise<string> {
-  for (let i = 0; i < CONFIG.FETCH_RETRIES; i++) {
-    try {
-      const response = await fetch(url, { headers: BROWSER_HEADERS });
-
-      // Check for rate limit / WAF block
-      if (response.status === 403 || response.status === 429) {
-        const waitTime = CONFIG.RATE_LIMIT_BACKOFF_MS * (i + 1);
-        console.error(`[RATE LIMITED] ${response.status} - waiting ${waitTime / 1000}s before retry`);
-        stats.retriedRequests++;
-        await new Promise(r => setTimeout(r, waitTime));
-        continue;
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      return await response.text();
-    } catch (error) {
-      if (i === CONFIG.FETCH_RETRIES - 1) throw error;
-      stats.retriedRequests++;
-      console.error(`[RETRY ${i + 1}/${CONFIG.FETCH_RETRIES}] ${url}`);
-      await new Promise(r => setTimeout(r, CONFIG.FETCH_RETRY_DELAY_MS * (i + 1)));
-    }
-  }
-  throw new Error('Should not reach here');
-}
-
 async function getTerms(year: number): Promise<string[]> {
   // Try AJAX endpoint first (faster, but may be blocked)
   const ajaxUrl = `${CONFIG.FRONTEND_BASE}/ajax/search/termlist/${year}`;
+
   try {
-    const response = await fetch(ajaxUrl, { headers: BROWSER_HEADERS });
-    if (response.ok) {
-      const data = await response.json() as Record<string, string>;
-      const terms = Object.values(data);
+    const data = await robustFetch(ajaxUrl);
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(data) as Record<string, string>;
+      const terms = Object.values(parsed);
       if (terms.length > 0) return terms;
+    } catch {
+      // Not JSON, fall through to XML
     }
   } catch {
-    // Fall through to XML approach
+    // Network error, fall through to XML
   }
 
   // Fallback: try known term patterns via XML API
@@ -201,17 +408,12 @@ async function getTerms(year: number): Promise<string[]> {
   for (const term of possibleTerms) {
     try {
       const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}.xml`;
-      const response = await fetch(url, { headers: BROWSER_HEADERS });
-      if (response.ok) {
-        const text = await response.text();
-        // Check if it's a valid XML response (not HTML error)
-        if (text.includes('<subject') || text.includes('<ns2:')) {
-          validTerms.push(term);
-        }
+      const text = await robustFetch(url);
+      if (text.includes('<subject') || text.includes('<ns2:')) {
+        validTerms.push(term);
       }
-      await new Promise(r => setTimeout(r, CONFIG.RATE_LIMIT_DELAY_MS));
     } catch {
-      // Term doesn't exist for this year
+      // This term doesn't exist or network error, skip
     }
   }
 
@@ -221,7 +423,7 @@ async function getTerms(year: number): Promise<string[]> {
 async function getSubjects(year: number, term: string): Promise<string[]> {
   const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}.xml`;
   try {
-    const xml = await fetchWithRetry(url);
+    const xml = await robustFetch(url);
     const subjects: string[] = [];
     const regex = /<subject id="([^"]+)"/g;
     let match;
@@ -320,150 +522,6 @@ function makeCourseId(subject: string, number: string, year: number, term: strin
   return `${subject}-${number}-${year}-${term}`;
 }
 
-async function syncTerm(year: number, term: string, dryRun: boolean): Promise<{ courses: number; sections: number; subjects: number }> {
-  const termId = `${year}-${term}`;
-  console.error(`[TERM] ${termId} - fetching subjects...`);
-
-  const subjects = await getSubjects(year, term);
-  console.error(`[TERM] ${termId} - found ${subjects.length} subjects`);
-
-  let totalCourses = 0;
-  let totalSections = 0;
-
-  // Process subjects in parallel batches
-  for (let batchStart = 0; batchStart < subjects.length; batchStart += CONFIG.PARALLEL_BATCH_SIZE) {
-    const batch = subjects.slice(batchStart, batchStart + CONFIG.PARALLEL_BATCH_SIZE);
-    const batchNum = Math.floor(batchStart / CONFIG.PARALLEL_BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(subjects.length / CONFIG.PARALLEL_BATCH_SIZE);
-
-    // Process batch in parallel
-    const results = await Promise.all(batch.map(async (subject, idx) => {
-      const globalIdx = batchStart + idx + 1;
-      const progress = `[${globalIdx}/${subjects.length}]`;
-
-      try {
-        const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
-        const xml = await fetchWithRetry(url);
-        const { courses, sections } = parseSubjectCascade(xml, subject);
-
-        const now = Math.floor(Date.now() / 1000);
-        const sqlStatements: string[] = [];
-
-        for (const course of courses) {
-          const courseId = makeCourseId(subject, course.number, year, term);
-          const courseSections = sections.get(`${subject}-${course.number}`) || [];
-
-          // Get primary instructor from first lecture section
-          const lectureSection = courseSections.find(s =>
-            s.type.toLowerCase().includes('lecture') || s.type.toLowerCase().includes('lec')
-          ) || courseSections[0];
-          const primaryInstructor = lectureSection?.instructors[0];
-          const primaryInstructorName = primaryInstructor
-            ? `${primaryInstructor.lastName}${primaryInstructor.firstName ? `, ${primaryInstructor.firstName.charAt(0)}` : ''}`
-            : null;
-
-          const creditHours = parseInt(course.creditHours) || null;
-
-          // Collect SQL statements
-          if (!dryRun) {
-            sqlStatements.push(`INSERT OR REPLACE INTO courses (id, subject, number, title, description, credit_hours, gened, year, term, primary_instructor, last_synced) VALUES (${escapeSQL(courseId)}, ${escapeSQL(subject)}, ${escapeSQL(course.number)}, ${escapeSQL(course.title)}, ${escapeSQL(course.description)}, ${creditHours ?? 'NULL'}, ${escapeSQL(course.gened)}, ${year}, ${escapeSQL(term)}, ${escapeSQL(primaryInstructorName)}, ${now});`);
-          }
-
-          for (const section of courseSections) {
-            const instructorName = section.instructors[0]
-              ? `${section.instructors[0].lastName}${section.instructors[0].firstName ? `, ${section.instructors[0].firstName.charAt(0)}` : ''}`
-              : null;
-            const location = `${section.buildingName} ${section.roomNumber}`.trim() || null;
-
-            if (!dryRun) {
-              sqlStatements.push(`INSERT OR REPLACE INTO sections (crn, course_id, section_number, status, type, days, start_time, end_time, location, instructor, last_synced) VALUES (${escapeSQL(section.crn)}, ${escapeSQL(courseId)}, ${escapeSQL(section.sectionNumber)}, ${escapeSQL(section.enrollmentStatus)}, ${escapeSQL(section.type)}, ${escapeSQL(section.daysOfTheWeek)}, ${escapeSQL(section.startTime || null)}, ${escapeSQL(section.endTime || null)}, ${escapeSQL(location)}, ${escapeSQL(instructorName)}, ${now});`);
-            }
-          }
-        }
-
-        return {
-          subject,
-          progress,
-          success: true,
-          coursesCount: courses.length,
-          sectionsCount: sections.size,
-          sqlStatements
-        };
-      } catch (error) {
-        const errorMsg = `${year}/${term}/${subject}: ${error}`;
-        stats.failedSubjects.push(errorMsg);
-        return {
-          subject,
-          progress,
-          success: false,
-          coursesCount: 0,
-          sectionsCount: 0,
-          sqlStatements: [],
-          error: String(error)
-        };
-      }
-    }));
-
-    // Output results in order (to maintain deterministic SQL output)
-    for (const result of results) {
-      if (result.success) {
-        for (const sql of result.sqlStatements) {
-          console.log(sql);
-        }
-        totalCourses += result.coursesCount;
-        totalSections += result.sectionsCount;
-        console.error(`${result.progress} ${result.subject}: ${result.coursesCount} courses, ${result.sectionsCount} with sections`);
-      } else {
-        console.error(`${result.progress} [ERROR] ${result.subject}: ${result.error}`);
-      }
-    }
-
-    // Rate limit: wait between batches (not between individual requests)
-    if (batchStart + CONFIG.PARALLEL_BATCH_SIZE < subjects.length) {
-      console.error(`  [batch ${batchNum}/${totalBatches}] waiting ${CONFIG.BATCH_DELAY_MS}ms for rate limit...`);
-      await new Promise(r => setTimeout(r, CONFIG.BATCH_DELAY_MS));
-    }
-  }
-
-  // Output term_state INSERT (idempotent)
-  const now = Math.floor(Date.now() / 1000);
-  if (!dryRun) {
-    console.log(`INSERT OR REPLACE INTO term_state (term_id, year, term, status, last_checked, last_synced, subjects_count, courses_count, sections_count) VALUES (${escapeSQL(termId)}, ${year}, ${escapeSQL(term)}, 'historical', ${now}, ${now}, ${subjects.length}, ${totalCourses}, ${totalSections});`);
-  }
-
-  console.error(`[TERM] ${termId} - COMPLETE: ${totalCourses} courses, ${totalSections} sections`);
-
-  return { courses: totalCourses, sections: totalSections, subjects: subjects.length };
-}
-
-async function syncYear(year: number, termFilter: string | null, dryRun: boolean): Promise<void> {
-  console.error(`\n${'='.repeat(60)}`);
-  console.error(`[YEAR] ${year} - discovering terms...`);
-
-  let terms = await getTerms(year);
-
-  if (termFilter) {
-    terms = terms.filter(t => t.toLowerCase() === termFilter);
-    if (terms.length === 0) {
-      console.error(`[YEAR] ${year} - no matching term for filter "${termFilter}"`);
-      return;
-    }
-  }
-
-  console.error(`[YEAR] ${year} - syncing ${terms.length} terms: ${terms.join(', ')}`);
-  stats.totalYears++;
-
-  for (const term of terms) {
-    stats.totalTerms++;
-    const termStats = await syncTerm(year, term, dryRun);
-
-    stats.totalSubjects += termStats.subjects;
-    stats.totalCourses += termStats.courses;
-    stats.totalSections += termStats.sections;
-    stats.termStats.set(`${year}-${term}`, termStats);
-  }
-}
-
 function printSummary(args: Args, startTime: Date): void {
   const endTime = new Date();
   const durationMs = endTime.getTime() - startTime.getTime();
@@ -515,6 +573,33 @@ function printSummary(args: Args, startTime: Date): void {
   console.error(`${'='.repeat(60)}\n`);
 }
 
+async function discoverAllTerms(startYear: number, endYear: number, termFilter: string | null): Promise<{ year: number; term: string }[]> {
+  console.error(`\n[DISCOVERY] Fetching all terms for years ${startYear}-${endYear} in parallel...`);
+
+  const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
+
+  // Fetch all years' terms in parallel
+  const yearTermsResults = await Promise.all(
+    years.map(async (year) => {
+      let terms = await getTerms(year);
+      if (termFilter) {
+        terms = terms.filter(t => t.toLowerCase() === termFilter);
+      }
+      return terms.map(term => ({ year, term }));
+    })
+  );
+
+  // Flatten into single array of { year, term } objects
+  const allTerms = yearTermsResults.flat();
+
+  console.error(`[DISCOVERY] Found ${allTerms.length} terms across ${years.length} years`);
+  for (const { year, term } of allTerms) {
+    console.error(`  - ${year}/${term}`);
+  }
+
+  return allTerms;
+}
+
 async function main() {
   const args = parseArgs();
   const startTime = new Date();
@@ -523,6 +608,22 @@ async function main() {
   console.error(`  Range: ${args.startYear} - ${args.endYear}`);
   console.error(`  Term Filter: ${args.termFilter || '(all)'}`);
   console.error(`  Dry Run: ${args.dryRun}`);
+  console.error(`  Fresh Start: ${args.fresh}`);
+
+  // Load or clear checkpoint
+  if (args.fresh) {
+    clearCheckpoint();
+  } else {
+    loadCheckpoint();
+  }
+
+  // PHASE 1: Discover all terms upfront in parallel
+  const allTerms = await discoverAllTerms(args.startYear, args.endYear, args.termFilter);
+
+  if (allTerms.length === 0) {
+    console.error(`[WARNING] No terms found in range ${args.startYear}-${args.endYear}`);
+    return;
+  }
 
   // Print SQL header (idempotent - INSERT OR REPLACE handles duplicates)
   if (!args.dryRun) {
@@ -534,9 +635,180 @@ async function main() {
     console.log('BEGIN TRANSACTION;');
   }
 
-  // Sync years
-  for (let year = args.startYear; year <= args.endYear; year++) {
-    await syncYear(year, args.termFilter, args.dryRun);
+  // PHASE 2: Fetch all subjects for all terms in parallel
+  console.error(`\n[SUBJECTS] Fetching subject lists for all ${allTerms.length} terms in parallel...`);
+  const termSubjectsResults = await Promise.all(
+    allTerms.map(async ({ year, term }) => {
+      const subjects = await getSubjects(year, term);
+      return { year, term, subjects };
+    })
+  );
+
+  // Build flat list of all (year, term, subject) work items
+  const allWorkItems: { year: number; term: string; subject: string }[] = [];
+  const uniqueYears = new Set<number>();
+  for (const { year, term, subjects } of termSubjectsResults) {
+    uniqueYears.add(year);
+    stats.totalTerms++;
+    console.error(`[SUBJECTS] ${year}/${term}: ${subjects.length} subjects`);
+    for (const subject of subjects) {
+      allWorkItems.push({ year, term, subject });
+    }
+  }
+  stats.totalYears = uniqueYears.size;
+
+  console.error(`\n[SYNC] Total work items: ${allWorkItems.length} subject-terms to fetch`);
+
+  // Filter out already-completed items (checkpoint resume)
+  const pendingWorkItems = allWorkItems.filter(
+    ({ year, term, subject }) => !isCompleted(year, term, subject)
+  );
+  const skippedCount = allWorkItems.length - pendingWorkItems.length;
+  if (skippedCount > 0) {
+    console.error(`[CHECKPOINT] Skipping ${skippedCount} already-completed items`);
+  }
+  console.error(`[SYNC] Pending work items: ${pendingWorkItems.length}`);
+
+  if (pendingWorkItems.length === 0) {
+    console.error(`[SYNC] All items already completed! Use --fresh to start over.`);
+    printSummary(args, startTime);
+    return;
+  }
+
+  console.error(`[SYNC] Strategy: ${CONFIG.MAX_CONCURRENT} concurrent connections, ${CONFIG.BATCH_SIZE} items per batch`);
+
+  // PHASE 3: Process ALL subjects across ALL terms in batches
+  const termResults = new Map<string, { courses: number; sections: number; subjects: number }>();
+  let completedItems = 0;
+  let failedItems = 0;
+
+  for (let batchStart = 0; batchStart < pendingWorkItems.length; batchStart += CONFIG.BATCH_SIZE) {
+    const batch = pendingWorkItems.slice(batchStart, batchStart + CONFIG.BATCH_SIZE);
+    const batchNum = Math.floor(batchStart / CONFIG.BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(pendingWorkItems.length / CONFIG.BATCH_SIZE);
+
+    // Record when this burst starts for accurate window tracking
+    recordBurstStart();
+
+    console.error(`\n[BATCH ${batchNum}/${totalBatches}] Processing ${batch.length} items (${completedItems} done, ${failedItems} failed)...`);
+
+    const results = await Promise.all(batch.map(async ({ year, term, subject }) => {
+      const termId = `${year}-${term}`;
+
+      try {
+        const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
+        const xml = await robustFetch(url);
+        const { courses, sections } = parseSubjectCascade(xml, subject);
+
+        const now = Math.floor(Date.now() / 1000);
+        const sqlStatements: string[] = [];
+
+        for (const course of courses) {
+          const courseId = makeCourseId(subject, course.number, year, term);
+          const courseSections = sections.get(`${subject}-${course.number}`) || [];
+
+          const lectureSection = courseSections.find(s =>
+            s.type.toLowerCase().includes('lecture') || s.type.toLowerCase().includes('lec')
+          ) || courseSections[0];
+          const primaryInstructor = lectureSection?.instructors[0];
+          const primaryInstructorName = primaryInstructor
+            ? `${primaryInstructor.lastName}${primaryInstructor.firstName ? `, ${primaryInstructor.firstName.charAt(0)}` : ''}`
+            : null;
+
+          const creditHours = parseInt(course.creditHours) || null;
+
+          if (!args.dryRun) {
+            sqlStatements.push(`INSERT OR REPLACE INTO courses (id, subject, number, title, description, credit_hours, gened, year, term, primary_instructor, last_synced) VALUES (${escapeSQL(courseId)}, ${escapeSQL(subject)}, ${escapeSQL(course.number)}, ${escapeSQL(course.title)}, ${escapeSQL(course.description)}, ${creditHours ?? 'NULL'}, ${escapeSQL(course.gened)}, ${year}, ${escapeSQL(term)}, ${escapeSQL(primaryInstructorName)}, ${now});`);
+          }
+
+          for (const section of courseSections) {
+            const instructorName = section.instructors[0]
+              ? `${section.instructors[0].lastName}${section.instructors[0].firstName ? `, ${section.instructors[0].firstName.charAt(0)}` : ''}`
+              : null;
+            const location = `${section.buildingName} ${section.roomNumber}`.trim() || null;
+
+            if (!args.dryRun) {
+              sqlStatements.push(`INSERT OR REPLACE INTO sections (crn, course_id, section_number, status, type, days, start_time, end_time, location, instructor, last_synced) VALUES (${escapeSQL(section.crn)}, ${escapeSQL(courseId)}, ${escapeSQL(section.sectionNumber)}, ${escapeSQL(section.enrollmentStatus)}, ${escapeSQL(section.type)}, ${escapeSQL(section.daysOfTheWeek)}, ${escapeSQL(section.startTime || null)}, ${escapeSQL(section.endTime || null)}, ${escapeSQL(location)}, ${escapeSQL(instructorName)}, ${now});`);
+            }
+          }
+        }
+
+        return {
+          year,
+          term,
+          termId,
+          subject,
+          success: true,
+          coursesCount: courses.length,
+          sectionsCount: sections.size,
+          sqlStatements
+        };
+      } catch (error) {
+        const errorMsg = `${year}/${term}/${subject}: ${error}`;
+        stats.failedSubjects.push(errorMsg);
+        return {
+          year,
+          term,
+          termId,
+          subject,
+          success: false,
+          coursesCount: 0,
+          sectionsCount: 0,
+          sqlStatements: [],
+          error: String(error)
+        };
+      }
+    }));
+
+    // Output results and accumulate stats
+    let batchSuccess = 0;
+    let batchFailed = 0;
+    for (const result of results) {
+      if (result.success) {
+        for (const sql of result.sqlStatements) {
+          console.log(sql);
+        }
+
+        // Mark this item as completed in checkpoint
+        markCompleted(result.year, result.term, result.subject);
+
+        // Accumulate per-term stats
+        const existing = termResults.get(result.termId) || { courses: 0, sections: 0, subjects: 0 };
+        existing.courses += result.coursesCount;
+        existing.sections += result.sectionsCount;
+        existing.subjects += 1;
+        termResults.set(result.termId, existing);
+
+        stats.totalSubjects++;
+        stats.totalCourses += result.coursesCount;
+        stats.totalSections += result.sectionsCount;
+        completedItems++;
+        batchSuccess++;
+      } else {
+        failedItems++;
+        batchFailed++;
+      }
+    }
+
+    // Save checkpoint after each batch
+    saveCheckpoint();
+
+    console.error(`[BATCH ${batchNum}/${totalBatches}] Complete: ${batchSuccess} succeeded, ${batchFailed} failed`);
+  }
+
+  // Output term_state for each term
+  const now = Math.floor(Date.now() / 1000);
+  if (!args.dryRun) {
+    for (const [termId, termStats] of termResults) {
+      const [yearStr, term] = termId.split('-');
+      const year = parseInt(yearStr);
+      console.log(`INSERT OR REPLACE INTO term_state (term_id, year, term, status, last_checked, last_synced, subjects_count, courses_count, sections_count) VALUES (${escapeSQL(termId)}, ${year}, ${escapeSQL(term)}, 'historical', ${now}, ${now}, ${termStats.subjects}, ${termStats.courses}, ${termStats.sections});`);
+    }
+  }
+
+  // Copy termResults to stats
+  for (const [termId, termStats] of termResults) {
+    stats.termStats.set(termId, termStats);
   }
 
   if (!args.dryRun) {
