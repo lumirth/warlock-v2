@@ -479,7 +479,7 @@ app.get('/api/course/:subject/:number', async (c) => {
     for (const section of parsed.sections) {
       const meeting = section.meetings[0];
       const instructorName = meeting?.instructors[0]
-        ? `${meeting.instructors[0].lastName}, ${meeting.instructors[0].firstName.charAt(0)}`
+        ? `${meeting.instructors[0].lastName}${meeting.instructors[0].firstName ? `, ${meeting.instructors[0].firstName.charAt(0)}` : ''}`
         : null;
 
       await upsertSection(c.env.DB, {
@@ -491,7 +491,7 @@ app.get('/api/course/:subject/:number', async (c) => {
         days: meeting?.daysOfTheWeek || null,
         start_time: convertTo24Hour(meeting?.start || '') || null,
         end_time: convertTo24Hour(meeting?.end || '') || null,
-        location: meeting ? `${meeting.buildingName} ${meeting.roomNumber}`.trim() : null,
+        location: meeting ? `${meeting.buildingName} ${meeting.roomNumber}`.trim() || null : null,
         instructor: instructorName,
         instructor_rmp: null,
         instructor_gpa: null,
