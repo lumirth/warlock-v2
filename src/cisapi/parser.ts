@@ -193,3 +193,146 @@ export function convertTo24Hour(time12: string): string {
 
   return `${hours.toString().padStart(2, '0')}:${minutes}`;
 }
+
+// Subject cascade types and parser
+export interface ParsedSubjectCascade {
+  subjectId: string;
+  subjectLabel: string;
+  courses: ParsedCascadeCourse[];
+}
+
+export interface ParsedCascadeCourse {
+  id: string;
+  subject: string;
+  title: string;
+  description: string;
+  creditHours: string;
+  genEdCategories: string[];
+  sections: ParsedCascadeSection[];
+}
+
+export interface ParsedCascadeSection {
+  crn: string;
+  sectionNumber: string;
+  enrollmentStatus: string;
+  type: string;
+  startTime: string;
+  endTime: string;
+  daysOfTheWeek: string;
+  buildingName: string;
+  roomNumber: string;
+  instructors: { firstName: string; lastName: string }[];
+}
+
+export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade | null {
+  const subjectIdMatch = xml.match(/<ns2:subject[^>]*id="([^"]+)"/);
+  const labelMatch = xml.match(/<label>([^<]+)<\/label>/);
+
+  if (!subjectIdMatch) return null;
+
+  const subjectId = subjectIdMatch[1];
+  const subjectLabel = labelMatch?.[1] ?? subjectId;
+
+  const courses: ParsedCascadeCourse[] = [];
+
+  // Match cascadingCourse blocks
+  const courseBlockRegex = /<cascadingCourse[^>]*id="([^"]+)"[^>]*>[\s\S]*?<\/cascadingCourse>/g;
+  let courseMatch;
+
+  while ((courseMatch = courseBlockRegex.exec(xml)) !== null) {
+    const block = courseMatch[0];
+    const courseId = courseMatch[1];
+
+    const titleMatch = block.match(/<label>([^<]*)<\/label>/);
+    const descMatch = block.match(/<description>([^<]*)<\/description>/);
+    const creditMatch = block.match(/<creditHours>([^<]*)<\/creditHours>/);
+
+    // Parse genEd categories
+    const genEdCategories: string[] = [];
+    const genEdRegex = /<category[^>]*id="([^"]+)"/g;
+    let genEdMatch;
+    while ((genEdMatch = genEdRegex.exec(block)) !== null) {
+      genEdCategories.push(genEdMatch[1]);
+    }
+
+    // Parse sections
+    const sections = parseCascadeSections(block);
+
+    // Extract just the course number from "AAS 100" format
+    const courseNumber = courseId.split(' ').pop() ?? courseId;
+
+    courses.push({
+      id: courseNumber,
+      subject: subjectId,
+      title: titleMatch?.[1] ?? '',
+      description: descMatch?.[1]?.trim() ?? '',
+      creditHours: creditMatch?.[1] ?? '',
+      genEdCategories,
+      sections
+    });
+  }
+
+  return { subjectId, subjectLabel, courses };
+}
+
+function parseCascadeSections(courseXml: string): ParsedCascadeSection[] {
+  const sections: ParsedCascadeSection[] = [];
+
+  const sectionBlockRegex = /<section[^>]*id="([^"]+)"[^>]*>[\s\S]*?<\/section>/g;
+  let sectionMatch;
+
+  while ((sectionMatch = sectionBlockRegex.exec(courseXml)) !== null) {
+    const block = sectionMatch[0];
+    const crn = sectionMatch[1];
+
+    const sectionNumberMatch = block.match(/<sectionNumber>([^<]*)<\/sectionNumber>/);
+    const enrollmentStatusMatch = block.match(/<enrollmentStatus>([^<]*)<\/enrollmentStatus>/);
+
+    // Parse first meeting
+    const meetingMatch = block.match(/<meeting>[\s\S]*?<\/meeting>/);
+    let type = '', startTime = '', endTime = '', days = '', building = '', room = '';
+    const instructors: { firstName: string; lastName: string }[] = [];
+
+    if (meetingMatch) {
+      const meeting = meetingMatch[0];
+      const typeMatch = meeting.match(/<type[^>]*>([^<]*)<\/type>/);
+      const startMatch = meeting.match(/<start>([^<]*)<\/start>/);
+      const endMatch = meeting.match(/<end>([^<]*)<\/end>/);
+      const daysMatch = meeting.match(/<daysOfTheWeek>([^<]*)<\/daysOfTheWeek>/);
+      const buildingMatch = meeting.match(/<buildingName>([^<]*)<\/buildingName>/);
+      const roomMatch = meeting.match(/<roomNumber>([^<]*)<\/roomNumber>/);
+
+      type = typeMatch?.[1] ?? '';
+      startTime = startMatch?.[1] ?? '';
+      endTime = endMatch?.[1] ?? '';
+      days = daysMatch?.[1] ?? '';
+      building = buildingMatch?.[1] ?? '';
+      room = roomMatch?.[1] ?? '';
+
+      // Parse instructors
+      const instructorRegex = /<instructor>[\s\S]*?<firstName>([^<]*)<\/firstName>[\s\S]*?<lastName>([^<]*)<\/lastName>[\s\S]*?<\/instructor>/g;
+      let instructorMatch;
+      while ((instructorMatch = instructorRegex.exec(meeting)) !== null) {
+        instructors.push({
+          firstName: instructorMatch[1],
+          lastName: instructorMatch[2]
+        });
+      }
+    }
+
+    sections.push({
+      crn,
+      sectionNumber: sectionNumberMatch?.[1] ?? '',
+      enrollmentStatus: enrollmentStatusMatch?.[1] ?? 'Unknown',
+      type,
+      startTime: convertTo24Hour(startTime),
+      endTime: convertTo24Hour(endTime),
+      daysOfTheWeek: days,
+      buildingName: building,
+      roomNumber: room,
+      instructors
+    });
+  }
+
+  return sections;
+}
