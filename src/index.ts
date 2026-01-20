@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
+import type { D1Database } from '@cloudflare/workers-types';
+import { getCourseCount } from './db/index.js';
 
 type Bindings = {
+  DB: D1Database;
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
   CISAPI_BASE: string;
@@ -17,5 +20,10 @@ app.get('/', (c) => {
 });
 
 app.get('/health', (c) => c.json({ healthy: true }));
+
+app.get('/stats', async (c) => {
+  const count = await getCourseCount(c.env.DB);
+  return c.json({ courses: count });
+});
 
 export default app;
