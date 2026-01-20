@@ -5,6 +5,10 @@ import { CISAPIClient } from './cisapi/client.js';
 import { syncSubject } from './services/sync.js';
 import { searchCourses } from './services/embeddings.js';
 import { hybridSearch, keywordSearch, type SearchFilters } from './services/search.js';
+import { discoverAndClassifyTerms } from './services/term-discovery.js';
+import { syncTerm } from './services/parallel-sync.js';
+import { getTermsByStatus, getTermState, upsertTermState, makeTermId } from './db/index.js';
+import { getRateLimiter, resetRateLimiter } from './services/rate-limiter.js';
 
 type Bindings = {
   DB: D1Database;
@@ -186,6 +190,152 @@ app.get('/api/search', async (c) => {
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }
+});
+
+// Term discovery endpoint
+app.post('/admin/discover-terms', async (c) => {
+  const config = {
+    frontendBase: c.env.FRONTEND_BASE,
+    cisapiBase: c.env.CISAPI_BASE,
+  };
+
+  try {
+    const classifications = await discoverAndClassifyTerms(c.env.DB, config);
+    return c.json({
+      discovered: classifications.length,
+      terms: classifications.map(cl => ({
+        termId: cl.term.termId,
+        year: cl.term.year,
+        term: cl.term.term,
+        status: cl.status,
+        sampleStatuses: cl.sampleEnrollmentStatuses
+      }))
+    });
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Get term states
+app.get('/admin/terms', async (c) => {
+  const status = c.req.query('status') as 'active' | 'historical' | undefined;
+
+  try {
+    if (status) {
+      const terms = await getTermsByStatus(c.env.DB, status);
+      return c.json({ terms });
+    }
+
+    const active = await getTermsByStatus(c.env.DB, 'active');
+    const historical = await getTermsByStatus(c.env.DB, 'historical');
+    return c.json({ active, historical });
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Sync a specific term
+app.post('/admin/sync/:year/:term', async (c) => {
+  const { year, term } = c.req.param();
+
+  const config = {
+    cisapiBase: c.env.CISAPI_BASE,
+    concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
+  };
+
+  try {
+    const result = await syncTerm(
+      c.env.DB,
+      config,
+      parseInt(year),
+      term,
+      c.env.VECTORIZE,
+      c.env.AI
+    );
+
+    await upsertTermState(c.env.DB, {
+      term_id: makeTermId(parseInt(year), term),
+      year: parseInt(year),
+      term,
+      status: 'active',
+      last_checked: Math.floor(Date.now() / 1000),
+      last_synced: Math.floor(Date.now() / 1000),
+      subjects_count: result.successfulSubjects + result.failedSubjects,
+      courses_count: result.totalCourses,
+      sections_count: result.totalSections,
+      sync_errors: result.failedSubjects > 0
+        ? JSON.stringify(result.subjectResults.filter(r => !r.success).map(r => r.error))
+        : null,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Sync all active terms
+app.post('/admin/sync-active', async (c) => {
+  const activeTerms = await getTermsByStatus(c.env.DB, 'active');
+
+  if (activeTerms.length === 0) {
+    return c.json({ message: 'No active terms found. Run /admin/discover-terms first.' });
+  }
+
+  const config = {
+    cisapiBase: c.env.CISAPI_BASE,
+    concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
+  };
+
+  const results = [];
+  for (const termState of activeTerms) {
+    const result = await syncTerm(
+      c.env.DB,
+      config,
+      termState.year,
+      termState.term,
+      c.env.VECTORIZE,
+      c.env.AI
+    );
+    results.push(result);
+
+    await upsertTermState(c.env.DB, {
+      ...termState,
+      last_synced: Math.floor(Date.now() / 1000),
+      courses_count: result.totalCourses,
+      sections_count: result.totalSections,
+      sync_errors: result.failedSubjects > 0
+        ? JSON.stringify(result.subjectResults.filter(r => !r.success).map(r => r.error))
+        : null,
+    });
+  }
+
+  return c.json({ results });
+});
+
+// Rate limiter status
+app.get('/admin/rate-limit-status', (c) => {
+  const rateLimiter = getRateLimiter({
+    backoffBaseMs: parseInt(c.env.BACKOFF_BASE_MS) || 5000,
+    backoffMaxMs: parseInt(c.env.BACKOFF_MAX_MS) || 60000,
+    maxRetries: parseInt(c.env.MAX_RETRIES) || 3,
+  });
+
+  const state = rateLimiter.getState();
+  const errorMessage = rateLimiter.getErrorMessage();
+  const staleWarning = rateLimiter.getStaleDataWarning();
+
+  return c.json({
+    ...state,
+    errorMessage,
+    staleWarning,
+  });
+});
+
+// Reset rate limiter
+app.post('/admin/reset-rate-limiter', (c) => {
+  resetRateLimiter();
+  return c.json({ message: 'Rate limiter reset' });
 });
 
 export default app;
