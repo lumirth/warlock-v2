@@ -95,6 +95,22 @@ CREATE TABLE IF NOT EXISTS sync_state (
     items_synced INTEGER
 );
 
+-- Term state tracking
+CREATE TABLE IF NOT EXISTS term_state (
+    term_id TEXT PRIMARY KEY,     -- "2025-fall"
+    year INTEGER NOT NULL,
+    term TEXT NOT NULL,           -- "winter", "spring", "summer", "fall"
+    status TEXT NOT NULL,         -- "active" | "historical"
+    last_checked INTEGER,         -- Unix timestamp when status was verified
+    last_synced INTEGER,          -- Unix timestamp when courses were synced
+    subjects_count INTEGER,
+    courses_count INTEGER,
+    sections_count INTEGER,
+    sync_errors TEXT,             -- JSON array of recent errors
+    created_at INTEGER DEFAULT (unixepoch()),
+    updated_at INTEGER DEFAULT (unixepoch())
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_courses_subject ON courses(subject);
 CREATE INDEX IF NOT EXISTS idx_courses_term ON courses(year, term);
@@ -105,6 +121,8 @@ CREATE INDEX IF NOT EXISTS idx_sections_instructor ON sections(instructor);
 CREATE INDEX IF NOT EXISTS idx_sections_time ON sections(start_time);
 CREATE INDEX IF NOT EXISTS idx_gpa_course ON gpa_stats(subject, number);
 CREATE INDEX IF NOT EXISTS idx_rmp_expires ON rmp_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_term_state_status ON term_state(status);
+CREATE INDEX IF NOT EXISTS idx_term_state_year ON term_state(year);
 
 -- Full-text search with trigram tokenizer
 CREATE VIRTUAL TABLE IF NOT EXISTS courses_fts USING fts5(
