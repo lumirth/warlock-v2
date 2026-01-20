@@ -10,6 +10,7 @@ import { syncTerm } from './services/parallel-sync.js';
 import { getTermsByStatus, getTermState, upsertTermState, makeTermId } from './db/index.js';
 import { getRateLimiter, resetRateLimiter } from './services/rate-limiter.js';
 import { parseCourseDetailXml, convertTo24Hour } from './cisapi/parser.js';
+import { browserFetch, BROWSER_HEADERS } from './http/browser-fetch.js';
 
 type Bindings = {
   DB: D1Database;
@@ -345,19 +346,20 @@ app.get('/admin/rate-limit-status', (c) => {
 // Debug endpoint - test fetching any CISAPI URL
 app.get('/admin/debug/fetch', async (c) => {
   const testUrl = c.req.query('url');
+  const useBrowserHeaders = c.req.query('browser') !== 'false';
+
   if (!testUrl) {
     return c.json({ error: 'Missing ?url= parameter' });
   }
 
   try {
-    const response = await fetch(testUrl, {
-      headers: { 'Accept': 'application/xml' },
-      redirect: 'follow'
-    });
+    const response = useBrowserHeaders
+      ? await browserFetch(testUrl)
+      : await fetch(testUrl, { headers: { 'Accept': 'application/xml' } });
 
-    const headers: Record<string, string> = {};
+    const respHeaders: Record<string, string> = {};
     response.headers.forEach((value, key) => {
-      headers[key] = value;
+      respHeaders[key] = value;
     });
 
     const body = await response.text();
@@ -368,7 +370,8 @@ app.get('/admin/debug/fetch', async (c) => {
       statusText: response.statusText,
       bodyLength: body.length,
       bodySnippet: body.substring(0, 1000),
-      headers
+      headers: respHeaders,
+      usedBrowserHeaders: useBrowserHeaders
     });
   } catch (error) {
     return c.json({ error: String(error), url: testUrl });
@@ -507,9 +510,7 @@ app.get('/api/course/:subject/:number', async (c) => {
     await rateLimiter.waitIfNeeded();
 
     const url = `${c.env.CISAPI_BASE}/schedule/${year}/${term}/${subject}/${number}.xml?mode=cascade`;
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/xml' }
-    });
+    const response = await browserFetch(url);
 
     if (!response.ok) {
       if (rateLimiter.isRateLimited(response.status)) {

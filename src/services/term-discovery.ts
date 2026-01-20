@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { upsertTermState, makeTermId, type TermState } from '../db/index.js';
 import { getRateLimiter } from './rate-limiter.js';
+import { browserFetch } from '../http/browser-fetch.js';
 
 export interface TermDiscoveryConfig {
   frontendBase: string;
@@ -30,7 +31,7 @@ export async function discoverTermsForYear(
   await rateLimiter.waitIfNeeded();
 
   const url = `${config.frontendBase}/ajax/search/termlist/${year}`;
-  const response = await fetch(url);
+  const response = await browserFetch(url);
 
   if (!response.ok) {
     if (rateLimiter.isRateLimited(response.status)) {
@@ -87,9 +88,7 @@ export async function classifyTerm(
   await rateLimiter.waitIfNeeded();
 
   const url = `${config.cisapiBase}/schedule/${term.year}/${term.term}/${sampleSubject}.xml?mode=cascade`;
-  const response = await fetch(url, {
-    headers: { 'Accept': 'application/xml' }
-  });
+  const response = await browserFetch(url);
 
   if (!response.ok) {
     if (rateLimiter.isRateLimited(response.status)) {

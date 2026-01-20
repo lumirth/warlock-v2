@@ -3,6 +3,7 @@ import { parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/par
 import { upsertCourse, upsertSection, makeCourseId, type Course, type Section } from '../db/index.js';
 import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js';
 import { getRateLimiter } from './rate-limiter.js';
+import { browserFetch } from '../http/browser-fetch.js';
 
 export interface ParallelSyncConfig {
   cisapiBase: string;
@@ -51,9 +52,7 @@ async function fetchSubjectCascade(
 
   const url = `${config.cisapiBase}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
 
-  const response = await fetch(url, {
-    headers: { 'Accept': 'application/xml' }
-  });
+  const response = await browserFetch(url);
 
   if (!response.ok) {
     if (rateLimiter.isRateLimited(response.status)) {
@@ -180,9 +179,7 @@ async function getSubjectsForTerm(
   await rateLimiter.waitIfNeeded();
 
   const url = `${config.cisapiBase}/schedule/${year}/${term}.xml`;
-  const response = await fetch(url, {
-    headers: { 'Accept': 'application/xml' }
-  });
+  const response = await browserFetch(url);
 
   if (!response.ok) {
     throw new Error(`Failed to get subjects: HTTP ${response.status}`);
