@@ -1,0 +1,9 @@
+name = "uiuc-course-search"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+CURRENT_YEAR = "2025"
+CURRENT_TERM = "fall"
+CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"

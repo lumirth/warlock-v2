@@ -1,0 +1,22 @@
+{
+  "name": "uiuc-course-search",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.12.4",
+    "@cloudflare/workers-types": "^4.20260120.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17",
+    "wrangler": "^4.59.2"
+  },
+  "dependencies": {
+    "hono": "^4.11.4"
+  }
+}
