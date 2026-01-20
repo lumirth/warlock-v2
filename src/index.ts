@@ -10,9 +10,25 @@ type Bindings = {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
   AI: Ai;
+
+  // API endpoints
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
   CISAPI_BASE: string;
+  FRONTEND_BASE: string;
+
+  // Sync settings
+  SYNC_INTERVAL_MS: string;
+  SYNC_CONCURRENCY: string;
+  TERM_CHECK_INTERVAL_MS: string;
+
+  // Rate limiting
+  BACKOFF_BASE_MS: string;
+  BACKOFF_MAX_MS: string;
+  MAX_RETRIES: string;
+
+  // Caching
+  CLIENT_CACHE_TTL_MS: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();

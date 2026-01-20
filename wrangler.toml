@@ -4,9 +4,25 @@ compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-CURRENT_YEAR = "2025"
-CURRENT_TERM = "fall"
+CURRENT_YEAR = "2026"
+CURRENT_TERM = "spring"
+
+# API endpoints
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
+FRONTEND_BASE = "https://courses.illinois.edu"
+
+# Sync settings
+SYNC_INTERVAL_MS = "180000"
+SYNC_CONCURRENCY = "25"
+TERM_CHECK_INTERVAL_MS = "86400000"
+
+# Rate limiting
+BACKOFF_BASE_MS = "5000"
+BACKOFF_MAX_MS = "60000"
+MAX_RETRIES = "3"
+
+# Caching
+CLIENT_CACHE_TTL_MS = "30000"
 
 [[d1_databases]]
 binding = "DB"
