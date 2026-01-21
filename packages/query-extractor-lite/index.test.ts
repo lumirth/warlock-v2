@@ -36,14 +36,14 @@ describe('extractQueryLite', () => {
     });
 
     it('extracts course code with surrounding text', () => {
-      const result = extractQueryLite('easy CS 225 morning');
+      const result = extractQueryLite('fun CS 225 morning');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'course_code',
           metadata: { subject: 'CS', number: '225' }
         })
       );
-      expect(result.residual).toContain('easy');
+      expect(result.residual).toContain('fun');
       expect(result.residual).toContain('morning');
     });
 
@@ -106,12 +106,41 @@ describe('extractQueryLite', () => {
     it('extracts gened patterns', () => {
       const result = extractQueryLite('easy gened humanities');
       expect(result.hints).toContainEqual(expect.objectContaining({ type: 'gened', value: 'humanities' }));
-      expect(result.residual).toBe('easy');
     });
 
     it('extracts "by instructor" pattern', () => {
       const result = extractQueryLite('cs 225 by fagen');
       expect(result.hints).toContainEqual(expect.objectContaining({ type: 'instructor', value: 'fagen' }));
+    });
+  });
+
+  describe('difficulty extraction', () => {
+    it('extracts "easy" keyword', () => {
+      const result = extractQueryLite('easy gen ed');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'difficulty', value: 'easy' })
+      );
+    });
+
+    it('extracts "hard" keyword', () => {
+      const result = extractQueryLite('hard CS class');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'difficulty', value: 'hard' })
+      );
+    });
+
+    it('extracts "simple" as easy', () => {
+      const result = extractQueryLite('simple science class');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'difficulty', value: 'easy' })
+      );
+    });
+
+    it('extracts "challenging" as hard', () => {
+      const result = extractQueryLite('challenging math');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'difficulty', value: 'hard' })
+      );
     });
   });
 });

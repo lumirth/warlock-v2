@@ -59,7 +59,20 @@ export function extractQueryLite(query: string): ExtractedQuery {
   }
   residual = residual.replace(instructorRegex, ' ');
 
-  // 4. GenEd pattern: "gened [Category]" or "[Category] gened"
+  // 4. Difficulty: "easy", "hard", "difficult" - extract BEFORE gened to avoid conflicts
+  const easyRegex = /\b(easy|simple|gpa booster)\b/gi;
+  if (easyRegex.test(residual)) {
+    hints.push({ type: 'difficulty', value: 'easy', confidence: 0.7 });
+  }
+  residual = residual.replace(easyRegex, ' ');
+
+  const hardRegex = /\b(hard|difficult|challenging)\b/gi;
+  if (hardRegex.test(residual)) {
+    hints.push({ type: 'difficulty', value: 'hard', confidence: 0.7 });
+  }
+  residual = residual.replace(hardRegex, ' ');
+
+  // 5. GenEd pattern: "gened [Category]" or "[Category] gened"
   const genedForwardRegex = /\b(gened|gen ed|gen-ed)\s+([a-zA-Z]+)/gi;
   let genedMatch;
   while ((genedMatch = genedForwardRegex.exec(residual)) !== null) {
