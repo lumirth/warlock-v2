@@ -9,6 +9,5 @@
     "test": "npm test --workspaces"
   },
   "devDependencies": {
-    "vitest": "^4.0.17"
   }
 }
