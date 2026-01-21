@@ -6,15 +6,22 @@
  * that can be executed against D1.
  *
  * Usage:
- *   npx tsx scripts/historical-sync.ts > historical-data.sql 2> historical-sync.log
- *   wrangler d1 execute course-search-db --remote --file=historical-data.sql
+ *   npx tsx scripts/historical-sync.ts
+ *   wrangler d1 execute course-search-db --remote --file=historical-data-YYYY-MM-DDTHH-MM-SS.sql
  *
  * Options:
  *   --start-year=YYYY  Start year (default: 2004)
  *   --end-year=YYYY    End year (default: current year)
  *   --term=TERM        Only sync specific term (e.g., spring, fall)
+ *   --sql-file=PATH    SQL output file (default: timestamped)
+ *   --log-file=PATH    Log output file (default: timestamped)
  *   --dry-run          Don't output SQL, just show what would be synced
  *   --fresh            Ignore checkpoint, start fresh
+ *
+ * Output:
+ *   - SQL is written to a timestamped .sql file in the current directory
+ *   - Logs are written to a timestamped .log file in the current directory
+ *   - Progress is also displayed in the terminal
  *
  * Resume:
  *   The script saves progress to historical-sync-checkpoint.json after each batch.
@@ -24,9 +31,247 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseSubjectCascadeXml } from '../src/cisapi/parser.ts';
-import { fromSubjectCascade, formatInstructorName } from '../src/transforms/course.ts';
-import { makeCourseId } from '../src/db/index.ts';
+import { parseSubjectCascadeXml, type ParsedSubjectCascade, type ParsedCascadeCourse, type ParsedCascadeSection, type ParsedMeeting, type ParsedGenEdCategory } from '../apps/api/src/cisapi/parser.ts';
+
+// Inline makeCourseId to avoid D1 type issues
+function makeCourseId(subject: string, number: string, year: number, term: string): string {
+  return `${subject}-${number}-${year}-${term}`;
+}
+
+// Format instructor name as "LastName, F" or just "LastName" if no first name
+function formatInstructorName(inst: { firstName: string; lastName: string }): string {
+  if (inst.firstName) {
+    return `${inst.lastName}, ${inst.firstName.charAt(0)}`;
+  }
+  return inst.lastName;
+}
+
+// Transform types for SQL generation
+interface SubjectData {
+  id: string;
+  name: string;
+  college_code: string | null;
+  department_code: string | null;
+  unit_name: string | null;
+  contact_name: string | null;
+  contact_title: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  phone_number: string | null;
+  website_url: string | null;
+  description: string | null;
+}
+
+interface CourseData {
+  id: string;
+  subject: string;
+  number: string;
+  title: string;
+  description: string | null;
+  credit_hours: number | null;
+  gened: string | null;
+  subject_id: string | null;
+  course_info: string | null;
+  degree_attributes: string | null;
+  class_schedule_info: string | null;
+  date_range_text: string | null;
+  registration_notes: string | null;
+  approval_code: string | null;
+  year: number;
+  term: string;
+  primary_instructor: string | null;
+}
+
+interface SectionData {
+  crn: string;
+  course_id: string;
+  section_number: string | null;
+  status: string | null;
+  type: string | null;
+  days: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  instructor: string | null;
+  section_title: string | null;
+  status_code: string | null;
+  section_status_code: string | null;
+  section_text: string | null;
+  section_notes: string | null;
+  capp_area: string | null;
+  date_range_text: string | null;
+  part_of_term: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  credit_hours: string | null;
+}
+
+interface MeetingData {
+  section_crn: string;
+  meeting_index: number;
+  type_code: string | null;
+  type_name: string | null;
+  days: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  building_name: string | null;
+  room_number: string | null;
+  date_range_text: string | null;
+  instructors: { firstName: string; lastName: string }[];
+}
+
+interface GenEdData {
+  categoryId: string;
+  categoryName: string | null;
+  attributeCode: string | null;
+  attributeName: string | null;
+}
+
+interface TransformedCourse {
+  course: CourseData;
+  sections: { section: SectionData; meetings: MeetingData[] }[];
+  genEdCategories: GenEdData[];
+}
+
+interface TransformResult {
+  subject: SubjectData;
+  coursesWithSections: TransformedCourse[];
+}
+
+// Transform parsed XML into our database format
+function fromSubjectCascade(parsed: ParsedSubjectCascade, year: number, term: string): TransformResult {
+  const meta = parsed.subjectMetadata;
+
+  const subject: SubjectData = {
+    id: parsed.subjectId,
+    name: parsed.subjectLabel || meta.label || parsed.subjectId,
+    college_code: meta.collegeCode || null,
+    department_code: meta.departmentCode || null,
+    unit_name: meta.unitName || null,
+    contact_name: meta.contactName || null,
+    contact_title: meta.contactTitle || null,
+    address_line1: meta.addressLine1 || null,
+    address_line2: meta.addressLine2 || null,
+    phone_number: meta.phoneNumber || null,
+    website_url: meta.websiteUrl || null,
+    description: meta.description || null,
+  };
+
+  const coursesWithSections: TransformedCourse[] = parsed.courses.map(course => {
+    const courseId = makeCourseId(parsed.subjectId, course.id, year, term);
+
+    // Get primary instructor from first lecture section
+    const lectureSection = course.sections.find(s =>
+      s.meetings.some(m => m.typeName.toLowerCase().includes('lecture'))
+    ) || course.sections[0];
+
+    const firstMeeting = lectureSection?.meetings[0];
+    const primaryInstructor = firstMeeting?.instructors[0];
+    const primaryInstructorName = primaryInstructor ? formatInstructorName(primaryInstructor) : null;
+
+    // Parse credit hours
+    const creditHours = parseInt(course.creditHours) || null;
+
+    // First gened category ID for the simple gened field
+    const firstGenEd = course.genEdCategories[0]?.id || null;
+
+    const courseData: CourseData = {
+      id: courseId,
+      subject: parsed.subjectId,
+      number: course.id,
+      title: course.title,
+      description: course.description || null,
+      credit_hours: creditHours,
+      gened: firstGenEd,
+      subject_id: parsed.subjectId,
+      course_info: course.courseInfo || null,
+      degree_attributes: course.degreeAttributes || null,
+      class_schedule_info: course.classScheduleInfo || null,
+      date_range_text: course.dateRangeText || null,
+      registration_notes: course.registrationNotes || null,
+      approval_code: course.approvalCode || null,
+      year,
+      term,
+      primary_instructor: primaryInstructorName,
+    };
+
+    // Transform genEd categories
+    const genEdCategories: GenEdData[] = [];
+    for (const ge of course.genEdCategories) {
+      if (ge.attributes.length > 0) {
+        for (const attr of ge.attributes) {
+          genEdCategories.push({
+            categoryId: ge.id,
+            categoryName: ge.name || null,
+            attributeCode: attr.code || null,
+            attributeName: attr.name || null,
+          });
+        }
+      } else {
+        genEdCategories.push({
+          categoryId: ge.id,
+          categoryName: ge.name || null,
+          attributeCode: null,
+          attributeName: null,
+        });
+      }
+    }
+
+    // Transform sections
+    const sections = course.sections.map(sec => {
+      const firstMeeting = sec.meetings[0];
+      const firstInstructor = firstMeeting?.instructors[0];
+      const instructorName = firstInstructor ? formatInstructorName(firstInstructor) : null;
+      const location = firstMeeting
+        ? `${firstMeeting.buildingName} ${firstMeeting.roomNumber}`.trim()
+        : null;
+
+      const sectionData: SectionData = {
+        crn: sec.crn,
+        course_id: courseId,
+        section_number: sec.sectionNumber || null,
+        status: sec.enrollmentStatus || null,
+        type: firstMeeting?.typeName || null,
+        days: firstMeeting?.days || null,
+        start_time: firstMeeting?.startTime || null,
+        end_time: firstMeeting?.endTime || null,
+        location: location || null,
+        instructor: instructorName,
+        section_title: sec.sectionTitle || null,
+        status_code: sec.statusCode || null,
+        section_status_code: sec.sectionStatusCode || null,
+        section_text: sec.sectionText || null,
+        section_notes: sec.sectionNotes || null,
+        capp_area: sec.cappArea || null,
+        date_range_text: sec.dateRangeText || null,
+        part_of_term: sec.partOfTerm || null,
+        start_date: sec.startDate || null,
+        end_date: sec.endDate || null,
+        credit_hours: sec.creditHours || null,
+      };
+
+      const meetings: MeetingData[] = sec.meetings.map((m, idx) => ({
+        section_crn: sec.crn,
+        meeting_index: idx,
+        type_code: m.typeCode || null,
+        type_name: m.typeName || null,
+        days: m.days || null,
+        start_time: m.startTime || null,
+        end_time: m.endTime || null,
+        building_name: m.buildingName || null,
+        room_number: m.roomNumber || null,
+        date_range_text: m.dateRangeText || null,
+        instructors: m.instructors,
+      }));
+
+      return { section: sectionData, meetings };
+    });
+
+    return { course: courseData, sections, genEdCategories };
+  });
+
+  return { subject, coursesWithSections };
+}
 
 // Configuration
 const CONFIG = {
@@ -39,7 +284,7 @@ const CONFIG = {
   // 4. Retry failed requests in subsequent batches
   MAX_CONCURRENT: 50,           // Max simultaneous connections
   BATCH_SIZE: 500,              // Process 500 items per batch (queued through pool)
-  RATE_LIMIT_WINDOW_MS: 5 * 60 * 1000,  // WAF uses 5-minute rolling window
+  RATE_LIMIT_WINDOW_MS: 10 * 60 * 1000, // WAF uses 10-minute rolling window
   RATE_LIMIT_BUFFER_MS: 15 * 1000,      // Safety buffer after window expires
   NETWORK_TIMEOUT_MS: 30000,    // 30s timeout per request
   START_YEAR: 2004,
@@ -69,10 +314,10 @@ function loadCheckpoint(): void {
       for (const key of data.completedItems) {
         completedSet.add(key);
       }
-      console.error(`[CHECKPOINT] Loaded ${completedSet.size} completed items from checkpoint`);
+      writeLog(`[CHECKPOINT] Loaded ${completedSet.size} completed items from checkpoint`);
     }
   } catch (err) {
-    console.error(`[CHECKPOINT] Could not load checkpoint: ${err}`);
+    writeLog(`[CHECKPOINT] Could not load checkpoint: ${err}`);
   }
 }
 
@@ -85,7 +330,7 @@ function saveCheckpoint(): void {
   try {
     fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint));
   } catch (err) {
-    console.error(`[CHECKPOINT] Could not save checkpoint: ${err}`);
+    writeLog(`[CHECKPOINT] Could not save checkpoint: ${err}`);
   }
 }
 
@@ -102,10 +347,10 @@ function clearCheckpoint(): void {
   try {
     if (fs.existsSync(checkpointPath)) {
       fs.unlinkSync(checkpointPath);
-      console.error(`[CHECKPOINT] Cleared checkpoint file`);
+      writeLog(`[CHECKPOINT] Cleared checkpoint file`);
     }
   } catch (err) {
-    console.error(`[CHECKPOINT] Could not clear checkpoint: ${err}`);
+    writeLog(`[CHECKPOINT] Could not clear checkpoint: ${err}`);
   }
 }
 
@@ -179,11 +424,11 @@ async function triggerRateLimitWait(): Promise<void> {
   isRateLimited = true;
   const waitTime = getRateLimitWaitTime();
   const waitMin = (waitTime / 1000 / 60).toFixed(1);
-  console.error(`\n[RATE LIMIT] Blocked - pausing all requests for ${waitMin}m...`);
+  writeLog(`\n[RATE LIMIT] Blocked - pausing all requests for ${waitMin}m...`);
 
   rateLimitPromise = new Promise<void>((resolve) => {
     setTimeout(() => {
-      console.error(`[RATE LIMIT] Window expired - resuming`);
+      writeLog(`[RATE LIMIT] Window expired - resuming`);
       isRateLimited = false;
       burstStartTime = null;
       rateLimitPromise = null;
@@ -276,6 +521,27 @@ interface Args {
   termFilter: string | null;
   dryRun: boolean;
   fresh: boolean;
+  sqlFile: string;
+  logFile: string;
+}
+
+// File writers for SQL and logs
+let sqlWriter: fs.WriteStream | null = null;
+let logWriter: fs.WriteStream | null = null;
+
+function writeSql(line: string): void {
+  if (sqlWriter) {
+    sqlWriter.write(line + '\n');
+  }
+}
+
+function writeLog(message: string): void {
+  // Always write to terminal
+  console.log(message);
+  // Also write to log file
+  if (logWriter) {
+    logWriter.write(message + '\n');
+  }
 }
 
 function parseArgs(): Args {
@@ -287,6 +553,8 @@ function parseArgs(): Args {
   let termFilter: string | null = null;
   let dryRun = false;
   let fresh = false;
+  let sqlFile: string | null = null;
+  let logFile: string | null = null;
 
   for (const arg of args) {
     if (arg.startsWith('--start-year=')) {
@@ -303,6 +571,10 @@ function parseArgs(): Args {
       }
     } else if (arg.startsWith('--term=')) {
       termFilter = arg.split('=')[1].toLowerCase();
+    } else if (arg.startsWith('--sql-file=')) {
+      sqlFile = arg.split('=')[1];
+    } else if (arg.startsWith('--log-file=')) {
+      logFile = arg.split('=')[1];
     } else if (arg === '--dry-run') {
       dryRun = true;
     } else if (arg === '--fresh') {
@@ -312,20 +584,22 @@ function parseArgs(): Args {
 Historical Sync Script
 
 Usage:
-  npx tsx scripts/historical-sync.ts [options] > historical-data.sql
+  npx tsx scripts/historical-sync.ts [options]
 
 Options:
   --start-year=YYYY  Start year (default: ${CONFIG.START_YEAR})
   --end-year=YYYY    End year (default: ${currentYear})
   --term=TERM        Only sync specific term (e.g., spring, fall, summer, winter)
+  --sql-file=PATH    SQL output file (default: historical-data.sql)
+  --log-file=PATH    Log output file (default: historical-sync.log)
   --dry-run          Don't output SQL, just show what would be synced
   --fresh            Ignore checkpoint, start fresh
   --help, -h         Show this help message
 
 Examples:
-  npx tsx scripts/historical-sync.ts > all-data.sql
-  npx tsx scripts/historical-sync.ts --start-year=2020 > recent-data.sql
-  npx tsx scripts/historical-sync.ts --term=fall --start-year=2023 > fall-2023.sql
+  npx tsx scripts/historical-sync.ts
+  npx tsx scripts/historical-sync.ts --start-year=2020
+  npx tsx scripts/historical-sync.ts --term=fall --start-year=2023
   npx tsx scripts/historical-sync.ts --dry-run
 `);
       process.exit(0);
@@ -337,7 +611,16 @@ Examples:
     process.exit(1);
   }
 
-  return { startYear, endYear, termFilter, dryRun, fresh };
+  // Generate default file names based on timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  if (!sqlFile) {
+    sqlFile = `historical-data-${timestamp}.sql`;
+  }
+  if (!logFile) {
+    logFile = `historical-sync-${timestamp}.log`;
+  }
+
+  return { startYear, endYear, termFilter, dryRun, fresh, sqlFile, logFile };
 }
 
 // Statistics tracking
@@ -418,7 +701,14 @@ async function getSubjects(year: number, term: string): Promise<string[]> {
 
 function escapeSQL(str: string | null): string {
   if (str === null) return 'NULL';
-  return `'${str.replace(/'/g, "''")}'`;
+  // Escape single quotes and replace newlines/carriage returns with space
+  // Also handle backslashes to avoid escape sequence issues
+  return `'${str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "''")
+    .replace(/\r?\n/g, ' ')
+    .replace(/\r/g, ' ')
+  }'`;
 }
 
 function printSummary(args: Args, startTime: Date): void {
@@ -426,54 +716,54 @@ function printSummary(args: Args, startTime: Date): void {
   const durationMs = endTime.getTime() - startTime.getTime();
   const durationMin = (durationMs / 1000 / 60).toFixed(2);
 
-  console.error(`\n${'='.repeat(60)}`);
-  console.error(`HISTORICAL SYNC SUMMARY`);
-  console.error(`${'='.repeat(60)}`);
-  console.error(`\nConfiguration:`);
-  console.error(`  Start Year:    ${args.startYear}`);
-  console.error(`  End Year:      ${args.endYear}`);
-  console.error(`  Term Filter:   ${args.termFilter || '(all terms)'}`);
-  console.error(`  Dry Run:       ${args.dryRun}`);
+  writeLog(`\n${'='.repeat(60)}`);
+  writeLog(`HISTORICAL SYNC SUMMARY`);
+  writeLog(`${'='.repeat(60)}`);
+  writeLog(`\nConfiguration:`);
+  writeLog(`  Start Year:    ${args.startYear}`);
+  writeLog(`  End Year:      ${args.endYear}`);
+  writeLog(`  Term Filter:   ${args.termFilter || '(all terms)'}`);
+  writeLog(`  Dry Run:       ${args.dryRun}`);
 
-  console.error(`\nResults:`);
-  console.error(`  Years Synced:      ${stats.totalYears}`);
-  console.error(`  Terms Synced:      ${stats.totalTerms}`);
-  console.error(`  Subjects Synced:   ${stats.totalSubjects}`);
-  console.error(`  Courses Synced:    ${stats.totalCourses}`);
-  console.error(`  Sections Synced:   ${stats.totalSections}`);
-  console.error(`  Retried Requests:  ${stats.retriedRequests}`);
-  console.error(`  Failed Subjects:   ${stats.failedSubjects.length}`);
+  writeLog(`\nResults:`);
+  writeLog(`  Years Synced:      ${stats.totalYears}`);
+  writeLog(`  Terms Synced:      ${stats.totalTerms}`);
+  writeLog(`  Subjects Synced:   ${stats.totalSubjects}`);
+  writeLog(`  Courses Synced:    ${stats.totalCourses}`);
+  writeLog(`  Sections Synced:   ${stats.totalSections}`);
+  writeLog(`  Retried Requests:  ${stats.retriedRequests}`);
+  writeLog(`  Failed Subjects:   ${stats.failedSubjects.length}`);
 
-  console.error(`\nTiming:`);
-  console.error(`  Started:    ${startTime.toISOString()}`);
-  console.error(`  Completed:  ${endTime.toISOString()}`);
-  console.error(`  Duration:   ${durationMin} minutes`);
+  writeLog(`\nTiming:`);
+  writeLog(`  Started:    ${startTime.toISOString()}`);
+  writeLog(`  Completed:  ${endTime.toISOString()}`);
+  writeLog(`  Duration:   ${durationMin} minutes`);
 
   if (stats.failedSubjects.length > 0) {
-    console.error(`\n[WARNING] Failed subjects (${stats.failedSubjects.length}):`);
+    writeLog(`\n[WARNING] Failed subjects (${stats.failedSubjects.length}):`);
     for (const failure of stats.failedSubjects) {
-      console.error(`  - ${failure}`);
+      writeLog(`  - ${failure}`);
     }
   }
 
-  console.error(`\nPer-Term Breakdown:`);
+  writeLog(`\nPer-Term Breakdown:`);
   for (const [termId, termStats] of stats.termStats) {
-    console.error(`  ${termId}: ${termStats.subjects} subjects, ${termStats.courses} courses, ${termStats.sections} sections`);
+    writeLog(`  ${termId}: ${termStats.subjects} subjects, ${termStats.courses} courses, ${termStats.sections} sections`);
   }
 
   // Final status
-  console.error(`\n${'='.repeat(60)}`);
+  writeLog(`\n${'='.repeat(60)}`);
   if (stats.failedSubjects.length === 0) {
-    console.error(`✓ SYNC COMPLETE - All data fetched successfully`);
+    writeLog(`✓ SYNC COMPLETE - All data fetched successfully`);
   } else {
-    console.error(`⚠ SYNC COMPLETE WITH ERRORS - ${stats.failedSubjects.length} subjects failed`);
-    console.error(`  Consider re-running with specific term to retry failed subjects`);
+    writeLog(`⚠ SYNC COMPLETE WITH ERRORS - ${stats.failedSubjects.length} subjects failed`);
+    writeLog(`  Consider re-running with specific term to retry failed subjects`);
   }
-  console.error(`${'='.repeat(60)}\n`);
+  writeLog(`${'='.repeat(60)}\n`);
 }
 
 async function discoverAllTerms(startYear: number, endYear: number, termFilter: string | null): Promise<{ year: number; term: string }[]> {
-  console.error(`\n[DISCOVERY] Fetching all terms for years ${startYear}-${endYear} in parallel...`);
+  writeLog(`\n[DISCOVERY] Fetching all terms for years ${startYear}-${endYear} in parallel...`);
 
   const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
 
@@ -491,9 +781,9 @@ async function discoverAllTerms(startYear: number, endYear: number, termFilter: 
   // Flatten into single array of { year, term } objects
   const allTerms = yearTermsResults.flat();
 
-  console.error(`[DISCOVERY] Found ${allTerms.length} terms across ${years.length} years`);
+  writeLog(`[DISCOVERY] Found ${allTerms.length} terms across ${years.length} years`);
   for (const { year, term } of allTerms) {
-    console.error(`  - ${year}/${term}`);
+    writeLog(`  - ${year}/${term}`);
   }
 
   return allTerms;
@@ -503,11 +793,19 @@ async function main() {
   const args = parseArgs();
   const startTime = new Date();
 
-  console.error(`\nHistorical Sync Starting...`);
-  console.error(`  Range: ${args.startYear} - ${args.endYear}`);
-  console.error(`  Term Filter: ${args.termFilter || '(all)'}`);
-  console.error(`  Dry Run: ${args.dryRun}`);
-  console.error(`  Fresh Start: ${args.fresh}`);
+  // Initialize file writers
+  if (!args.dryRun) {
+    sqlWriter = fs.createWriteStream(path.join(process.cwd(), args.sqlFile));
+    writeLog(`SQL output: ${args.sqlFile}`);
+  }
+  logWriter = fs.createWriteStream(path.join(process.cwd(), args.logFile));
+  writeLog(`Log output: ${args.logFile}`);
+
+  writeLog(`\nHistorical Sync Starting...`);
+  writeLog(`  Range: ${args.startYear} - ${args.endYear}`);
+  writeLog(`  Term Filter: ${args.termFilter || '(all)'}`);
+  writeLog(`  Dry Run: ${args.dryRun}`);
+  writeLog(`  Fresh Start: ${args.fresh}`);
 
   // Load or clear checkpoint
   if (args.fresh) {
@@ -520,22 +818,22 @@ async function main() {
   const allTerms = await discoverAllTerms(args.startYear, args.endYear, args.termFilter);
 
   if (allTerms.length === 0) {
-    console.error(`[WARNING] No terms found in range ${args.startYear}-${args.endYear}`);
+    writeLog(`[WARNING] No terms found in range ${args.startYear}-${args.endYear}`);
     return;
   }
 
   // Print SQL header (idempotent - INSERT OR REPLACE handles duplicates)
   if (!args.dryRun) {
-    console.log('-- Historical course data sync');
-    console.log('-- Generated: ' + new Date().toISOString());
-    console.log(`-- Range: ${args.startYear} - ${args.endYear}`);
-    console.log(`-- Term Filter: ${args.termFilter || 'all'}`);
-    console.log('-- NOTE: Uses INSERT OR REPLACE for idempotency (safe to re-run)');
-    console.log('BEGIN TRANSACTION;');
+    writeSql('-- Historical course data sync');
+    writeSql('-- Generated: ' + new Date().toISOString());
+    writeSql(`-- Range: ${args.startYear} - ${args.endYear}`);
+    writeSql(`-- Term Filter: ${args.termFilter || 'all'}`);
+    writeSql('-- NOTE: Uses INSERT OR REPLACE for idempotency (safe to re-run)');
+    writeSql('BEGIN TRANSACTION;');
   }
 
   // PHASE 2: Fetch all subjects for all terms in parallel
-  console.error(`\n[SUBJECTS] Fetching subject lists for all ${allTerms.length} terms in parallel...`);
+  writeLog(`\n[SUBJECTS] Fetching subject lists for all ${allTerms.length} terms in parallel...`);
   const termSubjectsResults = await Promise.all(
     allTerms.map(async ({ year, term }) => {
       const subjects = await getSubjects(year, term);
@@ -549,14 +847,14 @@ async function main() {
   for (const { year, term, subjects } of termSubjectsResults) {
     uniqueYears.add(year);
     stats.totalTerms++;
-    console.error(`[SUBJECTS] ${year}/${term}: ${subjects.length} subjects`);
+    writeLog(`[SUBJECTS] ${year}/${term}: ${subjects.length} subjects`);
     for (const subject of subjects) {
       allWorkItems.push({ year, term, subject });
     }
   }
   stats.totalYears = uniqueYears.size;
 
-  console.error(`\n[SYNC] Total work items: ${allWorkItems.length} subject-terms to fetch`);
+  writeLog(`\n[SYNC] Total work items: ${allWorkItems.length} subject-terms to fetch`);
 
   // Filter out already-completed items (checkpoint resume)
   const pendingWorkItems = allWorkItems.filter(
@@ -564,17 +862,17 @@ async function main() {
   );
   const skippedCount = allWorkItems.length - pendingWorkItems.length;
   if (skippedCount > 0) {
-    console.error(`[CHECKPOINT] Skipping ${skippedCount} already-completed items`);
+    writeLog(`[CHECKPOINT] Skipping ${skippedCount} already-completed items`);
   }
-  console.error(`[SYNC] Pending work items: ${pendingWorkItems.length}`);
+  writeLog(`[SYNC] Pending work items: ${pendingWorkItems.length}`);
 
   if (pendingWorkItems.length === 0) {
-    console.error(`[SYNC] All items already completed! Use --fresh to start over.`);
+    writeLog(`[SYNC] All items already completed! Use --fresh to start over.`);
     printSummary(args, startTime);
     return;
   }
 
-  console.error(`[SYNC] Strategy: ${CONFIG.MAX_CONCURRENT} concurrent connections, ${CONFIG.BATCH_SIZE} items per batch`);
+  writeLog(`[SYNC] Strategy: ${CONFIG.MAX_CONCURRENT} concurrent connections, ${CONFIG.BATCH_SIZE} items per batch`);
 
   // PHASE 3: Process ALL subjects across ALL terms in batches
   const termResults = new Map<string, { courses: number; sections: number; subjects: number }>();
@@ -589,7 +887,7 @@ async function main() {
     // Record when this burst starts for accurate window tracking
     recordBurstStart();
 
-    console.error(`\n[BATCH ${batchNum}/${totalBatches}] Processing ${batch.length} items (${completedItems} done, ${failedItems} failed)...`);
+    writeLog(`\n[BATCH ${batchNum}/${totalBatches}] Processing ${batch.length} items (${completedItems} done, ${failedItems} failed)...`);
 
     const results = await Promise.all(batch.map(async ({ year, term, subject }) => {
       const termId = `${year}-${term}`;
@@ -629,8 +927,11 @@ async function main() {
                   const displayName = formatInstructorName(inst) || inst.lastName;
                   sqlStatements.push(`INSERT OR IGNORE INTO instructors (first_name, last_name, display_name) VALUES (${escapeSQL(inst.firstName)}, ${escapeSQL(inst.lastName)}, ${escapeSQL(displayName)});`);
 
-                  // 7. Meeting Instructor link
-                  sqlStatements.push(`INSERT OR REPLACE INTO meeting_instructors (meeting_id, instructor_id) SELECT m.id, i.id FROM meetings m, instructors i WHERE m.section_crn = ${escapeSQL(section.crn)} AND m.meeting_index = ${meeting.meeting_index} AND i.last_name = ${escapeSQL(inst.lastName)} AND i.first_name IS ${escapeSQL(inst.firstName)};`);
+                  // 7. Meeting Instructor link (handle NULL first_name with IS/= appropriately)
+                  const firstNameCondition = inst.firstName
+                    ? `i.first_name = ${escapeSQL(inst.firstName)}`
+                    : `i.first_name IS NULL`;
+                  sqlStatements.push(`INSERT OR IGNORE INTO meeting_instructors (meeting_id, instructor_id) SELECT m.id, i.id FROM meetings m, instructors i WHERE m.section_crn = ${escapeSQL(section.crn)} AND m.meeting_index = ${meeting.meeting_index} AND i.last_name = ${escapeSQL(inst.lastName)} AND ${firstNameCondition};`);
                 }
               }
             }
@@ -670,7 +971,7 @@ async function main() {
     for (const result of results) {
       if (result.success) {
         for (const sql of result.sqlStatements) {
-          console.log(sql);
+          writeSql(sql);
         }
 
         // Mark this item as completed in checkpoint
@@ -697,7 +998,7 @@ async function main() {
     // Save checkpoint after each batch
     saveCheckpoint();
 
-    console.error(`[BATCH ${batchNum}/${totalBatches}] Complete: ${batchSuccess} succeeded, ${batchFailed} failed`);
+    writeLog(`[BATCH ${batchNum}/${totalBatches}] Complete: ${batchSuccess} succeeded, ${batchFailed} failed`);
   }
 
   // Output term_state for each term
@@ -706,7 +1007,7 @@ async function main() {
     for (const [termId, termStats] of termResults) {
       const [yearStr, term] = termId.split('-');
       const year = parseInt(yearStr);
-      console.log(`INSERT OR REPLACE INTO term_state (term_id, year, term, status, last_checked, last_synced, subjects_count, courses_count, sections_count) VALUES (${escapeSQL(termId)}, ${year}, ${escapeSQL(term)}, 'historical', ${now}, ${now}, ${termStats.subjects}, ${termStats.courses}, ${termStats.sections});`);
+      writeSql(`INSERT OR REPLACE INTO term_state (term_id, year, term, status, last_checked, last_synced, subjects_count, courses_count, sections_count) VALUES (${escapeSQL(termId)}, ${year}, ${escapeSQL(term)}, 'historical', ${now}, ${now}, ${termStats.subjects}, ${termStats.courses}, ${termStats.sections});`);
     }
   }
 
@@ -716,14 +1017,22 @@ async function main() {
   }
 
   if (!args.dryRun) {
-    console.log('COMMIT;');
+    writeSql('COMMIT;');
   }
 
   // Print comprehensive summary
   printSummary(args, startTime);
+
+  // Close file writers
+  if (sqlWriter) {
+    sqlWriter.end();
+  }
+  if (logWriter) {
+    logWriter.end();
+  }
 }
 
 main().catch(error => {
-  console.error(`\n[FATAL ERROR] ${error}`);
+  writeLog(`\n[FATAL ERROR] ${error}`);
   process.exit(1);
 });
