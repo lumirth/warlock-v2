@@ -3,3 +3,11 @@ node_modules/
 .dev.vars
 .worktrees/
 apps/web/dist/
+
+# OS files
+.DS_Store
+
+# Sync artifacts (large SQL dumps, logs, checkpoints)
+*.sql
+*.log
+historical-sync-checkpoint.json
