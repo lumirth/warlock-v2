@@ -8,6 +8,35 @@ export interface SearchResult {
   score: number;
   semanticRank?: number;
   keywordRank?: number;
+  termPriority?: number;
+  historical?: boolean;
+}
+
+interface TermInfo {
+  term_id: string;
+  year: number;
+  term: string;
+  status: string;
+}
+
+function getTermPriority(
+  termInfo: TermInfo,
+  activeTerm: string | null,
+  registrableTerm: string | null
+): number {
+  const seasonRank: Record<string, number> = { fall: 1, spring: 1, summer: 2, winter: 2 };
+
+  // Registrable term is highest priority
+  if (termInfo.term_id === registrableTerm) return 0;
+
+  // Active term is second priority
+  if (termInfo.term_id === activeTerm) return 1;
+
+  // Historical: Fall/Spring before Winter/Summer, then by recency
+  const base = 100 - termInfo.year;
+  const seasonPenalty = (seasonRank[termInfo.term] === 2) ? 50 : 0;
+
+  return 2 + base + seasonPenalty;
 }
 
 // Reciprocal Rank Fusion constant
@@ -231,4 +260,51 @@ export async function hybridSearch(
     semanticRank: s.semanticRank,
     keywordRank: s.keywordRank
   })).filter(r => r.course);
+}
+
+export async function hybridSearchWithTermRanking(
+  db: D1Database,
+  vectorize: VectorizeIndex,
+  ai: Ai,
+  plan: SearchPlan,
+  limit: number = 20
+): Promise<SearchResult[]> {
+  // Get current term states
+  const termStates = await db.prepare(`
+    SELECT term_id, year, term, status FROM term_state
+    WHERE status IN ('active', 'registrable')
+    ORDER BY year DESC
+  `).all<TermInfo>();
+
+  const activeTerm = termStates.results.find(t => t.status === 'active')?.term_id || null;
+  const registrableTerm = termStates.results.find(t => t.status === 'registrable')?.term_id || null;
+
+  // Run standard hybrid search
+  const results = await hybridSearch(db, vectorize, ai, plan, limit * 2);
+
+  // Add term info and sort by term priority, then by score
+  const enrichedResults = results.map((r) => {
+    const termInfo: TermInfo = {
+      term_id: `${r.course.year}-${r.course.term}`,
+      year: r.course.year,
+      term: r.course.term,
+      status: 'historical'
+    };
+    const termPriority = getTermPriority(termInfo, activeTerm, registrableTerm);
+    return {
+      ...r,
+      termPriority,
+      historical: termInfo.term_id !== activeTerm && termInfo.term_id !== registrableTerm
+    };
+  });
+
+  // Sort by term priority first, then by score
+  enrichedResults.sort((a, b) => {
+    if (a.termPriority !== b.termPriority) {
+      return a.termPriority! - b.termPriority!;
+    }
+    return b.score - a.score;
+  });
+
+  return enrichedResults.slice(0, limit);
 }
