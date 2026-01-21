@@ -123,6 +123,19 @@ CREATE TABLE IF NOT EXISTS sections (
     end_time TEXT,                    -- "09:50"
     location TEXT,
 
+    -- New fields from CISAPI
+    section_title TEXT,               -- for topics courses
+    status_code TEXT,
+    section_status_code TEXT,
+    section_text TEXT,                -- detailed info
+    section_notes TEXT,               -- major restrictions
+    capp_area TEXT,                   -- James Scholars, etc.
+    date_range_text TEXT,
+    part_of_term TEXT,                -- "1", "A", "B"
+    start_date TEXT,
+    end_date TEXT,
+    credit_hours TEXT,                -- section-level override
+
     -- Instructor
     instructor TEXT,
     instructor_rmp REAL,
