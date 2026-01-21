@@ -28,6 +28,75 @@ CREATE TABLE IF NOT EXISTS courses (
     UNIQUE(subject, number, year, term)
 );
 
+-- Subject/department metadata
+CREATE TABLE IF NOT EXISTS subjects (
+    id TEXT PRIMARY KEY,              -- "CS", "AAS"
+    name TEXT NOT NULL,               -- "Computer Science"
+    college_code TEXT,
+    department_code TEXT,
+    unit_name TEXT,
+    contact_name TEXT,
+    contact_title TEXT,
+    address_line1 TEXT,
+    address_line2 TEXT,
+    phone_number TEXT,
+    website_url TEXT,
+    description TEXT,
+    last_synced INTEGER
+);
+
+-- Normalized instructors
+CREATE TABLE IF NOT EXISTS instructors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT,
+    last_name TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    rmp_rating REAL,
+    rmp_difficulty REAL,
+    avg_gpa REAL,
+    gpa_sample_size INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_instructors_name ON instructors(last_name, first_name);
+
+-- Multiple meetings per section
+CREATE TABLE IF NOT EXISTS meetings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    section_crn TEXT NOT NULL,
+    meeting_index INTEGER NOT NULL,
+    type_code TEXT,
+    type_name TEXT,
+    days TEXT,
+    start_time TEXT,
+    end_time TEXT,
+    building_name TEXT,
+    room_number TEXT,
+    date_range_text TEXT,
+    UNIQUE(section_crn, meeting_index),
+    FOREIGN KEY (section_crn) REFERENCES sections(crn) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_meetings_section ON meetings(section_crn);
+
+-- Many-to-many: meetings <-> instructors
+CREATE TABLE IF NOT EXISTS meeting_instructors (
+    meeting_id INTEGER NOT NULL,
+    instructor_id INTEGER NOT NULL,
+    PRIMARY KEY (meeting_id, instructor_id),
+    FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+    FOREIGN KEY (instructor_id) REFERENCES instructors(id)
+);
+
+-- Multiple GenEd categories per course
+CREATE TABLE IF NOT EXISTS course_gened (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    category_name TEXT,
+    attribute_code TEXT,
+    attribute_name TEXT,
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_course_gened_course ON course_gened(course_id);
+
 -- Sections table
 CREATE TABLE IF NOT EXISTS sections (
     crn TEXT PRIMARY KEY,
