@@ -1,7 +1,10 @@
 import { Hono } from 'hono';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { searchCourses } from '../services/embeddings.js';
-import { hybridSearch, keywordSearch, type SearchFilters } from '../services/search.js';
+import { hybridSearch, keywordSearch } from '../services/search.js';
+import { resolveQuery } from '../services/query-resolver.js';
+import { extractQueryLite } from '@uiuc-course-search/query-extractor-lite';
+import type { ExtractedQuery, SearchPlan } from '@uiuc-course-search/query-types';
 
 type Bindings = {
   DB: D1Database;
@@ -26,27 +29,6 @@ searchRoutes.get('/search/semantic', async (c) => {
   }
 });
 
-// Keyword search endpoint
-searchRoutes.get('/search/keyword', async (c) => {
-  const query = c.req.query('q') || '';
-
-  const filters: SearchFilters = {
-    subject: c.req.query('subject'),
-    minGpa: c.req.query('min_gpa') ? parseFloat(c.req.query('min_gpa')!) : undefined,
-    maxGpa: c.req.query('max_gpa') ? parseFloat(c.req.query('max_gpa')!) : undefined,
-    credits: c.req.query('credits') ? parseInt(c.req.query('credits')!) : undefined,
-    gened: c.req.query('gened'),
-    status: c.req.query('status')
-  };
-
-  try {
-    const results = await keywordSearch(c.env.DB, query, filters, 20);
-    return c.json({ results });
-  } catch (error) {
-    return c.json({ error: String(error) }, 500);
-  }
-});
-
 // Hybrid search endpoint (combines semantic + keyword with RRF)
 searchRoutes.get('/api/search', async (c) => {
   const query = c.req.query('q');
@@ -54,14 +36,28 @@ searchRoutes.get('/api/search', async (c) => {
     return c.json({ error: 'Missing query parameter q' }, 400);
   }
 
-  const filters: SearchFilters = {
-    subject: c.req.query('subject'),
-    minGpa: c.req.query('min_gpa') ? parseFloat(c.req.query('min_gpa')!) : undefined,
-    maxGpa: c.req.query('max_gpa') ? parseFloat(c.req.query('max_gpa')!) : undefined,
-    credits: c.req.query('credits') ? parseInt(c.req.query('credits')!) : undefined,
-    gened: c.req.query('gened'),
-    status: c.req.query('status')
-  };
+  // 1. Get extracted query (either from client header or via server-side fallback)
+  let extracted: ExtractedQuery;
+  const hintsHeader = c.req.header('X-Search-Hints');
+  
+  if (hintsHeader) {
+    try {
+      extracted = JSON.parse(hintsHeader);
+    } catch (e) {
+      extracted = extractQueryLite(query);
+    }
+  } else {
+    // Fallback to server-side regex extraction if client didn't provide hints
+    extracted = extractQueryLite(query);
+  }
+
+  // 2. Authoritatively resolve hints to DB IDs/Codes
+  const plan = await resolveQuery(c.env.DB, extracted);
+  
+  // 3. Allow manual overrides from query params
+  if (c.req.query('subject')) plan.filters.subject = c.req.query('subject');
+  if (c.req.query('gened')) plan.filters.gened_code = c.req.query('gened');
+  if (c.req.query('credits')) plan.filters.credits = parseInt(c.req.query('credits')!);
 
   const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : 20;
 
@@ -70,8 +66,7 @@ searchRoutes.get('/api/search', async (c) => {
       c.env.DB,
       c.env.VECTORIZE,
       c.env.AI,
-      query,
-      filters,
+      plan,
       limit
     );
 
@@ -84,10 +79,12 @@ searchRoutes.get('/api/search', async (c) => {
       })),
       meta: {
         total: results.length,
-        query
+        plan,
+        extracted
       }
     });
   } catch (error) {
+    console.error('Search error:', error);
     return c.json({ error: String(error) }, 500);
   }
 });

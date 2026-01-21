@@ -1,17 +1,7 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { searchCourses as semanticSearch } from './embeddings.js';
 import type { Course } from '../db/index.js';
-
-export interface SearchFilters {
-  subject?: string;
-  minGpa?: number;
-  maxGpa?: number;
-  credits?: number;
-  gened?: string;
-  status?: string;
-  minStartTime?: string;
-  maxStartTime?: string;
-}
+import type { SearchPlan } from '@uiuc-course-search/query-types';
 
 export interface SearchResult {
   course: Course;
@@ -29,59 +19,69 @@ function rrfScore(rank: number): number {
 
 export async function keywordSearch(
   db: D1Database,
-  query: string,
-  filters: SearchFilters,
+  plan: SearchPlan,
   limit: number = 50
 ): Promise<{ id: string; rank: number }[]> {
+  const { filters, keywordQuery } = plan;
+  
   // Build WHERE clause for filters
   const whereClauses: string[] = [];
   const params: (string | number)[] = [];
+  const joins: string[] = [];
 
   if (filters.subject) {
     whereClauses.push('c.subject = ?');
     params.push(filters.subject);
   }
-  if (filters.minGpa !== undefined) {
-    whereClauses.push('c.avg_gpa >= ?');
-    params.push(filters.minGpa);
-  }
-  if (filters.maxGpa !== undefined) {
-    whereClauses.push('c.avg_gpa <= ?');
-    params.push(filters.maxGpa);
-  }
+  
   if (filters.credits !== undefined) {
     whereClauses.push('c.credit_hours = ?');
     params.push(filters.credits);
   }
-  if (filters.gened) {
-    whereClauses.push('c.gened = ?');
-    params.push(filters.gened);
+
+  if (filters.gened_code) {
+    joins.push('JOIN course_gened cg ON cg.course_id = c.id');
+    whereClauses.push('(cg.category_id = ? OR cg.attribute_code = ?)');
+    params.push(filters.gened_code, filters.gened_code);
+  }
+
+  if (filters.instructor_ids && filters.instructor_ids.length > 0) {
+    joins.push('JOIN sections s ON s.course_id = c.id');
+    joins.push('JOIN meetings m ON m.section_crn = s.crn');
+    joins.push('JOIN meeting_instructors mi ON mi.meeting_id = m.id');
+    
+    const placeholders = filters.instructor_ids.map(() => '?').join(',');
+    whereClauses.push(`mi.instructor_id IN (${placeholders})`);
+    params.push(...filters.instructor_ids);
   }
 
   const whereClause = whereClauses.length > 0
     ? 'WHERE ' + whereClauses.join(' AND ')
     : '';
 
+  const joinClause = joins.join(' ');
+
   // FTS5 search with BM25 ranking
+  // We use DISTINCT because joins might duplicate courses (multiple sections/meetings/instructors)
   const sql = `
-    SELECT c.id, bm25(courses_fts) as score
+    SELECT DISTINCT c.id, bm25(courses_fts) as fts_score
     FROM courses_fts fts
     JOIN courses c ON c.rowid = fts.rowid
+    ${joinClause}
     ${whereClause}
-    ${query ? "AND courses_fts MATCH ?" : ""}
-    ORDER BY score
+    ${keywordQuery ? (whereClause ? "AND" : "WHERE") + " courses_fts MATCH ?" : ""}
+    ORDER BY fts_score
     LIMIT ?
   `;
 
   const finalParams = [...params];
-  if (query) {
-    // Escape special FTS5 characters and use phrase matching
-    const escapedQuery = query.replace(/['"]/g, '').trim();
+  if (keywordQuery) {
+    const escapedQuery = keywordQuery.replace(/['"]/g, '').trim();
     finalParams.push(escapedQuery);
   }
   finalParams.push(limit);
 
-  const result = await db.prepare(sql).bind(...finalParams).all<{ id: string; score: number }>();
+  const result = await db.prepare(sql).bind(...finalParams).all<{ id: string; fts_score: number }>();
 
   return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
 }
@@ -90,14 +90,14 @@ export async function hybridSearch(
   db: D1Database,
   vectorize: VectorizeIndex,
   ai: Ai,
-  query: string,
-  filters: SearchFilters,
+  plan: SearchPlan,
   limit: number = 20
 ): Promise<SearchResult[]> {
   // Run both searches in parallel
+  // Note: semanticSearch might also benefit from metadata filtering in the future
   const [semanticResults, keywordResults] = await Promise.all([
-    semanticSearch(vectorize, ai, query, 50),
-    keywordSearch(db, query, filters, 50)
+    semanticSearch(vectorize, ai, plan.semanticQuery, 50),
+    keywordSearch(db, plan, 50)
   ]);
 
   // Build rank maps
