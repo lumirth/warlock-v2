@@ -258,3 +258,196 @@ export async function getTermState(
     'SELECT * FROM term_state WHERE term_id = ?'
   ).bind(termId).first<TermState>();
 }
+
+// Subject operations
+
+export async function upsertSubject(db: D1Database, subject: Subject): Promise<void> {
+  await db.prepare(`
+    INSERT INTO subjects (id, name, college_code, department_code, unit_name,
+                          contact_name, contact_title, address_line1, address_line2,
+                          phone_number, website_url, description, last_synced)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      college_code = excluded.college_code,
+      department_code = excluded.department_code,
+      unit_name = excluded.unit_name,
+      contact_name = excluded.contact_name,
+      contact_title = excluded.contact_title,
+      address_line1 = excluded.address_line1,
+      address_line2 = excluded.address_line2,
+      phone_number = excluded.phone_number,
+      website_url = excluded.website_url,
+      description = excluded.description,
+      last_synced = excluded.last_synced
+  `).bind(
+    subject.id, subject.name, subject.college_code, subject.department_code,
+    subject.unit_name, subject.contact_name, subject.contact_title,
+    subject.address_line1, subject.address_line2, subject.phone_number,
+    subject.website_url, subject.description, subject.last_synced
+  ).run();
+}
+
+export async function getSubject(db: D1Database, id: string): Promise<Subject | null> {
+  return db.prepare(
+    'SELECT * FROM subjects WHERE id = ?'
+  ).bind(id).first<Subject>();
+}
+
+// Instructor operations
+
+export async function upsertInstructor(
+  db: D1Database,
+  instructor: Omit<Instructor, 'id'>
+): Promise<number> {
+  const result = await db.prepare(`
+    INSERT INTO instructors (first_name, last_name, display_name, rmp_rating,
+                             rmp_difficulty, avg_gpa, gpa_sample_size)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(first_name, last_name) DO UPDATE SET
+      display_name = excluded.display_name,
+      rmp_rating = excluded.rmp_rating,
+      rmp_difficulty = excluded.rmp_difficulty,
+      avg_gpa = excluded.avg_gpa,
+      gpa_sample_size = excluded.gpa_sample_size
+    RETURNING id
+  `).bind(
+    instructor.first_name, instructor.last_name, instructor.display_name,
+    instructor.rmp_rating, instructor.rmp_difficulty, instructor.avg_gpa,
+    instructor.gpa_sample_size
+  ).first<{ id: number }>();
+
+  if (!result) {
+    // If RETURNING didn't work, fetch the existing record
+    const existing = await getInstructorByName(db, instructor.last_name, instructor.first_name);
+    if (!existing) {
+      throw new Error('Failed to insert or retrieve instructor');
+    }
+    return existing.id;
+  }
+
+  return result.id;
+}
+
+export async function getInstructorByName(
+  db: D1Database,
+  lastName: string,
+  firstName: string | null
+): Promise<Instructor | null> {
+  return db.prepare(`
+    SELECT * FROM instructors WHERE last_name = ? AND first_name IS ?
+  `).bind(lastName, firstName).first<Instructor>();
+}
+
+// Meeting operations
+
+export async function upsertMeeting(
+  db: D1Database,
+  meeting: Omit<Meeting, 'id'>
+): Promise<number> {
+  const result = await db.prepare(`
+    INSERT INTO meetings (section_crn, meeting_index, type_code, type_name,
+                          days, start_time, end_time, building_name,
+                          room_number, date_range_text)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(section_crn, meeting_index) DO UPDATE SET
+      type_code = excluded.type_code,
+      type_name = excluded.type_name,
+      days = excluded.days,
+      start_time = excluded.start_time,
+      end_time = excluded.end_time,
+      building_name = excluded.building_name,
+      room_number = excluded.room_number,
+      date_range_text = excluded.date_range_text
+    RETURNING id
+  `).bind(
+    meeting.section_crn, meeting.meeting_index, meeting.type_code, meeting.type_name,
+    meeting.days, meeting.start_time, meeting.end_time, meeting.building_name,
+    meeting.room_number, meeting.date_range_text
+  ).first<{ id: number }>();
+
+  if (!result) {
+    // If RETURNING didn't work, fetch the existing record
+    const existing = await db.prepare(`
+      SELECT id FROM meetings WHERE section_crn = ? AND meeting_index = ?
+    `).bind(meeting.section_crn, meeting.meeting_index).first<{ id: number }>();
+
+    if (!existing) {
+      throw new Error('Failed to insert or retrieve meeting');
+    }
+    return existing.id;
+  }
+
+  return result.id;
+}
+
+export async function getMeetingsForSection(
+  db: D1Database,
+  sectionCrn: string
+): Promise<Meeting[]> {
+  const result = await db.prepare(`
+    SELECT * FROM meetings WHERE section_crn = ? ORDER BY meeting_index
+  `).bind(sectionCrn).all<Meeting>();
+  return result.results;
+}
+
+// MeetingInstructor operations
+
+export async function linkMeetingInstructor(
+  db: D1Database,
+  meetingId: number,
+  instructorId: number
+): Promise<void> {
+  await db.prepare(`
+    INSERT INTO meeting_instructors (meeting_id, instructor_id)
+    VALUES (?, ?)
+    ON CONFLICT(meeting_id, instructor_id) DO NOTHING
+  `).bind(meetingId, instructorId).run();
+}
+
+export async function clearMeetingInstructors(
+  db: D1Database,
+  meetingId: number
+): Promise<void> {
+  await db.prepare(
+    'DELETE FROM meeting_instructors WHERE meeting_id = ?'
+  ).bind(meetingId).run();
+}
+
+// CourseGened operations
+
+export async function upsertCourseGened(
+  db: D1Database,
+  gened: Omit<CourseGened, 'id'>
+): Promise<void> {
+  await db.prepare(`
+    INSERT INTO course_gened (course_id, category_id, category_name,
+                              attribute_code, attribute_name)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(course_id, category_id, attribute_code) DO UPDATE SET
+      category_name = excluded.category_name,
+      attribute_name = excluded.attribute_name
+  `).bind(
+    gened.course_id, gened.category_id, gened.category_name,
+    gened.attribute_code, gened.attribute_name
+  ).run();
+}
+
+export async function clearCourseGeneds(
+  db: D1Database,
+  courseId: string
+): Promise<void> {
+  await db.prepare(
+    'DELETE FROM course_gened WHERE course_id = ?'
+  ).bind(courseId).run();
+}
+
+export async function getGenedsByCourse(
+  db: D1Database,
+  courseId: string
+): Promise<CourseGened[]> {
+  const result = await db.prepare(`
+    SELECT * FROM course_gened WHERE course_id = ? ORDER BY category_id, attribute_code
+  `).bind(courseId).all<CourseGened>();
+  return result.results;
+}
