@@ -296,20 +296,55 @@ export async function getSubject(db: D1Database, id: string): Promise<Subject | 
 
 // Instructor operations
 
+export async function createInstructor(
+  db: D1Database,
+  instructor: { firstName?: string | null; lastName: string; displayName: string }
+): Promise<number> {
+  const result = await db.prepare(`
+    INSERT INTO instructors (first_name, last_name, display_name)
+    VALUES (?, ?, ?)
+    RETURNING id
+  `)
+    .bind(instructor.firstName || null, instructor.lastName, instructor.displayName)
+    .first<{ id: number }>();
+
+  return result!.id;
+}
+
+// Keep old function for backward compatibility during migration
 export async function upsertInstructor(
   db: D1Database,
   instructor: Omit<Instructor, 'id'>
 ): Promise<number> {
+  // Since we removed the unique constraint, we first check if an instructor exists
+  const existing = await getInstructorByName(db, instructor.last_name, instructor.first_name);
+
+  if (existing) {
+    // Update existing instructor
+    await db.prepare(`
+      UPDATE instructors SET
+        display_name = ?,
+        rmp_rating = ?,
+        rmp_difficulty = ?,
+        avg_gpa = ?,
+        gpa_sample_size = ?
+      WHERE id = ?
+    `).bind(
+      instructor.display_name,
+      instructor.rmp_rating,
+      instructor.rmp_difficulty,
+      instructor.avg_gpa,
+      instructor.gpa_sample_size,
+      existing.id
+    ).run();
+    return existing.id;
+  }
+
+  // Insert new instructor
   const result = await db.prepare(`
     INSERT INTO instructors (first_name, last_name, display_name, rmp_rating,
                              rmp_difficulty, avg_gpa, gpa_sample_size)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(first_name, last_name) DO UPDATE SET
-      display_name = excluded.display_name,
-      rmp_rating = excluded.rmp_rating,
-      rmp_difficulty = excluded.rmp_difficulty,
-      avg_gpa = excluded.avg_gpa,
-      gpa_sample_size = excluded.gpa_sample_size
     RETURNING id
   `).bind(
     instructor.first_name, instructor.last_name, instructor.display_name,
@@ -318,12 +353,7 @@ export async function upsertInstructor(
   ).first<{ id: number }>();
 
   if (!result) {
-    // If RETURNING didn't work, fetch the existing record
-    const existing = await getInstructorByName(db, instructor.last_name, instructor.first_name);
-    if (!existing) {
-      throw new Error('Failed to insert or retrieve instructor');
-    }
-    return existing.id;
+    throw new Error('Failed to insert instructor');
   }
 
   return result.id;
