@@ -24,6 +24,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { parseSubjectCascadeXml } from '../src/cisapi/parser.ts';
+import { fromSubjectCascade, formatInstructorName } from '../src/transforms/course.ts';
+import { makeCourseId } from '../src/db/index.ts';
 
 // Configuration
 const CONFIG = {
@@ -360,29 +363,6 @@ const stats: SyncStats = {
   termStats: new Map(),
 };
 
-interface Course {
-  id: string;
-  subject: string;
-  number: string;
-  title: string;
-  description: string | null;
-  creditHours: string;
-  gened: string | null;
-}
-
-interface Section {
-  crn: string;
-  sectionNumber: string;
-  type: string;
-  enrollmentStatus: string;
-  startTime: string;
-  endTime: string;
-  daysOfTheWeek: string;
-  buildingName: string;
-  roomNumber: string;
-  instructors: { firstName: string; lastName: string }[];
-}
-
 async function getTerms(year: number): Promise<string[]> {
   // Try AJAX endpoint first (faster, but may be blocked)
   const ajaxUrl = `${CONFIG.FRONTEND_BASE}/ajax/search/termlist/${year}`;
@@ -436,90 +416,9 @@ async function getSubjects(year: number, term: string): Promise<string[]> {
   }
 }
 
-function parseSubjectCascade(xml: string, subjectId: string): { courses: Course[]; sections: Map<string, Section[]> } {
-  const courses: Course[] = [];
-  const sections = new Map<string, Section[]>();
-
-  // Extract cascadingCourse blocks (the API uses this element name in cascade mode)
-  const courseBlocks = xml.match(/<cascadingCourse id="[^"]*"[\s\S]*?<\/cascadingCourse>/g) || [];
-
-  for (const block of courseBlocks) {
-    // cascadingCourse id is like "CS 101" - extract course number from it
-    const cascadeIdMatch = block.match(/<cascadingCourse id="[A-Z]+\s*(\d+[A-Z]*)"/i);
-    const labelMatch = block.match(/<label>([^<]*)<\/label>/);
-    const descMatch = block.match(/<description>([^<]*)<\/description>/);
-    const creditMatch = block.match(/<creditHours>([^<]*)<\/creditHours>/);
-    const genedMatch = block.match(/<category id="([^"]+)"/);
-
-    if (cascadeIdMatch && labelMatch) {
-      const courseNumber = cascadeIdMatch[1];
-      const courseId = `${subjectId}-${courseNumber}`;
-      courses.push({
-        id: courseNumber,
-        subject: subjectId,
-        number: courseNumber,
-        title: labelMatch[1],
-        description: descMatch ? descMatch[1] : null,
-        creditHours: creditMatch ? creditMatch[1] : '0',
-        gened: genedMatch ? genedMatch[1] : null,
-      });
-
-      // Parse sections for this course (API uses detailedSection in cascade mode)
-      const courseSections: Section[] = [];
-      const sectionBlocks = block.match(/<detailedSection id="[^"]*"[\s\S]*?<\/detailedSection>/g) || [];
-
-      for (const sectionBlock of sectionBlocks) {
-        const crnMatch = sectionBlock.match(/<detailedSection id="(\d+)"/);
-        const sectionNumMatch = sectionBlock.match(/<sectionNumber>([^<]*)<\/sectionNumber>/);
-        const typeMatch = sectionBlock.match(/<type[^>]*>([^<]*)<\/type>/);
-        const statusMatch = sectionBlock.match(/<enrollmentStatus>([^<]*)<\/enrollmentStatus>/);
-        const startMatch = sectionBlock.match(/<start>([^<]*)<\/start>/);
-        const endMatch = sectionBlock.match(/<end>([^<]*)<\/end>/);
-        const daysMatch = sectionBlock.match(/<daysOfTheWeek>([^<]*)<\/daysOfTheWeek>/);
-        const buildingMatch = sectionBlock.match(/<buildingName>([^<]*)<\/buildingName>/);
-        const roomMatch = sectionBlock.match(/<roomNumber>([^<]*)<\/roomNumber>/);
-
-        // Parse instructors
-        const instructors: { firstName: string; lastName: string }[] = [];
-        const instructorBlocks = sectionBlock.match(/<instructor>[\s\S]*?<\/instructor>/g) || [];
-        for (const instBlock of instructorBlocks) {
-          const firstMatch = instBlock.match(/<firstName>([^<]*)<\/firstName>/);
-          const lastMatch = instBlock.match(/<lastName>([^<]*)<\/lastName>/);
-          if (firstMatch && lastMatch) {
-            instructors.push({ firstName: firstMatch[1], lastName: lastMatch[1] });
-          }
-        }
-
-        if (crnMatch) {
-          courseSections.push({
-            crn: crnMatch[1],
-            sectionNumber: sectionNumMatch ? sectionNumMatch[1] : '',
-            type: typeMatch ? typeMatch[1] : '',
-            enrollmentStatus: statusMatch ? statusMatch[1] : 'UNKNOWN',
-            startTime: startMatch ? startMatch[1] : '',
-            endTime: endMatch ? endMatch[1] : '',
-            daysOfTheWeek: daysMatch ? daysMatch[1] : '',
-            buildingName: buildingMatch ? buildingMatch[1] : '',
-            roomNumber: roomMatch ? roomMatch[1] : '',
-            instructors,
-          });
-        }
-      }
-
-      sections.set(courseId, courseSections);
-    }
-  }
-
-  return { courses, sections };
-}
-
 function escapeSQL(str: string | null): string {
   if (str === null) return 'NULL';
   return `'${str.replace(/'/g, "''")}'`;
-}
-
-function makeCourseId(subject: string, number: string, year: number, term: string): string {
-  return `${subject}-${number}-${year}-${term}`;
 }
 
 function printSummary(args: Args, startTime: Date): void {
@@ -698,37 +597,42 @@ async function main() {
       try {
         const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
         const xml = await robustFetch(url);
-        const { courses, sections } = parseSubjectCascade(xml, subject);
+        const parsed = parseSubjectCascadeXml(xml);
+        const { subject: subjectMeta, coursesWithSections } = fromSubjectCascade(parsed, year, term);
 
         const now = Math.floor(Date.now() / 1000);
         const sqlStatements: string[] = [];
 
-        for (const course of courses) {
-          const courseId = makeCourseId(subject, course.number, year, term);
-          const courseSections = sections.get(`${subject}-${course.number}`) || [];
+        if (!args.dryRun) {
+          // 1. Subject metadata
+          sqlStatements.push(`INSERT OR REPLACE INTO subjects (id, name, college_code, department_code, unit_name, contact_name, contact_title, address_line1, address_line2, phone_number, website_url, description, last_synced) VALUES (${escapeSQL(subjectMeta.id)}, ${escapeSQL(subjectMeta.name)}, ${escapeSQL(subjectMeta.college_code)}, ${escapeSQL(subjectMeta.department_code)}, ${escapeSQL(subjectMeta.unit_name)}, ${escapeSQL(subjectMeta.contact_name)}, ${escapeSQL(subjectMeta.contact_title)}, ${escapeSQL(subjectMeta.address_line1)}, ${escapeSQL(subjectMeta.address_line2)}, ${escapeSQL(subjectMeta.phone_number)}, ${escapeSQL(subjectMeta.website_url)}, ${escapeSQL(subjectMeta.description)}, ${now});`);
 
-          const lectureSection = courseSections.find(s =>
-            s.type.toLowerCase().includes('lecture') || s.type.toLowerCase().includes('lec')
-          ) || courseSections[0];
-          const primaryInstructor = lectureSection?.instructors[0];
-          const primaryInstructorName = primaryInstructor
-            ? `${primaryInstructor.lastName}${primaryInstructor.firstName ? `, ${primaryInstructor.firstName.charAt(0)}` : ''}`
-            : null;
+          for (const { course, sections, genEdCategories } of coursesWithSections) {
+            // 2. Course
+            sqlStatements.push(`INSERT OR REPLACE INTO courses (id, subject, number, title, description, credit_hours, gened, subject_id, course_info, degree_attributes, class_schedule_info, date_range_text, registration_notes, approval_code, year, term, primary_instructor, last_synced) VALUES (${escapeSQL(course.id)}, ${escapeSQL(course.subject)}, ${escapeSQL(course.number)}, ${escapeSQL(course.title)}, ${escapeSQL(course.description)}, ${course.credit_hours ?? 'NULL'}, ${escapeSQL(course.gened)}, ${escapeSQL(course.subject_id)}, ${escapeSQL(course.course_info)}, ${escapeSQL(course.degree_attributes)}, ${escapeSQL(course.class_schedule_info)}, ${escapeSQL(course.date_range_text)}, ${escapeSQL(course.registration_notes)}, ${escapeSQL(course.approval_code)}, ${course.year}, ${escapeSQL(course.term)}, ${escapeSQL(course.primary_instructor)}, ${now});`);
 
-          const creditHours = parseInt(course.creditHours) || null;
+            // 3. Course GenEds
+            for (const ge of genEdCategories) {
+              sqlStatements.push(`INSERT OR REPLACE INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES (${escapeSQL(course.id)}, ${escapeSQL(ge.categoryId)}, ${escapeSQL(ge.categoryName)}, ${escapeSQL(ge.attributeCode)}, ${escapeSQL(ge.attributeName)});`);
+            }
 
-          if (!args.dryRun) {
-            sqlStatements.push(`INSERT OR REPLACE INTO courses (id, subject, number, title, description, credit_hours, gened, year, term, primary_instructor, last_synced) VALUES (${escapeSQL(courseId)}, ${escapeSQL(subject)}, ${escapeSQL(course.number)}, ${escapeSQL(course.title)}, ${escapeSQL(course.description)}, ${creditHours ?? 'NULL'}, ${escapeSQL(course.gened)}, ${year}, ${escapeSQL(term)}, ${escapeSQL(primaryInstructorName)}, ${now});`);
-          }
+            for (const { section, meetings } of sections) {
+              // 4. Section
+              sqlStatements.push(`INSERT OR REPLACE INTO sections (crn, course_id, section_number, status, type, days, start_time, end_time, location, instructor, section_title, status_code, section_status_code, section_text, section_notes, capp_area, date_range_text, part_of_term, start_date, end_date, credit_hours, last_synced) VALUES (${escapeSQL(section.crn)}, ${escapeSQL(section.course_id)}, ${escapeSQL(section.section_number)}, ${escapeSQL(section.status)}, ${escapeSQL(section.type)}, ${escapeSQL(section.days)}, ${escapeSQL(section.start_time)}, ${escapeSQL(section.end_time)}, ${escapeSQL(section.location)}, ${escapeSQL(section.instructor)}, ${escapeSQL(section.section_title)}, ${escapeSQL(section.status_code)}, ${escapeSQL(section.section_status_code)}, ${escapeSQL(section.section_text)}, ${escapeSQL(section.section_notes)}, ${escapeSQL(section.capp_area)}, ${escapeSQL(section.date_range_text)}, ${escapeSQL(section.part_of_term)}, ${escapeSQL(section.start_date)}, ${escapeSQL(section.end_date)}, ${escapeSQL(section.credit_hours)}, ${now});`);
 
-          for (const section of courseSections) {
-            const instructorName = section.instructors[0]
-              ? `${section.instructors[0].lastName}${section.instructors[0].firstName ? `, ${section.instructors[0].firstName.charAt(0)}` : ''}`
-              : null;
-            const location = `${section.buildingName} ${section.roomNumber}`.trim() || null;
+              for (const meeting of meetings) {
+                // 5. Meeting
+                sqlStatements.push(`INSERT OR REPLACE INTO meetings (section_crn, meeting_index, type_code, type_name, days, start_time, end_time, building_name, room_number, date_range_text) VALUES (${escapeSQL(section.crn)}, ${meeting.meeting_index}, ${escapeSQL(meeting.type_code)}, ${escapeSQL(meeting.type_name)}, ${escapeSQL(meeting.days)}, ${escapeSQL(meeting.start_time)}, ${escapeSQL(meeting.end_time)}, ${escapeSQL(meeting.building_name)}, ${escapeSQL(meeting.room_number)}, ${escapeSQL(meeting.date_range_text)});`);
 
-            if (!args.dryRun) {
-              sqlStatements.push(`INSERT OR REPLACE INTO sections (crn, course_id, section_number, status, type, days, start_time, end_time, location, instructor, last_synced) VALUES (${escapeSQL(section.crn)}, ${escapeSQL(courseId)}, ${escapeSQL(section.sectionNumber)}, ${escapeSQL(section.enrollmentStatus)}, ${escapeSQL(section.type)}, ${escapeSQL(section.daysOfTheWeek)}, ${escapeSQL(section.startTime || null)}, ${escapeSQL(section.endTime || null)}, ${escapeSQL(location)}, ${escapeSQL(instructorName)}, ${now});`);
+                for (const inst of meeting.instructors) {
+                  // 6. Instructor
+                  const displayName = formatInstructorName(inst) || inst.lastName;
+                  sqlStatements.push(`INSERT OR IGNORE INTO instructors (first_name, last_name, display_name) VALUES (${escapeSQL(inst.firstName)}, ${escapeSQL(inst.lastName)}, ${escapeSQL(displayName)});`);
+
+                  // 7. Meeting Instructor link
+                  sqlStatements.push(`INSERT OR REPLACE INTO meeting_instructors (meeting_id, instructor_id) SELECT m.id, i.id FROM meetings m, instructors i WHERE m.section_crn = ${escapeSQL(section.crn)} AND m.meeting_index = ${meeting.meeting_index} AND i.last_name = ${escapeSQL(inst.lastName)} AND i.first_name IS ${escapeSQL(inst.firstName)};`);
+                }
+              }
             }
           }
         }
@@ -739,8 +643,8 @@ async function main() {
           termId,
           subject,
           success: true,
-          coursesCount: courses.length,
-          sectionsCount: sections.size,
+          coursesCount: coursesWithSections.length,
+          sectionsCount: coursesWithSections.reduce((acc, c) => acc + c.sections.length, 0),
           sqlStatements
         };
       } catch (error) {

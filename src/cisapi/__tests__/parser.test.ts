@@ -10,7 +10,11 @@ const SAMPLE_CASCADE_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <label>Data Structures</label>
     <description>Data abstractions and algorithms.</description>
     <creditHours>4</creditHours>
-    <category id="QR"/>
+    <genEdCategories>
+      <genEdCategory id="QR">
+        <description>Quantitative Reasoning I</description>
+      </genEdCategory>
+    </genEdCategories>
     <detailedSection id="12345" href="http://example.com">
       <sectionNumber>AL1</sectionNumber>
       <enrollmentStatus>Open</enrollmentStatus>
@@ -93,7 +97,7 @@ describe('parseSubjectCascadeXml', () => {
     expect(cs225?.sections[0].crn).toBe('12345');
     expect(cs225?.sections[0].sectionNumber).toBe('AL1');
     expect(cs225?.sections[0].enrollmentStatus).toBe('Open');
-    expect(cs225?.sections[0].type).toBe('Lecture');
+    expect(cs225?.sections[0].meetings[0].typeName).toBe('Lecture');
 
     // Second section should be the discussion
     expect(cs225?.sections[1].crn).toBe('12346');
@@ -104,29 +108,31 @@ describe('parseSubjectCascadeXml', () => {
     const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
     const cs225 = result?.courses.find(c => c.id === '225');
     const lecture = cs225?.sections[0];
+    const meeting = lecture?.meetings[0];
 
-    expect(lecture?.startTime).toBe('09:00');
-    expect(lecture?.endTime).toBe('09:50');
-    expect(lecture?.daysOfTheWeek).toBe('MWF');
-    expect(lecture?.buildingName).toBe('Siebel Center');
-    expect(lecture?.roomNumber).toBe('1404');
+    expect(meeting?.startTime).toBe('09:00');
+    expect(meeting?.endTime).toBe('09:50');
+    expect(meeting?.days).toBe('MWF');
+    expect(meeting?.buildingName).toBe('Siebel Center');
+    expect(meeting?.roomNumber).toBe('1404');
   });
 
   it('parses instructor information correctly', () => {
     const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
     const cs225 = result?.courses.find(c => c.id === '225');
     const lecture = cs225?.sections[0];
+    const meeting = lecture?.meetings[0];
 
-    expect(lecture?.instructors).toHaveLength(1);
-    expect(lecture?.instructors[0].firstName).toBe('Wade');
-    expect(lecture?.instructors[0].lastName).toBe('Fagen-Ulmschneider');
+    expect(meeting?.instructors).toHaveLength(1);
+    expect(meeting?.instructors[0].firstName).toBe('Wade');
+    expect(meeting?.instructors[0].lastName).toBe('Fagen-Ulmschneider');
   });
 
   it('parses genEd categories correctly', () => {
     const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
     const cs225 = result?.courses.find(c => c.id === '225');
 
-    expect(cs225?.genEdCategories).toContain('QR');
+    expect(cs225?.genEdCategories[0].id).toBe('QR');
   });
 
   it('throws for invalid XML without subject id', () => {
@@ -137,9 +143,10 @@ describe('parseSubjectCascadeXml', () => {
     const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
     const cs374 = result?.courses.find(c => c.id === '374');
     const section = cs374?.sections[0];
+    const meeting = section?.meetings[0];
 
     // Should have empty instructors array, not crash
-    expect(section?.instructors).toEqual([]);
+    expect(meeting?.instructors).toEqual([]);
   });
 });
 

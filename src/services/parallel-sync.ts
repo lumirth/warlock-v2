@@ -1,10 +1,19 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
-import { upsertCourse, upsertSection } from '../db/index.js';
+import {
+  upsertCourse,
+  upsertSection,
+  upsertSubject,
+  upsertMeeting,
+  upsertInstructor,
+  linkMeetingInstructor,
+  insertCourseGened,
+  deleteCourseGeneds
+} from '../db/index.js';
 import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js';
 import { getRateLimiter } from './rate-limiter.js';
 import { browserFetch } from '../http/browser-fetch.js';
-import { fromSubjectCascade } from '../transforms/course.js';
+import { fromSubjectCascade, formatInstructorName } from '../transforms/course.js';
 
 export interface ParallelSyncConfig {
   cisapiBase: string;
@@ -85,13 +94,27 @@ async function saveSubjectData(
   vectorize?: VectorizeIndex,
   ai?: Ai
 ): Promise<{ coursesCount: number; sectionsCount: number }> {
-  const coursesWithSections = fromSubjectCascade(parsed, year, term);
+  const { subject, coursesWithSections } = fromSubjectCascade(parsed, year, term);
+  await upsertSubject(db, subject);
+
   let coursesCount = 0;
   let sectionsCount = 0;
 
-  for (const { course, sections } of coursesWithSections) {
+  for (const { course, sections, genEdCategories } of coursesWithSections) {
     await upsertCourse(db, course);
     coursesCount++;
+
+    // Handle GenEds - clear existing and insert new
+    await deleteCourseGeneds(db, course.id);
+    for (const cat of genEdCategories) {
+      await insertCourseGened(db, {
+        course_id: course.id,
+        category_id: cat.categoryId,
+        category_name: cat.categoryName,
+        attribute_code: cat.attributeCode,
+        attribute_name: cat.attributeName
+      });
+    }
 
     if (vectorize && ai) {
       try {
@@ -110,9 +133,27 @@ async function saveSubjectData(
       }
     }
 
-    for (const section of sections) {
+    for (const { section, meetings } of sections) {
       await upsertSection(db, section);
       sectionsCount++;
+
+      for (const meetingData of meetings) {
+        const { instructors, ...meeting } = meetingData;
+        const meetingId = await upsertMeeting(db, meeting);
+
+        for (const instructor of instructors) {
+          const instructorId = await upsertInstructor(db, {
+            first_name: instructor.firstName || null,
+            last_name: instructor.lastName,
+            display_name: formatInstructorName(instructor) || instructor.lastName,
+            rmp_rating: null,
+            rmp_difficulty: null,
+            avg_gpa: null,
+            gpa_sample_size: null
+          });
+          await linkMeetingInstructor(db, meetingId, instructorId);
+        }
+      }
     }
   }
 

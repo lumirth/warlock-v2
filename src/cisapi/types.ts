@@ -4,6 +4,21 @@ export interface CISAPISubject {
   label?: string;       // "Computer Science" (from some endpoints)
 }
 
+export interface CISAPISubjectDetail {
+  id: string;
+  label: string;
+  collegeCode: string;
+  departmentCode: string;
+  unitName: string;
+  contactName: string;
+  contactTitle: string;
+  addressLine1: string;
+  addressLine2: string;
+  phoneNumber: string;
+  webSiteURL: string;
+  collegeDepartmentDescription: string;
+}
+
 export interface CISAPICourse {
   id: string;           // "225"
   href: string;
@@ -14,12 +29,18 @@ export interface CISAPICourse {
 export interface CISAPISection {
   crn: string;
   sectionNumber: string;
+  sectionTitle: string;           // NEW - for topics courses
   statusCode: string;
-  partOfTerm: string;
   sectionStatusCode: string;
   enrollmentStatus: string;
+  sectionText: string;            // NEW
+  sectionNotes: string;           // NEW
+  sectionCappArea: string;        // NEW
+  sectionDateRange: string;       // NEW
+  partOfTerm: string;
   startDate: string;
   endDate: string;
+  creditHours: string;            // NEW - section-level override
   meetings: CISAPIMeeting[];
 }
 
@@ -31,6 +52,7 @@ export interface CISAPIMeeting {
   daysOfTheWeek: string;
   roomNumber: string;
   buildingName: string;
+  meetingDateRange: string;       // NEW
   instructors: CISAPIInstructor[];
 }
 
@@ -47,11 +69,21 @@ export interface CISAPICourseDetail {
   creditHours: string;
   courseSectionInformation: string;
   classScheduleInformation: string;
+  sectionDegreeAttributes: string;      // NEW
+  sectionDateRange: string;             // NEW
+  sectionRegistrationNotes: string;     // NEW
+  sectionApprovalCode: string;          // NEW
   genEdCategories: CISAPIGenEd[];
   sections: CISAPISection[];
 }
 
 export interface CISAPIGenEd {
   id: string;
+  description: string;
+  attributes: CISAPIGenEdAttribute[];   // NEW
+}
+
+export interface CISAPIGenEdAttribute {
+  code: string;
   description: string;
 }

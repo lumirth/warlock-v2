@@ -5,7 +5,8 @@ import type {
   CISAPISection,
   CISAPIMeeting,
   CISAPIInstructor,
-  CISAPIGenEd
+  CISAPIGenEd,
+  CISAPIGenEdAttribute
 } from './types.js';
 import { Parser } from 'htmlparser2';
 
@@ -52,17 +53,24 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
   const labelMatch = xml.match(/<label>([^<]+)<\/label>/);
   const descMatch = xml.match(/<description>([^<]*)<\/description>/s);
   const creditMatch = xml.match(/<creditHours>([^<]*)<\/creditHours>/);
+  const courseInfoMatch = xml.match(/<courseSectionInformation>([^<]*)<\/courseSectionInformation>/s);
+  const classScheduleInfoMatch = xml.match(/<classScheduleInformation>([^<]*)<\/classScheduleInformation>/s);
 
   if (!idMatch || !subjectMatch) return null;
 
   // Parse genEd categories
   const genEdCategories: CISAPIGenEd[] = [];
-  const genEdRegex = /<genEdCategory\s+id="([^"]+)"[^>]*>([^<]*)<\/genEdCategory>/g;
+  const genEdRegex = /<genEdCategory\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/genEdCategory>/g;
   let genEdMatch;
   while ((genEdMatch = genEdRegex.exec(xml)) !== null) {
+    const id = genEdMatch[1];
+    const content = genEdMatch[2];
+    const descMatch = content.match(/<description>([^<]*)<\/description>/);
+    // Attributes are not easily regexable without nested loop, leaving empty for now in this simple parser
     genEdCategories.push({
-      id: genEdMatch[1],
-      description: genEdMatch[2]
+      id: id,
+      description: descMatch ? descMatch[1] : '',
+      attributes: []
     });
   }
 
@@ -75,8 +83,12 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
     label: labelMatch?.[1] ?? '',
     description: descMatch?.[1]?.trim() ?? '',
     creditHours: creditMatch?.[1] ?? '',
-    courseSectionInformation: '',
-    classScheduleInformation: '',
+    courseSectionInformation: courseInfoMatch?.[1]?.trim() ?? '',
+    classScheduleInformation: classScheduleInfoMatch?.[1]?.trim() ?? '',
+    sectionDegreeAttributes: '', // Not implemented in regex parser yet
+    sectionDateRange: '',        // Not implemented in regex parser yet
+    sectionRegistrationNotes: '', // Not implemented in regex parser yet
+    sectionApprovalCode: '',      // Not implemented in regex parser yet
     genEdCategories,
     sections
   };
@@ -100,18 +112,26 @@ function parseSectionsXml(xml: string): CISAPISection[] {
     const endDateMatch = block.match(/<endDate>([^<]*)<\/endDate>/);
     const partOfTermMatch = block.match(/<partOfTerm>([^<]*)<\/partOfTerm>/);
     const sectionStatusCodeMatch = block.match(/<sectionStatusCode>([^<]*)<\/sectionStatusCode>/);
+    const sectionTitleMatch = block.match(/<sectionTitle>([^<]*)<\/sectionTitle>/);
+    const creditHoursMatch = block.match(/<creditHours>([^<]*)<\/creditHours>/);
 
     const meetings = parseMeetingsXml(block);
 
     sections.push({
       crn,
       sectionNumber: sectionNumberMatch?.[1] ?? '',
+      sectionTitle: sectionTitleMatch?.[1] ?? '',
       statusCode: statusCodeMatch?.[1] ?? '',
+      sectionStatusCode: sectionStatusCodeMatch?.[1] ?? '',
       enrollmentStatus: enrollmentStatusMatch?.[1] ?? 'Unknown',
+      sectionText: '', // Not implemented in regex parser
+      sectionNotes: '', // Not implemented in regex parser
+      sectionCappArea: '', // Not implemented in regex parser
+      sectionDateRange: '', // Not implemented in regex parser
       startDate: startDateMatch?.[1] ?? '',
       endDate: endDateMatch?.[1] ?? '',
       partOfTerm: partOfTermMatch?.[1] ?? '',
-      sectionStatusCode: sectionStatusCodeMatch?.[1] ?? '',
+      creditHours: creditHoursMatch?.[1] ?? '',
       meetings
     });
   }
@@ -134,6 +154,7 @@ function parseMeetingsXml(sectionXml: string): CISAPIMeeting[] {
     const daysMatch = block.match(/<daysOfTheWeek>([^<]*)<\/daysOfTheWeek>/);
     const roomMatch = block.match(/<roomNumber>([^<]*)<\/roomNumber>/);
     const buildingMatch = block.match(/<buildingName>([^<]*)<\/buildingName>/);
+    const dateRangeMatch = block.match(/<meetingDateRange>([^<]*)<\/meetingDateRange>/);
 
     const instructors = parseInstructorsXml(block);
 
@@ -145,6 +166,7 @@ function parseMeetingsXml(sectionXml: string): CISAPIMeeting[] {
       daysOfTheWeek: daysMatch?.[1] ?? '',
       roomNumber: roomMatch?.[1] ?? '',
       buildingName: buildingMatch?.[1] ?? '',
+      meetingDateRange: dateRangeMatch?.[1] ?? '',
       instructors
     });
   }
@@ -196,10 +218,63 @@ export function convertTo24Hour(time12: string): string {
 }
 
 // Subject cascade types and parser
+export interface ParsedSubjectMetadata {
+  id: string;
+  label: string;
+  collegeCode: string;
+  departmentCode: string;
+  unitName: string;
+  contactName: string;
+  contactTitle: string;
+  addressLine1: string;
+  addressLine2: string;
+  phoneNumber: string;
+  websiteUrl: string;
+  description: string;
+}
+
 export interface ParsedSubjectCascade {
   subjectId: string;
   subjectLabel: string;
+  subjectMetadata: ParsedSubjectMetadata;
   courses: ParsedCascadeCourse[];
+}
+
+export interface ParsedGenEdCategory {
+  id: string;
+  name: string;
+  attributes: { code: string; name: string }[];
+}
+
+export interface ParsedMeeting {
+  index: number;
+  typeCode: string;
+  typeName: string;
+  startTime: string;
+  endTime: string;
+  days: string;
+  buildingName: string;
+  roomNumber: string;
+  dateRangeText: string;
+  instructors: { firstName: string; lastName: string }[];
+}
+
+export interface ParsedCascadeSection {
+  crn: string;
+  sectionNumber: string;
+  sectionTitle: string;
+  enrollmentStatus: string;
+  statusCode: string;
+  sectionStatusCode: string;
+  sectionText: string;
+  sectionNotes: string;
+  cappArea: string;
+  dateRangeText: string;
+  partOfTerm: string;
+  startDate: string;
+  endDate: string;
+  creditHours: string;
+  meetings: ParsedMeeting[];
 }
 
 export interface ParsedCascadeCourse {
@@ -208,30 +283,37 @@ export interface ParsedCascadeCourse {
   title: string;
   description: string;
   creditHours: string;
-  genEdCategories: string[];
+  courseInfo: string;
+  degreeAttributes: string;
+  classScheduleInfo: string;
+  dateRangeText: string;
+  registrationNotes: string;
+  approvalCode: string;
+  genEdCategories: ParsedGenEdCategory[];
   sections: ParsedCascadeSection[];
 }
 
-export interface ParsedCascadeSection {
-  crn: string;
-  sectionNumber: string;
-  enrollmentStatus: string;
-  type: string;
-  startTime: string;
-  endTime: string;
-  daysOfTheWeek: string;
-  buildingName: string;
-  roomNumber: string;
-  instructors: { firstName: string; lastName: string }[];
-}
-
 export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
-  const result: ParsedSubjectCascade = { subjectId: '', subjectLabel: '', courses: [] };
+  const result: ParsedSubjectCascade = {
+    subjectId: '',
+    subjectLabel: '',
+    subjectMetadata: {
+      id: '', label: '', collegeCode: '', departmentCode: '', unitName: '',
+      contactName: '', contactTitle: '', addressLine1: '', addressLine2: '',
+      phoneNumber: '', websiteUrl: '', description: ''
+    },
+    courses: []
+  };
+
   let currentCourse: ParsedCascadeCourse | null = null;
   let currentSection: ParsedCascadeSection | null = null;
+  let currentMeeting: ParsedMeeting | null = null;
   let currentInstructor: { firstName: string; lastName: string } | null = null;
+  let currentGenEd: ParsedGenEdCategory | null = null;
   let currentText = '';
+
   let inMeeting = false;
+  let inSubject = false;
 
   const parser = new Parser({
     onopentag(name, attrs) {
@@ -239,6 +321,8 @@ export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
 
       if (name === 'ns2:subject') {
         result.subjectId = attrs.id || '';
+        result.subjectMetadata.id = attrs.id || '';
+        inSubject = true;
       }
       if (name === 'cascadingCourse') {
         const courseId = (attrs.id || '').split(' ').pop() ?? attrs.id;
@@ -248,6 +332,12 @@ export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
           title: '',
           description: '',
           creditHours: '',
+          courseInfo: '',
+          degreeAttributes: '',
+          classScheduleInfo: '',
+          dateRangeText: '',
+          registrationNotes: '',
+          approvalCode: '',
           genEdCategories: [],
           sections: []
         };
@@ -257,25 +347,60 @@ export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
         currentSection = {
           crn: attrs.id || '',
           sectionNumber: '',
+          sectionTitle: '',
           enrollmentStatus: '',
-          type: '',
-          startTime: '',
-          endTime: '',
-          daysOfTheWeek: '',
-          buildingName: '',
-          roomNumber: '',
-          instructors: []
+          statusCode: '',
+          sectionStatusCode: '',
+          sectionText: '',
+          sectionNotes: '',
+          cappArea: '',
+          dateRangeText: '',
+          partOfTerm: '',
+          startDate: '',
+          endDate: '',
+          creditHours: '',
+          meetings: []
         };
         currentCourse.sections.push(currentSection);
       }
-      if (name === 'meeting') {
+      if (name === 'meeting' && currentSection) {
         inMeeting = true;
+        currentMeeting = {
+          index: currentSection.meetings.length,
+          typeCode: '',
+          typeName: '',
+          startTime: '',
+          endTime: '',
+          days: '',
+          buildingName: '',
+          roomNumber: '',
+          dateRangeText: '',
+          instructors: []
+        };
+        currentSection.meetings.push(currentMeeting);
       }
-      if (name === 'instructor' && currentSection) {
-        currentInstructor = { firstName: '', lastName: '' };
+      if (name === 'type' && currentMeeting) {
+          currentMeeting.typeCode = attrs.code || '';
       }
-      if (name === 'category' && currentCourse && attrs.id) {
-        currentCourse.genEdCategories.push(attrs.id);
+      if (name === 'instructor' && currentMeeting) {
+        currentInstructor = {
+          firstName: attrs.firstName || '',
+          lastName: attrs.lastName || ''
+        };
+      }
+      if ((name === 'genEdCategory' || name === 'category') && currentCourse && attrs.id) {
+        currentGenEd = {
+          id: attrs.id,
+          name: '',
+          attributes: []
+        };
+        currentCourse.genEdCategories.push(currentGenEd);
+      }
+      if ((name === 'attribute' || name === 'genEdAttribute' || name === 'ns2:genEdAttr') && currentGenEd && (attrs.code || attrs.id)) {
+        currentGenEd.attributes.push({
+            code: attrs.code || attrs.id || '',
+            name: ''
+        });
       }
     },
     ontext(text) {
@@ -284,49 +409,103 @@ export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
     onclosetag(name) {
       const text = currentText.trim();
 
-      // Subject-level
-      if (name === 'label' && !currentCourse) {
-        result.subjectLabel = text;
+      // Subject Metadata
+      if (inSubject && !currentCourse) {
+        if (name === 'label') result.subjectLabel = text;
+        if (name === 'collegeCode') result.subjectMetadata.collegeCode = text;
+        if (name === 'departmentCode') result.subjectMetadata.departmentCode = text;
+        if (name === 'unitName') result.subjectMetadata.unitName = text;
+        if (name === 'contactName') result.subjectMetadata.contactName = text;
+        if (name === 'contactTitle') result.subjectMetadata.contactTitle = text;
+        if (name === 'addressLine1') result.subjectMetadata.addressLine1 = text;
+        if (name === 'addressLine2') result.subjectMetadata.addressLine2 = text;
+        if (name === 'phoneNumber') result.subjectMetadata.phoneNumber = text;
+        if (name === 'webSiteURL') result.subjectMetadata.websiteUrl = text;
+        if (name === 'collegeDepartmentDescription') result.subjectMetadata.description = text;
       }
 
-      // Course-level fields (when not in a section)
+      // Course-level fields
       if (currentCourse && !currentSection) {
         if (name === 'label') currentCourse.title = text;
         if (name === 'description') currentCourse.description = text;
         if (name === 'creditHours') currentCourse.creditHours = text;
+        if (name === 'courseSectionInformation') currentCourse.courseInfo = text;
+        if (name === 'sectionDegreeAttributes') currentCourse.degreeAttributes = text;
+        if (name === 'classScheduleInformation') currentCourse.classScheduleInfo = text;
+        if (name === 'sectionDateRange') currentCourse.dateRangeText = text;
+        if (name === 'sectionRegistrationNotes') currentCourse.registrationNotes = text;
+        if (name === 'sectionApprovalCode') currentCourse.approvalCode = text;
+      }
+
+      // GenEd Category fields
+      if (currentGenEd) {
+          if (name === 'description') currentGenEd.name = text;
+          if (name === 'attribute' || name === 'genEdAttribute' || name === 'ns2:genEdAttr') {
+              const lastAttr = currentGenEd.attributes[currentGenEd.attributes.length - 1];
+              if (lastAttr) {
+                  if (!lastAttr.name) lastAttr.name = text;
+              }
+          }
       }
 
       // Section-level fields
-      if (currentSection) {
+      if (currentSection && !inMeeting) {
         if (name === 'sectionNumber') currentSection.sectionNumber = text;
+        if (name === 'sectionTitle') currentSection.sectionTitle = text;
         if (name === 'enrollmentStatus') currentSection.enrollmentStatus = text;
+        if (name === 'statusCode') currentSection.statusCode = text;
+        if (name === 'sectionStatusCode') currentSection.sectionStatusCode = text;
+        if (name === 'sectionText') currentSection.sectionText = text;
+        if (name === 'sectionNotes') currentSection.sectionNotes = text;
+        if (name === 'cappArea') currentSection.cappArea = text;
+        if (name === 'sectionDateRange') currentSection.dateRangeText = text;
+        if (name === 'partOfTerm') currentSection.partOfTerm = text;
+        if (name === 'startDate') currentSection.startDate = text;
+        if (name === 'endDate') currentSection.endDate = text;
+        if (name === 'creditHours') currentSection.creditHours = text;
       }
 
       // Meeting-level fields
-      if (currentSection && inMeeting) {
-        if (name === 'type') currentSection.type = text;
-        if (name === 'start') currentSection.startTime = convertTo24Hour(text);
-        if (name === 'end') currentSection.endTime = convertTo24Hour(text);
-        if (name === 'daysOfTheWeek') currentSection.daysOfTheWeek = text;
-        if (name === 'buildingName') currentSection.buildingName = text;
-        if (name === 'roomNumber') currentSection.roomNumber = text;
+      if (currentMeeting && inMeeting) {
+        if (name === 'type') currentMeeting.typeName = text;
+        if (name === 'start') currentMeeting.startTime = convertTo24Hour(text);
+        if (name === 'end') currentMeeting.endTime = convertTo24Hour(text);
+        if (name === 'daysOfTheWeek') currentMeeting.days = text;
+        if (name === 'buildingName') currentMeeting.buildingName = text;
+        if (name === 'roomNumber') currentMeeting.roomNumber = text;
+        if (name === 'meetingDateRange') currentMeeting.dateRangeText = text;
       }
 
       // Instructor fields
       if (currentInstructor) {
-        if (name === 'firstName') currentInstructor.firstName = text;
-        if (name === 'lastName') currentInstructor.lastName = text;
-        if (name === 'instructor' && currentSection) {
+        if (name === 'firstName' && !currentInstructor.firstName) currentInstructor.firstName = text;
+        if (name === 'lastName' && !currentInstructor.lastName) currentInstructor.lastName = text;
+        if (name === 'instructor' && currentMeeting) {
+          if (!currentInstructor.firstName && !currentInstructor.lastName) {
+              // Try parsing the text content if attributes were empty
+              const parts = text.split(',').map(p => p.trim());
+              if (parts.length >= 2) {
+                  currentInstructor.lastName = parts[0];
+                  currentInstructor.firstName = parts[1];
+              } else {
+                  currentInstructor.lastName = text;
+              }
+          }
           if (currentInstructor.lastName) {
-            currentSection.instructors.push(currentInstructor);
+            currentMeeting.instructors.push(currentInstructor);
           }
           currentInstructor = null;
         }
       }
 
-      if (name === 'meeting') inMeeting = false;
+      if (name === 'meeting') {
+          inMeeting = false;
+          currentMeeting = null;
+      }
       if (name === 'detailedSection') currentSection = null;
       if (name === 'cascadingCourse') currentCourse = null;
+      if (name === 'genEdCategory' || name === 'category') currentGenEd = null;
+      if (name === 'ns2:subject') inSubject = false;
 
       currentText = '';
     }
@@ -337,6 +516,13 @@ export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
 
   if (!result.subjectId) {
     throw new Error('Invalid XML: missing subject id');
+  }
+
+  if (!result.subjectMetadata.label) {
+      result.subjectMetadata.label = result.subjectLabel;
+  }
+  if (!result.subjectMetadata.id) {
+      result.subjectMetadata.id = result.subjectId;
   }
 
   return result;

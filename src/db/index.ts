@@ -422,7 +422,7 @@ export async function clearMeetingInstructors(
 
 // CourseGened operations
 
-export async function upsertCourseGened(
+export async function insertCourseGened(
   db: D1Database,
   gened: Omit<CourseGened, 'id'>
 ): Promise<void> {
@@ -439,7 +439,7 @@ export async function upsertCourseGened(
   ).run();
 }
 
-export async function clearCourseGeneds(
+export async function deleteCourseGeneds(
   db: D1Database,
   courseId: string
 ): Promise<void> {
