@@ -21,7 +21,8 @@ function App() {
     setLoading(true)
     
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+      const apiBase = import.meta.env.PROD ? 'https://uiuc-course-search.lumirth.workers.dev' : '';
+      const response = await fetch(`${apiBase}/api/search?q=${encodeURIComponent(query)}`, {
         headers: {
           'X-Search-Hints': JSON.stringify(extracted)
         }
