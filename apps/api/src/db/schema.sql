@@ -69,6 +69,17 @@ CREATE TABLE IF NOT EXISTS instructors (
 -- Non-unique index for searching (allows duplicate names for different people)
 CREATE INDEX IF NOT EXISTS idx_instructors_search ON instructors(last_name, first_name);
 
+-- Subject aliases for natural language recognition
+CREATE TABLE IF NOT EXISTS subject_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    is_auto_generated INTEGER DEFAULT 0,  -- 1 if generated from name, 0 if manual
+    UNIQUE(subject_id, alias),
+    FOREIGN KEY (subject_id) REFERENCES subjects(id)
+);
+CREATE INDEX IF NOT EXISTS idx_subject_aliases_alias ON subject_aliases(alias);
+
 -- Multiple meetings per section
 CREATE TABLE IF NOT EXISTS meetings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
