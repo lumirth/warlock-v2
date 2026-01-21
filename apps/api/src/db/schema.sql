@@ -247,3 +247,32 @@ CREATE TRIGGER IF NOT EXISTS courses_fts_update AFTER UPDATE ON courses BEGIN
     INSERT INTO courses_fts(rowid, subject, number, title, description, primary_instructor, gened)
     VALUES (new.rowid, new.subject, new.number, new.title, new.description, new.primary_instructor, new.gened);
 END;
+
+-- Full-text search for sections (topics courses, section-level instructors)
+CREATE VIRTUAL TABLE IF NOT EXISTS sections_fts USING fts5(
+    section_title,
+    instructor,
+    section_text,
+    section_notes,
+    content='sections',
+    content_rowid='rowid',
+    tokenize='trigram'
+);
+
+-- Triggers to keep sections_fts in sync
+CREATE TRIGGER IF NOT EXISTS sections_fts_insert AFTER INSERT ON sections BEGIN
+    INSERT INTO sections_fts(rowid, section_title, instructor, section_text, section_notes)
+    VALUES (new.rowid, new.section_title, new.instructor, new.section_text, new.section_notes);
+END;
+
+CREATE TRIGGER IF NOT EXISTS sections_fts_delete AFTER DELETE ON sections BEGIN
+    INSERT INTO sections_fts(sections_fts, rowid, section_title, instructor, section_text, section_notes)
+    VALUES('delete', old.rowid, old.section_title, old.instructor, old.section_text, old.section_notes);
+END;
+
+CREATE TRIGGER IF NOT EXISTS sections_fts_update AFTER UPDATE ON sections BEGIN
+    INSERT INTO sections_fts(sections_fts, rowid, section_title, instructor, section_text, section_notes)
+    VALUES('delete', old.rowid, old.section_title, old.instructor, old.section_text, old.section_notes);
+    INSERT INTO sections_fts(rowid, section_title, instructor, section_text, section_notes)
+    VALUES (new.rowid, new.section_title, new.instructor, new.section_text, new.section_notes);
+END;
