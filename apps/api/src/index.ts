@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { healthRoutes } from './routes/health.js';
 import { searchRoutes } from './routes/search.js';
@@ -24,6 +25,12 @@ type Bindings = {
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+// Enable CORS for the web client
+app.use('/api/*', cors({
+  origin: ['https://uiuc-course-search-web.pages.dev', 'http://localhost:5173'],
+  allowHeaders: ['X-Search-Hints', 'Content-Type'],
+}));
 
 app.route('/', healthRoutes);
 app.route('/', searchRoutes);
