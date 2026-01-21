@@ -1,27 +1,46 @@
-export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level';
+export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level' | 'course_code' | 'crn' | 'days' | 'time' | 'difficulty' | 'online' | 'status';
 
 export interface QueryHint {
   type: QueryHintType;
-  value: string; // "Fagen", "Humanities"
-  confidence: number; // 0-1
-  isExplicit?: boolean; // true if user clicked a chip or typed "instructor:..."
+  value: string;
+  confidence: number;
+  isExplicit?: boolean;
+  metadata?: Record<string, string>; // For course_code: { subject: 'CS', number: '225' }
 }
 
 export interface ExtractedQuery {
   rawQuery: string;
   hints: QueryHint[];
-  residual: string; // "easy" (parts not covered by hints)
+  residual: string;
+}
+
+export interface SearchFilters {
+  instructor_ids?: number[];
+  gened_code?: string;
+  subject?: string;
+  number?: string;           // NEW: course number
+  level?: number;
+  credits?: number;
+  term?: string;
+  year?: number;             // NEW
+  days?: string;             // NEW: "MWF", "TR"
+  time_start?: string;       // NEW: "09:00"
+  time_end?: string;         // NEW
+  difficulty?: 'easy' | 'hard'; // NEW
+  online?: boolean;          // NEW
+  status?: 'open' | 'closed'; // NEW
+  crn?: string;              // NEW: direct CRN lookup
+}
+
+export interface Ambiguity {
+  term: string;
+  chosen: { type: string; value: string; label: string };
+  alternatives: { type: string; value: string; label: string }[];
 }
 
 export interface SearchPlan {
-  filters: {
-    instructor_ids?: number[];
-    gened_code?: string;
-    subject?: string;
-    level?: number;
-    credits?: number;
-    term?: string;
-  };
-  semanticQuery: string; // The residual to vector search
-  keywordQuery: string;  // The residual to keyword search
+  filters: SearchFilters;
+  semanticQuery: string;
+  keywordQuery: string;
+  ambiguities?: Ambiguity[];  // NEW: for disambiguation hints
 }
