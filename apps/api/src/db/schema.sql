@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS instructors (
     avg_gpa REAL,
     gpa_sample_size INTEGER
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_instructors_name ON instructors(last_name, first_name);
+-- Non-unique index for searching (allows duplicate names for different people)
+CREATE INDEX IF NOT EXISTS idx_instructors_search ON instructors(last_name, first_name);
 
 -- Multiple meetings per section
 CREATE TABLE IF NOT EXISTS meetings (
