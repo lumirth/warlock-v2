@@ -132,6 +132,31 @@ export async function keywordSearch(
   return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
 }
 
+export async function sectionKeywordSearch(
+  db: D1Database,
+  keywordQuery: string,
+  limit: number = 50
+): Promise<{ id: string; rank: number }[]> {
+  if (!keywordQuery || !keywordQuery.trim()) {
+    return [];
+  }
+
+  const sql = `
+    SELECT DISTINCT c.id, bm25(sections_fts) as fts_score
+    FROM sections_fts fts
+    JOIN sections s ON s.rowid = fts.rowid
+    JOIN courses c ON s.course_id = c.id
+    WHERE sections_fts MATCH ?
+    ORDER BY fts_score
+    LIMIT ?
+  `;
+
+  const escapedQuery = keywordQuery.replace(/['"]/g, '').trim();
+  const result = await db.prepare(sql).bind(escapedQuery, limit).all<{ id: string; fts_score: number }>();
+
+  return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+}
+
 export async function hybridSearch(
   db: D1Database,
   vectorize: VectorizeIndex,
@@ -139,11 +164,11 @@ export async function hybridSearch(
   plan: SearchPlan,
   limit: number = 20
 ): Promise<SearchResult[]> {
-  // Run both searches in parallel
-  // Note: semanticSearch might also benefit from metadata filtering in the future
-  const [semanticResults, keywordResults] = await Promise.all([
+  // Run all searches in parallel
+  const [semanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
     semanticSearch(vectorize, ai, plan.semanticQuery, 50),
-    keywordSearch(db, plan, 50)
+    keywordSearch(db, plan, 50),
+    sectionKeywordSearch(db, plan.keywordQuery || plan.semanticQuery, 50)
   ]);
 
   // Build rank maps
@@ -151,7 +176,15 @@ export async function hybridSearch(
   semanticResults.forEach((r, i) => semanticRanks.set(r.id, i + 1));
 
   const keywordRanks = new Map<string, number>();
-  keywordResults.forEach((r) => keywordRanks.set(r.id, r.rank));
+  courseKeywordResults.forEach((r) => keywordRanks.set(r.id, r.rank));
+
+  // Merge section results into keyword ranks (take best rank if duplicate)
+  sectionKeywordResults.forEach((r) => {
+    const existing = keywordRanks.get(r.id);
+    if (!existing || r.rank < existing) {
+      keywordRanks.set(r.id, r.rank);
+    }
+  });
 
   // Collect all unique IDs
   const allIds = new Set([...semanticRanks.keys(), ...keywordRanks.keys()]);
