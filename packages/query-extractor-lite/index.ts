@@ -124,6 +124,26 @@ export function extractQueryLite(query: string): ExtractedQuery {
     }
   }
 
+  // 8. Online
+  const onlineRegex = /\b(online|remote|virtual)\b/gi;
+  if (onlineRegex.test(residual)) {
+    hints.push({ type: 'online', value: 'true', confidence: 0.8 });
+  }
+  residual = residual.replace(onlineRegex, ' ');
+
+  const inPersonRegex = /\b(in-person|in person|on campus|face to face)\b/gi;
+  if (inPersonRegex.test(residual)) {
+    hints.push({ type: 'online', value: 'false', confidence: 0.8 });
+  }
+  residual = residual.replace(inPersonRegex, ' ');
+
+  // 9. Section status
+  const openRegex = /\b(open|available)\s*(sections?|classes?)?\b/gi;
+  if (openRegex.test(residual)) {
+    hints.push({ type: 'status', value: 'open', confidence: 0.7 });
+  }
+  residual = residual.replace(openRegex, ' ');
+
   // Clean up residual
   residual = residual.replace(/\s+/g, ' ').trim();
 

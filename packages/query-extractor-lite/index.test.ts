@@ -189,4 +189,43 @@ describe('extractQueryLite', () => {
       );
     });
   });
+
+  describe('online extraction', () => {
+    it('extracts "online"', () => {
+      const result = extractQueryLite('online classes');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'online', value: 'true' })
+      );
+    });
+
+    it('extracts "remote"', () => {
+      const result = extractQueryLite('remote lecture');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'online', value: 'true' })
+      );
+    });
+
+    it('extracts "in person"', () => {
+      const result = extractQueryLite('in person class');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'online', value: 'false' })
+      );
+    });
+  });
+
+  describe('status extraction', () => {
+    it('extracts "open sections"', () => {
+      const result = extractQueryLite('open sections');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'status', value: 'open' })
+      );
+    });
+
+    it('extracts "available classes"', () => {
+      const result = extractQueryLite('available classes');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'status', value: 'open' })
+      );
+    });
+  });
 });
