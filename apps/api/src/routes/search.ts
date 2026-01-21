@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { searchCourses } from '../services/embeddings.js';
-import { hybridSearch, keywordSearch } from '../services/search.js';
+import { hybridSearchWithTermRanking, keywordSearch } from '../services/search.js';
 import { resolveQuery } from '../services/query-resolver.js';
 import { extractQueryLite } from '@uiuc-course-search/query-extractor-lite';
 import type { ExtractedQuery, SearchPlan } from '@uiuc-course-search/query-types';
@@ -62,7 +62,7 @@ searchRoutes.get('/api/search', async (c) => {
   const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : 20;
 
   try {
-    const results = await hybridSearch(
+    const results = await hybridSearchWithTermRanking(
       c.env.DB,
       c.env.VECTORIZE,
       c.env.AI,
@@ -75,12 +75,14 @@ searchRoutes.get('/api/search', async (c) => {
         ...r.course,
         _score: r.score,
         _semanticRank: r.semanticRank,
-        _keywordRank: r.keywordRank
+        _keywordRank: r.keywordRank,
+        _historical: r.historical
       })),
       meta: {
         total: results.length,
         plan,
-        extracted
+        extracted,
+        ambiguities: plan.ambiguities
       }
     });
   } catch (error) {
