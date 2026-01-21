@@ -23,7 +23,40 @@ export async function keywordSearch(
   limit: number = 50
 ): Promise<{ id: string; rank: number }[]> {
   const { filters, keywordQuery } = plan;
-  
+
+  // Fast path: exact course lookup (subject + number)
+  if (filters.subject && filters.number && !keywordQuery?.trim()) {
+    const exactSql = `
+      SELECT id FROM courses
+      WHERE subject = ? AND number = ?
+      ORDER BY year DESC,
+        CASE term WHEN 'spring' THEN 1 WHEN 'fall' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END
+      LIMIT ?
+    `;
+    const exactResult = await db.prepare(exactSql)
+      .bind(filters.subject, filters.number, limit)
+      .all<{ id: string }>();
+
+    if (exactResult.results.length > 0) {
+      return exactResult.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+    }
+  }
+
+  // CRN direct lookup
+  if (filters.crn) {
+    const crnSql = `
+      SELECT DISTINCT c.id
+      FROM sections s
+      JOIN courses c ON s.course_id = c.id
+      WHERE s.crn = ?
+      LIMIT 1
+    `;
+    const crnResult = await db.prepare(crnSql).bind(filters.crn).all<{ id: string }>();
+    if (crnResult.results.length > 0) {
+      return crnResult.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+    }
+  }
+
   // Build WHERE clause for filters
   const whereClauses: string[] = [];
   const params: (string | number)[] = [];
@@ -33,7 +66,12 @@ export async function keywordSearch(
     whereClauses.push('c.subject = ?');
     params.push(filters.subject);
   }
-  
+
+  if (filters.number) {
+    whereClauses.push('c.number = ?');
+    params.push(filters.number);
+  }
+
   if (filters.credits !== undefined) {
     whereClauses.push('c.credit_hours = ?');
     params.push(filters.credits);
@@ -49,7 +87,7 @@ export async function keywordSearch(
     joins.push('JOIN sections s ON s.course_id = c.id');
     joins.push('JOIN meetings m ON m.section_crn = s.crn');
     joins.push('JOIN meeting_instructors mi ON mi.meeting_id = m.id');
-    
+
     const placeholders = filters.instructor_ids.map(() => '?').join(',');
     whereClauses.push(`mi.instructor_id IN (${placeholders})`);
     params.push(...filters.instructor_ids);
@@ -62,20 +100,28 @@ export async function keywordSearch(
   const joinClause = joins.join(' ');
 
   // FTS5 search with BM25 ranking
-  // We use DISTINCT because joins might duplicate courses (multiple sections/meetings/instructors)
-  const sql = `
+  const hasKeyword = keywordQuery && keywordQuery.trim().length > 0;
+
+  const sql = hasKeyword ? `
     SELECT DISTINCT c.id, bm25(courses_fts) as fts_score
     FROM courses_fts fts
     JOIN courses c ON c.rowid = fts.rowid
     ${joinClause}
     ${whereClause}
-    ${keywordQuery ? (whereClause ? "AND" : "WHERE") + " courses_fts MATCH ?" : ""}
+    ${whereClause ? 'AND' : 'WHERE'} courses_fts MATCH ?
     ORDER BY fts_score
+    LIMIT ?
+  ` : `
+    SELECT DISTINCT c.id, 0 as fts_score
+    FROM courses c
+    ${joinClause}
+    ${whereClause}
+    ORDER BY c.year DESC, c.subject, c.number
     LIMIT ?
   `;
 
   const finalParams = [...params];
-  if (keywordQuery) {
+  if (hasKeyword) {
     const escapedQuery = keywordQuery.replace(/['"]/g, '').trim();
     finalParams.push(escapedQuery);
   }
