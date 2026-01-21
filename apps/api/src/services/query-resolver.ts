@@ -138,23 +138,36 @@ async function resolveCourseCode(
 }
 
 async function validateSubject(db: D1Database, subject: string): Promise<string | null> {
-  const upperSubject = subject.toUpperCase();
+  const normalized = subject.toLowerCase().trim();
+  const upper = subject.toUpperCase();
 
-  // Check exact code match
-  const result = await db.prepare('SELECT id FROM subjects WHERE id = ?')
-    .bind(upperSubject)
+  // 1. Exact code match
+  const byCode = await db.prepare('SELECT id FROM subjects WHERE id = ?')
+    .bind(upper)
     .first<{ id: string }>();
+  if (byCode) return byCode.id;
 
-  if (result) return result.id;
-
-  // Check by name (case-insensitive)
-  const byName = await db.prepare('SELECT id FROM subjects WHERE LOWER(name) = LOWER(?)')
-    .bind(subject)
+  // 2. Full name match
+  const byName = await db.prepare('SELECT id FROM subjects WHERE LOWER(name) = ?')
+    .bind(normalized)
     .first<{ id: string }>();
-
   if (byName) return byName.id;
 
-  // TODO: Add alias lookup and fuzzy matching in Phase 5
+  // 3. Alias lookup
+  const byAlias = await db.prepare('SELECT subject_id FROM subject_aliases WHERE alias = ?')
+    .bind(normalized)
+    .first<{ subject_id: string }>();
+  if (byAlias) return byAlias.subject_id;
+
+  // 4. Fuzzy match (simple LIKE for now)
+  const fuzzy = await db.prepare(`
+    SELECT id FROM subjects
+    WHERE name LIKE ? OR id LIKE ?
+    LIMIT 1
+  `)
+    .bind(`%${normalized}%`, `%${upper}%`)
+    .first<{ id: string }>();
+  if (fuzzy) return fuzzy.id;
 
   return null;
 }
