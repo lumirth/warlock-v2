@@ -4,33 +4,89 @@ export function extractQueryLite(query: string): ExtractedQuery {
   const hints: QueryHint[] = [];
   let residual = query;
 
-  // Simple regex heuristics for server-side fallback
-
-  // 1. "by [Instructor]" - Priority 1
-  const byMatch = residual.match(/\b(by|with|prof|professor)\s+([a-zA-Z]+)/i);
-  if (byMatch) {
-    hints.push({ type: 'instructor', value: byMatch[2], confidence: 0.8 });
-    residual = residual.replace(byMatch[0], '');
+  // 1. Course code pattern: "CS 225", "cs225", "MATH241"
+  // Matches 2-4 letter subject + optional space + 3-digit number
+  const courseCodeRegex = /\b([A-Za-z]{2,4})\s*(\d{3})\b/g;
+  let courseMatch;
+  while ((courseMatch = courseCodeRegex.exec(residual)) !== null) {
+    hints.push({
+      type: 'course_code',
+      value: `${courseMatch[1].toUpperCase()} ${courseMatch[2]}`,
+      confidence: 0.95,
+      metadata: {
+        subject: courseMatch[1].toUpperCase(),
+        number: courseMatch[2]
+      }
+    });
   }
+  // Remove matched course codes from residual
+  residual = residual.replace(courseCodeRegex, ' ');
 
-  // 2. "gened [Category]" - Priority 2 (more specific)
-  const genedMatchForward = residual.match(/\b(gened|gen ed)\s+([a-zA-Z]+)/i);
-  if (genedMatchForward) {
-    hints.push({ type: 'gened', value: genedMatchForward[2], confidence: 0.7 });
-    residual = residual.replace(genedMatchForward[0], '');
-  } else {
-    // 3. "[Category] gened" - Fallback
-    const genedMatchBackward = residual.match(/\b([a-zA-Z]+)\s+(gened|gen ed)\b/i);
-    if (genedMatchBackward) {
-      // Avoid matching common words like "easy" if possible, but for lite we keep it simple
-      hints.push({ type: 'gened', value: genedMatchBackward[1], confidence: 0.6 });
-      residual = residual.replace(genedMatchBackward[0], '');
-    }
+  // 2. CRN pattern: standalone 5-digit number or "CRN 12345"
+  const crnWithPrefixRegex = /\bCRN\s*(\d{5})\b/gi;
+  let crnPrefixMatch;
+  while ((crnPrefixMatch = crnWithPrefixRegex.exec(residual)) !== null) {
+    hints.push({
+      type: 'crn',
+      value: crnPrefixMatch[1],
+      confidence: 0.95
+    });
   }
+  residual = residual.replace(crnWithPrefixRegex, ' ');
+
+  // Standalone 5-digit number (only if no other context suggests it's something else)
+  const standaloneCrnRegex = /\b(\d{5})\b/g;
+  let standaloneCrnMatch;
+  while ((standaloneCrnMatch = standaloneCrnRegex.exec(residual)) !== null) {
+    // Only treat as CRN if it's the primary content or clearly a CRN
+    hints.push({
+      type: 'crn',
+      value: standaloneCrnMatch[1],
+      confidence: 0.7  // Lower confidence for standalone numbers
+    });
+  }
+  residual = residual.replace(standaloneCrnRegex, ' ');
+
+  // 3. Instructor pattern: "by [Name]", "with [Name]", "prof [Name]", "professor [Name]"
+  const instructorRegex = /\b(by|with|prof|professor)\s+([a-zA-Z][\w-]*)/gi;
+  let instructorMatch;
+  while ((instructorMatch = instructorRegex.exec(residual)) !== null) {
+    hints.push({
+      type: 'instructor',
+      value: instructorMatch[2].toLowerCase(),
+      confidence: 0.8
+    });
+  }
+  residual = residual.replace(instructorRegex, ' ');
+
+  // 4. GenEd pattern: "gened [Category]" or "[Category] gened"
+  const genedForwardRegex = /\b(gened|gen ed|gen-ed)\s+([a-zA-Z]+)/gi;
+  let genedMatch;
+  while ((genedMatch = genedForwardRegex.exec(residual)) !== null) {
+    hints.push({
+      type: 'gened',
+      value: genedMatch[2].toLowerCase(),
+      confidence: 0.7
+    });
+  }
+  residual = residual.replace(genedForwardRegex, ' ');
+
+  const genedBackwardRegex = /\b([a-zA-Z]+)\s+(gened|gen ed|gen-ed)\b/gi;
+  while ((genedMatch = genedBackwardRegex.exec(residual)) !== null) {
+    hints.push({
+      type: 'gened',
+      value: genedMatch[1].toLowerCase(),
+      confidence: 0.6
+    });
+  }
+  residual = residual.replace(genedBackwardRegex, ' ');
+
+  // Clean up residual
+  residual = residual.replace(/\s+/g, ' ').trim();
 
   return {
     rawQuery: query,
     hints,
-    residual: residual.replace(/\s+/g, ' ').trim()
+    residual
   };
 }
