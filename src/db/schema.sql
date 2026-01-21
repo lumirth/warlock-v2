@@ -7,6 +7,16 @@ CREATE TABLE IF NOT EXISTS courses (
     description TEXT,
     credit_hours INTEGER,
     gened TEXT,                       -- "QR", "HUM", etc.
+
+    -- New fields from CISAPI
+    subject_id TEXT,                  -- FK to subjects
+    course_info TEXT,                 -- courseSectionInformation (prereqs, cross-listings)
+    degree_attributes TEXT,           -- sectionDegreeAttributes
+    class_schedule_info TEXT,         -- classScheduleInformation
+    date_range_text TEXT,             -- course-level sectionDateRange
+    registration_notes TEXT,          -- sectionRegistrationNotes
+    approval_code TEXT,               -- sectionApprovalCode
+
     year INTEGER NOT NULL,
     term TEXT NOT NULL,
 
