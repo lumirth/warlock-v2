@@ -36,7 +36,7 @@ describe('extractQueryLite', () => {
     });
 
     it('extracts course code with surrounding text', () => {
-      const result = extractQueryLite('fun CS 225 morning');
+      const result = extractQueryLite('fun CS 225 intro');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'course_code',
@@ -44,7 +44,7 @@ describe('extractQueryLite', () => {
         })
       );
       expect(result.residual).toContain('fun');
-      expect(result.residual).toContain('morning');
+      expect(result.residual).toContain('intro');
     });
 
     it('extracts 4-letter subject codes', () => {
@@ -140,6 +140,52 @@ describe('extractQueryLite', () => {
       const result = extractQueryLite('challenging math');
       expect(result.hints).toContainEqual(
         expect.objectContaining({ type: 'difficulty', value: 'hard' })
+      );
+    });
+  });
+
+  describe('time extraction', () => {
+    it('extracts "morning"', () => {
+      const result = extractQueryLite('morning classes');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'time', value: 'morning' })
+      );
+    });
+
+    it('extracts "afternoon"', () => {
+      const result = extractQueryLite('afternoon lecture');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'time', value: 'afternoon' })
+      );
+    });
+
+    it('extracts "evening"', () => {
+      const result = extractQueryLite('evening class');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'time', value: 'evening' })
+      );
+    });
+  });
+
+  describe('days extraction', () => {
+    it('extracts "MWF"', () => {
+      const result = extractQueryLite('MWF classes');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'days', value: 'MWF' })
+      );
+    });
+
+    it('extracts "TR"', () => {
+      const result = extractQueryLite('TR lecture');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'days', value: 'TR' })
+      );
+    });
+
+    it('extracts "tuesday thursday"', () => {
+      const result = extractQueryLite('tuesday thursday');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'days', value: 'TR' })
       );
     });
   });

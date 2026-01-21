@@ -94,6 +94,36 @@ export function extractQueryLite(query: string): ExtractedQuery {
   }
   residual = residual.replace(genedBackwardRegex, ' ');
 
+  // 6. Time of day
+  const timeKeywords: Record<string, string> = {
+    'morning': 'morning',
+    'afternoon': 'afternoon',
+    'evening': 'evening',
+    'night': 'evening',
+  };
+  for (const [keyword, value] of Object.entries(timeKeywords)) {
+    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+    if (regex.test(residual)) {
+      hints.push({ type: 'time', value, confidence: 0.7 });
+      residual = residual.replace(regex, ' ');
+    }
+  }
+
+  // 7. Days pattern
+  const daysPatterns: Array<{ pattern: RegExp; value: string }> = [
+    { pattern: /\bMWF\b/gi, value: 'MWF' },
+    { pattern: /\bTR\b/gi, value: 'TR' },
+    { pattern: /\bMW\b/gi, value: 'MW' },
+    { pattern: /\b(tuesday|tue)\s*(thursday|thu|and\s*thursday)\b/gi, value: 'TR' },
+    { pattern: /\b(monday|mon)\s*(wednesday|wed)\s*(friday|fri)\b/gi, value: 'MWF' },
+  ];
+  for (const { pattern, value } of daysPatterns) {
+    if (pattern.test(residual)) {
+      hints.push({ type: 'days', value, confidence: 0.8 });
+      residual = residual.replace(pattern, ' ');
+    }
+  }
+
   // Clean up residual
   residual = residual.replace(/\s+/g, ' ').trim();
 
