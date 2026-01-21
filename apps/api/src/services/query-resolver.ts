@@ -141,7 +141,7 @@ async function validateSubject(db: D1Database, subject: string): Promise<string 
   const normalized = subject.toLowerCase().trim();
   const upper = subject.toUpperCase();
 
-  // 1. Exact code match
+  // 1. Exact code match in subjects table
   const byCode = await db.prepare('SELECT id FROM subjects WHERE id = ?')
     .bind(upper)
     .first<{ id: string }>();
@@ -159,7 +159,7 @@ async function validateSubject(db: D1Database, subject: string): Promise<string 
     .first<{ subject_id: string }>();
   if (byAlias) return byAlias.subject_id;
 
-  // 4. Fuzzy match (simple LIKE for now)
+  // 4. Fuzzy match in subjects table
   const fuzzy = await db.prepare(`
     SELECT id FROM subjects
     WHERE name LIKE ? OR id LIKE ?
@@ -168,6 +168,12 @@ async function validateSubject(db: D1Database, subject: string): Promise<string 
     .bind(`%${normalized}%`, `%${upper}%`)
     .first<{ id: string }>();
   if (fuzzy) return fuzzy.id;
+
+  // 5. Fallback: check if subject code exists in courses table
+  const byCourse = await db.prepare('SELECT DISTINCT subject FROM courses WHERE subject = ? LIMIT 1')
+    .bind(upper)
+    .first<{ subject: string }>();
+  if (byCourse) return byCourse.subject;
 
   return null;
 }
