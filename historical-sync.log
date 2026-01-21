@@ -210,3 +210,188 @@ Historical Sync Starting...
 [RATE LIMIT] Window expired - resuming
 
 [RATE LIMIT] Blocked - pausing all requests for 5.3m...
+[RATE LIMIT] Window expired - resuming
+[BATCH 9/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 10/24] Processing 500 items (4500 done, 0 failed)...
+[BATCH 10/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 11/24] Processing 500 items (5000 done, 0 failed)...
+[BATCH 11/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 12/24] Processing 500 items (5500 done, 0 failed)...
+
+[RATE LIMIT] Blocked - pausing all requests for 4.9m...
+[RATE LIMIT] Window expired - resuming
+
+[RATE LIMIT] Blocked - pausing all requests for 5.3m...
+[RATE LIMIT] Window expired - resuming
+[BATCH 12/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 13/24] Processing 500 items (6000 done, 0 failed)...
+[BATCH 13/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 14/24] Processing 500 items (6500 done, 0 failed)...
+
+[RATE LIMIT] Blocked - pausing all requests for 5.0m...
+[RATE LIMIT] Window expired - resuming
+
+[RATE LIMIT] Blocked - pausing all requests for 5.3m...
+[RATE LIMIT] Window expired - resuming
+[BATCH 14/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 15/24] Processing 500 items (7000 done, 0 failed)...
+[BATCH 15/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 16/24] Processing 500 items (7500 done, 0 failed)...
+[BATCH 16/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 17/24] Processing 500 items (8000 done, 0 failed)...
+
+[RATE LIMIT] Blocked - pausing all requests for 4.9m...
+[RATE LIMIT] Window expired - resuming
+
+[RATE LIMIT] Blocked - pausing all requests for 5.3m...
+[RATE LIMIT] Window expired - resuming
+[BATCH 17/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 18/24] Processing 500 items (8500 done, 0 failed)...
+[BATCH 18/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 19/24] Processing 500 items (9000 done, 0 failed)...
+[BATCH 19/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 20/24] Processing 500 items (9500 done, 0 failed)...
+[BATCH 20/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 21/24] Processing 500 items (10000 done, 0 failed)...
+
+[RATE LIMIT] Blocked - pausing all requests for 4.8m...
+[RATE LIMIT] Window expired - resuming
+
+[RATE LIMIT] Blocked - pausing all requests for 5.3m...
+[RATE LIMIT] Window expired - resuming
+[BATCH 21/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 22/24] Processing 500 items (10500 done, 0 failed)...
+[BATCH 22/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 23/24] Processing 500 items (11000 done, 0 failed)...
+[BATCH 23/24] Complete: 500 succeeded, 0 failed
+
+[BATCH 24/24] Processing 26 items (11500 done, 0 failed)...
+
+[RATE LIMIT] Blocked - pausing all requests for 5.0m...
+[RATE LIMIT] Window expired - resuming
+
+[RATE LIMIT] Blocked - pausing all requests for 5.3m...
+[RATE LIMIT] Window expired - resuming
+[BATCH 24/24] Complete: 26 succeeded, 0 failed
+
+============================================================
+HISTORICAL SYNC SUMMARY
+============================================================
+
+Configuration:
+  Start Year:    2004
+  End Year:      2026
+  Term Filter:   (all terms)
+  Dry Run:       false
+
+Results:
+  Years Synced:      23
+  Terms Synced:      77
+  Subjects Synced:   11526
+  Courses Synced:    204183
+  Sections Synced:   204183
+  Retried Requests:  3538
+  Failed Subjects:   0
+
+Timing:
+  Started:    2026-01-20T22:19:55.620Z
+  Completed:  2026-01-20T23:44:41.577Z
+  Duration:   84.77 minutes
+
+Per-Term Breakdown:
+  2004-fall: 162 subjects, 3616 courses, 3616 sections
+  2005-spring: 164 subjects, 3724 courses, 3724 sections
+  2005-summer: 149 subjects, 1159 courses, 1159 sections
+  2005-fall: 167 subjects, 3723 courses, 3723 sections
+  2006-spring: 164 subjects, 3778 courses, 3778 sections
+  2006-summer: 151 subjects, 1100 courses, 1100 sections
+  2006-fall: 166 subjects, 3745 courses, 3745 sections
+  2007-spring: 166 subjects, 3757 courses, 3757 sections
+  2007-summer: 152 subjects, 1102 courses, 1102 sections
+  2007-fall: 170 subjects, 3738 courses, 3738 sections
+  2008-spring: 170 subjects, 3815 courses, 3815 sections
+  2008-summer: 148 subjects, 1115 courses, 1115 sections
+  2008-fall: 173 subjects, 3852 courses, 3852 sections
+  2009-spring: 175 subjects, 3927 courses, 3927 sections
+  2009-summer: 151 subjects, 1101 courses, 1101 sections
+  2009-fall: 178 subjects, 3956 courses, 3956 sections
+  2010-spring: 180 subjects, 4056 courses, 4056 sections
+  2010-summer: 154 subjects, 1084 courses, 1084 sections
+  2010-fall: 182 subjects, 3976 courses, 3976 sections
+  2011-spring: 181 subjects, 4027 courses, 4027 sections
+  2011-summer: 156 subjects, 1073 courses, 1073 sections
+  2011-fall: 178 subjects, 3915 courses, 3915 sections
+  2012-spring: 179 subjects, 3970 courses, 3970 sections
+  2012-summer: 157 subjects, 1096 courses, 1096 sections
+  2012-fall: 181 subjects, 3941 courses, 3941 sections
+  2013-spring: 180 subjects, 3940 courses, 3940 sections
+  2013-summer: 157 subjects, 1103 courses, 1103 sections
+  2013-fall: 177 subjects, 3995 courses, 3995 sections
+  2014-spring: 181 subjects, 3980 courses, 3980 sections
+  2014-summer: 159 subjects, 1110 courses, 1110 sections
+  2014-fall: 179 subjects, 4003 courses, 4003 sections
+  2015-winter: 4 subjects, 8 courses, 8 sections
+  2015-spring: 180 subjects, 4071 courses, 4071 sections
+  2015-summer: 162 subjects, 1142 courses, 1142 sections
+  2015-fall: 181 subjects, 4073 courses, 4073 sections
+  2016-winter: 13 subjects, 21 courses, 21 sections
+  2016-spring: 183 subjects, 4088 courses, 4088 sections
+  2016-summer: 159 subjects, 1109 courses, 1109 sections
+  2016-fall: 178 subjects, 4021 courses, 4021 sections
+  2017-winter: 19 subjects, 29 courses, 29 sections
+  2017-spring: 181 subjects, 4109 courses, 4109 sections
+  2017-summer: 159 subjects, 1119 courses, 1119 sections
+  2017-fall: 181 subjects, 4084 courses, 4084 sections
+  2018-winter: 25 subjects, 44 courses, 44 sections
+  2018-spring: 180 subjects, 4089 courses, 4089 sections
+  2018-summer: 163 subjects, 1122 courses, 1122 sections
+  2018-fall: 183 subjects, 4138 courses, 4138 sections
+  2019-winter: 26 subjects, 50 courses, 50 sections
+  2019-spring: 186 subjects, 4110 courses, 4110 sections
+  2019-summer: 164 subjects, 1107 courses, 1107 sections
+  2019-fall: 186 subjects, 4148 courses, 4148 sections
+  2020-winter: 25 subjects, 59 courses, 59 sections
+  2020-spring: 189 subjects, 4144 courses, 4144 sections
+  2020-summer: 167 subjects, 1154 courses, 1154 sections
+  2020-fall: 190 subjects, 4312 courses, 4312 sections
+  2021-winter: 37 subjects, 85 courses, 85 sections
+  2021-spring: 190 subjects, 4330 courses, 4330 sections
+  2021-summer: 162 subjects, 1173 courses, 1173 sections
+  2021-fall: 189 subjects, 4391 courses, 4391 sections
+  2022-winter: 33 subjects, 69 courses, 69 sections
+  2022-spring: 189 subjects, 4407 courses, 4407 sections
+  2022-summer: 162 subjects, 1200 courses, 1200 sections
+  2022-fall: 190 subjects, 4501 courses, 4501 sections
+  2023-winter: 31 subjects, 57 courses, 57 sections
+  2023-spring: 189 subjects, 4457 courses, 4457 sections
+  2023-summer: 161 subjects, 1213 courses, 1213 sections
+  2023-fall: 188 subjects, 4505 courses, 4505 sections
+  2024-winter: 32 subjects, 55 courses, 55 sections
+  2024-spring: 191 subjects, 4458 courses, 4458 sections
+  2024-summer: 155 subjects, 1187 courses, 1187 sections
+  2024-fall: 184 subjects, 4536 courses, 4536 sections
+  2025-winter: 34 subjects, 64 courses, 64 sections
+  2025-spring: 186 subjects, 4516 courses, 4516 sections
+  2025-summer: 151 subjects, 1047 courses, 1047 sections
+  2025-fall: 184 subjects, 4538 courses, 4538 sections
+  2026-winter: 30 subjects, 58 courses, 58 sections
+  2026-spring: 187 subjects, 4508 courses, 4508 sections
+
+============================================================
+✓ SYNC COMPLETE - All data fetched successfully
+============================================================
+

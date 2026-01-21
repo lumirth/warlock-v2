@@ -72,6 +72,17 @@ export function fromSubjectCascade(
         instructor_rmp: null,
         instructor_gpa: null,
         last_synced: now,
+        section_title: null,
+        status_code: null,
+        section_status_code: null,
+        section_text: null,
+        section_notes: null,
+        capp_area: null,
+        date_range_text: null,
+        part_of_term: null,
+        start_date: null,
+        end_date: null,
+        credit_hours: null
       }))
     };
   });

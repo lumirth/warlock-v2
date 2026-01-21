@@ -92,6 +92,17 @@ export interface Section {
   instructor_rmp: number | null;
   instructor_gpa: number | null;
   last_synced: number | null;
+  section_title: string | null;
+  status_code: string | null;
+  section_status_code: string | null;
+  section_text: string | null;
+  section_notes: string | null;
+  capp_area: string | null;
+  date_range_text: string | null;
+  part_of_term: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  credit_hours: string | null;
 }
 
 export interface TermState {
@@ -148,8 +159,11 @@ export async function upsertSection(db: D1Database, section: Section): Promise<v
   await db.prepare(`
     INSERT INTO sections (crn, course_id, section_number, status, type, days,
                           start_time, end_time, location, instructor,
-                          instructor_rmp, instructor_gpa, last_synced)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          instructor_rmp, instructor_gpa, last_synced,
+                          section_title, status_code, section_status_code,
+                          section_text, section_notes, capp_area, date_range_text,
+                          part_of_term, start_date, end_date, credit_hours)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(crn) DO UPDATE SET
       section_number = excluded.section_number,
       status = excluded.status,
@@ -161,12 +175,27 @@ export async function upsertSection(db: D1Database, section: Section): Promise<v
       instructor = excluded.instructor,
       instructor_rmp = excluded.instructor_rmp,
       instructor_gpa = excluded.instructor_gpa,
-      last_synced = excluded.last_synced
+      last_synced = excluded.last_synced,
+      section_title = excluded.section_title,
+      status_code = excluded.status_code,
+      section_status_code = excluded.section_status_code,
+      section_text = excluded.section_text,
+      section_notes = excluded.section_notes,
+      capp_area = excluded.capp_area,
+      date_range_text = excluded.date_range_text,
+      part_of_term = excluded.part_of_term,
+      start_date = excluded.start_date,
+      end_date = excluded.end_date,
+      credit_hours = excluded.credit_hours
   `).bind(
     section.crn, section.course_id, section.section_number, section.status,
     section.type, section.days, section.start_time, section.end_time,
     section.location, section.instructor, section.instructor_rmp,
-    section.instructor_gpa, section.last_synced
+    section.instructor_gpa, section.last_synced,
+    section.section_title, section.status_code, section.section_status_code,
+    section.section_text, section.section_notes, section.capp_area,
+    section.date_range_text, section.part_of_term, section.start_date,
+    section.end_date, section.credit_hours
   ).run();
 }
 
