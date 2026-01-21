@@ -1,5 +1,55 @@
 import type { D1Database } from '@cloudflare/workers-types';
 
+export interface Subject {
+  id: string;
+  name: string;
+  college_code: string | null;
+  department_code: string | null;
+  unit_name: string | null;
+  contact_name: string | null;
+  contact_title: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  phone_number: string | null;
+  website_url: string | null;
+  description: string | null;
+  last_synced: number | null;
+}
+
+export interface Instructor {
+  id: number;
+  first_name: string | null;
+  last_name: string;
+  display_name: string;
+  rmp_rating: number | null;
+  rmp_difficulty: number | null;
+  avg_gpa: number | null;
+  gpa_sample_size: number | null;
+}
+
+export interface Meeting {
+  id: number;
+  section_crn: string;
+  meeting_index: number;
+  type_code: string | null;
+  type_name: string | null;
+  days: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  building_name: string | null;
+  room_number: string | null;
+  date_range_text: string | null;
+}
+
+export interface CourseGened {
+  id: number;
+  course_id: string;
+  category_id: string;
+  category_name: string | null;
+  attribute_code: string | null;
+  attribute_name: string | null;
+}
+
 export interface Course {
   id: string;
   subject: string;
