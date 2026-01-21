@@ -50,6 +50,13 @@ export function fromSubjectCascade(
         primary_instructor_rmp: null,
         difficulty_score: null,
         quality_score: null,
+        subject_id: null,
+        course_info: null,
+        degree_attributes: null,
+        class_schedule_info: null,
+        date_range_text: null,
+        registration_notes: null,
+        approval_code: null,
       },
       sections: c.sections.map(s => ({
         crn: s.crn,

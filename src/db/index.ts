@@ -66,6 +66,13 @@ export interface Course {
   primary_instructor_rmp: number | null;
   difficulty_score: number | null;
   quality_score: number | null;
+  subject_id: string | null;
+  course_info: string | null;
+  degree_attributes: string | null;
+  class_schedule_info: string | null;
+  date_range_text: string | null;
+  registration_notes: string | null;
+  approval_code: string | null;
   last_synced: number | null;
   created_at: number;
   updated_at: number;
