@@ -1,28 +1,11 @@
 {
-  "name": "uiuc-course-search",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "uiuc-course-search-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "wrangler dev",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run test",
-    "deploy": "npm run check && wrangler deploy"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.12.4",
-    "@cloudflare/workers-types": "^4.20260120.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.17",
-    "wrangler": "^4.59.2"
-  },
-  "dependencies": {
-    "hono": "^4.11.4",
-    "htmlparser2": "^10.0.0"
+    "test": "npm test --workspaces"
   }
 }

@@ -1,0 +1,6 @@
+{
+  "name": "@uiuc-course-search/query-types",
+  "version": "0.0.1",
+  "main": "index.ts",
+  "types": "index.ts"
+}
