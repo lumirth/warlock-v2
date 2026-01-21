@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS course_gened (
     category_name TEXT,
     attribute_code TEXT,
     attribute_name TEXT,
+    UNIQUE(course_id, category_id, attribute_code),
     FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_course_gened_course ON course_gened(course_id);

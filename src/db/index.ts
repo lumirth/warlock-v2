@@ -334,8 +334,14 @@ export async function getInstructorByName(
   lastName: string,
   firstName: string | null
 ): Promise<Instructor | null> {
+  // Handle NULL comparison properly: use IS NULL when firstName is null, = otherwise
+  if (firstName === null) {
+    return db.prepare(`
+      SELECT * FROM instructors WHERE last_name = ? AND first_name IS NULL
+    `).bind(lastName).first<Instructor>();
+  }
   return db.prepare(`
-    SELECT * FROM instructors WHERE last_name = ? AND first_name IS ?
+    SELECT * FROM instructors WHERE last_name = ? AND first_name = ?
   `).bind(lastName, firstName).first<Instructor>();
 }
 
