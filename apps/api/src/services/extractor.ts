@@ -1,5 +1,6 @@
 import type { Hint, HintType, HintMetadata } from '@uiuc-course-search/query-types';
 import { createDefaultRegistry } from './alias-registry.js';
+import { VALID_SUBJECTS, UNSAFE_LOWERCASE_SUBJECTS } from './data/valid-subjects.js';
 
 export interface ExtractionResult {
   hints: Hint[];
@@ -244,23 +245,37 @@ function extractStandaloneEntities(text: string, hints: Hint[]): string {
   let residual = text;
 
   // Standalone Subject Codes (2-4 letters)
-  // We allow common lowercase subjects explicitly, otherwise require uppercase to avoid 
-  // catching common words like "the", "for", "with" as subjects.
-  const commonLowercase = ['cs', 'math', 'ece', 'stat', 'phys', 'bio', 'chem', 'econ', 'adv', 'psyc'];
-  const commonPattern = commonLowercase.join('|');
-  const subjectRegex = new RegExp(`\\b([A-Z]{2,4})\\b|\\b(${commonPattern})\\b`, 'g');
-  
+  // We scan for any 2-4 letter word that matches a valid subject code.
+  // If the word is fully uppercase, we accept it (e.g. "THE" -> Theatre).
+  // If the word is lowercase/mixed, we only accept it if it's NOT in the unsafe list (e.g. "phil" -> accepted, "the" -> ignored).
+  const subjectRegex = /\b([a-zA-Z]{2,4})\b/g;
+
   let match;
   const subjectMatches: { index: number; length: number }[] = [];
+
   while ((match = subjectRegex.exec(residual)) !== null) {
-    const val = (match[1] || match[2]).toUpperCase();
+    const raw = match[1];
+    const upper = raw.toUpperCase();
+
+    // 1. Must be a recognized subject code
+    if (!VALID_SUBJECTS.has(upper)) {
+      continue;
+    }
+
+    // 2. If not uppercase, must be "safe" (not a common English word)
+    const isUppercase = raw === upper;
+    if (!isUppercase && UNSAFE_LOWERCASE_SUBJECTS.has(upper)) {
+      continue;
+    }
+
     hints.push({
       type: 'subject',
-      value: val,
+      value: upper,
       metadata: createMetadata('regex', match[0], 0.6),
     });
     subjectMatches.push({ index: match.index, length: match[0].length });
   }
+
   for (let i = subjectMatches.length - 1; i >= 0; i--) {
     residual = maskRange(residual, subjectMatches[i].index, subjectMatches[i].length);
   }
