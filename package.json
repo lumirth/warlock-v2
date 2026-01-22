@@ -6,8 +6,14 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "npm test --workspaces"
+    "dev": "concurrently \"npm run dev -w @uiuc-course-search/api\" \"npm run dev -w @uiuc-course-search/web\"",
+    "build": "npm run build --workspaces",
+    "test": "npm test --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "deploy:api": "npm run deploy -w @uiuc-course-search/api",
+    "deploy:web": "npm run deploy -w @uiuc-course-search/web"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

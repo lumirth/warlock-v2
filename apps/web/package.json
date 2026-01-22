@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name uiuc-course-search-web",
     "preview": "vite preview",
     "test": "echo 'Web tests not yet implemented'"
   },
