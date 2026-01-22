@@ -169,19 +169,19 @@ export function buildFilterClauses(
   // Difficulty filter
   if (filters.difficulty) {
     const thresholds = DIFFICULTY_THRESHOLDS[filters.difficulty];
-    if (thresholds.min_gpa) {
+    if ('min_gpa' in thresholds) {
       where.push('c.avg_gpa >= ?');
       params.push(thresholds.min_gpa);
     }
-    if (thresholds.max_gpa) {
+    if ('max_gpa' in thresholds) {
       where.push('c.avg_gpa <= ?');
       params.push(thresholds.max_gpa);
     }
-    if (thresholds.min_difficulty) {
+    if ('min_difficulty' in thresholds) {
       where.push('c.difficulty_score >= ?');
       params.push(thresholds.min_difficulty);
     }
-    if (thresholds.max_difficulty) {
+    if ('max_difficulty' in thresholds) {
       where.push('c.difficulty_score <= ?');
       params.push(thresholds.max_difficulty);
     }
