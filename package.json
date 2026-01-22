@@ -6,14 +6,17 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev -w @uiuc-course-search/api\" \"npm run dev -w @uiuc-course-search/web\"",
-    "build": "npm run build --workspaces",
+    "generate:subjects": "tsx scripts/generate-subjects.ts",
+    "dev": "npm run generate:subjects && concurrently \"npm run dev -w @uiuc-course-search/api\" \"npm run dev -w @uiuc-course-search/web\"",
+    "build": "npm run generate:subjects && npm run build --workspaces",
     "test": "npm test --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "deploy:api": "npm run deploy -w @uiuc-course-search/api",
-    "deploy:web": "npm run deploy -w @uiuc-course-search/web"
+    "deploy:web": "npm run deploy -w @uiuc-course-search/web",
+    "deploy": "concurrently \"npm run deploy:api\" \"npm run deploy:web\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "tsx": "^4.21.0"
   }
 }
