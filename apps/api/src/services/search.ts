@@ -1,7 +1,7 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { searchCourses as semanticSearch } from './embeddings.js';
 import type { Course } from '../db/index.js';
-import type { SearchPlan } from '@uiuc-course-search/query-types';
+import type { SearchPlan, SearchFilters } from '@uiuc-course-search/query-types';
 
 export interface SearchResult {
   course: Course;
@@ -11,6 +11,25 @@ export interface SearchResult {
   termPriority?: number;
   historical?: boolean;
 }
+
+export const TIME_RANGES: Record<string, { start?: string; end?: string }> = {
+  'early': { end: '09:00' },
+  'morning': { end: '12:00' },
+  'midday': { start: '10:00', end: '14:00' },
+  'afternoon': { start: '12:00', end: '17:00' },
+  'evening': { start: '17:00' },
+};
+
+export const DIFFICULTY_THRESHOLDS = {
+  easy: { min_gpa: 3.5, max_difficulty: 3.0 },
+  hard: { max_gpa: 3.0, min_difficulty: 4.0 },
+};
+
+const STATUS_VALUES: Record<string, string[]> = {
+  'open': ['Open'],
+  'available': ['Open', 'Restricted'],
+  'closed': ['Closed'],
+};
 
 interface TermInfo {
   term_id: string;
@@ -44,6 +63,135 @@ const RRF_K = 60;
 
 function rrfScore(rank: number): number {
   return 1 / (RRF_K + rank);
+}
+
+export function buildFilterClauses(
+  filters: SearchFilters
+): { joins: string[]; where: string[]; params: (string | number)[] } {
+  const joinsSet = new Set<string>();
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+
+  // Subject filter
+  if (filters.subject) {
+    where.push('c.subject = ?');
+    params.push(filters.subject);
+  }
+
+  // Number filter
+  if (filters.number) {
+    where.push('c.number = ?');
+    params.push(filters.number);
+  }
+
+  // Credits filter
+  if (filters.credits !== undefined) {
+    where.push('c.credit_hours = ?');
+    params.push(filters.credits);
+  }
+
+  // Level filter
+  if (filters.level !== undefined) {
+    where.push('CAST(SUBSTR(c.number, 1, 1) AS INTEGER) * 100 = ?');
+    params.push(filters.level);
+  }
+
+  // GenEd filter (single)
+  if (filters.gened_code) {
+    joinsSet.add('JOIN course_gened cg ON cg.course_id = c.id');
+    where.push('(cg.category_id = ? OR cg.attribute_code = ?)');
+    params.push(filters.gened_code, filters.gened_code);
+  }
+
+  // GenEd filter (any)
+  if (filters.gened_any?.length) {
+    joinsSet.add('JOIN course_gened cg ON cg.course_id = c.id');
+    const placeholders = filters.gened_any.map(() => '?').join(',');
+    where.push(`cg.category_id IN (${placeholders})`);
+    params.push(...filters.gened_any);
+  }
+
+  // Instructor filter
+  if (filters.instructor_ids?.length) {
+    joinsSet.add('JOIN sections s ON s.course_id = c.id');
+    joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+    joinsSet.add('JOIN meeting_instructors mi ON mi.meeting_id = m.id');
+    const placeholders = filters.instructor_ids.map(() => '?').join(',');
+    where.push(`mi.instructor_id IN (${placeholders})`);
+    params.push(...filters.instructor_ids);
+  }
+
+  // Days filter
+  if (filters.days) {
+    joinsSet.add('JOIN sections s ON s.course_id = c.id');
+    joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+    where.push('m.days = ?');
+    params.push(filters.days);
+  }
+
+  // Time filter
+  if (filters.time) {
+    const range = TIME_RANGES[filters.time];
+    if (range) {
+      joinsSet.add('JOIN sections s ON s.course_id = c.id');
+      joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+      if (range.start) {
+        where.push('m.start_time >= ?');
+        params.push(range.start);
+      }
+      if (range.end) {
+        where.push('m.start_time < ?');
+        params.push(range.end);
+      }
+    }
+  }
+
+  // Online filter
+  if (filters.online !== undefined) {
+    joinsSet.add('JOIN sections s ON s.course_id = c.id');
+    joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+    if (filters.online) {
+      where.push("(m.building_name = '' OR m.building_name IS NULL OR LOWER(m.building_name) LIKE '%online%')");
+    } else {
+      where.push("m.building_name != '' AND m.building_name IS NOT NULL AND LOWER(m.building_name) NOT LIKE '%online%'");
+    }
+  }
+
+  // Status filter
+  if (filters.status) {
+    joinsSet.add('JOIN sections s ON s.course_id = c.id');
+    const statuses = STATUS_VALUES[filters.status] ?? ['Open'];
+    const placeholders = statuses.map(() => '?').join(',');
+    where.push(`s.status IN (${placeholders})`);
+    params.push(...statuses);
+  }
+
+  // Difficulty filter
+  if (filters.difficulty) {
+    const thresholds = DIFFICULTY_THRESHOLDS[filters.difficulty];
+    if (thresholds.min_gpa) {
+      where.push('c.avg_gpa >= ?');
+      params.push(thresholds.min_gpa);
+    }
+    if (thresholds.max_gpa) {
+      where.push('c.avg_gpa <= ?');
+      params.push(thresholds.max_gpa);
+    }
+    if (thresholds.min_difficulty) {
+      where.push('c.difficulty_score >= ?');
+      params.push(thresholds.min_difficulty);
+    }
+    if (thresholds.max_difficulty) {
+      where.push('c.difficulty_score <= ?');
+      params.push(thresholds.max_difficulty);
+    }
+  }
+
+  return {
+    joins: Array.from(joinsSet),
+    where,
+    params,
+  };
 }
 
 export async function keywordSearch(
@@ -193,11 +341,14 @@ export async function hybridSearch(
   plan: SearchPlan,
   limit: number = 20
 ): Promise<SearchResult[]> {
-  // Run all searches in parallel
+  const hasSemanticQuery = plan.semanticQuery?.trim().length > 0;
+  const hasKeywordQuery = plan.keywordQuery?.trim().length > 0;
+
+  // Run all searches in parallel, skipping empty queries
   const [semanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
-    semanticSearch(vectorize, ai, plan.semanticQuery, 50),
+    hasSemanticQuery ? semanticSearch(vectorize, ai, plan.semanticQuery, 50) : Promise.resolve([]),
     keywordSearch(db, plan, 50),
-    sectionKeywordSearch(db, plan.keywordQuery || plan.semanticQuery, 50)
+    hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, 50) : Promise.resolve([])
   ]);
 
   // Build rank maps
@@ -236,8 +387,23 @@ export async function hybridSearch(
     scores.push({ id, score, semanticRank, keywordRank });
   }
 
-  // Sort by RRF score and take top results
-  scores.sort((a, b) => b.score - a.score);
+  // Sort by RRF score, with tie-breaking: prefer keyword matches over semantic-only
+  scores.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    // Tie-breaker: keyword match is more precise than semantic-only
+    const aHasKeyword = a.keywordRank !== undefined;
+    const bHasKeyword = b.keywordRank !== undefined;
+    if (aHasKeyword !== bHasKeyword) {
+      return aHasKeyword ? -1 : 1;
+    }
+    // Secondary tie-breaker: lower keyword rank is better
+    if (aHasKeyword && bHasKeyword) {
+      return (a.keywordRank ?? 0) - (b.keywordRank ?? 0);
+    }
+    return 0;
+  });
   const topIds = scores.slice(0, limit);
 
   if (topIds.length === 0) {
