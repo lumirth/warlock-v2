@@ -96,10 +96,11 @@ describe('AliasRegistry', () => {
   });
 
   describe('gened aliases with cue rule', () => {
-    it('does NOT match "humanities" without cue', () => {
+    it('matches common gened phrases like "humanities" without cue', () => {
       const matches = registry.match('humanities');
-      const genedMatches = matches.filter(m => m.kind === 'gened');
-      expect(genedMatches).toHaveLength(0);
+      expect(matches).toContainEqual(
+        expect.objectContaining({ kind: 'gened', canonical: 'HUM' })
+      );
     });
 
     it('matches "humanities gen ed" with cue', () => {
