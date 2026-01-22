@@ -22,11 +22,11 @@
   {
     "input": "humanities",
     "expected": {
-      "hints": [],
-      "filters": {},
-      "residual": "humanities"
+      "hints": [{ "type": "gened", "value": "HUM" }],
+      "filters": { "gened_code": "HUM" },
+      "residual": ""
     },
-    "note": "No cue word, so humanities stays as residual for semantic search"
+    "note": "Common GenEd terms like 'humanities' are now extracted without cues"
   },
   {
     "input": "CS 225 with Fagen",

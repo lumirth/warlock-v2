@@ -151,17 +151,17 @@ export function createDefaultRegistry(): AliasRegistry {
 
   // GenEd codes (no cue required - explicit codes always work)
   registry.addAll([
-    { kind: 'gened', canonical: 'HUM', aliases: ['hum'] },
-    { kind: 'gened', canonical: 'NAT', aliases: ['nat'] },
-    { kind: 'gened', canonical: 'SBS', aliases: ['sbs'] },
-    { kind: 'gened', canonical: 'CS', aliases: ['cs gened', 'cs gen ed'] }, // Disambiguate from CS subject
-    { kind: 'gened', canonical: 'QR', aliases: ['qr'] },
+    { kind: 'gened', canonical: 'HUM', aliases: ['hum', 'humanities', 'humanities and the arts'] },
+    { kind: 'gened', canonical: 'NAT', aliases: ['nat', 'nat sci', 'natural sciences'] },
+    { kind: 'gened', canonical: 'SBS', aliases: ['sbs', 'social sciences', 'behavioral sciences', 'social and behavioral'] },
+    { kind: 'gened', canonical: 'CS', aliases: ['cs gened', 'cs gen ed', 'cultural studies'] }, // "cultural studies" is specific enough
+    { kind: 'gened', canonical: 'QR', aliases: ['qr', 'quantitative reasoning'] },
     { kind: 'gened', canonical: 'QR1', aliases: ['qr1', 'qr 1'] },
     { kind: 'gened', canonical: 'QR2', aliases: ['qr2', 'qr 2'] },
-    { kind: 'gened', canonical: 'NW', aliases: ['nw'] },
-    { kind: 'gened', canonical: 'US', aliases: ['us minority'] },
-    { kind: 'gened', canonical: 'WCC', aliases: ['wcc'] },
-    { kind: 'gened', canonical: 'ACP', aliases: ['acp'] },
+    { kind: 'gened', canonical: 'NW', aliases: ['nw', 'non western', 'non-western'] },
+    { kind: 'gened', canonical: 'US', aliases: ['us minority', 'minority cultures'] },
+    { kind: 'gened', canonical: 'WCC', aliases: ['wcc', 'western comparative'] },
+    { kind: 'gened', canonical: 'ACP', aliases: ['acp', 'advanced composition'] },
   ]);
 
   return registry;
