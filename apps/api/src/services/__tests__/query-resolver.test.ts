@@ -133,4 +133,164 @@ describe('resolveQuery', () => {
       expect(plan.filters.crn).toBe('12345');
     });
   });
+
+  describe('new hint types', () => {
+    describe('days hints', () => {
+      it('passes days filter through unchanged', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: 'MWF classes',
+          hints: [{ type: 'days', value: 'MWF', confidence: 0.8 }],
+          residual: 'classes'
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.days).toBe('MWF');
+      });
+    });
+
+    describe('time hints', () => {
+      it('passes time filter through unchanged', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: 'morning classes',
+          hints: [{ type: 'time', value: 'morning', confidence: 0.7 }],
+          residual: 'classes'
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.time).toBe('morning');
+      });
+    });
+
+    describe('level hints', () => {
+      it('passes numeric level filter', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: '400 level',
+          hints: [{ type: 'level', value: '400', confidence: 0.9 }],
+          residual: ''
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.level).toBe(400);
+      });
+    });
+
+    describe('credits hints', () => {
+      it('passes credits filter as number', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: '3 credits',
+          hints: [{ type: 'credits', value: '3', confidence: 0.8 }],
+          residual: ''
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.credits).toBe(3);
+      });
+    });
+
+    describe('online hints', () => {
+      it('converts online hint to boolean true', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: 'online class',
+          hints: [{ type: 'online', value: 'true', confidence: 0.8 }],
+          residual: 'class'
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.online).toBe(true);
+      });
+
+      it('converts in-person hint to boolean false', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: 'in person class',
+          hints: [{ type: 'online', value: 'false', confidence: 0.8 }],
+          residual: 'class'
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.online).toBe(false);
+      });
+    });
+
+    describe('status hints', () => {
+      it('passes status filter unchanged', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: 'open sections',
+          hints: [{ type: 'status', value: 'open', confidence: 0.7 }],
+          residual: 'sections'
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.status).toBe('open');
+      });
+    });
+
+    describe('difficulty hints', () => {
+      it('passes difficulty filter unchanged', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: 'easy class',
+          hints: [{ type: 'difficulty', value: 'easy', confidence: 0.7 }],
+          residual: 'class'
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.difficulty).toBe('easy');
+      });
+    });
+  });
 });

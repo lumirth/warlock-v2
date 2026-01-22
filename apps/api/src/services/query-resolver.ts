@@ -81,6 +81,40 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         // CRN is a direct lookup - handled specially in search
         plan.filters.crn = hint.value;
         break;
+
+      case 'days':
+        plan.filters.days = hint.value as string;
+        break;
+
+      case 'time':
+        plan.filters.time = hint.value as string;
+        break;
+
+      case 'level':
+        const levelValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
+        plan.filters.level = levelValue;
+        break;
+
+      case 'credits':
+        const creditsValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
+        plan.filters.credits = creditsValue;
+        break;
+
+      case 'online':
+        if (typeof hint.value === 'boolean') {
+          plan.filters.online = hint.value;
+        } else {
+          plan.filters.online = hint.value === 'true';
+        }
+        break;
+
+      case 'status':
+        plan.filters.status = hint.value as string;
+        break;
+
+      case 'difficulty':
+        plan.filters.difficulty = hint.value as 'easy' | 'hard';
+        break;
     }
   }
 
