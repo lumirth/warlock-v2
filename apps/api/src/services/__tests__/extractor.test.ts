@@ -124,6 +124,29 @@ describe('extract', () => {
         })
       );
     });
+
+    it('correctly parses "CS 400 level" as Level 400, not Course Code CS 400', () => {
+      const result = extract('CS 400 level');
+
+      // Should NOT contain courseCode CS 400
+      expect(result.hints).not.toContainEqual(
+        expect.objectContaining({
+          type: 'courseCode',
+          value: { subject: 'CS', number: '400' }
+        })
+      );
+
+      // Should contain Level 400
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'level',
+          value: 400
+        })
+      );
+
+      // Residual should contain CS (which will be handled by query expansion)
+      expect(result.residual).toContain('CS');
+    });
   });
 
   describe('phase 2: alias matching', () => {

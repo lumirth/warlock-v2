@@ -1,5 +1,6 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { searchCourses as semanticSearch } from './embeddings.js';
+import { validateSubject } from './query-resolver.js';
 import type { Course } from '../db/index.js';
 import type { SearchPlan, SearchFilters } from '@uiuc-course-search/query-types';
 
@@ -267,6 +268,17 @@ export function buildFilterClauses(
   };
 }
 
+function sanitizeFtsQuery(query: string): string {
+  if (!query) return '';
+  // Replace & with "and" to avoid silent failures
+  let sanitized = query.replace(/&/g, ' and ');
+  // Replace special chars that might break FTS5 (keep quotes, spaces, alphanumeric)
+  // Remove *, ^, (, ), [, ], {, }, :, +, - (unless part of word? best to be safe)
+  sanitized = sanitized.replace(/[^\w\s"']/g, ' ');
+  // Collapse whitespace
+  return sanitized.replace(/\s+/g, ' ').trim();
+}
+
 export async function keywordSearch(
   db: D1Database,
   plan: SearchPlan,
@@ -352,8 +364,25 @@ export async function keywordSearch(
   // FTS5 search with BM25 ranking
   const hasKeyword = keywordQuery && keywordQuery.trim().length > 0;
 
+  // Sanitize the query
+  const cleanQuery = hasKeyword ? sanitizeFtsQuery(keywordQuery) : '';
+  let searchParam = cleanQuery;
+
+  if (hasKeyword && !filters.subject && !filters.number) {
+    // If not already filtered by subject, check if query matches a subject name
+    // and inject the subject code to leverage the 10x subject column weight
+    const subjectId = await validateSubject(db, cleanQuery);
+    if (subjectId) {
+      // Use OR to allow non-subject matches to still appear (though ranked lower)
+      // We wrap the original query in quotes to prefer phrase matches,
+      // and append the subject ID which matches the high-weight subject column
+      const escaped = cleanQuery.replace(/"/g, '""');
+      searchParam = `"${escaped}" OR ${subjectId}`;
+    }
+  }
+
   const sql = hasKeyword ? `
-    SELECT DISTINCT c.id, bm25(courses_fts) as fts_score
+    SELECT DISTINCT c.id, bm25(courses_fts, 10.0, 10.0, 5.0, 1.0, 2.0, 2.0) as fts_score
     FROM courses_fts fts
     JOIN courses c ON c.rowid = fts.rowid
     ${joinClause}
@@ -372,8 +401,7 @@ export async function keywordSearch(
 
   const finalParams = [...params];
   if (hasKeyword) {
-    const escapedQuery = keywordQuery.replace(/['"]/g, '').trim();
-    finalParams.push(escapedQuery);
+    finalParams.push(searchParam);
   }
   finalParams.push(limit);
 
@@ -417,9 +445,14 @@ export async function hybridSearch(
   const hasSemanticQuery = plan.semanticQuery?.trim().length > 0;
   const hasKeywordQuery = plan.keywordQuery?.trim().length > 0;
 
+  // Detect navigational queries (exact course or CRN)
+  // If we have a specific course target, skip semantic search to avoid noise
+  const isNavigational = !!((plan.filters.subject && plan.filters.number) || plan.filters.crn);
+  const runSemantic = hasSemanticQuery && !isNavigational;
+
   // Run all searches in parallel, skipping empty queries
   const [semanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
-    hasSemanticQuery ? semanticSearch(vectorize, ai, plan.semanticQuery, 50) : Promise.resolve([]),
+    runSemantic ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50) : Promise.resolve([]),
     keywordSearch(db, plan, 50),
     hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, 50) : Promise.resolve([])
   ]);

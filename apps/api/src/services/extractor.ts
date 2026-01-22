@@ -43,7 +43,8 @@ function extractRegexPatterns(text: string, hints: Hint[]): string {
   let residual = text;
 
   // Course codes: CS 225, cs225, MATH241
-  const courseCodeRegex = /\b([A-Za-z]{2,4})\s*(\d{3})\b/g;
+  // Negative lookahead (?!\s*-?\s*level) ensures we don't capture "CS 400 level" as a course code
+  const courseCodeRegex = /\b([A-Za-z]{2,4})\s*(\d{3})\b(?!\s*-?\s*level)/g;
   let match;
   while ((match = courseCodeRegex.exec(text)) !== null) {
     hints.push({

@@ -1,4 +1,5 @@
 import type { VectorizeIndex, Ai } from '@cloudflare/workers-types';
+import type { SearchFilters } from '@uiuc-course-search/query-types';
 
 export interface CourseEmbeddingData {
   id: string;
@@ -40,6 +41,11 @@ export async function upsertCourseEmbedding(
   const text = createEmbeddingText(course);
   const embedding = await generateEmbedding(ai, text);
 
+  // Derive metadata fields for filtering
+  const numberVal = parseInt(course.number, 10);
+  const catalogNumber = isNaN(numberVal) ? 0 : numberVal;
+  const levelBucket = catalogNumber > 0 ? Math.floor(catalogNumber / 100) * 100 : 0;
+
   await vectorize.upsert([{
     id: course.id,
     values: embedding,
@@ -47,7 +53,9 @@ export async function upsertCourseEmbedding(
       subject: course.subject,
       number: course.number,
       title: course.title,
-      gened: course.gened || ''
+      gened: course.gened || '',
+      catalog_number: catalogNumber,
+      level_bucket: levelBucket
     }
   }]);
 }
@@ -56,14 +64,35 @@ export async function searchCourses(
   vectorize: VectorizeIndex,
   ai: Ai,
   query: string,
+  filters?: SearchFilters,
   topK: number = 50
 ): Promise<{ id: string; score: number }[]> {
   const queryEmbedding = await generateEmbedding(ai, query);
 
-  const results = await vectorize.query(queryEmbedding, {
+  const vectorizeOptions: any = {
     topK,
     returnMetadata: 'none'
-  });
+  };
+
+  // Apply metadata filters if supported
+  if (filters) {
+    const filterConditions: Record<string, any> = {};
+
+    if (filters.subject) {
+      filterConditions.subject = filters.subject;
+    }
+
+    if (filters.level) {
+      filterConditions.level_bucket = filters.level;
+    }
+
+    // If we have filters, attach them
+    if (Object.keys(filterConditions).length > 0) {
+      vectorizeOptions.filter = filterConditions;
+    }
+  }
+
+  const results = await vectorize.query(queryEmbedding, vectorizeOptions);
 
   return results.matches.map(m => ({
     id: m.id,

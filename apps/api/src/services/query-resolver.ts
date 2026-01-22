@@ -186,7 +186,7 @@ async function resolveCourseCode(
   }
 }
 
-async function validateSubject(db: D1Database, subject: string): Promise<string | null> {
+export async function validateSubject(db: D1Database, subject: string): Promise<string | null> {
   const normalized = subject.toLowerCase().trim();
   const upper = subject.toUpperCase();
 
