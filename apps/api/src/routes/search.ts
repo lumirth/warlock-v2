@@ -5,14 +5,31 @@ import { hybridSearchWithTermRanking, keywordSearch } from '../services/search.j
 import { resolveQuery } from '../services/query-resolver.js';
 import { parseQuery } from '../services/query-parser.js';
 import { extract } from '../services/extractor.js';
-import { extractQueryLite } from '@uiuc-course-search/query-extractor-lite';
-import type { ExtractedQuery, SearchPlan, QueryHint } from '@uiuc-course-search/query-types';
+import type { ExtractedQuery, SearchPlan, QueryHint, QueryHintType } from '@uiuc-course-search/query-types';
 
 type Bindings = {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
   AI: Ai;
 };
+
+function mapHintType(type: string): QueryHintType {
+  const mapping: Record<string, QueryHintType> = {
+    'courseCode': 'course_code',
+    'crn': 'crn',
+    'subject': 'subject',
+    'instructor': 'instructor',
+    'days': 'days',
+    'time': 'time',
+    'level': 'level',
+    'credits': 'credits',
+    'online': 'online',
+    'status': 'status',
+    'difficulty': 'difficulty',
+    'gened': 'gened',
+  };
+  return (mapping[type] || type) as QueryHintType;
+}
 
 export const searchRoutes = new Hono<{ Bindings: Bindings }>();
 
@@ -53,7 +70,7 @@ searchRoutes.get('/api/search', async (c) => {
     rawQuery: query,
     hints: extraction.hints.map(hint => {
       const queryHint: QueryHint = {
-        type: hint.type as any, // Type conversion - new system uses slightly different names
+        type: mapHintType(hint.type),
         value: typeof hint.value === 'object' && 'subject' in hint.value
           ? `${hint.value.subject} ${hint.value.number}`
           : String(hint.value),
