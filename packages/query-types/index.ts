@@ -73,7 +73,7 @@ export interface HintMetadata {
 // Rich hint structure
 export interface Hint {
   type: HintType;
-  value: string | number | boolean | NegationValue;
+  value: string | number | boolean | NegationValue | CourseCodeValue;
   metadata: HintMetadata;
 }
 
@@ -96,6 +96,11 @@ export type HintType =
 export interface NegationValue {
   target: HintType;
   value: string;
+}
+
+export interface CourseCodeValue {
+  subject: string;
+  number: string;
 }
 
 // Suggestion for ambiguous terms
