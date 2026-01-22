@@ -20,7 +20,7 @@ describe('keywordSearch ranking and expansion', () => {
     vi.clearAllMocks();
   });
 
-  it('resolves "Computer Science" to strict subject filter instead of FTS', async () => {
+  it('expands "Computer Science" to include CS subject code', async () => {
     // Mock validateSubject to return 'CS' for 'Computer Science'
     vi.mocked(validateSubject).mockResolvedValue('CS');
 
@@ -41,16 +41,13 @@ describe('keywordSearch ranking and expansion', () => {
     // Verify validateSubject was called
     expect(validateSubject).toHaveBeenCalledWith(mockDb, 'Computer Science');
 
-    // Verify the SQL uses strict filtering, NOT FTS match
-    // The query becomes a direct lookup on the subject column
-    expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('WHERE subject = ?'));
-    expect(mockDb.prepare).not.toHaveBeenCalledWith(expect.stringContaining('courses_fts MATCH'));
+    // Verify the SQL uses FTS expansion
+    expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('courses_fts MATCH ?'));
 
-    // Verify parameters: Subject 'CS' and Limit
+    // Verify parameters: Expanded query
     expect(mockStmt.bind).toHaveBeenCalledWith(
-      'CS',
-      expect.any(Number), // limit (optional filter params would be here if present)
-      expect.any(Number)  // limit is usually last
+      expect.stringContaining('"Computer Science" OR CS'),
+      expect.any(Number) // limit
     );
   });
 
@@ -72,8 +69,8 @@ describe('keywordSearch ranking and expansion', () => {
     await keywordSearch(mockDb as any, plan as any);
 
     // Verify the SQL contains the weighted bm25 call
-    // bm25(courses_fts, 10.0, 10.0, 5.0, 1.0, 2.0, 2.0)
-    expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('bm25(courses_fts, 10.0, 10.0, 5.0, 1.0, 2.0, 2.0)'));
+    // bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0)
+    expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0)'));
   });
 
   it('sanitizes query by replacing & with "and"', async () => {

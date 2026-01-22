@@ -268,13 +268,24 @@ export function buildFilterClauses(
   };
 }
 
-function sanitizeFtsQuery(query: string): string {
+export function sanitizeFtsQuery(query: string): string {
   if (!query) return '';
-  // Replace & with "and" to avoid silent failures
+
+  // Replace & with " and " to avoid silent failures or syntax errors
   let sanitized = query.replace(/&/g, ' and ');
-  // Replace special chars that might break FTS5 (keep quotes, spaces, alphanumeric)
-  // Remove *, ^, (, ), [, ], {, }, :, +, - (unless part of word? best to be safe)
+
+  // Count double quotes to check for balance
+  const quoteCount = (sanitized.match(/"/g) || []).length;
+  if (quoteCount % 2 !== 0) {
+    // Unbalanced quotes - remove them to prevent FTS5 syntax errors
+    sanitized = sanitized.replace(/"/g, ' ');
+  }
+
+  // Replace special chars that might break FTS5
+  // We keep alphanumeric, spaces, and double quotes (if they were balanced)
+  // Single quotes are also kept as they are usually fine for tokenizer
   sanitized = sanitized.replace(/[^\w\s"']/g, ' ');
+
   // Collapse whitespace
   return sanitized.replace(/\s+/g, ' ').trim();
 }
@@ -384,7 +395,7 @@ export async function keywordSearch(
   }
 
   const sql = hasKeyword ? `
-    SELECT DISTINCT c.id, bm25(courses_fts, 10.0, 10.0, 5.0, 1.0, 2.0, 2.0) as fts_score
+    SELECT DISTINCT c.id, bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0) as fts_score
     FROM courses_fts fts
     JOIN courses c ON c.rowid = fts.rowid
     ${joinClause}

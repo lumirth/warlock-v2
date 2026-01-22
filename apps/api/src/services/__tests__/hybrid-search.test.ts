@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { hybridSearch } from '../search.js';
 import * as embeddings from '../embeddings.js';
 import * as searchService from '../search.js';
+import { validateSubject } from '../query-resolver.js';
 
 // Mock dependencies
 const mockDb = {
@@ -18,6 +19,15 @@ const mockAi = {};
 vi.mock('../embeddings.js', () => ({
   searchCourses: vi.fn().mockResolvedValue([]),
 }));
+
+// Mock query-resolver to control validateSubject behavior
+vi.mock('../query-resolver.js', async (importOriginal) => {
+  const actual = await importOriginal() as any;
+  return {
+    ...actual,
+    validateSubject: vi.fn(),
+  };
+});
 
 // We can't easily spy on keywordSearch if it's in the same file and called directly,
 // unless we move the test to test the module exports or use a specific mocking strategy.
@@ -76,6 +86,36 @@ describe('hybridSearch', () => {
         expect.anything(),
         'easy ai',
         plan.filters, // Verify filters are passed
+        50
+    );
+  });
+
+  it('promotes "Computer Science" query to strict Subject Filter', async () => {
+    vi.mocked(validateSubject).mockResolvedValue('CS');
+
+    const plan = {
+      keywordQuery: 'Computer Science',
+      semanticQuery: 'Computer Science',
+      filters: {} // No filters initially
+    };
+
+    const mockStmt = {
+        bind: vi.fn().mockReturnThis(),
+        all: vi.fn().mockResolvedValue({ results: [] }),
+    };
+    mockDb.prepare.mockReturnValue(mockStmt);
+
+    await hybridSearch(mockDb as any, mockVectorize as any, mockAi as any, plan as any);
+
+    // Verify validateSubject was checked
+    expect(validateSubject).toHaveBeenCalledWith(mockDb, 'Computer Science');
+
+    // Verify semanticSearch was called WITH subject filter
+    expect(embeddings.searchCourses).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'Computer Science',
+        expect.objectContaining({ subject: 'CS' }), // Filter was added!
         50
     );
   });

@@ -1,0 +1,124 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SearchPipeline } from '../search-pipeline.js';
+import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
+import * as extractor from '../extractor.js';
+import * as queryResolver from '../query-resolver.js';
+import * as search from '../search.js';
+import * as topicRegistry from '../topic-registry.js';
+import type { Course } from '../../db/index.js';
+
+vi.mock('../extractor.js');
+vi.mock('../query-resolver.js');
+vi.mock('../search.js');
+vi.mock('../topic-registry.js');
+
+const mockCourse = (overrides: Partial<Course> = {}): Course => ({
+  id: 'CS-225-2025-fall',
+  subject: 'CS',
+  number: '225',
+  title: 'Data Structures',
+  description: 'Data structures and algorithms.',
+  credit_hours: 4,
+  gened: 'QR',
+  year: 2025,
+  term: 'fall',
+  avg_gpa: 3.5,
+  gpa_sample_size: 1000,
+  primary_instructor: 'Fagen-Ulmschneider, G',
+  primary_instructor_rmp: 4.5,
+  difficulty_score: 3.0,
+  quality_score: 4.5,
+  subject_id: 'CS',
+  course_info: null,
+  degree_attributes: null,
+  class_schedule_info: null,
+  date_range_text: null,
+  registration_notes: null,
+  approval_code: null,
+  last_synced: 0,
+  created_at: 0,
+  updated_at: 0,
+  ...overrides,
+});
+
+describe('SearchPipeline', () => {
+  let db: D1Database;
+  let vectorize: VectorizeIndex;
+  let ai: Ai;
+  let pipeline: SearchPipeline;
+
+  beforeEach(() => {
+    db = { prepare: vi.fn() } as any;
+    vectorize = {} as any;
+    ai = {} as any;
+    pipeline = new SearchPipeline(db, vectorize, ai);
+    vi.clearAllMocks();
+  });
+
+  it('Tier 1: should return results immediately for navigational queries', async () => {
+    const query = 'CS 225';
+    const mockExtracted = { 
+      hints: [{ 
+        type: 'courseCode', 
+        value: { subject: 'CS', number: '225' }, 
+        metadata: { source: 'regex', confidence: 0.95, raw: 'CS 225' } 
+      }], 
+      residual: '' 
+    };
+    const mockPlan = { filters: { subject: 'CS', number: '225' }, semanticQuery: '', keywordQuery: '' };
+    const mockResults = [{ course: mockCourse({ id: 'CS-225', subject: 'CS', number: '225' }), score: 1.0 }];
+
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted as any);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue(mockResults as any);
+
+    const result = await pipeline.search(query);
+
+    expect(result.results).toEqual(mockResults);
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+  });
+
+  it('Tier 2: should stop if structured search returns >= 3 results', async () => {
+    const query = 'CS 400 level';
+    const mockExtracted = { 
+      hints: [
+        { type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } }, 
+        { type: 'level', value: 400, metadata: { source: 'regex', confidence: 0.9, raw: '400 level' } }
+      ], 
+      residual: '' 
+    };
+    const mockPlan = { filters: { subject: 'CS', level: 400 }, semanticQuery: '', keywordQuery: '' };
+    const mockResults = Array(5).fill(null).map((_, i) => ({ course: mockCourse({ id: `CS-${i}`, subject: 'CS' }), score: 0.8 }));
+
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted as any);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue(mockResults as any);
+
+    const result = await pipeline.search(query);
+
+    expect(result.results).toEqual(mockResults);
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+  });
+
+  it('Tier 3: should expand topics if Tier 2 returns few results', async () => {
+    const query = 'ml courses';
+    const mockExtracted = { hints: [], residual: 'ml' };
+    const mockPlan = { filters: {}, semanticQuery: 'ml', keywordQuery: 'ml' };
+    
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted as any);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
+    vi.mocked(topicRegistry.expandTopics).mockReturnValue(['machine learning']);
+    
+    // Tier 2 returns 1 result, trigger Tier 3
+    vi.mocked(search.hybridSearchWithTermRanking)
+      .mockResolvedValueOnce([{ course: mockCourse({ id: '1' }), score: 0.5 }]) 
+      .mockResolvedValueOnce([{ course: mockCourse({ id: '1' }), score: 0.5 }, { course: mockCourse({ id: '2' }), score: 0.9 }]);
+
+    const result = await pipeline.search(query);
+
+    expect(topicRegistry.expandTopics).toHaveBeenCalledWith('ml');
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(2);
+    // Result should be the best ones found
+    expect(result.results.length).toBe(2);
+  });
+});

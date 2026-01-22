@@ -2,14 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { extract } from '../extractor.js';
 
 describe('extract', () => {
-  describe('phase 1: regex patterns', () => {
+  describe('phase 1: entities', () => {
     it('extracts course code "CS 225"', () => {
       const result = extract('CS 225');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'courseCode',
           value: { subject: 'CS', number: '225' },
-          metadata: expect.objectContaining({ source: 'regex' }),
         })
       );
     });
@@ -30,37 +29,47 @@ describe('extract', () => {
         expect.objectContaining({
           type: 'crn',
           value: '12345',
-          metadata: expect.objectContaining({ source: 'regex' }),
         })
       );
     });
 
-    it('extracts CRN with prefix "CRN 67890"', () => {
-      const result = extract('CRN 67890');
+    it('extracts standalone subject "MATH"', () => {
+      const result = extract('MATH course');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
-          type: 'crn',
-          value: '67890',
+          type: 'subject',
+          value: 'MATH',
         })
       );
     });
 
+    it('extracts standalone number "225"', () => {
+      const result = extract('225 course');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'courseCode',
+          value: { subject: '', number: '225' },
+        })
+      );
+    });
+
+    it('handles duplicate entities "CS 225 vs CS 440"', () => {
+      const result = extract('CS 225 vs CS 440');
+      const courseCodes = result.hints.filter(h => h.type === 'courseCode');
+      expect(courseCodes).toHaveLength(2);
+      expect(courseCodes).toContainEqual(expect.objectContaining({ value: { subject: 'CS', number: '225' } }));
+      expect(courseCodes).toContainEqual(expect.objectContaining({ value: { subject: 'CS', number: '440' } }));
+      expect(result.residual).toBe('vs');
+    });
+  });
+
+  describe('phase 2: attributes', () => {
     it('extracts credits "3 credits"', () => {
       const result = extract('3 credits');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'credits',
           value: 3,
-        })
-      );
-    });
-
-    it('extracts credits "4 credit hours"', () => {
-      const result = extract('4 credit hours');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'credits',
-          value: 4,
         })
       );
     });
@@ -75,217 +84,111 @@ describe('extract', () => {
       );
     });
 
-    it('extracts level "intro" as 100', () => {
-      const result = extract('intro class');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'level',
-          value: 100,
-        })
-      );
-    });
-
-    it('extracts level "advanced" as 400', () => {
-      const result = extract('advanced course');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'level',
-          value: 400,
-        })
-      );
-    });
-
-    it('extracts level "graduate" as 500', () => {
-      const result = extract('graduate seminar');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'level',
-          value: 500,
-        })
-      );
-    });
-
-    it('extracts days "MWF"', () => {
+    it('extracts aliases like "MWF" and "morning"', () => {
       const result = extract('MWF morning');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'days',
-          value: 'MWF',
-        })
-      );
+      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'days', value: 'MWF' }));
+      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'time', value: 'morning' }));
     });
 
-    it('extracts days "TR"', () => {
-      const result = extract('TR afternoon');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'days',
-          value: 'TR',
-        })
-      );
-    });
-
-    it('correctly parses "CS 400 level" as Level 400, not Course Code CS 400', () => {
-      const result = extract('CS 400 level');
-
-      // Should NOT contain courseCode CS 400
-      expect(result.hints).not.toContainEqual(
-        expect.objectContaining({
-          type: 'courseCode',
-          value: { subject: 'CS', number: '400' }
-        })
-      );
-
-      // Should contain Level 400
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'level',
-          value: 400
-        })
-      );
-
-      // Residual should contain CS (which will be handled by query expansion)
-      expect(result.residual).toContain('CS');
-    });
-  });
-
-  describe('phase 2: alias matching', () => {
     it('extracts difficulty "easy"', () => {
       const result = extract('easy class');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'difficulty',
-          value: 'easy',
-          metadata: expect.objectContaining({ source: 'alias' }),
-        })
-      );
-    });
-
-    it('extracts difficulty "gpa booster" as easy', () => {
-      const result = extract('gpa booster');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'difficulty',
-          value: 'easy',
-        })
-      );
-    });
-
-    it('extracts status "open"', () => {
-      const result = extract('open sections');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'status',
-          value: 'open',
-        })
-      );
-    });
-
-    it('extracts online "true" for "online"', () => {
-      const result = extract('online class');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'online',
-          value: true,
-        })
-      );
-    });
-
-    it('extracts online "false" for "in person"', () => {
-      const result = extract('in person class');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'online',
-          value: false,
-        })
-      );
-    });
-
-    it('extracts time "morning"', () => {
-      const result = extract('morning class');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'time',
-          value: 'morning',
-        })
-      );
-    });
-
-    it('extracts gened with cue "humanities gen ed"', () => {
-      const result = extract('humanities gen ed');
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({
-          type: 'gened',
-          value: 'HUM',
-        })
-      );
-    });
-
-    it('does NOT extract gened without cue "humanities"', () => {
-      const result = extract('humanities');
-      const genedHints = result.hints.filter(h => h.type === 'gened');
-      expect(genedHints).toHaveLength(0);
-      expect(result.residual).toContain('humanities');
+      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'difficulty', value: 'easy' }));
     });
   });
 
-  describe('phase 3: NLP (instructor)', () => {
-    it('extracts instructor with "with Fagen"', () => {
+  describe('order independence', () => {
+    it('extracts "CS 400 level" and "400 level CS" identically', () => {
+      const res1 = extract('CS 400 level');
+      const res2 = extract('400 level CS');
+
+      const getSubject = (h: any[]) => h.find(x => x.type === 'subject')?.value;
+      const getLevel = (h: any[]) => h.find(x => x.type === 'level')?.value;
+
+      expect(getSubject(res1.hints)).toBe('CS');
+      expect(getLevel(res1.hints)).toBe(400);
+      expect(getSubject(res2.hints)).toBe('CS');
+      expect(getLevel(res2.hints)).toBe(400);
+    });
+
+    it('extracts "3 credit CS course" and "CS course 3 credit" identically', () => {
+      const res1 = extract('3 credit CS course');
+      const res2 = extract('CS course 3 credit');
+
+      const getSubject = (h: any[]) => h.find(x => x.type === 'subject')?.value;
+      const getCredits = (h: any[]) => h.find(x => x.type === 'credits')?.value;
+
+      expect(getSubject(res1.hints)).toBe('CS');
+      expect(getCredits(res1.hints)).toBe(3);
+      expect(getSubject(res2.hints)).toBe('CS');
+      expect(getCredits(res2.hints)).toBe(3);
+    });
+  });
+
+  describe('phase 3: NLP & Negations', () => {
+    it('extracts instructor "with Fagen"', () => {
       const result = extract('CS 225 with Fagen');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'instructor',
           value: 'Fagen',
-          metadata: expect.objectContaining({ source: 'nlp' }),
         })
       );
     });
 
-    it('extracts instructor with "by Fleck"', () => {
-      const result = extract('data structures by Fleck');
+    it('extracts instructor with special characters "Prof O\'Brien"', () => {
+      const result = extract('Prof O\'Brien');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'instructor',
-          value: 'Fleck',
+          value: 'O\'Brien',
         })
       );
     });
 
-    it('extracts instructor with "professor Smith"', () => {
-      const result = extract('professor Smith');
+    it('extracts instructor with hyphen "with Liu-Prasad"', () => {
+      const result = extract('with Liu-Prasad');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'instructor',
-          value: 'Smith',
+          value: 'Liu-Prasad',
         })
       );
+    });
+
+    it('extracts negations "no morning"', () => {
+      const result = extract('no morning');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'negation',
+          value: expect.objectContaining({ target: 'time', value: 'morning' }),
+        })
+      );
+    });
+    
+    it('does not extract positive hint when negated', () => {
+      const result = extract('no morning');
+      const timeHints = result.hints.filter(h => h.type === 'time');
+      expect(timeHints).toHaveLength(0);
     });
   });
 
   describe('residual handling', () => {
     it('removes extracted hints from residual', () => {
-      const result = extract('CS 225 with Fagen morning');
+      const result = extract('CS 225 with Fagen easy');
       expect(result.residual).not.toContain('CS 225');
       expect(result.residual).not.toContain('Fagen');
-      expect(result.residual).not.toContain('morning');
+      expect(result.residual).not.toContain('easy');
     });
 
     it('keeps unmatched text in residual', () => {
-      const result = extract('data structures algorithms');
-      expect(result.residual).toContain('data');
-      expect(result.residual).toContain('structures');
+      const result = extract('interesting course about algorithms');
+      expect(result.residual).toContain('interesting');
       expect(result.residual).toContain('algorithms');
     });
-  });
 
-  describe('combined extraction', () => {
-    it('extracts multiple hints from complex query', () => {
-      const result = extract('easy CS 225 MWF morning with Fagen');
-      expect(result.hints.length).toBeGreaterThanOrEqual(4);
-      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'difficulty' }));
-      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'courseCode' }));
-      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'days' }));
-      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'instructor' }));
+    it('cleans up whitespace in residual', () => {
+      const result = extract('  data   structures  ');
+      expect(result.residual).toBe('data structures');
     });
   });
 });

@@ -68,12 +68,13 @@
     "input": "400 level CS",
     "expected": {
       "hints": [
-        { "type": "level", "value": 400 }
+        { "type": "level", "value": 400 },
+        { "type": "subject", "value": "CS" }
       ],
-      "filters": { "level": 400 },
-      "residual": "CS"
+      "filters": { "level": 400, "subject": "CS" },
+      "residual": ""
     },
-    "note": "CS alone without course number stays in residual for semantic search"
+    "note": "CS is now extracted as a subject hint"
   },
   {
     "input": "data structures",
