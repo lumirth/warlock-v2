@@ -65,12 +65,24 @@ function rrfScore(rank: number): number {
   return 1 / (RRF_K + rank);
 }
 
+export interface FilterClauseResult {
+  joins: string[];
+  where: string[];
+  params: (string | number)[];
+  groupBy?: string;
+  having?: string;
+  havingParams?: (string | number)[];
+}
+
 export function buildFilterClauses(
   filters: SearchFilters
-): { joins: string[]; where: string[]; params: (string | number)[] } {
+): FilterClauseResult {
   const joinsSet = new Set<string>();
   const where: string[] = [];
   const params: (string | number)[] = [];
+  let groupBy: string | undefined;
+  let having: string | undefined;
+  const havingParams: (string | number)[] = [];
 
   // Subject filter
   if (filters.subject) {
@@ -109,6 +121,17 @@ export function buildFilterClauses(
     const placeholders = filters.gened_any.map(() => '?').join(',');
     where.push(`cg.category_id IN (${placeholders})`);
     params.push(...filters.gened_any);
+  }
+
+  // GenEd filter (all) - requires GROUP BY + HAVING
+  if (filters.gened_all?.length) {
+    joinsSet.add('JOIN course_gened cg_all ON cg_all.course_id = c.id');
+    const placeholders = filters.gened_all.map(() => '?').join(',');
+    where.push(`cg_all.category_id IN (${placeholders})`);
+    params.push(...filters.gened_all);
+    groupBy = 'c.id';
+    having = `COUNT(DISTINCT cg_all.category_id) = ?`;
+    havingParams.push(filters.gened_all.length);
   }
 
   // Instructor filter
@@ -187,10 +210,60 @@ export function buildFilterClauses(
     }
   }
 
+  // Negation filters
+  if (filters.not) {
+    // Negated time ranges
+    if (filters.not.time?.length) {
+      joinsSet.add('JOIN sections s ON s.course_id = c.id');
+      joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+      for (const timeNeg of filters.not.time) {
+        const range = TIME_RANGES[timeNeg];
+        if (range) {
+          // Exclude courses that have meetings in this time range
+          if (range.start && range.end) {
+            where.push('NOT (m.start_time >= ? AND m.start_time < ?)');
+            params.push(range.start, range.end);
+          } else if (range.end) {
+            // "no morning" = exclude if start_time < 12:00
+            where.push('m.start_time >= ?');
+            params.push(range.end);
+          } else if (range.start) {
+            // "no evening" = exclude if start_time >= 17:00
+            where.push('m.start_time < ?');
+            params.push(range.start);
+          }
+        }
+      }
+    }
+
+    // Negated days
+    if (filters.not.days?.length) {
+      joinsSet.add('JOIN sections s ON s.course_id = c.id');
+      joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+      for (const daysNeg of filters.not.days) {
+        where.push('m.days != ?');
+        params.push(daysNeg);
+      }
+    }
+
+    // Negated instructors
+    if (filters.not.instructor_ids?.length) {
+      joinsSet.add('JOIN sections s ON s.course_id = c.id');
+      joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+      joinsSet.add('JOIN meeting_instructors mi ON mi.meeting_id = m.id');
+      const placeholders = filters.not.instructor_ids.map(() => '?').join(',');
+      where.push(`mi.instructor_id NOT IN (${placeholders})`);
+      params.push(...filters.not.instructor_ids);
+    }
+  }
+
   return {
     joins: Array.from(joinsSet),
     where,
     params,
+    groupBy,
+    having,
+    havingParams,
   };
 }
 

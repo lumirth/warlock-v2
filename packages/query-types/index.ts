@@ -1,4 +1,4 @@
-export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level' | 'course_code' | 'crn' | 'days' | 'time' | 'difficulty' | 'online' | 'status';
+export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level' | 'course_code' | 'crn' | 'days' | 'time' | 'difficulty' | 'online' | 'status' | 'negation';
 
 export interface QueryHint {
   type: QueryHintType;

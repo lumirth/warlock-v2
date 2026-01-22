@@ -115,6 +115,21 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
       case 'difficulty':
         plan.filters.difficulty = hint.value as 'easy' | 'hard';
         break;
+
+      case 'negation':
+        // Handle negation hints - they come as { target: HintType, value: string }
+        const negValue = hint.value as { target: string; value: string } | string;
+        if (typeof negValue === 'object' && 'target' in negValue) {
+          plan.filters.not = plan.filters.not || {};
+          if (negValue.target === 'time') {
+            plan.filters.not.time = plan.filters.not.time || [];
+            plan.filters.not.time.push(negValue.value);
+          } else if (negValue.target === 'days') {
+            plan.filters.not.days = plan.filters.not.days || [];
+            plan.filters.not.days.push(negValue.value);
+          }
+        }
+        break;
     }
   }
 

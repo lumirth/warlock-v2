@@ -31,8 +31,9 @@ cd apps/api && npx vitest run src/services/__tests__/query-resolver.test.ts
 # Watch mode
 cd apps/api && npm run test:watch
 
-# Run package tests
-cd packages/query-extractor-lite && npm test
+# Run specific test suites
+cd apps/api && npx vitest run src/services/__tests__/extractor.test.ts
+cd apps/api && npx vitest run src/services/__tests__/golden.test.ts
 ```
 
 ### Deployment
@@ -55,17 +56,18 @@ cd apps/api && npx wrangler d1 execute course-search-db --command="SELECT * FROM
 - `apps/api` - Cloudflare Worker API (Hono framework)
 - `apps/web` - React frontend (Vite)
 - `packages/query-types` - Shared TypeScript types for query processing
-- `packages/query-extractor-lite` - Regex-based query parser (runs on both client and server)
 
 ### Search Pipeline
 
-1. **Query Extraction** (`query-extractor-lite`): Parses natural language queries into structured hints (course codes, instructors, geneds, CRNs, etc.)
+1. **Query Parsing** (`services/query-parser.ts`): Parses power-user syntax (`field:value`, `gened:any(...)`, `-negations`).
 
-2. **Query Resolution** (`services/query-resolver.ts`): Validates hints against database - resolves subject codes, instructor names to IDs, gened synonyms to canonical codes. Handles ambiguities (e.g., "CS" could be Computer Science subject or Cultural Studies gened).
+2. **Query Extraction** (`services/extractor.ts`): Three-phase extraction (regex → alias → NLP) extracts structured hints from natural language (course codes, instructors, geneds, days, times, credits, etc.).
 
-3. **Hybrid Search** (`services/search.ts`): Runs keyword search (FTS5) and semantic search (Vectorize) in parallel, combines with Reciprocal Rank Fusion (RRF). Term prioritization ranks registrable > active > historical terms.
+3. **Query Resolution** (`services/query-resolver.ts`): Validates hints against database - resolves subject codes, instructor names to IDs, gened synonyms to canonical codes. Handles ambiguities (e.g., "CS" could be Computer Science subject or Cultural Studies gened).
 
-4. **Semantic Search** (`services/embeddings.ts`): Uses Cloudflare AI (`bge-small-en-v1.5`) for embeddings, stored in Vectorize index.
+4. **Hybrid Search** (`services/search.ts`): Runs keyword search (FTS5) and semantic search (Vectorize) in parallel, combines with Reciprocal Rank Fusion (RRF). Term prioritization ranks registrable > active > historical terms.
+
+5. **Semantic Search** (`services/embeddings.ts`): Uses Cloudflare AI (`bge-small-en-v1.5`) for embeddings, stored in Vectorize index.
 
 ### Data Source
 
