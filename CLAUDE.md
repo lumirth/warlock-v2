@@ -38,7 +38,12 @@ cd apps/api && npx vitest run src/services/__tests__/golden.test.ts
 
 ### Deployment
 ```bash
+# API (Cloudflare Worker)
 cd apps/api && npm run deploy       # Runs check then wrangler deploy
+
+# Web (Cloudflare Pages)
+cd apps/web && npm run build
+cd apps/web && npx wrangler pages deploy dist --project-name uiuc-course-search-web
 ```
 
 ### Database (D1)
