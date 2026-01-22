@@ -20,7 +20,7 @@ describe('keywordSearch ranking and expansion', () => {
     vi.clearAllMocks();
   });
 
-  it('expands "Computer Science" to include CS subject code', async () => {
+  it('resolves "Computer Science" to strict subject filter instead of FTS', async () => {
     // Mock validateSubject to return 'CS' for 'Computer Science'
     vi.mocked(validateSubject).mockResolvedValue('CS');
 
@@ -41,14 +41,16 @@ describe('keywordSearch ranking and expansion', () => {
     // Verify validateSubject was called
     expect(validateSubject).toHaveBeenCalledWith(mockDb, 'Computer Science');
 
-    // Verify the SQL and parameters
-    expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('courses_fts MATCH ?'));
+    // Verify the SQL uses strict filtering, NOT FTS match
+    // The query becomes a direct lookup on the subject column
+    expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('WHERE subject = ?'));
+    expect(mockDb.prepare).not.toHaveBeenCalledWith(expect.stringContaining('courses_fts MATCH'));
 
-    // The query should be expanded: "Computer Science" OR CS
-    // Note: The implementation uses double quotes for escaping and wraps in quotes
+    // Verify parameters: Subject 'CS' and Limit
     expect(mockStmt.bind).toHaveBeenCalledWith(
-      expect.stringContaining('"Computer Science" OR CS'),
-      expect.any(Number) // limit
+      'CS',
+      expect.any(Number), // limit (optional filter params would be here if present)
+      expect.any(Number)  // limit is usually last
     );
   });
 
