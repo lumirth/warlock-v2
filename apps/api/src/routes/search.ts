@@ -3,8 +3,10 @@ import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { searchCourses } from '../services/embeddings.js';
 import { hybridSearchWithTermRanking, keywordSearch } from '../services/search.js';
 import { resolveQuery } from '../services/query-resolver.js';
+import { parseQuery } from '../services/query-parser.js';
+import { extract } from '../services/extractor.js';
 import { extractQueryLite } from '@uiuc-course-search/query-extractor-lite';
-import type { ExtractedQuery, SearchPlan } from '@uiuc-course-search/query-types';
+import type { ExtractedQuery, SearchPlan, QueryHint } from '@uiuc-course-search/query-types';
 
 type Bindings = {
   DB: D1Database;
@@ -36,25 +38,60 @@ searchRoutes.get('/api/search', async (c) => {
     return c.json({ error: 'Missing query parameter q' }, 400);
   }
 
-  // 1. Get extracted query (either from client header or via server-side fallback)
-  let extracted: ExtractedQuery;
-  const hintsHeader = c.req.header('X-Search-Hints');
-  
-  if (hintsHeader) {
-    try {
-      extracted = JSON.parse(hintsHeader);
-    } catch (e) {
-      extracted = extractQueryLite(query);
+  const startTime = performance.now();
+
+  // 1. Parse power-user syntax (field:value, gened:any/all, negations, phrases)
+  const parsed = parseQuery(query);
+  const parseEndTime = performance.now();
+
+  // 2. Extract hints from residual using three-phase extraction
+  const extraction = extract(parsed.clauses[0].residual);
+  const extractionEndTime = performance.now();
+
+  // 3. Bridge to old ExtractedQuery format for resolver
+  const extractedQuery: ExtractedQuery = {
+    rawQuery: query,
+    hints: extraction.hints.map(hint => {
+      const queryHint: QueryHint = {
+        type: hint.type as any, // Type conversion - new system uses slightly different names
+        value: typeof hint.value === 'object' && 'subject' in hint.value
+          ? `${hint.value.subject} ${hint.value.number}`
+          : String(hint.value),
+        confidence: hint.metadata.confidence,
+        isExplicit: hint.metadata.source === 'regex',
+        metadata: hint.type === 'courseCode' && typeof hint.value === 'object' && 'subject' in hint.value
+          ? { subject: hint.value.subject, number: hint.value.number }
+          : undefined,
+      };
+      return queryHint;
+    }),
+    residual: extraction.residual,
+  };
+
+  // 4. Resolve hints against database
+  const plan = await resolveQuery(c.env.DB, extractedQuery);
+  const resolveEndTime = performance.now();
+
+  // 5. Apply parsed filters from power-user syntax
+  const clause = parsed.clauses[0];
+  for (const filter of clause.filters) {
+    if (filter.field === 'subject') plan.filters.subject = filter.value.toUpperCase();
+    if (filter.field === 'gened') plan.filters.gened_code = filter.value.toUpperCase();
+    if (filter.field === 'credits') plan.filters.credits = parseInt(filter.value);
+    if (filter.field === 'level') plan.filters.level = parseInt(filter.value);
+    if (filter.field === 'crn') plan.filters.crn = filter.value;
+    if (filter.field === 'instructor') {
+      // Would need to resolve instructor name to ID - skip for now
     }
-  } else {
-    // Fallback to server-side regex extraction if client didn't provide hints
-    extracted = extractQueryLite(query);
   }
 
-  // 2. Authoritatively resolve hints to DB IDs/Codes
-  const plan = await resolveQuery(c.env.DB, extracted);
-  
-  // 3. Allow manual overrides from query params
+  // 6. Apply gened:any/all from parsed query
+  if (clause.genedMode) {
+    if (clause.genedMode.any) plan.filters.gened_any = clause.genedMode.any;
+    if (clause.genedMode.all) plan.filters.gened_all = clause.genedMode.all;
+  }
+
+  // 7. Allow manual overrides from query params
   if (c.req.query('subject')) plan.filters.subject = c.req.query('subject');
   if (c.req.query('gened')) plan.filters.gened_code = c.req.query('gened');
   if (c.req.query('credits')) plan.filters.credits = parseInt(c.req.query('credits')!);
@@ -62,6 +99,7 @@ searchRoutes.get('/api/search', async (c) => {
   const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : 20;
 
   try {
+    const searchStartTime = performance.now();
     const results = await hybridSearchWithTermRanking(
       c.env.DB,
       c.env.VECTORIZE,
@@ -69,6 +107,14 @@ searchRoutes.get('/api/search', async (c) => {
       plan,
       limit
     );
+    const searchEndTime = performance.now();
+
+    const totalEndTime = performance.now();
+
+    // Calculate timing
+    const extractionMs = extractionEndTime - startTime;
+    const searchMs = searchEndTime - searchStartTime;
+    const totalMs = totalEndTime - startTime;
 
     return c.json({
       results: results.map(r => ({
@@ -79,11 +125,29 @@ searchRoutes.get('/api/search', async (c) => {
         _historical: r.historical
       })),
       meta: {
+        query: {
+          raw: query,
+          residual: extraction.residual,
+        },
+        extraction: {
+          hints: extraction.hints,
+        },
+        plan: {
+          filters: plan.filters,
+          clauses: parsed.clauses,
+        },
+        ambiguities: plan.ambiguities,
+        timing: {
+          extraction_ms: Math.round(extractionMs),
+          search_ms: Math.round(searchMs),
+          total_ms: Math.round(totalMs),
+        },
+      },
+      pagination: {
         total: results.length,
-        plan,
-        extracted,
-        ambiguities: plan.ambiguities
-      }
+        limit,
+        offset: 0,
+      },
     });
   } catch (error) {
     console.error('Search error:', error);
