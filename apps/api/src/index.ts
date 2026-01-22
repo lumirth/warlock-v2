@@ -26,10 +26,10 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// Enable CORS for the web client
+// Enable CORS for all origins
 app.use('/api/*', cors({
-  origin: ['https://uiuc-course-search-web.pages.dev', 'http://localhost:5173'],
-  allowHeaders: ['X-Search-Hints', 'Content-Type'],
+  origin: '*',
+  allowHeaders: ['X-Search-Hints', 'Content-Type', 'Authorization'],
 }));
 
 app.route('/', healthRoutes);

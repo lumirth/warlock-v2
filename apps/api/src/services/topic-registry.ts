@@ -21,14 +21,17 @@ export const TOPIC_MAP: Record<string, string> = {
 /**
  * Expands short topic names/synonyms into their full versions.
  * Returns an array of expansion terms.
+ * Uses word boundary matching to handle partial matches in the query string.
  */
 export function expandTopics(query: string): string[] {
-  const words = query.toLowerCase().split(/\W+/);
+  const lowercaseQuery = query.toLowerCase();
   const expansions: string[] = [];
 
-  for (const word of words) {
-    if (TOPIC_MAP[word]) {
-      expansions.push(TOPIC_MAP[word]);
+  for (const [key, value] of Object.entries(TOPIC_MAP)) {
+    // Match the key as a whole word in the query
+    const regex = new RegExp(`\\b${key}\\b`, 'i');
+    if (regex.test(lowercaseQuery)) {
+      expansions.push(value);
     }
   }
 

@@ -35,12 +35,14 @@ export function extract(text: string): ExtractionResult {
   // Pass 2: Attributes and Aliases (Level, Credits, Days, Time, etc.)
   residual = extractAttributesAndAliases(residual, hints);
 
-  // Pass 3: Standalone Subjects & Numbers
-  // We do this after aliases to avoid matching "MWF" as a subject
-  residual = extractStandaloneEntities(residual, hints);
-
-  // Pass 4: NLP Patterns (Instructors)
+  // Pass 3: NLP Patterns (Instructors)
+  // We do this BEFORE standalone subjects so names like "Fagen" or words like "with" 
+  // in instructor patterns aren't caught as subjects.
   residual = extractInstructors(residual, hints);
+
+  // Pass 4: Standalone Subjects & Numbers
+  // We do this after aliases and instructors to avoid matching "MWF" or names as subjects
+  residual = extractStandaloneEntities(residual, hints);
 
   // Clean up residual
   residual = residual.replace(/\s+/g, ' ').trim();
@@ -241,14 +243,20 @@ function extractAliases(text: string, hints: Hint[]): string {
 function extractStandaloneEntities(text: string, hints: Hint[]): string {
   let residual = text;
 
-  // Standalone Subject Codes (2-4 uppercase letters)
-  const subjectRegex = /\b([A-Z]{2,4})\b/g;
+  // Standalone Subject Codes (2-4 letters)
+  // We allow common lowercase subjects explicitly, otherwise require uppercase to avoid 
+  // catching common words like "the", "for", "with" as subjects.
+  const commonLowercase = ['cs', 'math', 'ece', 'stat', 'phys', 'bio', 'chem', 'econ', 'adv', 'psyc'];
+  const commonPattern = commonLowercase.join('|');
+  const subjectRegex = new RegExp(`\\b([A-Z]{2,4})\\b|\\b(${commonPattern})\\b`, 'g');
+  
   let match;
   const subjectMatches: { index: number; length: number }[] = [];
   while ((match = subjectRegex.exec(residual)) !== null) {
+    const val = (match[1] || match[2]).toUpperCase();
     hints.push({
       type: 'subject',
-      value: match[1],
+      value: val,
       metadata: createMetadata('regex', match[0], 0.6),
     });
     subjectMatches.push({ index: match.index, length: match[0].length });
@@ -293,7 +301,7 @@ function extractInstructors(text: string, hints: Hint[]): string {
     while ((match = patternCopy.exec(residual)) !== null) {
       hints.push({
         type: 'instructor',
-        value: match[1],
+        value: match[1], // Do NOT uppercase name
         metadata: createMetadata('nlp', match[0], 0.8),
       });
       matches.push({ index: match.index, length: match[0].length });

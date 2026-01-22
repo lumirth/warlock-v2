@@ -71,9 +71,12 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         break;
 
       case 'subject':
-        const validSubject = await validateSubject(db, hint.value);
-        if (validSubject) {
-          plan.filters.subject = validSubject;
+        const validSubj = await validateSubject(db, hint.value);
+        if (validSubj) {
+          plan.filters.subject = validSubj;
+        } else {
+          plan.keywordQuery = (plan.keywordQuery + " " + hint.value).trim();
+          plan.semanticQuery = (plan.semanticQuery + " " + hint.value).trim();
         }
         break;
 
@@ -181,8 +184,9 @@ async function resolveCourseCode(
     plan.semanticQuery = plan.semanticQuery.replace(hint.value, '').trim();
     plan.keywordQuery = plan.keywordQuery.replace(hint.value, '').trim();
   } else {
-    // Subject not found - keep in semantic query for fuzzy matching
-    plan.semanticQuery = (hint.value + ' ' + plan.semanticQuery).trim();
+    // Subject not found - keep in queries for fuzzy matching
+    plan.semanticQuery = (hint.value + " " + plan.semanticQuery).trim();
+    plan.keywordQuery = (hint.value + " " + plan.keywordQuery).trim();
   }
 }
 
@@ -209,14 +213,16 @@ export async function validateSubject(db: D1Database, subject: string): Promise<
   if (byAlias) return byAlias.subject_id;
 
   // 4. Fuzzy match in subjects table
-  const fuzzy = await db.prepare(`
-    SELECT id FROM subjects
-    WHERE name LIKE ? OR id LIKE ?
-    LIMIT 1
-  `)
-    .bind(`%${normalized}%`, `%${upper}%`)
-    .first<{ id: string }>();
-  if (fuzzy) return fuzzy.id;
+  if (normalized.length > 3) {
+    const fuzzy = await db.prepare(`
+      SELECT id FROM subjects
+      WHERE name LIKE ? OR id LIKE ?
+      LIMIT 1
+    `)
+      .bind(`%${normalized}%`, `%${upper}%`)
+      .first<{ id: string }>();
+    if (fuzzy) return fuzzy.id;
+  }
 
   // 5. Fallback: check if subject code exists in courses table
   const byCourse = await db.prepare('SELECT DISTINCT subject FROM courses WHERE subject = ? LIMIT 1')

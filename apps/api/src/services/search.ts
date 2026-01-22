@@ -330,44 +330,12 @@ export async function keywordSearch(
     }
   }
 
-  // Build WHERE clause for filters
-  const whereClauses: string[] = [];
-  const params: (string | number)[] = [];
-  const joins: string[] = [];
+  // Build filter clauses using shared utility
+  const filterResults = buildFilterClauses(filters);
+  const { joins, where, params } = filterResults;
 
-  if (filters.subject) {
-    whereClauses.push('c.subject = ?');
-    params.push(filters.subject);
-  }
-
-  if (filters.number) {
-    whereClauses.push('c.number = ?');
-    params.push(filters.number);
-  }
-
-  if (filters.credits !== undefined) {
-    whereClauses.push('c.credit_hours = ?');
-    params.push(filters.credits);
-  }
-
-  if (filters.gened_code) {
-    joins.push('JOIN course_gened cg ON cg.course_id = c.id');
-    whereClauses.push('(cg.category_id = ? OR cg.attribute_code = ?)');
-    params.push(filters.gened_code, filters.gened_code);
-  }
-
-  if (filters.instructor_ids && filters.instructor_ids.length > 0) {
-    joins.push('JOIN sections s ON s.course_id = c.id');
-    joins.push('JOIN meetings m ON m.section_crn = s.crn');
-    joins.push('JOIN meeting_instructors mi ON mi.meeting_id = m.id');
-
-    const placeholders = filters.instructor_ids.map(() => '?').join(',');
-    whereClauses.push(`mi.instructor_id IN (${placeholders})`);
-    params.push(...filters.instructor_ids);
-  }
-
-  const whereClause = whereClauses.length > 0
-    ? 'WHERE ' + whereClauses.join(' AND ')
+  const whereClause = where.length > 0
+    ? 'WHERE ' + where.join(' AND ')
     : '';
 
   const joinClause = joins.join(' ');
@@ -380,15 +348,9 @@ export async function keywordSearch(
   let searchParam = cleanQuery;
 
   // Query Expansion: "Computer Science" -> ("Computer Science") OR CS
-  // Only apply if we haven't already filtered by subject (though if we did, this expansion is harmless but redundant)
   if (hasKeyword && !filters.subject && !filters.number) {
-    // If not already filtered by subject, check if query matches a subject name
-    // and inject the subject code to leverage the 10x subject column weight
     const subjectId = await validateSubject(db, cleanQuery);
     if (subjectId) {
-      // Use OR to allow non-subject matches to still appear (though ranked lower)
-      // We wrap the original query in quotes to prefer phrase matches,
-      // and append the subject ID which matches the high-weight subject column
       const escaped = cleanQuery.replace(/"/g, '""');
       searchParam = `"${escaped}" OR ${subjectId}`;
     }
@@ -426,24 +388,37 @@ export async function keywordSearch(
 export async function sectionKeywordSearch(
   db: D1Database,
   keywordQuery: string,
+  filters: SearchFilters,
   limit: number = 50
 ): Promise<{ id: string; rank: number }[]> {
   if (!keywordQuery || !keywordQuery.trim()) {
     return [];
   }
 
+  // Build filter clauses using shared utility
+  const filterResults = buildFilterClauses(filters);
+  const { joins, where, params } = filterResults;
+
+  const whereClause = where.length > 0
+    ? 'WHERE ' + where.join(' AND ')
+    : '';
+
+  const joinClause = joins.join(' ');
+
   const sql = `
     SELECT DISTINCT c.id, bm25(sections_fts) as fts_score
     FROM sections_fts fts
     JOIN sections s ON s.rowid = fts.rowid
     JOIN courses c ON s.course_id = c.id
-    WHERE sections_fts MATCH ?
+    ${joinClause}
+    ${whereClause}
+    ${whereClause ? 'AND' : 'WHERE'} sections_fts MATCH ?
     ORDER BY fts_score
     LIMIT ?
   `;
 
-  const escapedQuery = keywordQuery.replace(/['"]/g, '').trim();
-  const result = await db.prepare(sql).bind(escapedQuery, limit).all<{ id: string; fts_score: number }>();
+  const escapedQuery = sanitizeFtsQuery(keywordQuery);
+  const result = await db.prepare(sql).bind(...params, escapedQuery, limit).all<{ id: string; fts_score: number }>();
 
   return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
 }
@@ -456,7 +431,6 @@ export async function hybridSearch(
   limit: number = 20
 ): Promise<SearchResult[]> {
   // Pre-processing: Attempt to resolve ambiguous Subject queries (e.g. "Computer Science") to a strict filter
-  // This ensures Semantic Search also respects the subject constraint, preventing irrelevant results (like BCOG 200)
   if (!plan.filters.subject && !plan.filters.number && plan.keywordQuery?.trim()) {
     const cleanQuery = sanitizeFtsQuery(plan.keywordQuery);
     const potentialSubject = await validateSubject(db, cleanQuery);
@@ -469,7 +443,6 @@ export async function hybridSearch(
   const hasKeywordQuery = plan.keywordQuery?.trim().length > 0;
 
   // Detect navigational queries (exact course or CRN)
-  // If we have a specific course target, skip semantic search to avoid noise
   const isNavigational = !!((plan.filters.subject && plan.filters.number) || plan.filters.crn);
   const runSemantic = hasSemanticQuery && !isNavigational;
 
@@ -477,7 +450,7 @@ export async function hybridSearch(
   const [semanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
     runSemantic ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50) : Promise.resolve([]),
     keywordSearch(db, plan, 50),
-    hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, 50) : Promise.resolve([])
+    hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, 50) : Promise.resolve([])
   ]);
 
   // Build rank maps
@@ -516,18 +489,16 @@ export async function hybridSearch(
     scores.push({ id, score, semanticRank, keywordRank });
   }
 
-  // Sort by RRF score, with tie-breaking: prefer keyword matches over semantic-only
+  // Sort by RRF score
   scores.sort((a, b) => {
     if (b.score !== a.score) {
       return b.score - a.score;
     }
-    // Tie-breaker: keyword match is more precise than semantic-only
     const aHasKeyword = a.keywordRank !== undefined;
     const bHasKeyword = b.keywordRank !== undefined;
     if (aHasKeyword !== bHasKeyword) {
       return aHasKeyword ? -1 : 1;
     }
-    // Secondary tie-breaker: lower keyword rank is better
     if (aHasKeyword && bHasKeyword) {
       return (a.keywordRank ?? 0) - (b.keywordRank ?? 0);
     }

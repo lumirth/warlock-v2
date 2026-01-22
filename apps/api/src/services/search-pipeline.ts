@@ -1,7 +1,7 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { extractQuery } from './extractor.js';
 import { resolveQuery } from './query-resolver.js';
-import { hybridSearchWithTermRanking, type SearchResult } from './search.js';
+import { hybridSearchWithTermRanking, sanitizeFtsQuery, type SearchResult } from './search.js';
 import { expandTopics } from './topic-registry.js';
 import { parseQuery } from './query-parser.js';
 import type { SearchPlan, ExtractedQuery, QueryHint, QueryHintType, SearchFilters, Hint } from '@uiuc-course-search/query-types';
@@ -111,15 +111,21 @@ export class SearchPipeline {
       Object.assign(plan.filters, overrides);
     }
 
+    // 8. Sanitize search queries to prevent FTS crashes
+    plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);
+    plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
+
     const searchStartTime = performance.now();
     let results: SearchResult[] = [];
 
     // Tier 1: Navigational (Exact course code or CRN)
     const isNavigational = !!((plan.filters.subject && plan.filters.number) || plan.filters.crn);
     if (isNavigational) {
+      console.log('Tier 1: Navigational search');
       results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
     } else {
       // Tier 2: Structured (Search with extracted filters)
+      console.log('Tier 2: Structured search');
       results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
       
       // If we have few results, try expansion
@@ -127,10 +133,11 @@ export class SearchPipeline {
         // Tier 3: Topic Hybrid (Topic expansion)
         const expandedKeywords = expandTopics(extracted.residual);
         if (expandedKeywords.length > 0) {
+          console.log('Tier 3: Topic expansion', expandedKeywords);
           const expandedPlan: SearchPlan = {
             ...plan,
-            keywordQuery: `${plan.keywordQuery} ${expandedKeywords.join(' ')}`.trim(),
-            semanticQuery: `${plan.semanticQuery} ${expandedKeywords.join(' ')}`.trim(),
+            keywordQuery: sanitizeFtsQuery(`${plan.keywordQuery} ${expandedKeywords.join(' ')}`),
+            semanticQuery: sanitizeFtsQuery(`${plan.semanticQuery} ${expandedKeywords.join(' ')}`),
           };
           
           const expandedResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, expandedPlan, limit);
@@ -140,24 +147,32 @@ export class SearchPipeline {
 
       // Tier 4: Fallback (Broaden)
       if (results.length < 3) {
+        console.log(`Tier 4: Broadening search (current results: ${results.length})`);
         // 1. If we have a level filter, try removing it
         if (plan.filters.level) {
+          console.log('Tier 4.1: Removing level filter');
           const broadPlan = { ...plan, filters: { ...plan.filters } };
           delete broadPlan.filters.level;
           const broadResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, broadPlan, limit);
           results = this.mergeResults(results, broadResults, limit);
         }
 
-        // 2. If we still have no results, broaden to all subjects
-        if (results.length === 0 && (plan.filters.subject || plan.filters.gened_code)) {
+        // 2. If we still have few results, broaden while KEEPING subject
+        if (results.length < 3 && (plan.filters.subject || plan.filters.gened_code)) {
+          console.log('Tier 4.2: Broadening filters while keeping subject');
           const veryBroadPlan: SearchPlan = {
             ...plan,
             filters: { ...plan.filters },
-            semanticQuery: query,
-            keywordQuery: query
+            semanticQuery: sanitizeFtsQuery(query),
+            keywordQuery: sanitizeFtsQuery(query)
           };
-          delete veryBroadPlan.filters.subject;
+          // NEVER drop the Subject filter
           delete veryBroadPlan.filters.gened_code;
+          delete veryBroadPlan.filters.instructor_ids;
+          delete veryBroadPlan.filters.level;
+          delete veryBroadPlan.filters.difficulty;
+          // Note: we explicitly keep veryBroadPlan.filters.subject if it exists
+          
           const veryBroadResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, veryBroadPlan, limit);
           results = this.mergeResults(results, veryBroadResults, limit);
         }

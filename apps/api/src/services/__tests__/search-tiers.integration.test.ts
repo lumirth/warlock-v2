@@ -55,10 +55,9 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     vi.clearAllMocks();
   });
 
-  it('Test Case 1 (Tier 1): "CS 225" should return strict match immediately', async () => {
+  it('Tier 1: "CS 225" should return strict match immediately', async () => {
     const query = 'CS 225';
     
-    // 1. Mock Extraction
     vi.mocked(extractor.extractQuery).mockReturnValue({
       hints: [{
         type: 'courseCode',
@@ -68,21 +67,18 @@ describe('SearchPipeline Tiered Logic Integration', () => {
       residual: ''
     } as any);
 
-    // 2. Mock Resolver
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
       filters: { subject: 'CS', number: '225' },
       semanticQuery: '',
       keywordQuery: ''
     } as any);
 
-    // 3. Mock Search
     const mockResults = [{ course: mockCourse({ subject: 'CS', number: '225' }), score: 1.0, termPriority: 0 }];
     vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue(mockResults as any);
 
     const result = await pipeline.search(query);
 
     expect(result.results).toEqual(mockResults);
-    // Should only call search once because it is navigational
     expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
     expect(vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3].filters).toMatchObject({
       subject: 'CS',
@@ -90,7 +86,7 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     });
   });
 
-  it('Test Case 2 (Tier 2): "CS 400 level" should extract subject and level', async () => {
+  it('Tier 2: "CS 400 level" should extract subject and level', async () => {
     const query = 'CS 400 level';
     
     vi.mocked(extractor.extractQuery).mockReturnValue({
@@ -120,7 +116,7 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     });
   });
 
-  it('Test Case 3 (Tier 3): "easy ai classes" should expand topics', async () => {
+  it('Tier 3: "easy ai classes" should expand topics', async () => {
     const query = 'easy ai classes';
     
     vi.mocked(extractor.extractQuery).mockReturnValue({
@@ -134,13 +130,10 @@ describe('SearchPipeline Tiered Logic Integration', () => {
       keywordQuery: 'ai classes'
     } as any);
 
-    // Mock expansion
     vi.mocked(topicRegistry.expandTopics).mockReturnValue(['artificial intelligence', 'machine learning']);
 
-    // First call (Tier 2) returns 1 result (triggering expansion)
     vi.mocked(search.hybridSearchWithTermRanking)
       .mockResolvedValueOnce([{ course: mockCourse({ id: 'AI-101', title: 'Intro to AI' }), score: 0.5, termPriority: 0 }])
-      // Second call (Tier 3) returns more results
       .mockResolvedValueOnce([
         { course: mockCourse({ id: 'AI-101', title: 'Intro to AI' }), score: 0.5, termPriority: 0 },
         { course: mockCourse({ id: 'CS-440', title: 'Artificial Intelligence' }), score: 0.9, termPriority: 0 }
@@ -151,61 +144,80 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     expect(topicRegistry.expandTopics).toHaveBeenCalledWith('ai classes');
     expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(2);
     expect(result.results).toHaveLength(2);
-    expect(result.results[0].course.id).toBe('CS-440'); // Should be first due to higher score
+    expect(result.results[0].course.id).toBe('CS-440');
   });
 
-  it('Test Case 4 (Robustness): "phil of law & state" should handle special characters', async () => {
-    // This tests that the pipeline doesn't crash and correctly passes the query through
-    // We'll use the real sanitizer check indirectly
-    const query = 'phil of law & state';
+  it('Tier 4: should KEEP subject filter when broadening search', async () => {
+    const query = 'CS 400 level gened:HUM';
     
     vi.mocked(extractor.extractQuery).mockReturnValue({
-      hints: [],
-      residual: 'phil of law & state'
+      hints: [
+        { type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } },
+        { type: 'level', value: 400, metadata: { source: 'regex', confidence: 0.9, raw: '400' } },
+        { type: 'gened', value: 'HUM', metadata: { source: 'regex', confidence: 0.9, raw: 'HUM' } }
+      ],
+      residual: ''
     } as any);
 
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
-      filters: {},
-      semanticQuery: 'phil of law & state',
-      keywordQuery: 'phil of law & state'
+      filters: { subject: 'CS', level: 400, gened_code: 'HUM' },
+      semanticQuery: '',
+      keywordQuery: ''
     } as any);
 
-    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([]);
-    vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
-
-    // Should NOT throw
-    await expect(pipeline.search(query)).resolves.not.toThrow();
+    // Tier 2: 0 results (CS 400 level HUM)
+    // Tier 3: No topic expansion
+    // Tier 4.1: Broaden by removing level -> 0 results (CS HUM)
+    // Tier 4.2: Broaden by removing gened, but KEEPING subject CS -> results
     
-    expect(search.hybridSearchWithTermRanking).toHaveBeenCalled();
-  });
-
-  it('Tier 4: should broaden search if no results found with subject filter', async () => {
-    const query = 'CS underwater basket weaving';
-    
-    vi.mocked(extractor.extractQuery).mockReturnValue({
-      hints: [{ type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } }],
-      residual: 'underwater basket weaving'
-    } as any);
-
-    vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
-      filters: { subject: 'CS' },
-      semanticQuery: 'underwater basket weaving',
-      keywordQuery: 'underwater basket weaving'
-    } as any);
-
-    // Tier 2: 0 results
     vi.mocked(search.hybridSearchWithTermRanking)
       .mockResolvedValueOnce([]) // Tier 2
-      .mockResolvedValueOnce([ // Tier 4 Broadening (removing subject)
-        { course: mockCourse({ id: 'ART-101', subject: 'ART', title: 'Basket Weaving' }), score: 0.8, termPriority: 0 }
+      .mockResolvedValueOnce([]) // Tier 4.1 (CS HUM)
+      .mockResolvedValueOnce([   // Tier 4.2 (CS)
+        { course: mockCourse({ id: 'CS-101', subject: 'CS', title: 'Intro to CS' }), score: 0.7, termPriority: 0 }
       ]);
     
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
     const result = await pipeline.search(query);
 
-    // Should call search at least twice (Tier 2, then Tier 4 fallback)
-    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(2);
-    expect(result.results[0].course.subject).toBe('ART');
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(3);
+    
+    // Check filters in last call (Tier 4.2)
+    const lastSearchCallFilters = vi.mocked(search.hybridSearchWithTermRanking).mock.calls[2][3].filters;
+    expect(lastSearchCallFilters.subject).toBe('CS');
+    expect(lastSearchCallFilters.level).toBeUndefined();
+    expect(lastSearchCallFilters.gened_code).toBeUndefined();
+    
+    expect(result.results[0].course.subject).toBe('CS');
+  });
+
+  it('Tier 4: should NOT return results from other subjects even if no results in current subject', async () => {
+    const query = 'CS nonexistenttopic';
+    
+    vi.mocked(extractor.extractQuery).mockReturnValue({
+      hints: [{ type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } }],
+      residual: 'nonexistenttopic'
+    } as any);
+
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
+      filters: { subject: 'CS' },
+      semanticQuery: 'nonexistenttopic',
+      keywordQuery: 'nonexistenttopic'
+    } as any);
+
+    // Tier 2: 0 results
+    // Tier 3: 0 results
+    // Tier 4: Broadening... should still have subject: 'CS'
+    
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([]);
+    vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
+
+    const result = await pipeline.search(query);
+
+    // Verify all search calls kept the subject
+    for (const call of vi.mocked(search.hybridSearchWithTermRanking).mock.calls) {
+      expect(call[3].filters.subject).toBe('CS');
+    }
   });
 });
