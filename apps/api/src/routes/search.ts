@@ -41,7 +41,7 @@ searchRoutes.get('/search/semantic', async (c) => {
   }
 
   try {
-    const results = await searchCourses(c.env.VECTORIZE, c.env.AI, query, 20);
+    const results = await searchCourses(c.env.VECTORIZE, c.env.AI, query, undefined, 20);
     return c.json({ results });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
