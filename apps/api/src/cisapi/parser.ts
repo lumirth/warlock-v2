@@ -457,7 +457,7 @@ export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
         if (name === 'sectionStatusCode') currentSection.sectionStatusCode = text;
         if (name === 'sectionText') currentSection.sectionText = text;
         if (name === 'sectionNotes') currentSection.sectionNotes = text;
-        if (name === 'cappArea') currentSection.cappArea = text;
+        if (name === 'sectionCappArea') currentSection.cappArea = text;
         if (name === 'sectionDateRange') currentSection.dateRangeText = text;
         if (name === 'partOfTerm') currentSection.partOfTerm = text;
         if (name === 'startDate') currentSection.startDate = text;
