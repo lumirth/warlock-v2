@@ -12,7 +12,6 @@ const LEVEL_KEYWORDS: Record<string, number> = {
   'beginner': 100,
   'advanced': 400,
   'upper': 400,
-  'upper level': 400,
   'graduate': 500,
   'grad': 500,
 };
@@ -78,7 +77,7 @@ function extractRegexPatterns(text: string, hints: Hint[]): string {
   residual = residual.replace(crnRegex, ' ');
 
   // Credits: 3 credits, 4 credit hours, 3-credit
-  const creditsRegex = /\b(\d)\s*-?\s*(?:credit|credits|cr|hour|hours)s?\b/gi;
+  const creditsRegex = /\b(\d{1,2})\s*-?\s*(?:credit|credits|cr|hour|hours)s?\b/gi;
   while ((match = creditsRegex.exec(text)) !== null) {
     hints.push({
       type: 'credits',
@@ -102,13 +101,13 @@ function extractRegexPatterns(text: string, hints: Hint[]): string {
   // Level keywords: intro, advanced, graduate
   for (const [keyword, level] of Object.entries(LEVEL_KEYWORDS)) {
     const keywordRegex = new RegExp(`\\b${keyword}\\b`, 'gi');
-    if (keywordRegex.test(text)) {
+    if (keywordRegex.test(residual)) {
       hints.push({
         type: 'level',
         value: level,
         metadata: createMetadata('regex', keyword, 0.7),
       });
-      residual = residual.replace(keywordRegex, ' ');
+      residual = residual.replace(new RegExp(`\\b${keyword}\\b`, 'gi'), ' ');
     }
   }
 
@@ -203,13 +202,15 @@ function extractNlpPatterns(text: string, hints: Hint[]): string {
 
   for (const pattern of instructorPatterns) {
     let match;
-    while ((match = pattern.exec(text)) !== null) {
+    const patternCopy = new RegExp(pattern.source, pattern.flags);
+    while ((match = patternCopy.exec(residual)) !== null) {
       hints.push({
         type: 'instructor',
         value: match[1],
         metadata: createMetadata('nlp', match[0], 0.8),
       });
       residual = residual.replace(match[0], ' ');
+      patternCopy.lastIndex = 0;
     }
   }
 
