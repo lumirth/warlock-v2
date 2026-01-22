@@ -1,0 +1,789 @@
+[
+  {
+    "id": 1,
+    "query": "CS 225",
+    "expected_filters": {"subject": "CS", "number": "225"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS"},
+    "category": "navigational",
+    "notes": "Basic course code lookup"
+  },
+  {
+    "id": 2,
+    "query": "cs 225",
+    "expected_filters": {"subject": "CS", "number": "225"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS"},
+    "category": "navigational",
+    "notes": "Lowercase course code"
+  },
+  {
+    "id": 3,
+    "query": "CS225",
+    "expected_filters": {"subject": "CS", "number": "225"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS"},
+    "category": "navigational",
+    "notes": "No space between subject and number"
+  },
+  {
+    "id": 4,
+    "query": "cs225",
+    "expected_filters": {"subject": "CS", "number": "225"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS"},
+    "category": "navigational",
+    "notes": "Lowercase, no space"
+  },
+  {
+    "id": 5,
+    "query": "STAT 400",
+    "expected_filters": {"subject": "STAT", "number": "400"},
+    "expected_residual": "",
+    "invariants": {"subject": "STAT"},
+    "category": "navigational"
+  },
+  {
+    "id": 6,
+    "query": "ECE 110",
+    "expected_filters": {"subject": "ECE", "number": "110"},
+    "expected_residual": "",
+    "invariants": {"subject": "ECE"},
+    "category": "navigational"
+  },
+  {
+    "id": 7,
+    "query": "MATH 241",
+    "expected_filters": {"subject": "MATH", "number": "241"},
+    "expected_residual": "",
+    "invariants": {"subject": "MATH"},
+    "category": "navigational"
+  },
+  {
+    "id": 8,
+    "query": "RHET 105",
+    "expected_filters": {"subject": "RHET", "number": "105"},
+    "expected_residual": "",
+    "invariants": {"subject": "RHET"},
+    "category": "navigational"
+  },
+  {
+    "id": 9,
+    "query": "PHYS 211",
+    "expected_filters": {"subject": "PHYS", "number": "211"},
+    "expected_residual": "",
+    "invariants": {"subject": "PHYS"},
+    "category": "navigational"
+  },
+  {
+    "id": 10,
+    "query": "CRN 12345",
+    "expected_filters": {"crn": "12345"},
+    "expected_residual": "",
+    "category": "navigational",
+    "notes": "CRN lookup with prefix"
+  },
+  {
+    "id": 11,
+    "query": "crn 67890",
+    "expected_filters": {"crn": "67890"},
+    "expected_residual": "",
+    "category": "navigational",
+    "notes": "Lowercase CRN prefix"
+  },
+  {
+    "id": 12,
+    "query": "12345",
+    "expected_filters": {"crn": "12345"},
+    "expected_residual": "",
+    "category": "navigational",
+    "notes": "Bare 5-digit CRN"
+  },
+  {
+    "id": 13,
+    "query": "computer science 225",
+    "expected_filters": {"subject": "CS", "number": "225"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS"},
+    "category": "navigational",
+    "notes": "Full subject name with number - CURRENTLY FAILING"
+  },
+  {
+    "id": 14,
+    "query": "comp sci 225",
+    "expected_filters": {"subject": "CS", "number": "225"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS"},
+    "category": "navigational",
+    "notes": "Common abbreviation - CURRENTLY FAILING"
+  },
+  {
+    "id": 15,
+    "query": "psychology 100",
+    "expected_filters": {"subject": "PSYC", "number": "100"},
+    "expected_residual": "",
+    "invariants": {"subject": "PSYC"},
+    "category": "navigational",
+    "notes": "Full subject name - CURRENTLY FAILING"
+  },
+  {
+    "id": 16,
+    "query": "easy humanities gen ed",
+    "expected_filters": {"difficulty": "easy", "gened_code": "HUM"},
+    "expected_residual": "",
+    "invariants": {"gened_code": "HUM"},
+    "category": "structured",
+    "notes": "Residual should NOT contain 'gen ed'"
+  },
+  {
+    "id": 17,
+    "query": "easy online gen ed",
+    "expected_filters": {"difficulty": "easy", "online": true},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Residual should NOT contain 'gen ed'"
+  },
+  {
+    "id": 18,
+    "query": "open sections intro",
+    "expected_filters": {"status": "open", "level": 100},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Residual should NOT contain 'sections'"
+  },
+  {
+    "id": 19,
+    "query": "3 credits",
+    "expected_filters": {"credits": 3},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 20,
+    "query": "4 credit hours",
+    "expected_filters": {"credits": 4},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 21,
+    "query": "MWF morning",
+    "expected_filters": {"days": "MWF", "time": "morning"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 22,
+    "query": "TR afternoon",
+    "expected_filters": {"days": "TR", "time": "afternoon"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 23,
+    "query": "400 level CS",
+    "expected_filters": {"level": 400, "subject": "CS"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS", "level_gte": 400, "level_lte": 499},
+    "category": "structured"
+  },
+  {
+    "id": 24,
+    "query": "CS 400-level",
+    "expected_filters": {"subject": "CS", "level": 400},
+    "expected_residual": "",
+    "invariants": {"subject": "CS", "level_gte": 400, "level_lte": 499},
+    "category": "structured"
+  },
+  {
+    "id": 25,
+    "query": "easy CS classes",
+    "expected_filters": {"difficulty": "easy", "subject": "CS"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS"},
+    "category": "structured",
+    "notes": "Residual should NOT contain 'classes'"
+  },
+  {
+    "id": 26,
+    "query": "online courses",
+    "expected_filters": {"online": true},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Residual should NOT contain 'courses'"
+  },
+  {
+    "id": 27,
+    "query": "in person classes",
+    "expected_filters": {"online": false},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Residual should NOT contain 'classes'"
+  },
+  {
+    "id": 28,
+    "query": "quantitative reasoning",
+    "expected_filters": {"gened_code": "QR"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 29,
+    "query": "quantitative reasoning 1",
+    "expected_filters": {"gened_code": "QR1"},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Should extract QR1, not just QR"
+  },
+  {
+    "id": 30,
+    "query": "natural sciences gen ed",
+    "expected_filters": {"gened_code": "NAT"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 31,
+    "query": "social behavioral science",
+    "expected_filters": {"gened_code": "SBS"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 32,
+    "query": "non western cultures",
+    "expected_filters": {"gened_code": "NW"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 33,
+    "query": "us minority cultures",
+    "expected_filters": {"gened_code": "US"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 34,
+    "query": "advanced composition",
+    "expected_filters": {"gened_code": "ACP"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 35,
+    "query": "writing intensive",
+    "expected_filters": {"gened_code": "ACP"},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 36,
+    "query": "CS 225 with Fagen",
+    "expected_filters": {"subject": "CS", "number": "225"},
+    "expected_residual": "",
+    "expected_instructor": "Fagen",
+    "category": "structured",
+    "notes": "Instructor should be resolved"
+  },
+  {
+    "id": 37,
+    "query": "Professor Smith CHEM",
+    "expected_filters": {"subject": "CHEM"},
+    "expected_residual": "",
+    "expected_instructor": "Smith",
+    "category": "structured"
+  },
+  {
+    "id": 38,
+    "query": "Dr. Johnson MATH",
+    "expected_filters": {"subject": "MATH"},
+    "expected_residual": "",
+    "expected_instructor": "Johnson",
+    "category": "structured"
+  },
+  {
+    "id": 39,
+    "query": "no morning classes",
+    "expected_filters": {"not": {"time": ["morning"]}},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Negation of time"
+  },
+  {
+    "id": 40,
+    "query": "avoid friday",
+    "expected_filters": {"not": {"days": ["friday"]}},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Negation of days"
+  },
+  {
+    "id": 41,
+    "query": "not online",
+    "expected_filters": {"online": false},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Should interpret as in-person"
+  },
+  {
+    "id": 42,
+    "query": "no evening",
+    "expected_filters": {"not": {"time": ["evening"]}},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 43,
+    "query": "gened:HUM",
+    "expected_filters": {"gened_code": "HUM"},
+    "expected_residual": "",
+    "category": "power_syntax"
+  },
+  {
+    "id": 44,
+    "query": "gened:HUM easy",
+    "expected_filters": {"gened_code": "HUM", "difficulty": "easy"},
+    "expected_residual": "",
+    "category": "power_syntax"
+  },
+  {
+    "id": 45,
+    "query": "gened:any(HUM,US)",
+    "expected_filters": {"gened_any": ["HUM", "US"]},
+    "expected_residual": "",
+    "category": "power_syntax"
+  },
+  {
+    "id": 46,
+    "query": "gened:any(HUM, US) morning",
+    "expected_filters": {"gened_any": ["HUM", "US"], "time": "morning"},
+    "expected_residual": "",
+    "category": "power_syntax",
+    "notes": "Spaces in parentheses"
+  },
+  {
+    "id": 47,
+    "query": "gened:all(QR1,QR2)",
+    "expected_filters": {"gened_all": ["QR1", "QR2"]},
+    "expected_residual": "",
+    "category": "power_syntax"
+  },
+  {
+    "id": 48,
+    "query": "subject:CS 400 level",
+    "expected_filters": {"subject": "CS", "level": 400},
+    "expected_residual": "",
+    "category": "power_syntax"
+  },
+  {
+    "id": 49,
+    "query": "credits:3 MWF",
+    "expected_filters": {"credits": 3, "days": "MWF"},
+    "expected_residual": "",
+    "category": "power_syntax"
+  },
+  {
+    "id": 50,
+    "query": "data structures",
+    "expected_filters": {},
+    "expected_residual": "data structures",
+    "expected_top1_title": "Data Structures",
+    "category": "semantic",
+    "notes": "Pure semantic - should match CS 225"
+  },
+  {
+    "id": 51,
+    "query": "machine learning",
+    "expected_filters": {},
+    "expected_residual": "machine learning",
+    "category": "semantic"
+  },
+  {
+    "id": 52,
+    "query": "artificial intelligence",
+    "expected_filters": {},
+    "expected_residual": "artificial intelligence",
+    "category": "semantic"
+  },
+  {
+    "id": 53,
+    "query": "organic chemistry",
+    "expected_filters": {},
+    "expected_residual": "organic chemistry",
+    "category": "semantic"
+  },
+  {
+    "id": 54,
+    "query": "linear algebra",
+    "expected_filters": {},
+    "expected_residual": "linear algebra",
+    "category": "semantic"
+  },
+  {
+    "id": 55,
+    "query": "calculus 2",
+    "expected_filters": {},
+    "expected_residual": "calculus 2",
+    "expected_top1_title": "Calculus II",
+    "category": "semantic"
+  },
+  {
+    "id": 56,
+    "query": "discrete math",
+    "expected_filters": {},
+    "expected_residual": "discrete math",
+    "category": "semantic"
+  },
+  {
+    "id": 57,
+    "query": "operating systems",
+    "expected_filters": {},
+    "expected_residual": "operating systems",
+    "category": "semantic"
+  },
+  {
+    "id": 58,
+    "query": "computer architecture",
+    "expected_filters": {},
+    "expected_residual": "computer architecture",
+    "category": "semantic"
+  },
+  {
+    "id": 59,
+    "query": "database systems",
+    "expected_filters": {},
+    "expected_residual": "database systems",
+    "category": "semantic"
+  },
+  {
+    "id": 60,
+    "query": "C++ programming",
+    "expected_filters": {},
+    "expected_residual": "C++ programming",
+    "category": "edge_case_punctuation",
+    "notes": "Plus signs should not be stripped"
+  },
+  {
+    "id": 61,
+    "query": "ai/ml courses",
+    "expected_filters": {},
+    "expected_residual": "ai/ml",
+    "category": "edge_case_punctuation",
+    "notes": "Slash should be preserved or handled"
+  },
+  {
+    "id": 62,
+    "query": "law & ethics",
+    "expected_filters": {},
+    "expected_residual": "law and ethics",
+    "category": "edge_case_punctuation",
+    "notes": "Ampersand should become 'and'"
+  },
+  {
+    "id": 63,
+    "query": "philosophy of law & state",
+    "expected_filters": {},
+    "expected_residual": "philosophy of law and state",
+    "category": "edge_case_punctuation"
+  },
+  {
+    "id": 64,
+    "query": "C#",
+    "expected_filters": {},
+    "expected_residual": "C sharp",
+    "category": "edge_case_punctuation",
+    "notes": "Should handle C# special token"
+  },
+  {
+    "id": 65,
+    "query": ".NET development",
+    "expected_filters": {},
+    "expected_residual": "dotnet development",
+    "category": "edge_case_punctuation"
+  },
+  {
+    "id": 66,
+    "query": "3-4 credits",
+    "expected_filters": {"credits_min": 3, "credits_max": 4},
+    "expected_residual": "",
+    "category": "edge_case_range",
+    "notes": "Credit range - CURRENTLY NOT SUPPORTED"
+  },
+  {
+    "id": 67,
+    "query": "300-400 level",
+    "expected_filters": {"level_min": 300, "level_max": 400},
+    "expected_residual": "",
+    "category": "edge_case_range",
+    "notes": "Level range - CURRENTLY NOT SUPPORTED"
+  },
+  {
+    "id": 68,
+    "query": "after 2pm",
+    "expected_filters": {"time_start": "14:00"},
+    "expected_residual": "",
+    "category": "edge_case_range",
+    "notes": "Time comparator - CURRENTLY NOT SUPPORTED"
+  },
+  {
+    "id": 69,
+    "query": "before 10am",
+    "expected_filters": {"time_end": "10:00"},
+    "expected_residual": "",
+    "category": "edge_case_range",
+    "notes": "Time comparator - CURRENTLY NOT SUPPORTED"
+  },
+  {
+    "id": 70,
+    "query": "at least 3 credits",
+    "expected_filters": {"credits_min": 3},
+    "expected_residual": "",
+    "category": "edge_case_range",
+    "notes": "Credit comparator - CURRENTLY NOT SUPPORTED"
+  },
+  {
+    "id": 71,
+    "query": "CS courses",
+    "expected_filters": {"subject": "CS"},
+    "expected_residual": "",
+    "invariants": {"subject": "CS"},
+    "category": "disambiguation",
+    "notes": "CS = Computer Science subject, not Cultural Studies gened"
+  },
+  {
+    "id": 72,
+    "query": "cultural studies gened",
+    "expected_filters": {"gened_code": "CS"},
+    "expected_residual": "",
+    "category": "disambiguation",
+    "notes": "CS = Cultural Studies gened because of context"
+  },
+  {
+    "id": 73,
+    "query": "humanities gen ed",
+    "expected_filters": {"gened_code": "HUM"},
+    "expected_residual": "",
+    "category": "disambiguation",
+    "notes": "HUM gened, not HUM subject"
+  },
+  {
+    "id": 74,
+    "query": "humanities department",
+    "expected_filters": {"subject": "HUM"},
+    "expected_residual": "",
+    "category": "disambiguation",
+    "notes": "HUM subject, not HUM gened"
+  },
+  {
+    "id": 75,
+    "query": "PS courses",
+    "expected_filters": {"subject": "PS"},
+    "expected_residual": "",
+    "category": "disambiguation",
+    "notes": "PS = Political Science subject, not Physical Sciences gened"
+  },
+  {
+    "id": 76,
+    "query": "physical sciences gened",
+    "expected_filters": {"gened_code": "PS"},
+    "expected_residual": "",
+    "category": "disambiguation"
+  },
+  {
+    "id": 77,
+    "query": "400 level CS MWF morning 3 credits",
+    "expected_filters": {"level": 400, "subject": "CS", "days": "MWF", "time": "morning", "credits": 3},
+    "expected_residual": "",
+    "invariants": {"subject": "CS", "level_gte": 400, "level_lte": 499},
+    "category": "structured",
+    "notes": "Multi-filter structured query"
+  },
+  {
+    "id": 78,
+    "query": "easy humanities MWF afternoon",
+    "expected_filters": {"difficulty": "easy", "gened_code": "HUM", "days": "MWF", "time": "afternoon"},
+    "expected_residual": "",
+    "invariants": {"gened_code": "HUM"},
+    "category": "structured"
+  },
+  {
+    "id": 79,
+    "query": "open 3 credit online",
+    "expected_filters": {"status": "open", "credits": 3, "online": true},
+    "expected_residual": "",
+    "category": "structured"
+  },
+  {
+    "id": 80,
+    "query": "intro machine learning",
+    "expected_filters": {},
+    "expected_residual": "intro machine learning",
+    "category": "semantic",
+    "notes": "intro should NOT force level=100 for ML courses"
+  },
+  {
+    "id": 81,
+    "query": "intro to compilers",
+    "expected_filters": {},
+    "expected_residual": "intro to compilers",
+    "category": "semantic",
+    "notes": "Should return CS 421, not be restricted to 100-level"
+  },
+  {
+    "id": 82,
+    "query": "intro to AI 400 level",
+    "expected_filters": {"level": 400},
+    "expected_residual": "intro to AI",
+    "invariants": {"level_gte": 400, "level_lte": 499},
+    "category": "structured",
+    "notes": "Explicit 400 level should override implicit intro"
+  },
+  {
+    "id": 83,
+    "query": "senior seminar",
+    "expected_filters": {},
+    "expected_residual": "senior seminar",
+    "category": "semantic",
+    "notes": "senior could boost 400-level but not filter"
+  },
+  {
+    "id": 84,
+    "query": "graduate algorithms",
+    "expected_filters": {"level": 500},
+    "expected_residual": "algorithms",
+    "invariants": {"level_gte": 500},
+    "category": "structured",
+    "notes": "graduate should filter to 500+"
+  },
+  {
+    "id": 85,
+    "query": "beginner spanish",
+    "expected_filters": {"level": 100},
+    "expected_residual": "spanish",
+    "category": "structured"
+  },
+  {
+    "id": 86,
+    "query": "advanced economics",
+    "expected_filters": {"level": 400},
+    "expected_residual": "economics",
+    "category": "structured"
+  },
+  {
+    "id": 87,
+    "query": "STAT 400 or MATH 415",
+    "expected_filters": {},
+    "expected_residual": "STAT 400 or MATH 415",
+    "category": "edge_case",
+    "notes": "OR queries not currently supported"
+  },
+  {
+    "id": 88,
+    "query": "ECE or CS 400-level",
+    "expected_filters": {"level": 400},
+    "expected_residual": "ECE or CS",
+    "category": "edge_case",
+    "notes": "Multi-subject not supported"
+  },
+  {
+    "id": 89,
+    "query": "spring 2026 CS",
+    "expected_filters": {"subject": "CS"},
+    "expected_residual": "spring 2026",
+    "category": "edge_case",
+    "notes": "Term extraction not supported"
+  },
+  {
+    "id": 90,
+    "query": "fall CS courses",
+    "expected_filters": {"subject": "CS"},
+    "expected_residual": "fall",
+    "category": "edge_case",
+    "notes": "Term extraction not supported"
+  },
+  {
+    "id": 91,
+    "query": "gpa booster",
+    "expected_filters": {"difficulty": "easy"},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Should not leave 'booster' in residual"
+  },
+  {
+    "id": 92,
+    "query": "easy A",
+    "expected_filters": {"difficulty": "easy"},
+    "expected_residual": "",
+    "category": "structured",
+    "notes": "Should not leave 'A' in residual"
+  },
+  {
+    "id": 93,
+    "query": "gened:HUM -hard",
+    "expected_filters": {"gened_code": "HUM"},
+    "expected_residual": "",
+    "expected_negations": ["hard"],
+    "category": "power_syntax",
+    "notes": "Negation with power syntax"
+  },
+  {
+    "id": 94,
+    "query": "\"data structures\"",
+    "expected_filters": {},
+    "expected_residual": "",
+    "expected_phrases": ["data structures"],
+    "category": "power_syntax",
+    "notes": "Quoted phrase"
+  },
+  {
+    "id": 95,
+    "query": "CS -online",
+    "expected_filters": {"subject": "CS"},
+    "expected_residual": "",
+    "expected_negations": ["online"],
+    "category": "power_syntax"
+  },
+  {
+    "id": 96,
+    "query": "econ",
+    "expected_filters": {"subject": "ECON"},
+    "expected_residual": "",
+    "invariants": {"subject": "ECON"},
+    "category": "navigational",
+    "notes": "Common abbreviation"
+  },
+  {
+    "id": 97,
+    "query": "psych 100",
+    "expected_filters": {"subject": "PSYC", "number": "100"},
+    "expected_residual": "",
+    "invariants": {"subject": "PSYC"},
+    "category": "navigational",
+    "notes": "Common abbreviation"
+  },
+  {
+    "id": 98,
+    "query": "chem 101",
+    "expected_filters": {"subject": "CHEM", "number": "101"},
+    "expected_residual": "",
+    "invariants": {"subject": "CHEM"},
+    "category": "navigational"
+  },
+  {
+    "id": 99,
+    "query": "bio 120",
+    "expected_filters": {"subject": "BIOS", "number": "120"},
+    "expected_residual": "",
+    "category": "navigational",
+    "notes": "bio -> BIOS - CURRENTLY FAILING"
+  },
+  {
+    "id": 100,
+    "query": "history of art",
+    "expected_filters": {"subject": "ARTH"},
+    "expected_residual": "",
+    "category": "navigational",
+    "notes": "Should resolve to Art History department - CURRENTLY FAILING"
+  }
+]
