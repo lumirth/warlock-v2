@@ -285,9 +285,24 @@ export async function keywordSearch(
   limit: number = 50
 ): Promise<{ id: string; rank: number }[]> {
   const { filters, keywordQuery } = plan;
+  let localFilters = { ...filters };
+  let localKeywordQuery = keywordQuery;
+
+  // Attempt to resolve the entire keyword query to a subject
+  // This handles "Computer Science" -> subject:CS, or "CS" -> subject:CS
+  if (!localFilters.subject && !localFilters.number && localKeywordQuery?.trim()) {
+    const cleanQuery = sanitizeFtsQuery(localKeywordQuery);
+    const potentialSubject = await validateSubject(db, cleanQuery);
+    if (potentialSubject) {
+      localFilters.subject = potentialSubject;
+      // If the query was purely the subject name, clear the keyword query to avoid FTS redundancy
+      // and short-token issues (e.g. "CS" not matching in trigram FTS)
+      localKeywordQuery = '';
+    }
+  }
 
   // Fast path: exact course lookup (subject + number)
-  if (filters.subject && filters.number && !keywordQuery?.trim()) {
+  if (localFilters.subject && localFilters.number && !localKeywordQuery?.trim()) {
     const exactSql = `
       SELECT id FROM courses
       WHERE subject = ? AND number = ?
@@ -296,7 +311,7 @@ export async function keywordSearch(
       LIMIT ?
     `;
     const exactResult = await db.prepare(exactSql)
-      .bind(filters.subject, filters.number, limit)
+      .bind(localFilters.subject, localFilters.number, limit)
       .all<{ id: string }>();
 
     if (exactResult.results.length > 0) {
@@ -305,7 +320,7 @@ export async function keywordSearch(
   }
 
   // CRN direct lookup
-  if (filters.crn) {
+  if (localFilters.crn) {
     const crnSql = `
       SELECT DISTINCT c.id
       FROM sections s
@@ -313,7 +328,7 @@ export async function keywordSearch(
       WHERE s.crn = ?
       LIMIT 1
     `;
-    const crnResult = await db.prepare(crnSql).bind(filters.crn).all<{ id: string }>();
+    const crnResult = await db.prepare(crnSql).bind(localFilters.crn).all<{ id: string }>();
     if (crnResult.results.length > 0) {
       return crnResult.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
     }
@@ -324,35 +339,35 @@ export async function keywordSearch(
   const params: (string | number)[] = [];
   const joins: string[] = [];
 
-  if (filters.subject) {
+  if (localFilters.subject) {
     whereClauses.push('c.subject = ?');
-    params.push(filters.subject);
+    params.push(localFilters.subject);
   }
 
-  if (filters.number) {
+  if (localFilters.number) {
     whereClauses.push('c.number = ?');
-    params.push(filters.number);
+    params.push(localFilters.number);
   }
 
-  if (filters.credits !== undefined) {
+  if (localFilters.credits !== undefined) {
     whereClauses.push('c.credit_hours = ?');
-    params.push(filters.credits);
+    params.push(localFilters.credits);
   }
 
-  if (filters.gened_code) {
+  if (localFilters.gened_code) {
     joins.push('JOIN course_gened cg ON cg.course_id = c.id');
     whereClauses.push('(cg.category_id = ? OR cg.attribute_code = ?)');
-    params.push(filters.gened_code, filters.gened_code);
+    params.push(localFilters.gened_code, localFilters.gened_code);
   }
 
-  if (filters.instructor_ids && filters.instructor_ids.length > 0) {
+  if (localFilters.instructor_ids && localFilters.instructor_ids.length > 0) {
     joins.push('JOIN sections s ON s.course_id = c.id');
     joins.push('JOIN meetings m ON m.section_crn = s.crn');
     joins.push('JOIN meeting_instructors mi ON mi.meeting_id = m.id');
 
-    const placeholders = filters.instructor_ids.map(() => '?').join(',');
+    const placeholders = localFilters.instructor_ids.map(() => '?').join(',');
     whereClauses.push(`mi.instructor_id IN (${placeholders})`);
-    params.push(...filters.instructor_ids);
+    params.push(...localFilters.instructor_ids);
   }
 
   const whereClause = whereClauses.length > 0
@@ -362,13 +377,13 @@ export async function keywordSearch(
   const joinClause = joins.join(' ');
 
   // FTS5 search with BM25 ranking
-  const hasKeyword = keywordQuery && keywordQuery.trim().length > 0;
+  const hasKeyword = localKeywordQuery && localKeywordQuery.trim().length > 0;
 
   // Sanitize the query
-  const cleanQuery = hasKeyword ? sanitizeFtsQuery(keywordQuery) : '';
+  const cleanQuery = hasKeyword ? sanitizeFtsQuery(localKeywordQuery) : '';
   let searchParam = cleanQuery;
 
-  if (hasKeyword && !filters.subject && !filters.number) {
+  if (hasKeyword && !localFilters.subject && !localFilters.number) {
     // If not already filtered by subject, check if query matches a subject name
     // and inject the subject code to leverage the 10x subject column weight
     const subjectId = await validateSubject(db, cleanQuery);
