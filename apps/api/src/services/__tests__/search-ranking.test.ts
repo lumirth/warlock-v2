@@ -36,4 +36,19 @@ describe('exact-title boost', () => {
     const boosted = applyTitleBoost(scores, 'biology');
     expect(boosted[0].score).toBe(0.5);
   });
+
+  it('boosts when query contains title (long natural language query)', () => {
+    const scores = [
+      { id: 'CS-225', score: 0.5, title: 'Data Structures' },
+      { id: 'CS-101', score: 0.55, title: 'Intro to Computing' },
+    ];
+
+    // "data structures" is in the query, so it should get a smaller boost (0.15)
+    const boosted = applyTitleBoost(scores, 'i need help with data structures class');
+
+    // CS-225: 0.5 + 0.15 = 0.65
+    // CS-101: 0.55 (no change)
+    expect(boosted[0].id).toBe('CS-225');
+    expect(boosted[0].score).toBeCloseTo(0.65);
+  });
 });
