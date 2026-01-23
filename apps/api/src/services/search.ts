@@ -435,67 +435,36 @@ export async function postFilterSemanticResults(
 ): Promise<{ id: string; score: number }[]> {
   if (semanticResults.length === 0) return [];
 
-  const needsFilter = !!(filters.gened_code || filters.credits !== undefined ||
-                      filters.difficulty || filters.days || filters.time ||
-                      filters.online !== undefined || filters.status);
+  // Check if we have any active filters
+  const hasActiveFilters = Object.values(filters).some(v => v !== undefined && v !== null && (Array.isArray(v) ? v.length > 0 : true));
+  if (!hasActiveFilters) return semanticResults;
 
-  if (!needsFilter) return semanticResults;
+  const { joins, where, params, groupBy, having, havingParams } = buildFilterClauses(filters);
 
-  // Fetch course data for filtering
+  // If no actual SQL constraints generated, return original
+  if (where.length === 0 && joins.length === 0 && !having) return semanticResults;
+
+  // Fetch valid course IDs from DB by applying all filters to the candidate set
   const courseIds = semanticResults.map(r => r.id);
   const placeholders = courseIds.map(() => '?').join(',');
 
-  const coursesResult = await db.prepare(`
-    SELECT c.id, c.credit_hours, c.avg_gpa, c.difficulty_score,
-           GROUP_CONCAT(DISTINCT cg.category_id) as geneds
+  const sql = `
+    SELECT c.id
     FROM courses c
-    LEFT JOIN course_gened cg ON cg.course_id = c.id
+    ${joins.join(' ')}
     WHERE c.id IN (${placeholders})
-    GROUP BY c.id
-  `).bind(...courseIds).all<{
-    id: string;
-    credit_hours: number | null;
-    avg_gpa: number | null;
-    difficulty_score: number | null;
-    geneds: string | null;
-  }>();
+    ${where.length > 0 ? 'AND ' + where.join(' AND ') : ''}
+    ${groupBy ? 'GROUP BY ' + groupBy : ''}
+    ${having ? 'HAVING ' + having : ''}
+  `;
 
-  const courseMap = new Map(coursesResult.results.map(c => [c.id, c]));
+  // Param order: IN clause ids -> WHERE clause params -> HAVING clause params
+  const finalParams = [...courseIds, ...params, ...(havingParams || [])];
 
-  return semanticResults.filter(r => {
-    const course = courseMap.get(r.id);
-    if (!course) return false;
+  const validIdsResult = await db.prepare(sql).bind(...finalParams).all<{ id: string }>();
+  const validIdSet = new Set(validIdsResult.results.map(r => r.id));
 
-    // GenEd filter
-    if (filters.gened_code) {
-      const geneds = course.geneds?.split(',') || [];
-      if (!geneds.includes(filters.gened_code)) return false;
-    }
-
-    // Credits filter
-    if (filters.credits !== undefined && course.credit_hours !== filters.credits) {
-      return false;
-    }
-
-    // Difficulty filter
-    if (filters.difficulty) {
-      const thresholds = DIFFICULTY_THRESHOLDS[filters.difficulty];
-      if ('min_gpa' in thresholds && (course.avg_gpa || 0) < thresholds.min_gpa) {
-        return false;
-      }
-      if ('max_gpa' in thresholds && (course.avg_gpa || 0) > thresholds.max_gpa) {
-        return false;
-      }
-      if ('min_difficulty' in thresholds && (course.difficulty_score || 0) < thresholds.min_difficulty) {
-        return false;
-      }
-      if ('max_difficulty' in thresholds && (course.difficulty_score || 0) > thresholds.max_difficulty) {
-        return false;
-      }
-    }
-
-    return true;
-  });
+  return semanticResults.filter(r => validIdSet.has(r.id));
 }
 
 export async function hybridSearch(
