@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extract } from '../extractor.js';
+import { extract, extractQuery } from '../extractor.js';
 
 describe('extract', () => {
   describe('phase 1: entities', () => {
@@ -189,6 +189,39 @@ describe('extract', () => {
     it('cleans up whitespace in residual', () => {
       const result = extract('  data   structures  ');
       expect(result.residual).toBe('data structures');
+    });
+  });
+
+  describe('stop-phrase removal', () => {
+    it('removes "gen ed" from residual', () => {
+      const result = extractQuery('easy humanities gen ed');
+      expect(result.residual).not.toContain('gen ed');
+      expect(result.residual.trim()).toBe('');
+    });
+
+    it('removes "sections" from residual', () => {
+      const result = extractQuery('open sections');
+      expect(result.residual).not.toContain('sections');
+    });
+
+    it('removes "courses" from residual', () => {
+      const result = extractQuery('online courses');
+      expect(result.residual).not.toContain('courses');
+    });
+
+    it('removes "classes" from residual', () => {
+      const result = extractQuery('morning classes');
+      expect(result.residual).not.toContain('classes');
+    });
+
+    it('removes "booster" from residual', () => {
+      const result = extractQuery('gpa booster');
+      expect(result.residual).not.toContain('booster');
+    });
+
+    it('removes "only" from residual', () => {
+      const result = extractQuery('online only');
+      expect(result.residual).not.toContain('only');
     });
   });
 });
