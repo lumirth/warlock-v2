@@ -33,6 +33,9 @@ export function extract(text: string): ExtractionResult {
   residual = extractNegations(residual, hints);
   residual = extractCourseCodesAndCrns(residual, hints);
 
+  // Pass 1.5: Term extraction
+  residual = extractTerms(residual, hints);
+
   // Pass 2: Attributes and Aliases (Level, Credits, Days, Time, etc.)
   residual = extractAttributesAndAliases(residual, hints);
 
@@ -112,6 +115,30 @@ function extractNegations(text: string, hints: Hint[]): string {
       residual = maskRange(residual, matches[i].index, matches[i].length);
     }
   }
+  return residual;
+}
+
+function extractTerms(text: string, hints: Hint[]): string {
+  let residual = text;
+  const termRegex = /\b(spring|fall|summer|winter)\s*(20\d{2})\b/gi;
+
+  let match;
+  const matches: { index: number; length: number }[] = [];
+
+  while ((match = termRegex.exec(text)) !== null) {
+    hints.push({
+      type: 'term',
+      value: { term: match[1].toLowerCase(), year: parseInt(match[2]) },
+      metadata: createMetadata('regex', match[0], 0.95),
+    });
+    matches.push({ index: match.index, length: match[0].length });
+  }
+
+  // Mask matches in reverse order
+  for (let i = matches.length - 1; i >= 0; i--) {
+    residual = maskRange(residual, matches[i].index, matches[i].length);
+  }
+
   return residual;
 }
 
