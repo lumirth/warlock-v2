@@ -15,9 +15,9 @@
         { "type": "gened", "value": "HUM" }
       ],
       "filters": { "difficulty": "easy", "gened_code": "HUM" },
-      "residual": "gen ed"
+      "residual": ""
     },
-    "note": "Cue words 'gen ed' remain in residual after extracting 'humanities'"
+    "note": "Cue words like 'gen ed' are now removed from residual"
   },
   {
     "input": "humanities",
@@ -60,9 +60,9 @@
         { "type": "online", "value": true }
       ],
       "filters": { "difficulty": "easy", "online": true },
-      "residual": "gen ed"
+      "residual": ""
     },
-    "note": "gen ed without category name stays as residual"
+    "note": "gen ed is now removed as a stop phrase"
   },
   {
     "input": "400 level CS",
@@ -107,10 +107,11 @@
     "expected": {
       "hints": [
         { "type": "status", "value": "open" },
-        { "type": "level", "value": 100 }
+        { "type": "levelBoost", "value": 100 }
       ],
       "filters": { "status": "open", "level": 100 },
-      "residual": "sections"
-    }
+      "residual": "intro"
+    },
+    "note": "'sections' is removed; 'intro' remains as a levelBoost in residual"
   }
 ]
