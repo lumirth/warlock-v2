@@ -294,23 +294,37 @@ export function buildFilterClauses(
 }
 
 const SPECIAL_TOKENS: Record<string, string> = {
+  'c/c++': 'c cplusplus',
   'c++': 'cplusplus',
   'c#': 'csharp',
   '.net': 'dotnet',
   'f#': 'fsharp',
-  'c/c++': 'c cplusplus',
 };
+
+// Pre-compile regex for performance and correctness
+// Sort by length descending to handle overlapping tokens correctly
+// Use lookarounds to ensure we only match standalone tokens (not inside other words)
+const SPECIAL_TOKEN_REGEX = new RegExp(
+  Object.keys(SPECIAL_TOKENS)
+    .sort((a, b) => b.length - a.length)
+    .map(t => {
+      // Escape special characters
+      const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Apply alphanumeric boundaries to all tokens to ensure we match whole "words"
+      // even if they start/end with symbols (like .net or c++)
+      return `(?<![a-zA-Z0-9])${escaped}(?![a-zA-Z0-9])`;
+    })
+    .join('|'),
+  'gi'
+);
 
 export function sanitizeFtsQuery(query: string): string {
   if (!query) return '';
 
-  let sanitized = query;
-
-  // Handle special tokens BEFORE stripping punctuation
-  for (const [token, replacement] of Object.entries(SPECIAL_TOKENS)) {
-    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    sanitized = sanitized.replace(new RegExp(escaped, 'gi'), replacement);
-  }
+  // Handle special tokens in a single pass with word boundary safety
+  let sanitized = query.replace(SPECIAL_TOKEN_REGEX, (match) => {
+    return SPECIAL_TOKENS[match.toLowerCase()] || match;
+  });
 
   // Replace & with " and " to avoid silent failures or syntax errors
   sanitized = sanitized.replace(/&/g, ' and ');
