@@ -182,7 +182,7 @@ function extractTerms(text: string, hints: Hint[]): string {
       type: 'term',
       value: { term: match[1].toLowerCase(), year: parseInt(match[2]) },
       metadata: createMetadata('regex', match[0], 0.95),
-    });
+    } as any);
     matches.push({ index: match.index, length: match[0].length });
   }
 

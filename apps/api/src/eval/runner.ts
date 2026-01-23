@@ -144,5 +144,6 @@ export async function runEvaluation(baseUrl: string): Promise<void> {
 }
 
 // CLI entry point
+declare const process: any;
 const baseUrl = process.argv[2] || 'http://localhost:8787';
 runEvaluation(baseUrl).catch(console.error);
