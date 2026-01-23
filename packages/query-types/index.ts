@@ -85,13 +85,13 @@ export type HintType =
   | 'days'
   | 'time'
   | 'level'
+  | 'levelBoost'
   | 'credits'
   | 'online'
   | 'status'
   | 'difficulty'
   | 'gened'
   | 'term'
-  | 'semester'
   | 'negation';
 
 export interface NegationValue {

@@ -1,99 +1,54 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { keywordSearch } from '../search.js';
-import { validateSubject } from '../query-resolver.js';
+import { describe, it, expect } from 'vitest';
+import { applyTitleBoost } from '../search.js'; // You'll export this
 
-// Mock query-resolver to control validateSubject behavior
-vi.mock('../query-resolver.js', async (importOriginal) => {
-  const actual = await importOriginal() as any;
-  return {
-    ...actual,
-    validateSubject: vi.fn(),
-  };
-});
+describe('exact-title boost', () => {
+  it('boosts exact title matches significantly', () => {
+    const scores = [
+      { id: 'CS-225', score: 0.5, title: 'Data Structures' },
+      { id: 'CS-374', score: 0.6, title: 'Introduction to Algorithms' },
+    ];
 
-describe('keywordSearch ranking and expansion', () => {
-  const mockDb = {
-    prepare: vi.fn(),
-  };
+    const boosted = applyTitleBoost(scores, 'data structures');
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+    // CS-225 should now be ranked higher due to title match
+    // 0.5 + 0.5 = 1.0 > 0.6
+    expect(boosted[0].id).toBe('CS-225');
+    expect(boosted[0].score).toBeGreaterThan(0.9);
   });
 
-  it('expands "Computer Science" to include CS subject code', async () => {
-    // Mock validateSubject to return 'CS' for 'Computer Science'
-    vi.mocked(validateSubject).mockResolvedValue('CS');
+  it('boosts partial title matches moderately', () => {
+    const scores = [
+      { id: 'CS-440', score: 0.5, title: 'Artificial Intelligence' },
+      { id: 'CS-101', score: 0.55, title: 'Intro to Computing' },
+    ];
 
-    const mockStmt = {
-      bind: vi.fn().mockReturnThis(),
-      all: vi.fn().mockResolvedValue({ results: [] }),
-    };
-    mockDb.prepare.mockReturnValue(mockStmt);
+    const boosted = applyTitleBoost(scores, 'intelligence');
 
-    const plan = {
-      filters: {},
-      keywordQuery: 'Computer Science',
-      semanticQuery: 'Computer Science',
-    };
-
-    await keywordSearch(mockDb as any, plan as any);
-
-    // Verify validateSubject was called
-    expect(validateSubject).toHaveBeenCalledWith(mockDb, 'Computer Science');
-
-    // Verify the SQL uses FTS expansion
-    expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('courses_fts MATCH ?'));
-
-    // Verify parameters: Expanded query
-    expect(mockStmt.bind).toHaveBeenCalledWith(
-      expect.stringContaining('"Computer Science" OR CS'),
-      expect.any(Number) // limit
-    );
+    // CS-440 should get a boost (0.2) -> 0.7 > 0.55
+    expect(boosted[0].id).toBe('CS-440');
+    expect(boosted[0].score).toBeCloseTo(0.7);
   });
 
-  it('uses weighted bm25 function in the SQL', async () => {
-    vi.mocked(validateSubject).mockResolvedValue(null);
-
-    const mockStmt = {
-      bind: vi.fn().mockReturnThis(),
-      all: vi.fn().mockResolvedValue({ results: [] }),
-    };
-    mockDb.prepare.mockReturnValue(mockStmt);
-
-    const plan = {
-      filters: {},
-      keywordQuery: 'machine learning',
-      semanticQuery: 'machine learning',
-    };
-
-    await keywordSearch(mockDb as any, plan as any);
-
-    // Verify the SQL contains the weighted bm25 call
-    // bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0)
-    expect(mockDb.prepare).toHaveBeenCalledWith(expect.stringContaining('bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0)'));
+  it('does nothing if no match', () => {
+    const scores = [
+      { id: 'CS-225', score: 0.5, title: 'Data Structures' },
+    ];
+    const boosted = applyTitleBoost(scores, 'biology');
+    expect(boosted[0].score).toBe(0.5);
   });
 
-  it('sanitizes query by replacing & with "and"', async () => {
-    vi.mocked(validateSubject).mockResolvedValue(null);
+  it('boosts when query contains title (long natural language query)', () => {
+    const scores = [
+      { id: 'CS-225', score: 0.5, title: 'Data Structures' },
+      { id: 'CS-101', score: 0.55, title: 'Intro to Computing' },
+    ];
 
-    const mockStmt = {
-      bind: vi.fn().mockReturnThis(),
-      all: vi.fn().mockResolvedValue({ results: [] }),
-    };
-    mockDb.prepare.mockReturnValue(mockStmt);
+    // "data structures" is in the query, so it should get a smaller boost (0.15)
+    const boosted = applyTitleBoost(scores, 'i need help with data structures class');
 
-    const plan = {
-      filters: {},
-      keywordQuery: 'phil of law & state',
-      semanticQuery: 'phil of law & state',
-    };
-
-    await keywordSearch(mockDb as any, plan as any);
-
-    // Verify sanitization happened before binding
-    // The query passed to bind should have & replaced
-    const boundQuery = mockStmt.bind.mock.calls[0][0];
-    expect(boundQuery).toContain('phil of law and state');
-    expect(boundQuery).not.toContain('&');
+    // CS-225: 0.5 + 0.15 = 0.65
+    // CS-101: 0.55 (no change)
+    expect(boosted[0].id).toBe('CS-225');
+    expect(boosted[0].score).toBeCloseTo(0.65);
   });
 });

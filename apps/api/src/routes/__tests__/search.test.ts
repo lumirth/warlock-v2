@@ -52,7 +52,10 @@ describe('Search Routes', () => {
       DB: mockDB,
       VECTORIZE: mockVectorize,
       AI: mockAI
-    });
+    }, {
+      waitUntil: vi.fn(),
+      passThroughOnException: vi.fn()
+    } as any);
 
     if (res.status !== 200) {
       console.error(await res.text());
@@ -62,6 +65,6 @@ describe('Search Routes', () => {
     const data = await res.json() as any;
     expect(data.results).toBeDefined();
     expect(data.results[0].id).toBe('CS-225');
-    expect(searchSpy).toHaveBeenCalledWith('CS 225', 20, {});
+    expect(searchSpy).toHaveBeenCalledWith('CS 225', 20, {}, expect.any(Function));
   });
 });

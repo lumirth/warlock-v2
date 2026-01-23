@@ -7,15 +7,36 @@ export interface ExtractionResult {
   residual: string;
 }
 
-const LEVEL_KEYWORDS: Record<string, number> = {
-  'intro': 100,
-  'introductory': 100,
-  'beginner': 100,
+const LEVEL_KEYWORDS_HARD: Record<string, number> = {
   'advanced': 400,
   'upper': 400,
   'graduate': 500,
   'grad': 500,
 };
+
+const LEVEL_KEYWORDS_SOFT: Record<string, number> = {
+  'intro': 100,
+  'introductory': 100,
+  'beginner': 100,
+};
+
+// Stop-phrase removal - high-frequency generic tokens
+const STOP_PHRASES = [
+  'gen ed', 'gened', 'gen-ed',
+  'section', 'sections',
+  'class', 'classes',
+  'course', 'courses',
+  'only', 'booster'
+];
+
+const STOP_PHRASES_REGEX = new RegExp(`\\b(${STOP_PHRASES.join('|')})\\b`, 'gi');
+
+function removeStopPhrases(text: string): string {
+  return text
+    .replace(STOP_PHRASES_REGEX, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 // Cache the registry for performance
 const ALIAS_REGISTRY = createDefaultRegistry();
@@ -33,7 +54,7 @@ export function extract(text: string): ExtractionResult {
   residual = extractNegations(residual, hints);
   residual = extractCourseCodesAndCrns(residual, hints);
 
-  // Pass 1.5: Term extraction
+  // Pass 1.5: Term extraction (Spring 2026, etc.)
   residual = extractTerms(residual, hints);
 
   // Pass 2: Attributes and Aliases (Level, Credits, Days, Time, etc.)
@@ -55,24 +76,6 @@ export function extract(text: string): ExtractionResult {
   residual = removeStopPhrases(residual);
 
   return { hints, residual };
-}
-
-// Stop-phrase removal - high-frequency generic tokens
-const STOP_PHRASES = [
-  'gen ed', 'gened', 'gen-ed',
-  'section', 'sections',
-  'class', 'classes',
-  'course', 'courses',
-  'only', 'booster'
-];
-
-function removeStopPhrases(text: string): string {
-  let result = text;
-  for (const phrase of STOP_PHRASES) {
-    const regex = new RegExp(`\\b${phrase}\\b`, 'gi');
-    result = result.replace(regex, ' ');
-  }
-  return result.replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -115,30 +118,6 @@ function extractNegations(text: string, hints: Hint[]): string {
       residual = maskRange(residual, matches[i].index, matches[i].length);
     }
   }
-  return residual;
-}
-
-function extractTerms(text: string, hints: Hint[]): string {
-  let residual = text;
-  const termRegex = /\b(spring|fall|summer|winter)\s*(20\d{2})\b/gi;
-
-  let match;
-  const matches: { index: number; length: number }[] = [];
-
-  while ((match = termRegex.exec(text)) !== null) {
-    hints.push({
-      type: 'term',
-      value: { term: match[1].toLowerCase(), year: parseInt(match[2]) },
-      metadata: createMetadata('regex', match[0], 0.95),
-    });
-    matches.push({ index: match.index, length: match[0].length });
-  }
-
-  // Mask matches in reverse order
-  for (let i = matches.length - 1; i >= 0; i--) {
-    residual = maskRange(residual, matches[i].index, matches[i].length);
-  }
-
   return residual;
 }
 
@@ -194,6 +173,30 @@ function extractCourseCodesAndCrns(text: string, hints: Hint[]): string {
   return residual;
 }
 
+function extractTerms(text: string, hints: Hint[]): string {
+  let residual = text;
+  const termRegex = /\b(spring|fall|summer|winter)\s*(20\d{2})\b/gi;
+
+  let match;
+  const matches: { index: number; length: number }[] = [];
+
+  while ((match = termRegex.exec(text)) !== null) {
+    hints.push({
+      type: 'term',
+      value: { term: match[1].toLowerCase(), year: parseInt(match[2]) },
+      metadata: createMetadata('regex', match[0], 0.95),
+    } as any);
+    matches.push({ index: match.index, length: match[0].length });
+  }
+
+  // Mask matches in reverse order
+  for (let i = matches.length - 1; i >= 0; i--) {
+    residual = maskRange(residual, matches[i].index, matches[i].length);
+  }
+
+  return residual;
+}
+
 function extractAttributesAndAliases(text: string, hints: Hint[]): string {
   let residual = text;
 
@@ -228,8 +231,8 @@ function extractAttributesAndAliases(text: string, hints: Hint[]): string {
     residual = maskRange(residual, levelMatches[i].index, levelMatches[i].length);
   }
 
-  // 3. Level keywords
-  for (const [keyword, level] of Object.entries(LEVEL_KEYWORDS)) {
+  // 3. Level keywords (Hard filters)
+  for (const [keyword, level] of Object.entries(LEVEL_KEYWORDS_HARD)) {
     const keywordRegex = new RegExp(`\\b${keyword}\\b`, 'gi');
     let kMatch;
     const kMatches: { index: number; length: number }[] = [];
@@ -246,7 +249,22 @@ function extractAttributesAndAliases(text: string, hints: Hint[]): string {
     }
   }
 
-  // 4. Aliases
+  // 4. Soft level keywords (Boost only)
+  for (const [keyword, level] of Object.entries(LEVEL_KEYWORDS_SOFT)) {
+    const keywordRegex = new RegExp(`\\b${keyword}\\b`, 'gi');
+    let kMatch;
+    // Don't mask these - leave them in residual for semantic matching too
+    // Just add the hint
+    while ((kMatch = keywordRegex.exec(residual)) !== null) {
+      hints.push({
+        type: 'levelBoost',
+        value: level,
+        metadata: createMetadata('regex', kMatch[0], 0.5),
+      });
+    }
+  }
+
+  // 5. Aliases
   residual = extractAliases(residual, hints);
 
   return residual;

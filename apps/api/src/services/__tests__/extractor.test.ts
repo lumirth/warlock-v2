@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extract, extractQuery } from '../extractor.js';
+import { extract } from '../extractor.js';
 
 describe('extract', () => {
   describe('phase 1: entities', () => {
@@ -93,6 +93,42 @@ describe('extract', () => {
     it('extracts difficulty "easy"', () => {
       const result = extract('easy class');
       expect(result.hints).toContainEqual(expect.objectContaining({ type: 'difficulty', value: 'easy' }));
+    });
+
+    describe('intro as boost', () => {
+      it('extracts "intro" as levelBoost, not level', () => {
+        const result = extract('intro to compilers');
+
+        // Should NOT have a level hint
+        const levelHints = result.hints.filter(h => h.type === 'level');
+        expect(levelHints).toHaveLength(0);
+
+        // Should have a levelBoost hint
+        const boostHints = result.hints.filter(h => h.type === 'levelBoost');
+        expect(boostHints).toHaveLength(1);
+        expect(boostHints[0].value).toBe(100);
+
+        // "intro" should REMAIN in residual
+        expect(result.residual).toContain('intro');
+      });
+
+      it('explicit level overrides intro boost', () => {
+        const result = extract('intro to compilers 400 level');
+
+        // Should have level=400 from explicit "400 level"
+        const levelHints = result.hints.filter(h => h.type === 'level');
+        expect(levelHints).toHaveLength(1);
+        expect(levelHints[0].value).toBe(400);
+      });
+
+      it('extracts "graduate" as level and masks it', () => {
+        const result = extract('graduate algorithms');
+        // Should have level=500
+        expect(result.hints).toContainEqual(expect.objectContaining({ type: 'level', value: 500 }));
+        // "graduate" should be REMOVED from residual
+        expect(result.residual).not.toContain('graduate');
+        expect(result.residual).toContain('algorithms');
+      });
     });
   });
 
@@ -192,9 +228,50 @@ describe('extract', () => {
     });
   });
 
+  describe('stop-phrase removal', () => {
+    it('removes "gen ed" from residual', () => {
+      const result = extract('easy humanities gen ed');
+      expect(result.residual).not.toContain('gen ed');
+      expect(result.residual.trim()).toBe('');
+    });
+
+    it('removes "sections" from residual', () => {
+      const result = extract('open sections');
+      expect(result.residual).not.toContain('sections');
+    });
+
+    it('removes "courses" from residual', () => {
+      const result = extract('online courses');
+      expect(result.residual).not.toContain('courses');
+    });
+
+    it('removes "classes" from residual', () => {
+      const result = extract('morning classes');
+      expect(result.residual).not.toContain('classes');
+    });
+
+    it('removes "booster" from residual', () => {
+      const result = extract('gpa booster');
+      expect(result.residual).not.toContain('booster');
+    });
+
+    it('removes "only" from residual', () => {
+      const result = extract('online only');
+      expect(result.residual).not.toContain('only');
+    });
+
+    it('removes stop words even from valid titles (intended side effect)', () => {
+      // "Class" is a stop word, so "World Class Manufacturing" becomes "World Manufacturing"
+      const result = extract('World Class Manufacturing');
+      expect(result.residual).not.toContain('Class');
+      expect(result.residual).toContain('World');
+      expect(result.residual).toContain('Manufacturing');
+    });
+  });
+
   describe('term extraction', () => {
     it('extracts "spring 2026"', () => {
-      const result = extractQuery('CS spring 2026');
+      const result = extract('CS spring 2026');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'term',
@@ -204,7 +281,7 @@ describe('extract', () => {
     });
 
     it('extracts "fall 2025"', () => {
-      const result = extractQuery('fall 2025 MATH');
+      const result = extract('fall 2025 MATH');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'term',
@@ -214,7 +291,7 @@ describe('extract', () => {
     });
 
     it('extracts "summer 2026"', () => {
-      const result = extractQuery('summer 2026 online');
+      const result = extract('summer 2026 online');
       expect(result.hints).toContainEqual(
         expect.objectContaining({
           type: 'term',
@@ -224,42 +301,9 @@ describe('extract', () => {
     });
 
     it('removes term from residual', () => {
-      const result = extractQuery('CS spring 2026');
+      const result = extract('CS spring 2026');
       expect(result.residual).not.toContain('spring');
       expect(result.residual).not.toContain('2026');
-    });
-  });
-
-  describe('stop-phrase removal', () => {
-    it('removes "gen ed" from residual', () => {
-      const result = extractQuery('easy humanities gen ed');
-      expect(result.residual).not.toContain('gen ed');
-      expect(result.residual.trim()).toBe('');
-    });
-
-    it('removes "sections" from residual', () => {
-      const result = extractQuery('open sections');
-      expect(result.residual).not.toContain('sections');
-    });
-
-    it('removes "courses" from residual', () => {
-      const result = extractQuery('online courses');
-      expect(result.residual).not.toContain('courses');
-    });
-
-    it('removes "classes" from residual', () => {
-      const result = extractQuery('morning classes');
-      expect(result.residual).not.toContain('classes');
-    });
-
-    it('removes "booster" from residual', () => {
-      const result = extractQuery('gpa booster');
-      expect(result.residual).not.toContain('booster');
-    });
-
-    it('removes "only" from residual', () => {
-      const result = extractQuery('online only');
-      expect(result.residual).not.toContain('only');
     });
   });
 });

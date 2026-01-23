@@ -66,6 +66,31 @@ function rrfScore(rank: number): number {
   return 1 / (RRF_K + rank);
 }
 
+export function applyTitleBoost(
+  scores: { id: string; score: number; title?: string }[],
+  query: string
+): { id: string; score: number; title?: string }[] {
+  const queryLower = query.toLowerCase().trim();
+  if (!queryLower) return scores;
+
+  return scores.map(item => {
+    if (!item.title) return item;
+
+    const titleLower = item.title.toLowerCase();
+    let boost = 0;
+
+    if (titleLower === queryLower) {
+      boost = 0.5;  // Exact match
+    } else if (titleLower.includes(queryLower)) {
+      boost = 0.2;  // Query contained in title
+    } else if (queryLower.includes(titleLower)) {
+      boost = 0.15;  // Title contained in query
+    }
+
+    return { ...item, score: item.score + boost };
+  }).sort((a, b) => b.score - a.score);
+}
+
 export interface FilterClauseResult {
   joins: string[];
   where: string[];
@@ -268,11 +293,41 @@ export function buildFilterClauses(
   };
 }
 
+const SPECIAL_TOKENS: Record<string, string> = {
+  'c/c++': 'c cplusplus',
+  'c++': 'cplusplus',
+  'c#': 'csharp',
+  '.net': 'dotnet',
+  'f#': 'fsharp',
+};
+
+// Pre-compile regex for performance and correctness
+// Sort by length descending to handle overlapping tokens correctly
+// Use lookarounds to ensure we only match standalone tokens (not inside other words)
+const SPECIAL_TOKEN_REGEX = new RegExp(
+  Object.keys(SPECIAL_TOKENS)
+    .sort((a, b) => b.length - a.length)
+    .map(t => {
+      // Escape special characters
+      const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Apply alphanumeric boundaries to all tokens to ensure we match whole "words"
+      // even if they start/end with symbols (like .net or c++)
+      return `(?<![a-zA-Z0-9])${escaped}(?![a-zA-Z0-9])`;
+    })
+    .join('|'),
+  'gi'
+);
+
 export function sanitizeFtsQuery(query: string): string {
   if (!query) return '';
 
+  // Handle special tokens in a single pass with word boundary safety
+  let sanitized = query.replace(SPECIAL_TOKEN_REGEX, (match) => {
+    return SPECIAL_TOKENS[match.toLowerCase()] || match;
+  });
+
   // Replace & with " and " to avoid silent failures or syntax errors
-  let sanitized = query.replace(/&/g, ' and ');
+  sanitized = sanitized.replace(/&/g, ' and ');
 
   // Count double quotes to check for balance
   const quoteCount = (sanitized.match(/"/g) || []).length;
@@ -403,7 +458,9 @@ export async function sectionKeywordSearch(
     ? 'WHERE ' + where.join(' AND ')
     : '';
 
-  const joinClause = joins.join(' ');
+  // Filter out duplicate 'JOIN sections s' since we already join it manually below
+  const uniqueJoins = joins.filter(j => !j.includes('JOIN sections s '));
+  const joinClause = uniqueJoins.join(' ');
 
   const sql = `
     SELECT DISTINCT c.id, bm25(sections_fts) as fts_score
@@ -421,6 +478,50 @@ export async function sectionKeywordSearch(
   const result = await db.prepare(sql).bind(...params, escapedQuery, limit).all<{ id: string; fts_score: number }>();
 
   return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+}
+
+/**
+ * Enforces hard constraints on semantic search results.
+ * Vectorize is great for meaning but bad at hard filters (credits, geneds).
+ * This function fetches metadata for semantic candidates and prunes those that violate filters.
+ */
+export async function postFilterSemanticResults(
+  db: D1Database,
+  semanticResults: { id: string; score: number }[],
+  filters: SearchFilters
+): Promise<{ id: string; score: number }[]> {
+  if (semanticResults.length === 0) return [];
+
+  // Check if we have any active filters
+  const hasActiveFilters = Object.values(filters).some(v => v !== undefined && v !== null && (Array.isArray(v) ? v.length > 0 : true));
+  if (!hasActiveFilters) return semanticResults;
+
+  const { joins, where, params, groupBy, having, havingParams } = buildFilterClauses(filters);
+
+  // If no actual SQL constraints generated, return original
+  if (where.length === 0 && joins.length === 0 && !having) return semanticResults;
+
+  // Fetch valid course IDs from DB by applying all filters to the candidate set
+  const courseIds = semanticResults.map(r => r.id);
+  const placeholders = courseIds.map(() => '?').join(',');
+
+  const sql = `
+    SELECT c.id
+    FROM courses c
+    ${joins.join(' ')}
+    WHERE c.id IN (${placeholders})
+    ${where.length > 0 ? 'AND ' + where.join(' AND ') : ''}
+    ${groupBy ? 'GROUP BY ' + groupBy : ''}
+    ${having ? 'HAVING ' + having : ''}
+  `;
+
+  // Param order: IN clause ids -> WHERE clause params -> HAVING clause params
+  const finalParams = [...courseIds, ...params, ...(havingParams || [])];
+
+  const validIdsResult = await db.prepare(sql).bind(...finalParams).all<{ id: string }>();
+  const validIdSet = new Set(validIdsResult.results.map(r => r.id));
+
+  return semanticResults.filter(r => validIdSet.has(r.id));
 }
 
 export async function hybridSearch(
@@ -447,11 +548,21 @@ export async function hybridSearch(
   const runSemantic = hasSemanticQuery && !isNavigational;
 
   // Run all searches in parallel, skipping empty queries
-  const [semanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
-    runSemantic ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50) : Promise.resolve([]),
+  const [rawSemanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
+    runSemantic
+      ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50).catch(err => {
+          console.warn('Semantic search failed, ignoring:', err);
+          return [];
+        })
+      : Promise.resolve([]),
     keywordSearch(db, plan, 50),
     hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, 50) : Promise.resolve([])
   ]);
+
+  // Post-filter semantic results for hard constraints
+  const semanticResults = runSemantic
+    ? await postFilterSemanticResults(db, rawSemanticResults, plan.filters)
+    : [];
 
   // Build rank maps
   const semanticRanks = new Map<string, number>();
@@ -519,8 +630,16 @@ export async function hybridSearch(
   const courseMap = new Map<string, Course>();
   coursesResult.results.forEach(c => courseMap.set(c.id, c));
 
+  // Apply title boost for exact/partial matches
+  const resultsWithTitles = topIds.map(s => ({
+    ...s,
+    title: courseMap.get(s.id)?.title
+  }));
+
+  const boostedResults = applyTitleBoost(resultsWithTitles, plan.keywordQuery || '');
+
   // Return results with scores
-  return topIds.map(s => ({
+  return boostedResults.map(s => ({
     course: courseMap.get(s.id)!,
     score: s.score,
     semanticRank: s.semanticRank,

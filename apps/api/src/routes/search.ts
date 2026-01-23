@@ -44,7 +44,7 @@ searchRoutes.get('/api/search', async (c) => {
 
   try {
     const pipeline = new SearchPipeline(c.env.DB, c.env.VECTORIZE, c.env.AI);
-    const result = await pipeline.search(query, limit, overrides);
+    const result = await pipeline.search(query, limit, overrides, c.executionCtx.waitUntil.bind(c.executionCtx));
 
     return c.json({
       results: result.results.map(r => ({

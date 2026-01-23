@@ -121,4 +121,41 @@ describe('SearchPipeline', () => {
     // Result should be the best ones found
     expect(result.results.length).toBe(2);
   });
+
+  it('Tier 4: should track relaxed constraints in Tier 4', async () => {
+    const query = '400 level CS courses with Fagen';
+    const mockExtracted = {
+      hints: [
+        { type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } },
+        { type: 'level', value: 400, metadata: { source: 'regex', confidence: 0.9, raw: '400 level' } },
+        { type: 'instructor', value: 'Fagen', metadata: { source: 'regex', confidence: 0.9, raw: 'Fagen' } }
+      ],
+      residual: ''
+    };
+    const mockPlan = {
+      filters: { subject: 'CS', level: 400, instructor_ids: ['fagen-id'] },
+      semanticQuery: '',
+      keywordQuery: ''
+    };
+
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted as any);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
+    vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
+
+    // Tier 2: 0 results
+    // Tier 3: skip (no topics)
+    // Tier 4.1: remove level -> 0 results
+    // Tier 4.2: remove instructor_ids -> 5 results
+    vi.mocked(search.hybridSearchWithTermRanking)
+      .mockResolvedValueOnce([]) // Tier 2
+      .mockResolvedValueOnce([]) // Tier 4.1 (remove level)
+      .mockResolvedValueOnce(Array(5).fill(null).map((_, i) => ({ course: mockCourse({ id: `CS-${i}` }), score: 0.7 }))); // Tier 4.2 (remove instructor_ids)
+
+    const result = await pipeline.search(query);
+
+    expect(result.meta.fallback).toBeDefined();
+    expect(result.meta.fallback.tierReached).toBe(4.2);
+    expect(result.meta.fallback.constraintsRelaxed).toContain('level');
+    expect(result.meta.fallback.constraintsRelaxed).toContain('instructor_ids');
+  });
 });
