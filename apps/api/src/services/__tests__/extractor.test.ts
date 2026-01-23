@@ -191,4 +191,37 @@ describe('extract', () => {
       expect(result.residual).toBe('data structures');
     });
   });
+
+  describe('stop-phrase removal', () => {
+    it('removes "gen ed" from residual', () => {
+      const result = extract('easy humanities gen ed');
+      expect(result.residual).not.toContain('gen ed');
+      expect(result.residual.trim()).toBe('');
+    });
+
+    it('removes "sections" from residual', () => {
+      const result = extract('open sections');
+      expect(result.residual).not.toContain('sections');
+    });
+
+    it('removes "courses" from residual', () => {
+      const result = extract('online courses');
+      expect(result.residual).not.toContain('courses');
+    });
+
+    it('removes "classes" from residual', () => {
+      const result = extract('morning classes');
+      expect(result.residual).not.toContain('classes');
+    });
+
+    it('removes "booster" from residual', () => {
+      const result = extract('gpa booster');
+      expect(result.residual).not.toContain('booster');
+    });
+
+    it('removes "only" from residual', () => {
+      const result = extract('online only');
+      expect(result.residual).not.toContain('only');
+    });
+  });
 });

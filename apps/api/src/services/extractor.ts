@@ -17,6 +17,24 @@ const LEVEL_KEYWORDS: Record<string, number> = {
   'grad': 500,
 };
 
+// Stop-phrase removal - high-frequency generic tokens
+const STOP_PHRASES = [
+  'gen ed', 'gened', 'gen-ed',
+  'section', 'sections',
+  'class', 'classes',
+  'course', 'courses',
+  'only', 'booster'
+];
+
+function removeStopPhrases(text: string): string {
+  let result = text;
+  for (const phrase of STOP_PHRASES) {
+    const regex = new RegExp(`\\b${phrase}\\b`, 'gi');
+    result = result.replace(regex, ' ');
+  }
+  return result.replace(/\s+/g, ' ').trim();
+}
+
 // Cache the registry for performance
 const ALIAS_REGISTRY = createDefaultRegistry();
 
@@ -47,6 +65,9 @@ export function extract(text: string): ExtractionResult {
 
   // Clean up residual
   residual = residual.replace(/\s+/g, ' ').trim();
+
+  // Remove stop-phrases
+  residual = removeStopPhrases(residual);
 
   return { hints, residual };
 }
