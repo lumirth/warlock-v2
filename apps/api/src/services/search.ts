@@ -458,7 +458,9 @@ export async function sectionKeywordSearch(
     ? 'WHERE ' + where.join(' AND ')
     : '';
 
-  const joinClause = joins.join(' ');
+  // Filter out duplicate 'JOIN sections s' since we already join it manually below
+  const uniqueJoins = joins.filter(j => !j.includes('JOIN sections s '));
+  const joinClause = uniqueJoins.join(' ');
 
   const sql = `
     SELECT DISTINCT c.id, bm25(sections_fts) as fts_score
@@ -547,7 +549,12 @@ export async function hybridSearch(
 
   // Run all searches in parallel, skipping empty queries
   const [rawSemanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
-    runSemantic ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50) : Promise.resolve([]),
+    runSemantic
+      ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50).catch(err => {
+          console.warn('Semantic search failed, ignoring:', err);
+          return [];
+        })
+      : Promise.resolve([]),
     keywordSearch(db, plan, 50),
     hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, 50) : Promise.resolve([])
   ]);

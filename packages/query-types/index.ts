@@ -91,7 +91,7 @@ export type HintType =
   | 'status'
   | 'difficulty'
   | 'gened'
-  | 'semester'
+  | 'term'
   | 'negation';
 
 export interface NegationValue {

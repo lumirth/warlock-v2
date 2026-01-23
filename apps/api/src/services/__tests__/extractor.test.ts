@@ -107,6 +107,9 @@ describe('extract', () => {
         const boostHints = result.hints.filter(h => h.type === 'levelBoost');
         expect(boostHints).toHaveLength(1);
         expect(boostHints[0].value).toBe(100);
+
+        // "intro" should REMAIN in residual
+        expect(result.residual).toContain('intro');
       });
 
       it('explicit level overrides intro boost', () => {
@@ -116,6 +119,15 @@ describe('extract', () => {
         const levelHints = result.hints.filter(h => h.type === 'level');
         expect(levelHints).toHaveLength(1);
         expect(levelHints[0].value).toBe(400);
+      });
+
+      it('extracts "graduate" as level and masks it', () => {
+        const result = extract('graduate algorithms');
+        // Should have level=500
+        expect(result.hints).toContainEqual(expect.objectContaining({ type: 'level', value: 500 }));
+        // "graduate" should be REMOVED from residual
+        expect(result.residual).not.toContain('graduate');
+        expect(result.residual).toContain('algorithms');
       });
     });
   });

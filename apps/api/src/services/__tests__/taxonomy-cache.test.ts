@@ -119,4 +119,115 @@ describe('TaxonomyCache', () => {
       expect(cache.resolveSubject('xyz')).toBeNull();
     });
   });
+
+  describe('TaxonomyCache.resolveGened', () => {
+    it('resolves gened from alias', async () => {
+      const mockSubjects = { results: [] };
+      const mockSubjectAliases = { results: [] };
+      const mockGenedAliases = { results: [{ gened_code: 'HUM', alias: 'humanities' }] };
+      const mockTopicAliases = { results: [] };
+
+      mockDb.prepare.mockReturnValue({
+        all: vi.fn()
+          .mockResolvedValueOnce(mockSubjects)
+          .mockResolvedValueOnce(mockSubjectAliases)
+          .mockResolvedValueOnce(mockGenedAliases)
+          .mockResolvedValueOnce(mockTopicAliases)
+      });
+
+      const cache = await loadTaxonomyCache(mockDb as any);
+      expect(cache.resolveGened('humanities')).toBe('HUM');
+      expect(cache.resolveGened('HUM')).toBe('HUM');
+    });
+  });
+
+  describe('TaxonomyCache.expandTopic', () => {
+    it('expands topic abbreviation', async () => {
+      const mockSubjects = { results: [] };
+      const mockSubjectAliases = { results: [] };
+      const mockGenedAliases = { results: [] };
+      const mockTopicAliases = { results: [{ abbreviation: 'ml', expansion: 'machine learning' }] };
+
+      mockDb.prepare.mockReturnValue({
+        all: vi.fn()
+          .mockResolvedValueOnce(mockSubjects)
+          .mockResolvedValueOnce(mockSubjectAliases)
+          .mockResolvedValueOnce(mockGenedAliases)
+          .mockResolvedValueOnce(mockTopicAliases)
+      });
+
+      const cache = await loadTaxonomyCache(mockDb as any);
+      expect(cache.expandTopic('ml')).toBe('machine learning');
+      expect(cache.expandTopic('ML')).toBe('machine learning');
+    });
+  });
+
+  describe('TaxonomyCache.findSubjectInText', () => {
+    let cache: TaxonomyCache;
+
+    beforeEach(async () => {
+      const mockSubjects = { results: [
+        { id: 'CS', name: 'Computer Science' },
+        { id: 'MATH', name: 'Mathematics' }
+      ]};
+      const mockSubjectAliases = { results: [
+        { subject_id: 'CS', alias: 'computer science' },
+        { subject_id: 'CS', alias: 'comp sci' }
+      ]};
+      const mockGenedAliases = { results: [] };
+      const mockTopicAliases = { results: [] };
+
+      mockDb.prepare.mockReturnValue({
+        all: vi.fn()
+          .mockResolvedValueOnce(mockSubjects)
+          .mockResolvedValueOnce(mockSubjectAliases)
+          .mockResolvedValueOnce(mockGenedAliases)
+          .mockResolvedValueOnce(mockTopicAliases)
+      });
+
+      cache = await loadTaxonomyCache(mockDb as any);
+    });
+
+    it('finds longest matching alias first', () => {
+      // "Computer Science" (length 16) vs "CS" (length 2)
+      // Both map to CS. The input contains the full name.
+      // Prioritize longest match to avoid partial matches if they overlap (though here they don't exactly overlap in a conflicting way, but priority logic is key)
+
+      const result = cache.findSubjectInText('Intro to Computer Science 101');
+      expect(result).not.toBeNull();
+      expect(result?.code).toBe('CS');
+      expect(result?.match.toLowerCase()).toBe('computer science');
+    });
+
+    it('matches whole words only', () => {
+      // "MATH" shouldn't match "Mathematics" if we only look for "MATH"
+      const result = cache.findSubjectInText('Mathematics 200');
+      // MATH is an alias for MATH (id). Mathematics is the name.
+      // "Mathematics" (name) is also added as an alias in loadTaxonomyCache.
+      // So "Mathematics" should match "Mathematics".
+
+      const matchMathName = cache.findSubjectInText('Mathematics 200');
+      expect(matchMathName?.code).toBe('MATH');
+      expect(matchMathName?.match.toLowerCase()).toBe('mathematics');
+
+      // But "MATH" should NOT match "Mathemagics" if that were a word, or part of a word.
+      // Let's try a case where a short alias might match inside a word.
+      // CS matches inside "Physics"? No, 'cs' is in Physics.
+
+      const resultPhysics = cache.findSubjectInText('Physics 100');
+      // CS should not be found in Physics despite 'cs' being at the end
+      expect(resultPhysics).toBeNull();
+    });
+
+    it('matches short code when standing alone', () => {
+      const result = cache.findSubjectInText('CS 225');
+      expect(result?.code).toBe('CS');
+      expect(result?.match).toMatch(/CS/i);
+    });
+
+    it('returns null when no subject found', () => {
+      const result = cache.findSubjectInText('Hello World');
+      expect(result).toBeNull();
+    });
+  });
 });
