@@ -26,13 +26,13 @@ const STOP_PHRASES = [
   'only', 'booster'
 ];
 
+const STOP_PHRASES_REGEX = new RegExp(`\\b(${STOP_PHRASES.join('|')})\\b`, 'gi');
+
 function removeStopPhrases(text: string): string {
-  let result = text;
-  for (const phrase of STOP_PHRASES) {
-    const regex = new RegExp(`\\b${phrase}\\b`, 'gi');
-    result = result.replace(regex, ' ');
-  }
-  return result.replace(/\s+/g, ' ').trim();
+  return text
+    .replace(STOP_PHRASES_REGEX, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // Cache the registry for performance

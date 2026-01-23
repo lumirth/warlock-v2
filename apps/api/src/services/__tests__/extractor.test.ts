@@ -223,5 +223,13 @@ describe('extract', () => {
       const result = extract('online only');
       expect(result.residual).not.toContain('only');
     });
+
+    it('removes stop words even from valid titles (intended side effect)', () => {
+      // "Class" is a stop word, so "World Class Manufacturing" becomes "World Manufacturing"
+      const result = extract('World Class Manufacturing');
+      expect(result.residual).not.toContain('Class');
+      expect(result.residual).toContain('World');
+      expect(result.residual).toContain('Manufacturing');
+    });
   });
 });
