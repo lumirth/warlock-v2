@@ -66,6 +66,31 @@ function rrfScore(rank: number): number {
   return 1 / (RRF_K + rank);
 }
 
+export function applyTitleBoost(
+  scores: { id: string; score: number; title?: string }[],
+  query: string
+): { id: string; score: number; title?: string }[] {
+  const queryLower = query.toLowerCase().trim();
+  if (!queryLower) return scores;
+
+  return scores.map(item => {
+    if (!item.title) return item;
+
+    const titleLower = item.title.toLowerCase();
+    let boost = 0;
+
+    if (titleLower === queryLower) {
+      boost = 0.5;  // Exact match
+    } else if (titleLower.includes(queryLower)) {
+      boost = 0.2;  // Query contained in title
+    } else if (queryLower.includes(titleLower)) {
+      boost = 0.15;  // Title contained in query
+    }
+
+    return { ...item, score: item.score + boost };
+  }).sort((a, b) => b.score - a.score);
+}
+
 export interface FilterClauseResult {
   joins: string[];
   where: string[];
@@ -568,8 +593,16 @@ export async function hybridSearch(
   const courseMap = new Map<string, Course>();
   coursesResult.results.forEach(c => courseMap.set(c.id, c));
 
+  // Apply title boost for exact/partial matches
+  const resultsWithTitles = topIds.map(s => ({
+    ...s,
+    title: courseMap.get(s.id)?.title
+  }));
+
+  const boostedResults = applyTitleBoost(resultsWithTitles, plan.keywordQuery || '');
+
   // Return results with scores
-  return topIds.map(s => ({
+  return boostedResults.map(s => ({
     course: courseMap.get(s.id)!,
     score: s.score,
     semanticRank: s.semanticRank,
