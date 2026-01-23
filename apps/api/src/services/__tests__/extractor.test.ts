@@ -232,4 +232,42 @@ describe('extract', () => {
       expect(result.residual).toContain('Manufacturing');
     });
   });
+
+  describe('term extraction', () => {
+    it('extracts "spring 2026"', () => {
+      const result = extract('CS spring 2026');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'term',
+          value: { term: 'spring', year: 2026 }
+        })
+      );
+    });
+
+    it('extracts "fall 2025"', () => {
+      const result = extract('fall 2025 MATH');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'term',
+          value: { term: 'fall', year: 2025 }
+        })
+      );
+    });
+
+    it('extracts "summer 2026"', () => {
+      const result = extract('summer 2026 online');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'term',
+          value: { term: 'summer', year: 2026 }
+        })
+      );
+    });
+
+    it('removes term from residual', () => {
+      const result = extract('CS spring 2026');
+      expect(result.residual).not.toContain('spring');
+      expect(result.residual).not.toContain('2026');
+    });
+  });
 });
