@@ -94,6 +94,30 @@ describe('extract', () => {
       const result = extract('easy class');
       expect(result.hints).toContainEqual(expect.objectContaining({ type: 'difficulty', value: 'easy' }));
     });
+
+    describe('intro as boost', () => {
+      it('extracts "intro" as levelBoost, not level', () => {
+        const result = extract('intro to compilers');
+
+        // Should NOT have a level hint
+        const levelHints = result.hints.filter(h => h.type === 'level');
+        expect(levelHints).toHaveLength(0);
+
+        // Should have a levelBoost hint
+        const boostHints = result.hints.filter(h => h.type === 'levelBoost');
+        expect(boostHints).toHaveLength(1);
+        expect(boostHints[0].value).toBe(100);
+      });
+
+      it('explicit level overrides intro boost', () => {
+        const result = extract('intro to compilers 400 level');
+
+        // Should have level=400 from explicit "400 level"
+        const levelHints = result.hints.filter(h => h.type === 'level');
+        expect(levelHints).toHaveLength(1);
+        expect(levelHints[0].value).toBe(400);
+      });
+    });
   });
 
   describe('order independence', () => {

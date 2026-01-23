@@ -85,6 +85,7 @@ export type HintType =
   | 'days'
   | 'time'
   | 'level'
+  | 'levelBoost'
   | 'credits'
   | 'online'
   | 'status'

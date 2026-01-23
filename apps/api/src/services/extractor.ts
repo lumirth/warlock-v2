@@ -7,14 +7,17 @@ export interface ExtractionResult {
   residual: string;
 }
 
-const LEVEL_KEYWORDS: Record<string, number> = {
-  'intro': 100,
-  'introductory': 100,
-  'beginner': 100,
+const LEVEL_KEYWORDS_HARD: Record<string, number> = {
   'advanced': 400,
   'upper': 400,
   'graduate': 500,
   'grad': 500,
+};
+
+const LEVEL_KEYWORDS_SOFT: Record<string, number> = {
+  'intro': 100,
+  'introductory': 100,
+  'beginner': 100,
 };
 
 // Stop-phrase removal - high-frequency generic tokens
@@ -228,8 +231,8 @@ function extractAttributesAndAliases(text: string, hints: Hint[]): string {
     residual = maskRange(residual, levelMatches[i].index, levelMatches[i].length);
   }
 
-  // 3. Level keywords
-  for (const [keyword, level] of Object.entries(LEVEL_KEYWORDS)) {
+  // 3. Level keywords (Hard filters)
+  for (const [keyword, level] of Object.entries(LEVEL_KEYWORDS_HARD)) {
     const keywordRegex = new RegExp(`\\b${keyword}\\b`, 'gi');
     let kMatch;
     const kMatches: { index: number; length: number }[] = [];
@@ -246,7 +249,22 @@ function extractAttributesAndAliases(text: string, hints: Hint[]): string {
     }
   }
 
-  // 4. Aliases
+  // 4. Soft level keywords (Boost only)
+  for (const [keyword, level] of Object.entries(LEVEL_KEYWORDS_SOFT)) {
+    const keywordRegex = new RegExp(`\\b${keyword}\\b`, 'gi');
+    let kMatch;
+    // Don't mask these - leave them in residual for semantic matching too
+    // Just add the hint
+    while ((kMatch = keywordRegex.exec(residual)) !== null) {
+      hints.push({
+        type: 'levelBoost',
+        value: level,
+        metadata: createMetadata('regex', kMatch[0], 0.5),
+      });
+    }
+  }
+
+  // 5. Aliases
   residual = extractAliases(residual, hints);
 
   return residual;
