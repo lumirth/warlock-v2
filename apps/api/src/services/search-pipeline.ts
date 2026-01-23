@@ -4,6 +4,7 @@ import { resolveQuery } from './query-resolver.js';
 import { hybridSearchWithTermRanking, sanitizeFtsQuery, type SearchResult } from './search.js';
 import { expandTopics } from './topic-registry.js';
 import { parseQuery } from './query-parser.js';
+import { logSearch } from './query-logger.js';
 import type { SearchPlan, ExtractedQuery, QueryHint, QueryHintType, SearchFilters, Hint } from '@uiuc-course-search/query-types';
 
 export interface SearchPipelineResult {
@@ -117,29 +118,34 @@ export class SearchPipeline {
 
     const searchStartTime = performance.now();
     let results: SearchResult[] = [];
+    let tierReached = 1;
+    const constraintsRelaxed: string[] = [];
 
     // Tier 1: Navigational (Exact course code or CRN)
     const isNavigational = !!((plan.filters.subject && plan.filters.number) || plan.filters.crn);
     if (isNavigational) {
+      tierReached = 1;
       console.log('Tier 1: Navigational search');
       results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
     } else {
       // Tier 2: Structured (Search with extracted filters)
+      tierReached = 2;
       console.log('Tier 2: Structured search');
       results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
-      
+
       // If we have few results, try expansion
       if (results.length < 3) {
         // Tier 3: Topic Hybrid (Topic expansion)
         const expandedKeywords = expandTopics(extracted.residual);
         if (expandedKeywords.length > 0) {
+          tierReached = 3;
           console.log('Tier 3: Topic expansion', expandedKeywords);
           const expandedPlan: SearchPlan = {
             ...plan,
             keywordQuery: sanitizeFtsQuery(`${plan.keywordQuery} ${expandedKeywords.join(' ')}`),
             semanticQuery: sanitizeFtsQuery(`${plan.semanticQuery} ${expandedKeywords.join(' ')}`),
           };
-          
+
           const expandedResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, expandedPlan, limit);
           results = this.mergeResults(results, expandedResults, limit);
         }
@@ -147,9 +153,11 @@ export class SearchPipeline {
 
       // Tier 4: Fallback (Broaden)
       if (results.length < 3) {
+        tierReached = 4;
         console.log(`Tier 4: Broadening search (current results: ${results.length})`);
         // 1. If we have a level filter, try removing it
         if (plan.filters.level) {
+          constraintsRelaxed.push('level');
           console.log('Tier 4.1: Removing level filter');
           const broadPlan = { ...plan, filters: { ...plan.filters } };
           delete broadPlan.filters.level;
@@ -167,12 +175,16 @@ export class SearchPipeline {
             keywordQuery: sanitizeFtsQuery(query)
           };
           // NEVER drop the Subject filter
+          if (veryBroadPlan.filters.gened_code) constraintsRelaxed.push('gened_code');
+          if (veryBroadPlan.filters.instructor_ids) constraintsRelaxed.push('instructor_ids');
+          if (veryBroadPlan.filters.level && !constraintsRelaxed.includes('level')) constraintsRelaxed.push('level');
+
           delete veryBroadPlan.filters.gened_code;
           delete veryBroadPlan.filters.instructor_ids;
           delete veryBroadPlan.filters.level;
           delete veryBroadPlan.filters.difficulty;
           // Note: we explicitly keep veryBroadPlan.filters.subject if it exists
-          
+
           const veryBroadResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, veryBroadPlan, limit);
           results = this.mergeResults(results, veryBroadResults, limit);
         }
@@ -181,7 +193,7 @@ export class SearchPipeline {
     const searchEndTime = performance.now();
     const totalEndTime = performance.now();
 
-    return {
+    const result: SearchPipelineResult = {
       results,
       meta: {
         query: {
@@ -199,6 +211,18 @@ export class SearchPipeline {
         }
       }
     };
+
+    // Fire and forget logging
+    logSearch(
+      this.db,
+      query,
+      result,
+      isNavigational,
+      tierReached,
+      constraintsRelaxed
+    ).catch(err => console.error('Error in logSearch:', err));
+
+    return result;
   }
 
   /**
