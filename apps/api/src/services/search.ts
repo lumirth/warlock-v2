@@ -423,6 +423,81 @@ export async function sectionKeywordSearch(
   return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
 }
 
+/**
+ * Enforces hard constraints on semantic search results.
+ * Vectorize is great for meaning but bad at hard filters (credits, geneds).
+ * This function fetches metadata for semantic candidates and prunes those that violate filters.
+ */
+export async function postFilterSemanticResults(
+  db: D1Database,
+  semanticResults: { id: string; score: number }[],
+  filters: SearchFilters
+): Promise<{ id: string; score: number }[]> {
+  if (semanticResults.length === 0) return [];
+
+  const needsFilter = !!(filters.gened_code || filters.credits !== undefined ||
+                      filters.difficulty || filters.days || filters.time ||
+                      filters.online !== undefined || filters.status);
+
+  if (!needsFilter) return semanticResults;
+
+  // Fetch course data for filtering
+  const courseIds = semanticResults.map(r => r.id);
+  const placeholders = courseIds.map(() => '?').join(',');
+
+  const coursesResult = await db.prepare(`
+    SELECT c.id, c.credit_hours, c.avg_gpa, c.difficulty_score,
+           GROUP_CONCAT(DISTINCT cg.category_id) as geneds
+    FROM courses c
+    LEFT JOIN course_gened cg ON cg.course_id = c.id
+    WHERE c.id IN (${placeholders})
+    GROUP BY c.id
+  `).bind(...courseIds).all<{
+    id: string;
+    credit_hours: number | null;
+    avg_gpa: number | null;
+    difficulty_score: number | null;
+    geneds: string | null;
+  }>();
+
+  const courseMap = new Map(coursesResult.results.map(c => [c.id, c]));
+
+  return semanticResults.filter(r => {
+    const course = courseMap.get(r.id);
+    if (!course) return false;
+
+    // GenEd filter
+    if (filters.gened_code) {
+      const geneds = course.geneds?.split(',') || [];
+      if (!geneds.includes(filters.gened_code)) return false;
+    }
+
+    // Credits filter
+    if (filters.credits !== undefined && course.credit_hours !== filters.credits) {
+      return false;
+    }
+
+    // Difficulty filter
+    if (filters.difficulty) {
+      const thresholds = DIFFICULTY_THRESHOLDS[filters.difficulty];
+      if ('min_gpa' in thresholds && (course.avg_gpa || 0) < thresholds.min_gpa) {
+        return false;
+      }
+      if ('max_gpa' in thresholds && (course.avg_gpa || 0) > thresholds.max_gpa) {
+        return false;
+      }
+      if ('min_difficulty' in thresholds && (course.difficulty_score || 0) < thresholds.min_difficulty) {
+        return false;
+      }
+      if ('max_difficulty' in thresholds && (course.difficulty_score || 0) > thresholds.max_difficulty) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
 export async function hybridSearch(
   db: D1Database,
   vectorize: VectorizeIndex,
@@ -447,11 +522,16 @@ export async function hybridSearch(
   const runSemantic = hasSemanticQuery && !isNavigational;
 
   // Run all searches in parallel, skipping empty queries
-  const [semanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
+  const [rawSemanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
     runSemantic ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50) : Promise.resolve([]),
     keywordSearch(db, plan, 50),
     hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, 50) : Promise.resolve([])
   ]);
+
+  // Post-filter semantic results for hard constraints
+  const semanticResults = runSemantic
+    ? await postFilterSemanticResults(db, rawSemanticResults, plan.filters)
+    : [];
 
   // Build rank maps
   const semanticRanks = new Map<string, number>();
