@@ -293,11 +293,27 @@ export function buildFilterClauses(
   };
 }
 
+const SPECIAL_TOKENS: Record<string, string> = {
+  'c++': 'cplusplus',
+  'c#': 'csharp',
+  '.net': 'dotnet',
+  'f#': 'fsharp',
+  'c/c++': 'c cplusplus',
+};
+
 export function sanitizeFtsQuery(query: string): string {
   if (!query) return '';
 
+  let sanitized = query;
+
+  // Handle special tokens BEFORE stripping punctuation
+  for (const [token, replacement] of Object.entries(SPECIAL_TOKENS)) {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    sanitized = sanitized.replace(new RegExp(escaped, 'gi'), replacement);
+  }
+
   // Replace & with " and " to avoid silent failures or syntax errors
-  let sanitized = query.replace(/&/g, ' and ');
+  sanitized = sanitized.replace(/&/g, ' and ');
 
   // Count double quotes to check for balance
   const quoteCount = (sanitized.match(/"/g) || []).length;
