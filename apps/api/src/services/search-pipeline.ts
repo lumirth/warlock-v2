@@ -23,6 +23,11 @@ export interface SearchPipelineResult {
       search_ms: number;
       total_ms: number;
     };
+    fallback: {
+      tierReached: number;
+      constraintsRelaxed: string[];
+      originalResultCount: number;
+    };
   };
 }
 
@@ -55,9 +60,10 @@ export class SearchPipeline {
    * Main search entry point using a tiered approach.
    */
   async search(
-    query: string, 
-    limit: number = 20, 
-    overrides?: Partial<SearchFilters>
+    query: string,
+    limit: number = 20,
+    overrides?: Partial<SearchFilters>,
+    waitUntil?: (promise: Promise<any>) => void
   ): Promise<SearchPipelineResult> {
     const startTime = performance.now();
 
@@ -120,6 +126,7 @@ export class SearchPipeline {
     let results: SearchResult[] = [];
     let tierReached = 1;
     const constraintsRelaxed: string[] = [];
+    let originalResultCount = 0;
 
     // Tier 1: Navigational (Exact course code or CRN)
     const isNavigational = !!((plan.filters.subject && plan.filters.number) || plan.filters.crn);
@@ -127,11 +134,13 @@ export class SearchPipeline {
       tierReached = 1;
       console.log('Tier 1: Navigational search');
       results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
+      originalResultCount = results.length;
     } else {
       // Tier 2: Structured (Search with extracted filters)
       tierReached = 2;
       console.log('Tier 2: Structured search');
       results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
+      originalResultCount = results.length;
 
       // If we have few results, try expansion
       if (results.length < 3) {
@@ -148,15 +157,16 @@ export class SearchPipeline {
 
           const expandedResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, expandedPlan, limit);
           results = this.mergeResults(results, expandedResults, limit);
+          originalResultCount = results.length;
         }
       }
 
       // Tier 4: Fallback (Broaden)
       if (results.length < 3) {
-        tierReached = 4;
         console.log(`Tier 4: Broadening search (current results: ${results.length})`);
         // 1. If we have a level filter, try removing it
         if (plan.filters.level) {
+          tierReached = 4.1;
           constraintsRelaxed.push('level');
           console.log('Tier 4.1: Removing level filter');
           const broadPlan = { ...plan, filters: { ...plan.filters } };
@@ -167,6 +177,7 @@ export class SearchPipeline {
 
         // 2. If we still have few results, broaden while KEEPING subject
         if (results.length < 3 && (plan.filters.subject || plan.filters.gened_code)) {
+          tierReached = 4.2;
           console.log('Tier 4.2: Broadening filters while keeping subject');
           const veryBroadPlan: SearchPlan = {
             ...plan,
@@ -208,12 +219,17 @@ export class SearchPipeline {
           extraction_ms: Math.round(extractionEndTime - startTime),
           search_ms: Math.round(searchEndTime - searchStartTime),
           total_ms: Math.round(totalEndTime - startTime),
+        },
+        fallback: {
+          tierReached,
+          constraintsRelaxed,
+          originalResultCount
         }
       }
     };
 
-    // Fire and forget logging
-    logSearch(
+    // Fire and forget logging (with waitUntil if available)
+    const loggingPromise = logSearch(
       this.db,
       query,
       result,
@@ -221,6 +237,10 @@ export class SearchPipeline {
       tierReached,
       constraintsRelaxed
     ).catch(err => console.error('Error in logSearch:', err));
+
+    if (waitUntil) {
+      waitUntil(loggingPromise);
+    }
 
     return result;
   }
