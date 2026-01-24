@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { Container, Title, Text, Button, Loader, Flex, Grid, Stack, Badge, Group, Paper, Alert } from '@mantine/core'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { Scorecard } from '../components/Scorecard'
@@ -10,6 +10,10 @@ import type { Course } from '../lib/api-types'
 
 export function CoursePage() {
   const { subject, number } = useParams()
+  const [searchParams] = useSearchParams()
+  const term = searchParams.get('term') || undefined
+  const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined
+
   const [course, setCourse] = useState<Course | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -23,7 +27,7 @@ export function CoursePage() {
       setError(null)
 
       try {
-        const data = await api.getCourse(subject, number, controller.signal)
+        const data = await api.getCourse(subject, number, term, year, controller.signal)
         setCourse(data)
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return

@@ -42,6 +42,11 @@ searchRoutes.get('/api/search', async (c) => {
   if (c.req.query('gened')) overrides.gened_code = c.req.query('gened');
   if (c.req.query('credits')) overrides.credits = parseInt(c.req.query('credits')!);
 
+  const difficulty = c.req.query('difficulty');
+  if (difficulty === 'easy' || difficulty === 'hard') {
+    overrides.difficulty = difficulty;
+  }
+
   try {
     const pipeline = new SearchPipeline(c.env.DB, c.env.VECTORIZE, c.env.AI);
     const result = await pipeline.search(query, limit, overrides, c.executionCtx.waitUntil.bind(c.executionCtx));

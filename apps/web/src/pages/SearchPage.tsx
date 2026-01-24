@@ -169,7 +169,7 @@ export function SearchPage() {
                   withBorder
                   padding="sm"
                   component={Link}
-                  to={`/course/${r.subject}/${r.number}`}
+                  to={`/course/${r.subject}/${r.number}?term=${r.term}&year=${r.year}`}
                   style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                   shadow="sm"
                 >

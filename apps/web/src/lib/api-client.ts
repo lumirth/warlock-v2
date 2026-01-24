@@ -39,8 +39,13 @@ class ApiClient {
     return this.fetch<SearchResponse>(`api/search?q=${encodeURIComponent(query)}`, { signal })
   }
 
-  async getCourse(subject: string, number: string, signal?: AbortSignal): Promise<Course> {
-    const rawData = await this.fetch<RawCourseResponse>(`api/course/${subject}/${number}`, { signal })
+  async getCourse(subject: string, number: string, term?: string, year?: number, signal?: AbortSignal): Promise<Course> {
+    const params = new URLSearchParams()
+    if (term) params.append('term', term)
+    if (year) params.append('year', year.toString())
+    const queryString = params.toString() ? `?${params.toString()}` : ''
+
+    const rawData = await this.fetch<RawCourseResponse>(`api/course/${subject}/${number}${queryString}`, { signal })
 
     // Normalize sections if present
     const normalizedSections = rawData.sections
