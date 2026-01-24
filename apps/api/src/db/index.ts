@@ -126,6 +126,7 @@ export interface SyncState {
   last_status: string | null;
   items_synced: number | null;
   cursor: number | null;
+  etag: string | null;
 }
 
 export async function getSyncState(db: D1Database, id: string): Promise<SyncState | null> {
@@ -134,14 +135,15 @@ export async function getSyncState(db: D1Database, id: string): Promise<SyncStat
 
 export async function upsertSyncState(db: D1Database, state: SyncState): Promise<void> {
   await db.prepare(`
-    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       last_sync = excluded.last_sync,
       last_status = excluded.last_status,
       items_synced = excluded.items_synced,
-      cursor = excluded.cursor
-  `).bind(state.id, state.last_sync, state.last_status, state.items_synced, state.cursor).run();
+      cursor = excluded.cursor,
+      etag = excluded.etag
+  `).bind(state.id, state.last_sync, state.last_status, state.items_synced, state.cursor, state.etag).run();
 }
 
 export function makeCourseId(subject: string, number: string, year: number, term: string): string {

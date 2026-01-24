@@ -139,18 +139,47 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
 }
 
 /**
- * Resets the sync cursor to 0 to restart the process.
- * Also clears the KV cache to ensure fresh data.
+ * Checks for updates using ETag and resets the sync cursor if data has changed.
+ * Returns 'skipped_no_changes' or 'reset_initiated'.
  */
-export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<void> {
+export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<string> {
+  console.log('[GPA Reset] Checking for updates...');
+
+  // 1. Check current ETag from JSDelivr
+  const response = await fetch(GPA_DATASET_URL, { method: 'HEAD' });
+  if (!response.ok) {
+    throw new Error(`Failed to check GPA dataset: ${response.status} ${response.statusText}`);
+  }
+
+  const newEtag = response.headers.get('etag');
+  if (!newEtag) {
+    console.warn('[GPA Reset] No ETag header found. Forcing reset.');
+  }
+
+  // 2. Check stored ETag
+  const state = await getSyncState(db, 'gpa');
+  const currentEtag = state?.etag;
+
+  // 3. Compare (only skip if we have a completed sync with matching ETag)
+  if (newEtag && currentEtag === newEtag && state?.last_status === 'completed') {
+    console.log(`[GPA Reset] ETag matched (${newEtag}). No changes detected. Skipping reset.`);
+    return 'skipped_no_changes';
+  }
+
+  console.log(`[GPA Reset] Change detected (Old: ${currentEtag}, New: ${newEtag}). Resetting...`);
+
+  // 4. Reset
   await kv.delete(KV_KEY);
   await upsertSyncState(db, {
     id: 'gpa',
     last_sync: null,
     last_status: 'pending',
     items_synced: 0,
-    cursor: 0
+    cursor: 0,
+    etag: newEtag || null
   });
+
+  return 'reset_initiated';
 }
 
 /**
