@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { D1Database, VectorizeIndex, Ai, Fetcher } from '@cloudflare/workers-types';
+import type { D1Database, VectorizeIndex, Ai, Fetcher, KVNamespace } from '@cloudflare/workers-types';
 import { healthRoutes } from './routes/health.js';
 import { searchRoutes } from './routes/search.js';
 import { syncRoutes } from './routes/sync.js';
@@ -18,6 +18,7 @@ type Bindings = {
   VECTORIZE: VectorizeIndex;
   AI: Ai;
   SELF: Fetcher;
+  GPA_CACHE: KVNamespace;
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
   CISAPI_BASE: string;
@@ -76,7 +77,7 @@ export default {
       console.log('[Cron] Resetting GPA sync cursor...');
       ctx.waitUntil((async () => {
         try {
-          await resetGpaSync(env.DB);
+          await resetGpaSync(env.DB, env.GPA_CACHE);
           console.log('[Cron] GPA sync cursor reset to 0.');
         } catch (err) {
           console.error('[Cron] Failed to reset GPA sync:', err);
@@ -90,7 +91,7 @@ export default {
       console.log('[Cron] Resuming GPA sync chunk...');
       ctx.waitUntil((async () => {
         try {
-          const result = await resumeGpaSync(env.DB);
+          const result = await resumeGpaSync(env.DB, env.GPA_CACHE);
           console.log(`[Cron] GPA chunk processed: ${result.message}`);
 
           if (result.isComplete) {

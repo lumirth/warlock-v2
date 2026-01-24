@@ -1,11 +1,11 @@
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
 import { getSyncState, upsertSyncState } from '../db/index.js';
 
-// Use JSDelivr to ensure we get uncompressed content for Range requests
 const GPA_DATASET_URL = 'https://cdn.jsdelivr.net/gh/wadefagen/datasets@main/gpa/uiuc-gpa-dataset.csv';
-// 100KB chunk size is safe for 10ms CPU limit (approx 1000 lines)
-const CHUNK_SIZE_BYTES = 100 * 1024;
-const D1_BATCH_SIZE = 15; // Rows per SQL statement to stay under 100-param limit
+// 50K chars is safe for 10ms CPU limit (approx 500 lines)
+const CHUNK_SIZE_CHARS = 50 * 1024;
+const D1_BATCH_SIZE = 15;
+const KV_KEY = 'gpa_full_dataset';
 
 // GPA Weights
 const WEIGHTS: Record<string, number> = {
@@ -32,117 +32,100 @@ export interface SyncResult {
 }
 
 /**
- * Resumes GPA sync from the last saved cursor using HTTP Range requests.
- * Designed for Cloudflare Workers Free Tier (10ms CPU limit).
+ * Resumes GPA sync using KV-cached dataset to allow reliable slicing.
+ * Bypasses external HTTP Range/Compression issues.
  */
-export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
+export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<SyncResult> {
   // 1. Get current cursor
   const state = await getSyncState(db, 'gpa');
-  const startOffset = state?.cursor || 0;
-  const endOffset = startOffset + CHUNK_SIZE_BYTES;
+  const cursor = state?.cursor || 0;
 
-  console.log(`[GPA Sync] Resuming from byte offset ${startOffset}...`);
+  console.log(`[GPA Sync] Resuming from cursor ${cursor}...`);
 
-  // 2. Fetch chunk using Range header
-  const response = await fetch(GPA_DATASET_URL, {
-    headers: {
-      'Range': `bytes=${startOffset}-${endOffset}`,
-      'User-Agent': 'git-fetch', // Try a standard UA to avoid aggressive compression
-      'Accept': '*/*',
-      'Accept-Encoding': 'identity;q=1.0, *;q=0' // Strictly forbid compression
+  // 2. Get Data (Cache-First)
+  let fullText = await kv.get(KV_KEY, 'text');
+
+  if (!fullText) {
+    console.log('[GPA Sync] Cache miss. Fetching from JSDelivr...');
+    const response = await fetch(GPA_DATASET_URL);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch GPA dataset: ${response.status} ${response.statusText}`);
     }
-  });
 
-  const headersDebug = {
-    status: response.status,
-    range: response.headers.get('content-range'),
-    type: response.headers.get('content-type'),
-    encoding: response.headers.get('content-encoding')
-  };
-  console.log(`[GPA Sync Debug] Headers: ${JSON.stringify(headersDebug)}`);
+    fullText = await response.text();
+    if (!fullText) {
+      throw new Error('Fetched empty dataset');
+    }
 
-  // Handle completion (416 Range Not Satisfiable)
-  if (response.status === 416) {
+    // Cache for 2 hours (plenty of time to sync)
+    await kv.put(KV_KEY, fullText, { expirationTtl: 7200 });
+    console.log(`[GPA Sync] Cached ${fullText.length} chars to KV.`);
+  }
+
+  // 3. Check for completion
+  if (cursor >= fullText.length) {
+    console.log('[GPA Sync] Cursor reached end of file. Cleaning up...');
+    await kv.delete(KV_KEY); // Cleanup
+
     await upsertSyncState(db, {
       id: 'gpa',
       last_sync: Date.now(),
       last_status: 'completed',
       items_synced: (state?.items_synced || 0),
-      cursor: startOffset // Keep cursor at end
+      cursor: cursor
     });
-    return { success: true, rowsProcessed: 0, message: 'Sync already complete (EOF)', isComplete: true };
+
+    return {
+      success: true,
+      rowsProcessed: 0,
+      message: 'Sync Complete (EOF)',
+      isComplete: true
+    };
   }
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch GPA dataset: ${response.status} ${response.statusText}`);
-  }
+  // 4. Slice Chunk
+  // Determine chunk boundaries, respecting newlines
+  const endEstimate = Math.min(cursor + CHUNK_SIZE_CHARS, fullText.length);
+  let nextCursor = endEstimate;
 
-  const arrayBuffer = await response.arrayBuffer();
-  const text = new TextDecoder().decode(arrayBuffer);
-
-  // Hex dump first 16 bytes to detect GZIP (1f 8b)
-  const firstBytes = new Uint8Array(arrayBuffer.slice(0, 16));
-  const hexDump = Array.from(firstBytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
-  console.log(`[GPA Sync Debug] First 16 bytes: ${hexDump}`);
-  console.log(`[GPA Sync Debug] First 50 chars: ${text.substring(0, 50)}`);
-
-  if (!text) {
-     // Empty body?
-     return { success: true, rowsProcessed: 0, message: 'Empty response (EOF?)', isComplete: true };
-  }
-
-  // 3. Handle partial lines
-  // We must process only up to the last newline to ensure we don't process a truncated line.
-  // Unless this is the very end of the file (Content-Range header usually tells us, or text length < requested)
-  const contentRange = response.headers.get('content-range'); // "bytes 0-102400/8000000"
-  const totalSize = contentRange ? parseInt(contentRange.split('/')[1]) : -1;
-  const isEndOfFile = (totalSize !== -1 && endOffset >= totalSize) || text.length < CHUNK_SIZE_BYTES;
-
-  let processText = text;
-  let nextCursor = startOffset + text.length;
-
-  // Debug stats
-  const debugStats = {
-    startOffset,
-    textLength: text.length,
-    isEndOfFile,
-    contentRange: response.headers.get('content-range'),
-    chunkSize: CHUNK_SIZE_BYTES
-  };
-
-  if (!isEndOfFile) {
-    const lastNewline = text.lastIndexOf('\n');
-    if (lastNewline === -1) {
-      // Chunk is huge and has no newline? Unlikely for 100KB chunk.
-      // But if it happens, we can't process it safely.
-      // We might need to fetch a larger chunk or warn.
-      throw new Error(`Chunk contains no newlines. Line too long? Stats: ${JSON.stringify(debugStats)}`);
+  if (endEstimate < fullText.length) {
+    // Look backwards for the last newline to ensure we don't cut a line in half
+    const lastNewline = fullText.lastIndexOf('\n', endEstimate);
+    if (lastNewline > cursor) {
+      nextCursor = lastNewline + 1; // Start next chunk AFTER the newline
+    } else {
+      // No newline found in this chunk? Line is huge.
+      // Force break or extend (extending is dangerous for CPU).
+      // Let's force break and hope parser handles it or extend slightly.
+      // Actually, if a line is > 50KB, we have other problems.
+      console.warn('[GPA Sync] Warning: No newline found in chunk. Extending search...');
+      const nextNewline = fullText.indexOf('\n', endEstimate);
+      if (nextNewline !== -1) {
+        nextCursor = nextNewline + 1;
+      }
     }
-    processText = text.substring(0, lastNewline);
-    nextCursor = startOffset + lastNewline + 1; // Start next chunk after the newline
-  } else {
-    // EOF, process everything
-    nextCursor = startOffset + text.length;
   }
 
-  // 4. Parse lines
-  const lines = processText.split(/\r\n|\n|\r/).filter(l => l.trim().length > 0);
+  const chunk = fullText.substring(cursor, nextCursor);
+
+  // 5. Parse & Insert
+  const lines = chunk.split(/\r\n|\n|\r/).filter(l => l.trim().length > 0);
 
   // Skip header if we are at the very beginning
-  if (startOffset === 0 && lines.length > 0) {
+  if (cursor === 0 && lines.length > 0) {
     if (lines[0].startsWith('Year,Term') || lines[0].includes('Course Title')) {
       lines.shift();
     }
   }
 
-  // 5. Process lines (Insert to D1)
+  console.log(`[GPA Sync] Processing chunk ${cursor}-${nextCursor} (${lines.length} lines)`);
   const { inserted } = await processGpaBatch(db, lines);
 
-  // 6. Update cursor
+  // 6. Update state
   await upsertSyncState(db, {
     id: 'gpa',
     last_sync: Date.now(),
-    last_status: isEndOfFile ? 'completed' : 'in_progress',
+    last_status: 'in_progress',
     items_synced: (state?.items_synced || 0) + inserted,
     cursor: nextCursor
   });
@@ -150,15 +133,17 @@ export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
   return {
     success: true,
     rowsProcessed: inserted,
-    message: `Processed ${inserted} rows. Cursor moved to ${nextCursor}. ${isEndOfFile ? '(Complete)' : '(Continuing)'}. Debug: ${lines.length} lines parsed. Content-Type: ${response.headers.get('content-type')}, Encoding: ${response.headers.get('content-encoding')}, Range: ${response.headers.get('content-range')}`,
-    isComplete: isEndOfFile
+    message: `Processed ${inserted} rows. Cursor: ${nextCursor}/${fullText.length}`,
+    isComplete: false
   };
 }
 
 /**
  * Resets the sync cursor to 0 to restart the process.
+ * Also clears the KV cache to ensure fresh data.
  */
-export async function resetGpaSync(db: D1Database): Promise<void> {
+export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<void> {
+  await kv.delete(KV_KEY);
   await upsertSyncState(db, {
     id: 'gpa',
     last_sync: null,
