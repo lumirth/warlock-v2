@@ -1,7 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { getSyncState, upsertSyncState } from '../db/index.js';
 
-const GPA_DATASET_URL = 'https://raw.githubusercontent.com/wadefagen/datasets/main/gpa/uiuc-gpa-dataset.csv';
+// Use JSDelivr to ensure we get uncompressed content for Range requests
+const GPA_DATASET_URL = 'https://cdn.jsdelivr.net/gh/wadefagen/datasets@main/gpa/uiuc-gpa-dataset.csv';
 // 100KB chunk size is safe for 10ms CPU limit (approx 1000 lines)
 const CHUNK_SIZE_BYTES = 100 * 1024;
 const D1_BATCH_SIZE = 15; // Rows per SQL statement to stay under 100-param limit
