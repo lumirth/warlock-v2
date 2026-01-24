@@ -72,7 +72,8 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
       last_sync: Date.now(),
       last_status: 'completed',
       items_synced: (state?.items_synced || 0),
-      cursor: cursor
+      cursor: cursor, // Keep cursor at end
+      etag: state?.etag || null
     });
 
     return {
@@ -127,7 +128,8 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
     last_sync: Date.now(),
     last_status: 'in_progress',
     items_synced: (state?.items_synced || 0) + inserted,
-    cursor: nextCursor
+    cursor: nextCursor,
+    etag: state?.etag || null
   });
 
   return {
