@@ -1,8 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
 
 export interface InstructorMatch {
-  fullName: string; // "Margaret Fleck"
-  gpaName: string;  // "Fleck, Margaret"
+  fullName: string; // "Fleck, M"
+  gpaName?: string;  // "Fleck, Margaret"
   gpaId?: number;
   rmpId?: string;
   rmpRating?: number;
@@ -18,37 +18,31 @@ export interface MatchContext {
 }
 
 /**
- * Normalizes a GPA instructor name (Last, First Middle) to a search-friendly format (First Last)
+ * Normalizes a GPA instructor name (Last, First Middle) to the RMP cache format (Last, F)
  */
-export function normalizeGpaToRmpName(gpaName: string): string {
-  if (!gpaName.includes(',')) return gpaName;
+export function normalizeToRmpCacheName(name: string): string {
+  if (!name.includes(',')) return name;
 
-  const [last, rest] = gpaName.split(',').map(s => s.trim());
+  const [last, rest] = name.split(',').map(s => s.trim());
   if (!rest) return last;
 
-  // Split rest into first and middle
-  const parts = rest.split(/\s+/);
-  const first = parts[0];
-
-  // RMP usually uses "First Last"
-  return `${first} ${last}`;
+  // Take the first letter of the first name
+  const firstInitial = rest.charAt(0).toUpperCase();
+  return `${last}, ${firstInitial}`;
 }
 
 /**
  * Resolves an instructor by bridging GPA stats and RMP cache.
- *
- * Step 1: Find the full name in GPA stats using subject/number + partial name.
- * Step 2: Use that full name to find RMP data.
+ * Falls back to direct RMP match if GPA bridge is missing.
  */
 export async function resolveInstructor(
   db: D1Database,
   context: MatchContext
 ): Promise<InstructorMatch | null> {
   const { subject, number, instructorName } = context;
+  const normalizedSearchName = normalizeToRmpCacheName(instructorName);
 
-  // 1. Query GPA stats for the bridge
-  // We look for instructors teaching this specific course whose name starts with our partial
-  // GPA names are usually "Last, First"
+  // 1. Try GPA Bridge first (provides highest confidence)
   const gpaQuery = `
     SELECT id, instructor, avg_gpa
     FROM gpa_stats
@@ -61,34 +55,44 @@ export async function resolveInstructor(
     .bind(subject, number, `${instructorName}%`)
     .first<{ id: number; instructor: string; avg_gpa: number }>();
 
-  if (!gpaResult || !gpaResult.instructor) {
-    // Fallback: Try matching instructor directly in RMP if we have enough info
-    // But for now, as per plan, we prioritize the GPA bridge for safety
-    return null;
+  if (gpaResult && gpaResult.instructor) {
+    const gpaName = gpaResult.instructor;
+    const rmpSearchName = normalizeToRmpCacheName(gpaName);
+
+    const rmpResult = await db.prepare(`
+      SELECT rmp_id, rating, difficulty
+      FROM rmp_cache
+      WHERE instructor_name = ?
+      LIMIT 1
+    `).bind(rmpSearchName).first<{ rmp_id: string; rating: number; difficulty: number }>();
+
+    return {
+      fullName: rmpSearchName,
+      gpaName: gpaName,
+      gpaId: gpaResult.id,
+      rmpId: rmpResult?.rmp_id,
+      rmpRating: rmpResult?.rating,
+      rmpDifficulty: rmpResult?.difficulty,
+      avgGpa: gpaResult.avg_gpa
+    };
   }
 
-  const gpaName = gpaResult.instructor;
-  const rmpSearchName = normalizeGpaToRmpName(gpaName);
-
-  // 2. Query RMP cache for the full name
-  const rmpQuery = `
+  // 2. Fallback: Direct RMP Cache match
+  const rmpResult = await db.prepare(`
     SELECT rmp_id, rating, difficulty
     FROM rmp_cache
     WHERE instructor_name = ?
     LIMIT 1
-  `;
+  `).bind(normalizedSearchName).first<{ rmp_id: string; rating: number; difficulty: number }>();
 
-  const rmpResult = await db.prepare(rmpQuery)
-    .bind(rmpSearchName)
-    .first<{ rmp_id: string; rating: number; difficulty: number }>();
+  if (rmpResult) {
+    return {
+      fullName: normalizedSearchName,
+      rmpId: rmpResult.rmp_id,
+      rmpRating: rmpResult.rating,
+      rmpDifficulty: rmpResult.difficulty
+    };
+  }
 
-  return {
-    fullName: rmpSearchName,
-    gpaName: gpaName,
-    gpaId: gpaResult.id,
-    rmpId: rmpResult?.rmp_id,
-    rmpRating: rmpResult?.rating,
-    rmpDifficulty: rmpResult?.difficulty,
-    avgGpa: gpaResult.avg_gpa
-  };
+  return null;
 }

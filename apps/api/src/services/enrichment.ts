@@ -1,12 +1,18 @@
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 import { resolveInstructor } from './matcher.js';
 
+export interface EnrichmentTask {
+  termId: string;
+  subject: string;
+  number: string;
+  instructorName: string;
+}
+
 /**
- * Resolves instructor names for active courses and links them to GPA/RMP data.
- * The results are stored in instructor_course_links for runtime lookup.
+ * Coordinator: Identifies all unique instructor-course contexts and dispatches batches.
  */
-export async function enrichCoursesWithScoring(db: D1Database): Promise<void> {
-  console.log('[Enrichment] Starting Context-Aware Instructor Linking...');
+export async function coordinateEnrichment(db: D1Database, selfBinding: Fetcher): Promise<{ taskCount: number; batchCount: number }> {
+  console.log('[Enrichment Coord] Starting Context-Aware Instructor Linking...');
 
   // 1. Get Active Term
   const termResult = await db.prepare(`
@@ -22,11 +28,10 @@ export async function enrichCoursesWithScoring(db: D1Database): Promise<void> {
   `).first<{ term_id: string; year: number; term: string }>();
 
   if (!termResult) {
-    console.warn('[Enrichment] No active term found. Skipping linking.');
-    return;
+    console.warn('[Enrichment Coord] No active term found. Skipping linking.');
+    return { taskCount: 0, batchCount: 0 };
   }
   const { term_id: termId, year: activeYear, term: activeTerm } = termResult;
-  console.log(`[Enrichment] Using active term: ${termId} (Year: ${activeYear}, Term: ${activeTerm})`);
 
   // 2. Fetch unique (subject, number, primary_instructor) for the active term
   const coursesResult = await db.prepare(`
@@ -36,16 +41,12 @@ export async function enrichCoursesWithScoring(db: D1Database): Promise<void> {
   `).bind(activeYear, activeTerm).all<{ subject: string; number: string; primary_instructor: string }>();
 
   if (!coursesResult.success) {
-    console.error('[Enrichment] Failed to fetch active courses.');
-    return;
+    throw new Error('[Enrichment Coord] Failed to fetch active courses.');
   }
 
   const courses = coursesResult.results;
-  console.log(`[Enrichment] Found ${courses.length} courses with instructors for linking.`);
-
-  // 3. Extract unique instructor/course tuples to minimize resolution calls
   const uniqueLinks = new Set<string>();
-  const linkTasks: { termId: string; subject: string; number: string; instructorName: string }[] = [];
+  const linkTasks: EnrichmentTask[] = [];
 
   for (const course of courses) {
     const instructors = course.primary_instructor.split(';').map(s => s.trim()).filter(Boolean);
@@ -58,72 +59,87 @@ export async function enrichCoursesWithScoring(db: D1Database): Promise<void> {
     }
   }
 
-  console.log(`[Enrichment] Resolving ${linkTasks.length} unique instructor-course links...`);
+  console.log(`[Enrichment Coord] Found ${linkTasks.length} unique instructor-course contexts. Dispatching batches...`);
 
-  // 4. Resolve and Upsert
-  const BATCH_SIZE = 50;
-  let resolvedCount = 0;
+  // 3. Dispatch Batches (Fan-Out)
+  // BATCH_SIZE 100 ensures the batch worker stays well under the 1000 subrequest limit
+  const BATCH_SIZE = 100;
+  let batchCount = 0;
 
   for (let i = 0; i < linkTasks.length; i += BATCH_SIZE) {
     const chunk = linkTasks.slice(i, i + BATCH_SIZE);
-    const statements: any[] = [];
+    batchCount++;
 
-    for (const task of chunk) {
-      const match = await resolveInstructor(db, {
-        subject: task.subject,
-        number: task.number,
-        instructorName: task.instructorName
-      });
+    await selfBinding.fetch('http://internal/internal/enrich-batch', {
+      method: 'POST',
+      body: JSON.stringify({ tasks: chunk }),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 
-      if (match) {
-        statements.push(db.prepare(`
-          INSERT INTO instructor_course_links (
-            term_id, subject, number, instructor_name,
-            gpa_id, rmp_id, confidence_score, match_method
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
-            gpa_id = excluded.gpa_id,
-            rmp_id = excluded.rmp_id,
-            confidence_score = excluded.confidence_score,
-            match_method = excluded.match_method
-        `).bind(
-          task.termId,
-          task.subject,
-          task.number,
-          task.instructorName,
-          match.gpaId || null,
-          match.rmpId || null,
-          1.0,
-          'gpa_bridge'
-        ));
-        resolvedCount++;
-      }
-    }
+  console.log(`[Enrichment Coord] Dispatched ${batchCount} batches.`);
+  return { taskCount: linkTasks.length, batchCount };
+}
 
-    if (statements.length > 0) {
-      try {
-        await db.batch(statements);
-      } catch (err) {
-        console.error(`[Enrichment] Failed to batch upsert links at index ${i}:`, err);
-      }
-    }
+/**
+ * Batch Worker: Processes a subset of instructor-course contexts.
+ */
+export async function processEnrichmentBatch(db: D1Database, tasks: EnrichmentTask[]): Promise<number> {
+  console.log(`[Enrichment Batch] Processing ${tasks.length} tasks...`);
+  
+  const statements: any[] = [];
+  let resolvedCount = 0;
 
-    if (i > 0 && i % 500 === 0) {
-      console.log(`[Enrichment] Progress: ${i} / ${linkTasks.length} links processed...`);
+  for (const task of tasks) {
+    const match = await resolveInstructor(db, {
+      subject: task.subject,
+      number: task.number,
+      instructorName: task.instructorName
+    });
+
+    if (match) {
+      statements.push(db.prepare(`
+        INSERT INTO instructor_course_links (
+          term_id, subject, number, instructor_name,
+          gpa_id, rmp_id, confidence_score, match_method
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
+          gpa_id = excluded.gpa_id,
+          rmp_id = excluded.rmp_id,
+          confidence_score = excluded.confidence_score,
+          match_method = excluded.match_method
+      `).bind(
+        task.termId,
+        task.subject,
+        task.number,
+        task.instructorName,
+        match.gpaId || null,
+        match.rmpId || null,
+        1.0,
+        match.gpaId ? 'gpa_bridge' : 'direct_rmp'
+      ));
+      resolvedCount++;
     }
   }
 
-  console.log(`[Enrichment] Finished. Linked ${resolvedCount} instructors across ${linkTasks.length} unique contexts.`);
+  if (statements.length > 0) {
+    const CHUNK_SIZE = 50; 
+    for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+      await db.batch(statements.slice(i, i + CHUNK_SIZE));
+    }
+  }
+
+  return resolvedCount;
 }
 
+/**
+ * Propagates course-wide GPA averages from gpa_stats to the courses table.
+ */
 export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
-  console.log('[Enrichment] Starting GPA aggregation and enrichment...');
+  console.log('[Enrichment] Starting GPA aggregation...');
 
-  // 1. Calculate and UPSERT course-wide averages (instructor IS NULL)
-  // We calculate the weighted average across all instructors for each course
   try {
-    console.log('[Enrichment] Aggregating course stats...');
     await db.prepare(`
       INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, median_gpa, sample_size, last_updated)
       SELECT
@@ -142,14 +158,10 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
         sample_size = excluded.sample_size,
         last_updated = excluded.last_updated
     `).run();
-    console.log('[Enrichment] Aggregation complete.');
   } catch (err) {
     console.error('[Enrichment] Failed to aggregate course stats:', err);
-    // Continue anyway, maybe some stats exist
   }
 
-  // 2. Get course-wide averages that have changed or are missing in courses table
-  // Optimization: Join with courses table to only fetch rows where values differ
   const result = await db.prepare(`
     SELECT
       g.subject,
@@ -166,24 +178,13 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
     )
   `).all<{ subject: string; number: string; avg_gpa: number; sample_size: number }>();
 
-  if (!result.success) {
-    console.error('[Enrichment] Failed to fetch GPA stats.');
-    return;
-  }
+  if (!result.success) return;
 
   const updates = result.results;
-  console.log(`[Enrichment] Found ${updates.length} course stats to propagate (skipping unchanged).`);
-
-  // 3. Update courses in batches using D1 batching
-  // We use a larger batch size since we are only processing diffs
   const BATCH_SIZE = 500;
-  let updatedCount = 0;
 
   for (let i = 0; i < updates.length; i += BATCH_SIZE) {
     const chunk = updates.slice(i, i + BATCH_SIZE);
-
-    // Update all matching courses (historical and current) for this subject/number
-    // This is a "fan-out" update - one GPA stat applies to many course rows (years/terms)
     const statements = chunk.map(stat =>
       db.prepare(`
         UPDATE courses
@@ -191,17 +192,8 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
         WHERE subject = ? AND number = ?
       `).bind(stat.avg_gpa, stat.sample_size, stat.subject, stat.number)
     );
-
-    try {
-      await db.batch(statements);
-      updatedCount += chunk.length;
-    } catch (err) {
-      console.error(`[Enrichment] Failed to update batch starting at index ${i}:`, err);
-    }
+    await db.batch(statements);
   }
 
-  console.log(`[Enrichment] Finished. Propagated stats to ${updatedCount} course definitions.`);
-
-  // Chain the new scoring enrichment
-  await enrichCoursesWithScoring(db);
+  console.log(`[Enrichment] Propagated stats to ${updates.length} courses.`);
 }

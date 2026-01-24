@@ -5,13 +5,13 @@ import { healthRoutes } from './routes/health.js';
 import { searchRoutes } from './routes/search.js';
 import { syncRoutes } from './routes/sync.js';
 import { courseRoutes } from './routes/course.js';
-import { debugRoutes } from './routes/debug.js';
+import { adminRoutes, debugRoutes } from './routes/debug.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from './db/index.js';
 import { getSubjectsForTerm } from './services/parallel-sync.js';
 import { discoverAndClassifyTerms } from './services/term-discovery.js';
 
 import { resumeGpaSync, resetGpaSync } from './services/gpa-sync.js';
-import { enrichCoursesWithGpa, enrichCoursesWithScoring } from './services/enrichment.js';
+import { enrichCoursesWithGpa, coordinateEnrichment } from './services/enrichment.js';
 import { coordinateRmpSync } from './services/rmp-sync.js';
 
 type Bindings = {
@@ -45,7 +45,8 @@ app.route('/', healthRoutes);
 app.route('/', searchRoutes);
 app.route('/', syncRoutes);
 app.route('/', courseRoutes);
-app.route('/', debugRoutes);
+app.route('/', adminRoutes);
+app.route('/admin/debug', debugRoutes);
 
 export default {
   fetch: app.fetch,
@@ -113,7 +114,7 @@ export default {
             console.log('[Cron] GPA Sync Complete! Starting Enrichment...');
             await enrichCoursesWithGpa(env.DB);
             // Chain scoring enrichment after GPA enrichment
-            await enrichCoursesWithScoring(env.DB);
+            await coordinateEnrichment(env.DB, env.SELF);
             console.log('[Cron] Enrichment triggered.');
           }
         } catch (err) {

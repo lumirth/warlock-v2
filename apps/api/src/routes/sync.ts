@@ -1,13 +1,12 @@
 import { Hono } from 'hono';
 import type { D1Database, VectorizeIndex, Ai, Fetcher } from '@cloudflare/workers-types';
-import { CISAPIClient } from '../cisapi/client.js';
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
 import { resumeGpaSync, resetGpaSync, retryFailedBatches } from '../services/gpa-sync.js';
-import { enrichCoursesWithGpa, enrichCoursesWithScoring } from '../services/enrichment.js';
-import { syncRateMyProfessorData, coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
+import { enrichCoursesWithGpa, coordinateEnrichment, processEnrichmentBatch, EnrichmentTask } from '../services/enrichment.js';
+import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
 
 type Bindings = {
   DB: D1Database;
@@ -57,8 +56,6 @@ syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
       return c.json({ error: 'No teachers provided' }, 400);
     }
 
-    // Critical: Use waitUntil to run in background and return immediately
-    // This allows the Coordinator to continue dispatching without waiting for DB writes
     c.executionCtx.waitUntil((async () => {
       try {
         await processRmpBatch(c.env.DB, teachers);
@@ -74,12 +71,36 @@ syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
   }
 });
 
-// Admin trigger for Contextual Scoring
+// Admin trigger for Contextual Scoring (Coordinator)
 syncRoutes.post('/admin/enrich-scoring', async (c) => {
   try {
-    await enrichCoursesWithScoring(c.env.DB);
-    return c.json({ message: 'Scoring enrichment complete' });
+    const result = await coordinateEnrichment(c.env.DB, c.env.SELF);
+    return c.json({ message: 'Scoring enrichment dispatched', ...result });
   } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Internal batch sync endpoint for Enrichment
+syncRoutes.post('/internal/enrich-batch', async (c) => {
+  try {
+    const { tasks } = await c.req.json<{ tasks: EnrichmentTask[] }>();
+
+    if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+      return c.json({ error: 'No tasks provided' }, 400);
+    }
+
+    c.executionCtx.waitUntil((async () => {
+      try {
+        await processEnrichmentBatch(c.env.DB, tasks);
+      } catch (err) {
+        console.error('[Enrichment Batch] Background processing failed:', err);
+      }
+    })());
+
+    return c.json({ status: 'processing', message: 'Batch accepted', count: tasks.length }, 202);
+  } catch (error) {
+    console.error('[Enrichment Batch] Error:', error);
     return c.json({ error: String(error) }, 500);
   }
 });
@@ -87,9 +108,6 @@ syncRoutes.post('/admin/enrich-scoring', async (c) => {
 // Admin trigger for GPA Enrichment
 syncRoutes.post('/admin/enrich-gpa', async (c) => {
   try {
-    // Fire and forget (or await if you want to see logs)
-    // Enrichment can take time, so better to use waitUntil if it gets too long,
-    // but for debugging we'll await it to see immediate errors.
     await enrichCoursesWithGpa(c.env.DB);
     return c.json({ message: 'Enrichment complete' });
   } catch (error) {
@@ -119,10 +137,6 @@ syncRoutes.post('/admin/sync-gpa', async (c) => {
 
 // Internal batch sync endpoint (Fan-Out Worker)
 syncRoutes.post('/internal/sync-batch', async (c) => {
-  // Only allow internal calls (verify if needed, but Service Bindings are secure by default if not exposed)
-  // For extra security in HTTP mode, check a shared secret header if exposed to internet
-  // But here we assume this is called via Service Binding or internal dispatch
-
   try {
     const { year, term, subjects } = await c.req.json<{ year: number; term: string; subjects: string[] }>();
 
@@ -202,7 +216,7 @@ syncRoutes.get('/admin/terms', async (c) => {
 syncRoutes.post('/admin/sync/:year/:term', async (c) => {
   const { year, term } = c.req.param();
   const offset = parseInt(c.req.query('offset') || '0');
-  const limit = parseInt(c.req.query('limit') || '40'); // Default to 40 for efficiency
+  const limit = parseInt(c.req.query('limit') || '40');
 
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
@@ -244,7 +258,7 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
   }
 });
 
-// Sync all active terms (paginated - caller should iterate with offset/limit)
+// Sync all active terms
 syncRoutes.post('/admin/sync-active', async (c) => {
   const activeTerms = await getTermsByStatus(c.env.DB, 'active');
 
@@ -253,7 +267,7 @@ syncRoutes.post('/admin/sync-active', async (c) => {
   }
 
   const offset = parseInt(c.req.query('offset') || '0');
-  const limit = parseInt(c.req.query('limit') || '40'); // Default to 40
+  const limit = parseInt(c.req.query('limit') || '40');
 
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
