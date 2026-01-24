@@ -131,6 +131,11 @@ export function CoursePage() {
           </Stack>
         </Grid.Col>
       </Grid>
+
+      {/* Debug Info (Temporary) */}
+      <Text size="xs" c="dimmed" mt="xl" ta="center">
+        Debug: {course.id} | Sections: {course.sections?.length ?? 0} | Term: {course.term} {course.year}
+      </Text>
     </Container>
   )
 }
