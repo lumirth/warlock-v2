@@ -7,7 +7,7 @@ import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
 import { resumeGpaSync, resetGpaSync, retryFailedBatches } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa } from '../services/enrichment.js';
-import { syncRateMyProfessorData } from '../services/rmp-sync.js';
+import { syncRateMyProfessorData, coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
 
 type Bindings = {
   DB: D1Database;
@@ -41,9 +41,35 @@ syncRoutes.post('/admin/retry-gpa-failures', async (c) => {
 // Admin trigger for RMP Sync
 syncRoutes.post('/admin/sync-rmp', async (c) => {
   try {
-    const result = await syncRateMyProfessorData(c.env.DB);
+    const result = await coordinateRmpSync(c.env.SELF);
     return c.json(result);
   } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Internal batch sync endpoint for RMP
+syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
+  try {
+    const { teachers } = await c.req.json<{ teachers: RmpTeacherNode[] }>();
+
+    if (!teachers || !Array.isArray(teachers) || teachers.length === 0) {
+      return c.json({ error: 'No teachers provided' }, 400);
+    }
+
+    // Critical: Use waitUntil to run in background and return immediately
+    // This allows the Coordinator to continue dispatching without waiting for DB writes
+    c.executionCtx.waitUntil((async () => {
+      try {
+        await processRmpBatch(c.env.DB, teachers);
+      } catch (err) {
+        console.error('[RMP Batch] Background processing failed:', err);
+      }
+    })());
+
+    return c.json({ status: 'processing', message: 'Batch accepted', count: teachers.length }, 202);
+  } catch (error) {
+    console.error('[RMP Batch] Error:', error);
     return c.json({ error: String(error) }, 500);
   }
 });

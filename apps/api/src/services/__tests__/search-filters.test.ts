@@ -83,15 +83,31 @@ describe('buildFilterClauses', () => {
     it('generates SQL for difficulty=easy', () => {
       const filters: SearchFilters = { difficulty: 'easy' };
       const result = buildFilterClauses(filters);
-      expect(result.where).toContain('c.avg_gpa >= ?');
-      expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.min_gpa);
+      // Legacy GPA check
+      if ('min_gpa' in DIFFICULTY_THRESHOLDS.easy) {
+        expect(result.where).toContain('c.avg_gpa >= ?');
+        expect(result.params).toContain((DIFFICULTY_THRESHOLDS.easy as any).min_gpa);
+      }
+      // New Quality/Difficulty check
+      if ('min_quality' in DIFFICULTY_THRESHOLDS.easy) {
+        expect(result.where).toContain('c.quality_score >= ?');
+        expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.min_quality);
+      }
     });
 
     it('generates SQL for difficulty=hard', () => {
       const filters: SearchFilters = { difficulty: 'hard' };
       const result = buildFilterClauses(filters);
-      expect(result.where).toContain('c.avg_gpa <= ?');
-      expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.max_gpa);
+      // Legacy GPA check
+      if ('max_gpa' in DIFFICULTY_THRESHOLDS.hard) {
+        expect(result.where).toContain('c.avg_gpa <= ?');
+        expect(result.params).toContain((DIFFICULTY_THRESHOLDS.hard as any).max_gpa);
+      }
+      // New Quality/Difficulty check
+      if ('max_quality' in DIFFICULTY_THRESHOLDS.hard) {
+        expect(result.where).toContain('c.quality_score <= ?');
+        expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.max_quality);
+      }
     });
   });
 

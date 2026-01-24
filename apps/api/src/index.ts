@@ -12,6 +12,7 @@ import { discoverAndClassifyTerms } from './services/term-discovery.js';
 
 import { resumeGpaSync, resetGpaSync } from './services/gpa-sync.js';
 import { enrichCoursesWithGpa } from './services/enrichment.js';
+import { coordinateRmpSync } from './services/rmp-sync.js';
 
 type Bindings = {
   DB: D1Database;
@@ -74,7 +75,9 @@ export default {
 
     // Weekly GPA Reset (Sunday 2:00 AM CST / 8:00 AM UTC)
     if (cron === "0 8 * * 0") {
-      console.log('[Cron] Resetting GPA sync cursor...');
+      console.log('[Cron] Triggering Weekly Tasks (GPA Reset + RMP Sync)...');
+
+      // 1. Reset GPA Sync
       ctx.waitUntil((async () => {
         try {
           await resetGpaSync(env.DB, env.GPA_CACHE);
@@ -83,6 +86,18 @@ export default {
           console.error('[Cron] Failed to reset GPA sync:', err);
         }
       })());
+
+      // 2. Trigger RMP Sync
+      ctx.waitUntil((async () => {
+        try {
+          console.log('[Cron] Starting RMP Sync Coordination...');
+          await coordinateRmpSync(env.SELF);
+          console.log('[Cron] RMP Sync triggered successfully.');
+        } catch (err) {
+          console.error('[Cron] Failed to coordinate RMP sync:', err);
+        }
+      })());
+
       return;
     }
 

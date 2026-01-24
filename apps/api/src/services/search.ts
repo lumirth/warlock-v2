@@ -22,8 +22,8 @@ export const TIME_RANGES: Record<string, { start?: string; end?: string }> = {
 };
 
 export const DIFFICULTY_THRESHOLDS = {
-  easy: { min_gpa: 3.5, max_difficulty: 3.0 },
-  hard: { max_gpa: 3.0, min_difficulty: 4.0 },
+  easy: { min_quality: 70, max_difficulty: 30 }, // High Quality (>70), Low Difficulty (<30)
+  hard: { max_quality: 40, min_difficulty: 70 }, // Low Quality (<40), High Difficulty (>70)
 };
 
 const STATUS_VALUES: Record<string, string[]> = {
@@ -62,8 +62,10 @@ function getTermPriority(
 // Reciprocal Rank Fusion constant
 const RRF_K = 60;
 
-function rrfScore(rank: number): number {
-  return 1 / (RRF_K + rank);
+function rrfScore(rank: number, qualityScore?: number): number {
+  // Boost score slightly by quality (0-100 normalized to 0-0.5)
+  const qualityBoost = qualityScore ? (qualityScore / 200) : 0;
+  return (1 / (RRF_K + rank)) + qualityBoost;
 }
 
 export function applyTitleBoost<T extends { id: string; score: number; title?: string }>(
@@ -218,13 +220,25 @@ export function buildFilterClauses(
   // Difficulty filter
   if (filters.difficulty) {
     const thresholds = DIFFICULTY_THRESHOLDS[filters.difficulty];
+
+    // Legacy GPA support (if thresholds still use min_gpa/max_gpa)
     if ('min_gpa' in thresholds) {
       where.push('c.avg_gpa >= ?');
-      params.push(thresholds.min_gpa);
+      params.push((thresholds as any).min_gpa);
     }
     if ('max_gpa' in thresholds) {
       where.push('c.avg_gpa <= ?');
-      params.push(thresholds.max_gpa);
+      params.push((thresholds as any).max_gpa);
+    }
+
+    // New Composite Scores (0-100 scale)
+    if ('min_quality' in thresholds) {
+      where.push('c.quality_score >= ?');
+      params.push(thresholds.min_quality);
+    }
+    if ('max_quality' in thresholds) {
+      where.push('c.quality_score <= ?');
+      params.push(thresholds.max_quality);
     }
     if ('min_difficulty' in thresholds) {
       where.push('c.difficulty_score >= ?');
@@ -590,11 +604,16 @@ export async function hybridSearch(
     const semanticRank = semanticRanks.get(id);
     const keywordRank = keywordRanks.get(id);
 
+    // We need to fetch quality score for RRF boost
+    // Wait for the promise to resolve before accessing properties
+    const courseData = await db.prepare('SELECT quality_score FROM courses WHERE id = ?').bind(id).first<{ quality_score: number }>();
+    const qualityScore = courseData?.quality_score;
+
     if (semanticRank) {
-      score += rrfScore(semanticRank);
+      score += rrfScore(semanticRank, qualityScore);
     }
     if (keywordRank) {
-      score += rrfScore(keywordRank);
+      score += rrfScore(keywordRank, qualityScore);
     }
 
     scores.push({ id, score, semanticRank, keywordRank });
