@@ -64,7 +64,7 @@ syncRoutes.post('/admin/enrich-gpa', async (c) => {
 // Admin trigger: Reset GPA Sync Cursor
 syncRoutes.post('/admin/reset-gpa-sync', async (c) => {
   try {
-    await resetGpaSync(c.env.DB, c.env.GPA_CACHE as unknown as KVNamespace);
+    await resetGpaSync(c.env.DB, c.env.GPA_CACHE as any);
     return c.json({ message: 'GPA sync cursor reset to 0.' });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
@@ -74,7 +74,7 @@ syncRoutes.post('/admin/reset-gpa-sync', async (c) => {
 // Admin trigger: Resume GPA Sync (Process next chunk)
 syncRoutes.post('/admin/sync-gpa', async (c) => {
   try {
-    const result = await resumeGpaSync(c.env.DB, c.env.GPA_CACHE as unknown as KVNamespace);
+    const result = await resumeGpaSync(c.env.DB, c.env.GPA_CACHE as any);
     return c.json(result);
   } catch (error) {
     return c.json({ error: String(error) }, 500);
