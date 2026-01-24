@@ -10,6 +10,9 @@ import { getTermsByStatus, upsertTermState, makeTermId } from './db/index.js';
 import { getSubjectsForTerm } from './services/parallel-sync.js';
 import { discoverAndClassifyTerms } from './services/term-discovery.js';
 
+import { resumeGpaSync, resetGpaSync } from './services/gpa-sync.js';
+import { enrichCoursesWithGpa } from './services/enrichment.js';
+
 type Bindings = {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
@@ -68,7 +71,41 @@ export default {
       return;
     }
 
-    // Default: Regular Course Sync (every 5 mins)
+    // Weekly GPA Reset (Sunday 2:00 AM CST / 8:00 AM UTC)
+    if (cron === "0 8 * * 0") {
+      console.log('[Cron] Resetting GPA sync cursor...');
+      ctx.waitUntil((async () => {
+        try {
+          await resetGpaSync(env.DB);
+          console.log('[Cron] GPA sync cursor reset to 0.');
+        } catch (err) {
+          console.error('[Cron] Failed to reset GPA sync:', err);
+        }
+      })());
+      return;
+    }
+
+    // Frequent GPA Resume (Every 5 minutes)
+    if (cron === "*/5 * * * *") {
+      console.log('[Cron] Resuming GPA sync chunk...');
+      ctx.waitUntil((async () => {
+        try {
+          const result = await resumeGpaSync(env.DB);
+          console.log(`[Cron] GPA chunk processed: ${result.message}`);
+
+          if (result.isComplete) {
+            console.log('[Cron] GPA Sync Complete! Starting Enrichment...');
+            await enrichCoursesWithGpa(env.DB);
+            console.log('[Cron] Enrichment triggered.');
+          }
+        } catch (err) {
+          console.error('[Cron] GPA sync chunk failed:', err);
+        }
+      })());
+      return;
+    }
+
+    // Default: Regular Course Sync (every 3 minutes)
     console.log('[Cron] Starting scheduled sync (Fan-Out Mode)...');
 
     const activeTerms = await getTermsByStatus(env.DB, 'active');

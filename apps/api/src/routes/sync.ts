@@ -1,15 +1,19 @@
 import { Hono } from 'hono';
-import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
+import type { D1Database, VectorizeIndex, Ai, Fetcher } from '@cloudflare/workers-types';
 import { CISAPIClient } from '../cisapi/client.js';
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
+import { resumeGpaSync, resetGpaSync, retryFailedBatches } from '../services/gpa-sync.js';
+import { enrichCoursesWithGpa } from '../services/enrichment.js';
+import { syncRateMyProfessorData } from '../services/rmp-sync.js';
 
 type Bindings = {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
   AI: Ai;
+  SELF: Fetcher;
 
   // API endpoints
   CURRENT_YEAR: string;
@@ -22,6 +26,59 @@ type Bindings = {
 };
 
 export const syncRoutes = new Hono<{ Bindings: Bindings }>();
+
+// Admin trigger for Retry Failures
+syncRoutes.post('/admin/retry-gpa-failures', async (c) => {
+  try {
+    const result = await retryFailedBatches(c.env.DB);
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Admin trigger for RMP Sync
+syncRoutes.post('/admin/sync-rmp', async (c) => {
+  try {
+    const result = await syncRateMyProfessorData(c.env.DB);
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Admin trigger for GPA Enrichment
+syncRoutes.post('/admin/enrich-gpa', async (c) => {
+  try {
+    // Fire and forget (or await if you want to see logs)
+    // Enrichment can take time, so better to use waitUntil if it gets too long,
+    // but for debugging we'll await it to see immediate errors.
+    await enrichCoursesWithGpa(c.env.DB);
+    return c.json({ message: 'Enrichment complete' });
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Admin trigger: Reset GPA Sync Cursor
+syncRoutes.post('/admin/reset-gpa-sync', async (c) => {
+  try {
+    await resetGpaSync(c.env.DB);
+    return c.json({ message: 'GPA sync cursor reset to 0.' });
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Admin trigger: Resume GPA Sync (Process next chunk)
+syncRoutes.post('/admin/sync-gpa', async (c) => {
+  try {
+    const result = await resumeGpaSync(c.env.DB);
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
 
 // Internal batch sync endpoint (Fan-Out Worker)
 syncRoutes.post('/internal/sync-batch', async (c) => {
