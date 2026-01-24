@@ -48,9 +48,9 @@ export default {
     // Handle specific cron schedules
     const cron = event.cron;
 
-    // Daily Term Discovery (4:00 AM CST = 10:00 UTC)
-    if (cron === "0 10 * * *") {
-      console.log('[Cron] Starting daily term discovery...');
+    // Daily Term Discovery (4:00 AM & 4:00 PM CST)
+    if (cron === "0 10,22 * * *") {
+      console.log('[Cron] Starting scheduled term discovery...');
       ctx.waitUntil((async () => {
         try {
           const config = {

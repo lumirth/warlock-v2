@@ -26,8 +26,8 @@ CLIENT_CACHE_TTL_MS = "30000"
 
 [triggers]
 crons = [
-  "*/5 * * * *",  # Sync active terms every 5 minutes
-  "0 10 * * *"    # Discover new terms daily at 10:00 UTC (4:00 AM CST)
+  "*/3 * * * *",  # Sync active terms every 3 minutes
+  "0 10,22 * * *" # Discover new terms twice daily (4:00 AM & 4:00 PM CST)
 ]
 
 [[d1_databases]]

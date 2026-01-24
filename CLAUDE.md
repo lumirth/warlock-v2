@@ -59,8 +59,8 @@ cd apps/api && npx wrangler d1 execute course-search-db --command="SELECT * FROM
 - `packages/query-types` - Shared TypeScript types for query processing
 
 ### Sync & Discovery Architecture (Fan-Out)
-- **Auto-Discovery**: Daily cron (`0 10 * * *`) discovers new terms and classifies them as `active` or `historical`.
-- **Fan-Out Sync**: Every 5 minutes, the coordinator identifies active terms, splits subjects into batches of 40, and dispatches them via Service Bindings for parallel processing.
+- **Auto-Discovery**: Twice-daily cron (`0 10,22 * * *`) discovers new terms and classifies them as `active` or `historical`.
+- **Fan-Out Sync**: Every 3 minutes, the coordinator identifies active terms, splits subjects into batches of 40, and dispatches them via Service Bindings for parallel processing.
 - **Batch Workers**: Handle XML cascade parsing, D1 upserts, and Vectorize embedding generation.
 
 ### Search Pipeline

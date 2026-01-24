@@ -9,7 +9,7 @@ The API implements a sophisticated synchronization system to ingest course data 
 ### Fan-Out Sync Architecture
 To stay within Cloudflare Worker resource limits (subrequests, memory, and CPU time), the sync process uses a fan-out pattern:
 
-1.  **Coordinator (Cron Triggers):** A scheduled task runs every 5 minutes.
+1.  **Coordinator (Cron Triggers):** A scheduled task runs every 3 minutes.
 2.  **Subject Discovery:** The coordinator fetches the master list of subjects for all active terms.
 3.  **Batch Dispatch:** Subjects are divided into batches of **40 subjects** each.
 4.  **Parallel Execution:** The coordinator dispatches these batches via **Service Bindings** (`env.SELF.fetch`) to internal worker endpoints.
@@ -18,8 +18,8 @@ To stay within Cloudflare Worker resource limits (subrequests, memory, and CPU t
 ### Auto-Discovery Mechanism
 The system automatically discovers new academic terms to sync:
 
-*   **Daily Discovery:** A cron job runs daily at 10:00 UTC (4:00 AM CST).
-*   **Term Classification:** New terms are probed for "enrollmentStatus". If sections have real statuses (not "UNKNOWN"), the term is marked as `active` and added to the 5-minute sync rotation.
+*   **Twice-Daily Discovery:** A cron job runs daily at 4:00 AM & 4:00 PM CST (10:00 & 22:00 UTC).
+*   **Term Classification:** New terms are probed for "enrollmentStatus". If sections have real statuses (not "UNKNOWN"), the term is marked as `active` and added to the 3-minute sync rotation.
 *   **Historical Archive:** Terms with no active enrollment are marked as `historical` and kept in the database for reference but synced less frequently.
 
 ## Key Services
