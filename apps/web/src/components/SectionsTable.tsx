@@ -18,7 +18,7 @@ export function SectionsTable({ sections }: SectionsTableProps) {
         <Table.Td>
           <Group gap="xs">
              <Text size="sm" fw={500}>{section.instructor || 'TBA'}</Text>
-             {section.instructorRmp !== null && (
+             {typeof section.instructorRmp === 'number' && (
                  <Badge size="xs" color={section.instructorRmp > RMP_THRESHOLDS.GOOD ? 'teal' : 'orange'}>
                      {section.instructorRmp.toFixed(1)} ★
                  </Badge>
@@ -44,7 +44,7 @@ export function SectionsTable({ sections }: SectionsTableProps) {
           </Badge>
         </Table.Td>
         <Table.Td>
-            {section.instructorGpa !== null ? (
+            {typeof section.instructorGpa === 'number' ? (
                 <Text size="sm" fw={500}>{section.instructorGpa.toFixed(2)}</Text>
             ) : (
                 <Text size="xs" c="dimmed">-</Text>

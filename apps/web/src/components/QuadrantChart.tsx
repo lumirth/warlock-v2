@@ -42,7 +42,7 @@ export function QuadrantChart({ currentCourse, contextCourses = [] }: QuadrantCh
     const points = []
 
     // Only add current course if it has valid data
-    if (currentCourse.quality !== null && currentCourse.difficulty !== null) {
+    if (typeof currentCourse.quality === 'number' && typeof currentCourse.difficulty === 'number') {
       points.push({ ...currentCourse, type: 'current', z: 100 })
     }
 

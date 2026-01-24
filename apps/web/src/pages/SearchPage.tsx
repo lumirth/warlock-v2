@@ -117,7 +117,7 @@ export function SearchPage() {
                 <Badge
                   key={`${hint.type}-${i}`}
                   color={getHintColor(hint.type)}
-                  title={`Source: ${hint.metadata.source}, Confidence: ${(hint.metadata.confidence * 100).toFixed(0)}%`}
+                  title={`Source: ${hint.metadata.source}, Confidence: ${typeof hint.metadata.confidence === 'number' ? (hint.metadata.confidence * 100).toFixed(0) : '?' }%`}
                 >
                   {hint.type}: {formatHintValue(hint.value)}
                 </Badge>
@@ -184,7 +184,7 @@ export function SearchPage() {
                         {r.gened && <Badge variant="outline" size="xs">{r.gened}</Badge>}
                       </Group>
                     </div>
-                    {r._score !== undefined && (
+                    {typeof r._score === 'number' && (
                         <Badge variant="light">Match: {r._score.toFixed(2)}</Badge>
                     )}
                   </Flex>

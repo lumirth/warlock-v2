@@ -54,7 +54,7 @@ export function Scorecard({ qualityScore, difficultyScore }: ScorecardProps) {
 
       <Group gap="xs" mt="md">
          <Text size="xs" c="dimmed">
-             {qualityScore !== null
+             {typeof qualityScore === 'number'
                 ? `Based on composite quality score of ${qualityScore.toFixed(1)}`
                 : 'Insufficient data for quality score'}
          </Text>
