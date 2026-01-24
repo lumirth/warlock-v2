@@ -83,13 +83,22 @@ export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
   let processText = text;
   let nextCursor = startOffset + text.length;
 
+  // Debug stats
+  const debugStats = {
+    startOffset,
+    textLength: text.length,
+    isEndOfFile,
+    contentRange: response.headers.get('content-range'),
+    chunkSize: CHUNK_SIZE_BYTES
+  };
+
   if (!isEndOfFile) {
     const lastNewline = text.lastIndexOf('\n');
     if (lastNewline === -1) {
       // Chunk is huge and has no newline? Unlikely for 100KB chunk.
       // But if it happens, we can't process it safely.
       // We might need to fetch a larger chunk or warn.
-      throw new Error('Chunk contains no newlines. Line too long?');
+      throw new Error(`Chunk contains no newlines. Line too long? Stats: ${JSON.stringify(debugStats)}`);
     }
     processText = text.substring(0, lastNewline);
     nextCursor = startOffset + lastNewline + 1; // Start next chunk after the newline
@@ -123,7 +132,7 @@ export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
   return {
     success: true,
     rowsProcessed: inserted,
-    message: `Processed ${inserted} rows. Cursor moved to ${nextCursor}. ${isEndOfFile ? '(Complete)' : '(Continuing)'}`,
+    message: `Processed ${inserted} rows. Cursor moved to ${nextCursor}. ${isEndOfFile ? '(Complete)' : '(Continuing)'}. Debug: ${lines.length} lines parsed. first: ${lines[0]?.substring(0, 20)}...`,
     isComplete: isEndOfFile
   };
 }
