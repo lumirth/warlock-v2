@@ -35,6 +35,7 @@ export interface RawSection {
   end_time?: string | null
   instructor_rmp?: number | null
   instructor_gpa?: number | null
+  instructor_stats?: InstructorLink[] | null
 
   // camelCase (Fresh)
   sectionNumber?: string | null
@@ -64,6 +65,7 @@ export interface RawCourseResponse {
   difficulty_score: number | null
   _score?: number
   _historical?: boolean
+  instructor_links?: Record<string, InstructorLink>
   sections?: RawSection[]
 }
 
@@ -80,6 +82,15 @@ export interface Section {
   instructor: string
   instructorRmp: number | null
   instructorGpa: number | null
+  instructorStats?: InstructorLink[] | null
+}
+
+export interface InstructorLink {
+  instructor_name?: string | null
+  rmp_rating: number | null
+  rmp_id: string | null
+  avg_gpa: number | null
+  num_ratings?: number | null
 }
 
 export interface Course {
@@ -95,6 +106,7 @@ export interface Course {
   primary_instructor: string | null
   quality_score: number | null
   difficulty_score: number | null
+  instructor_links?: Record<string, InstructorLink>
   _score?: number
   _historical?: boolean
   sections?: Section[]
