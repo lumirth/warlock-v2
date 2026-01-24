@@ -98,7 +98,8 @@ function parseSectionsXml(xml: string): CISAPISection[] {
   const sections: CISAPISection[] = [];
 
   // Match each section block
-  const sectionBlockRegex = /<section\s+id="([^"]+)"[^>]*>[\s\S]*?<\/section>/g;
+  // Updated to handle both <section> and <detailedSection> tags
+  const sectionBlockRegex = /<(?:detailedSection|section)\s+id="([^"]+)"[^>]*>[\s\S]*?<\/(?:detailedSection|section)>/g;
   let sectionMatch;
 
   while ((sectionMatch = sectionBlockRegex.exec(xml)) !== null) {
