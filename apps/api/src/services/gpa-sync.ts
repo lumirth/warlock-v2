@@ -46,7 +46,8 @@ export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
   const response = await fetch(GPA_DATASET_URL, {
     headers: {
       'Range': `bytes=${startOffset}-${endOffset}`,
-      'User-Agent': 'Cloudflare-Worker-GPA-Sync'
+      'User-Agent': 'Cloudflare-Worker-GPA-Sync',
+      'Accept-Encoding': 'identity'
     }
   });
 
