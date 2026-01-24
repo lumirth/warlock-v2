@@ -26,10 +26,9 @@ CLIENT_CACHE_TTL_MS = "30000"
 
 [triggers]
 crons = [
-  "*/3 * * * *",   # Sync active terms every 3 minutes
   "0 10,22 * * *", # Discover new terms twice daily (4:00 AM & 4:00 PM CST)
   "0 8 * * 0",     # Reset GPA sync weekly (Sunday 2:00 AM CST)
-  "*/5 * * * *"    # Resume GPA sync chunks (Every 5 mins)
+  "*/5 * * * *"    # Frequent sync (GPA Resume + Active Terms)
 ]
 
 [[d1_databases]]

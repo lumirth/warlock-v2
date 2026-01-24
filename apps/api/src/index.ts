@@ -102,10 +102,11 @@ export default {
           console.error('[Cron] GPA sync chunk failed:', err);
         }
       })());
-      return;
+      // Fall through to allow Fan-Out sync to run as well
     }
 
-    // Default: Regular Course Sync (every 3 minutes)
+    // Default: Regular Course Sync (Fan-Out Mode)
+    // Runs on every cron trigger that reaches here (including */5 * * * *)
     console.log('[Cron] Starting scheduled sync (Fan-Out Mode)...');
 
     const activeTerms = await getTermsByStatus(env.DB, 'active');
