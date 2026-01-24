@@ -24,6 +24,12 @@ MAX_RETRIES = "3"
 # Caching
 CLIENT_CACHE_TTL_MS = "30000"
 
+[triggers]
+crons = [
+  "*/5 * * * *",  # Sync active terms every 5 minutes
+  "0 10 * * *"    # Discover new terms daily at 10:00 UTC (4:00 AM CST)
+]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "course-search-db"
@@ -35,3 +41,7 @@ index_name = "course-embeddings"
 
 [ai]
 binding = "AI"
+
+[[services]]
+binding = "SELF"
+service = "uiuc-course-search"

@@ -66,10 +66,10 @@ function rrfScore(rank: number): number {
   return 1 / (RRF_K + rank);
 }
 
-export function applyTitleBoost(
-  scores: { id: string; score: number; title?: string }[],
+export function applyTitleBoost<T extends { id: string; score: number; title?: string }>(
+  scores: T[],
   query: string
-): { id: string; score: number; title?: string }[] {
+): T[] {
   const queryLower = query.toLowerCase().trim();
   if (!queryLower) return scores;
 

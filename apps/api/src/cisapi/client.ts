@@ -1,5 +1,5 @@
 import type { CISAPISubject, CISAPICourse, CISAPICourseDetail } from './types.js';
-import { parseSubjectsXml, parseCoursesXml, parseCourseDetailXml } from './parser.js';
+import { parseSubjectsXml, parseCoursesXml, parseCourseDetailXml, parseSubjectCascadeXml, type ParsedSubjectCascade } from './parser.js';
 
 export interface CISAPIClientOptions {
   baseUrl: string;
@@ -50,6 +50,21 @@ export class CISAPIClient {
     const path = `/schedule/${this.year}/${this.term}/${subjectId}.xml`;
     const xml = await this.fetch(path);
     return parseCoursesXml(xml, subjectId);
+  }
+
+  async getSubjectCascade(subjectId: string): Promise<ParsedSubjectCascade> {
+    const path = `/schedule/${this.year}/${this.term}/${subjectId}.xml?mode=cascade`;
+    const xml = await this.fetch(path);
+
+    // Create a stream from the XML string since the parser now requires a stream
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(xml));
+        controller.close();
+      }
+    });
+
+    return parseSubjectCascadeXml(stream);
   }
 
   async getCourseDetail(subjectId: string, courseNumber: string): Promise<CISAPICourseDetail | null> {

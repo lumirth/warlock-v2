@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@uiuc-course-search/query-types": "^0.0.1",
+    "events": "^3.3.0",
     "hono": "^4.11.4",
     "htmlparser2": "^10.0.0"
   }

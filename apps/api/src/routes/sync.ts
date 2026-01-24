@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { CISAPIClient } from '../cisapi/client.js';
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
-import { syncTerm } from '../services/parallel-sync.js';
+import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
 
@@ -22,6 +22,45 @@ type Bindings = {
 };
 
 export const syncRoutes = new Hono<{ Bindings: Bindings }>();
+
+// Internal batch sync endpoint (Fan-Out Worker)
+syncRoutes.post('/internal/sync-batch', async (c) => {
+  // Only allow internal calls (verify if needed, but Service Bindings are secure by default if not exposed)
+  // For extra security in HTTP mode, check a shared secret header if exposed to internet
+  // But here we assume this is called via Service Binding or internal dispatch
+
+  try {
+    const { year, term, subjects } = await c.req.json<{ year: number; term: string; subjects: string[] }>();
+
+    if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
+      return c.json({ error: 'No subjects provided' }, 400);
+    }
+
+    const config = {
+      cisapiBase: c.env.CISAPI_BASE,
+      concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
+      offset: 0,
+      limit: subjects.length,
+    };
+
+    console.log(`[Batch Worker] Syncing ${subjects.length} subjects: ${subjects.join(', ')}`);
+
+    const result = await syncSubjects(
+      c.env.DB,
+      config,
+      year,
+      term,
+      subjects,
+      c.env.VECTORIZE,
+      c.env.AI
+    );
+
+    return c.json(result);
+  } catch (error) {
+    console.error('[Batch Worker] Error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
 
 // Term discovery endpoint
 syncRoutes.post('/admin/discover-terms', async (c) => {
@@ -69,7 +108,7 @@ syncRoutes.get('/admin/terms', async (c) => {
 syncRoutes.post('/admin/sync/:year/:term', async (c) => {
   const { year, term } = c.req.param();
   const offset = parseInt(c.req.query('offset') || '0');
-  const limit = parseInt(c.req.query('limit') || '20');
+  const limit = parseInt(c.req.query('limit') || '40'); // Default to 40 for efficiency
 
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
@@ -120,7 +159,7 @@ syncRoutes.post('/admin/sync-active', async (c) => {
   }
 
   const offset = parseInt(c.req.query('offset') || '0');
-  const limit = parseInt(c.req.query('limit') || '20');
+  const limit = parseInt(c.req.query('limit') || '40'); // Default to 40
 
   const config = {
     cisapiBase: c.env.CISAPI_BASE,

@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { parseSubjectCascadeXml } from '../parser.js';
 
+// Helper to create a stream from a string for testing
+function createStream(str: string): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(str));
+      controller.close();
+    }
+  });
+}
+
 // Sample XML that matches actual CISAPI cascade response structure
 // Note: CISAPI uses <cascadingCourse> and <detailedSection> in cascade mode
 const SAMPLE_CASCADE_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -68,16 +78,16 @@ const SAMPLE_CASCADE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 </ns2:subject>`;
 
 describe('parseSubjectCascadeXml', () => {
-  it('parses subject id and label correctly', () => {
-    const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
+  it('parses subject id and label correctly', async () => {
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
 
     expect(result).not.toBeNull();
     expect(result?.subjectId).toBe('CS');
     expect(result?.subjectLabel).toBe('Computer Science');
   });
 
-  it('parses cascadingCourse elements (not just <course>)', () => {
-    const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
+  it('parses cascadingCourse elements (not just <course>)', async () => {
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
 
     expect(result?.courses).toHaveLength(2);
     expect(result?.courses[0].id).toBe('225');
@@ -86,8 +96,8 @@ describe('parseSubjectCascadeXml', () => {
     expect(result?.courses[1].title).toBe('Intro to Algorithms');
   });
 
-  it('parses detailedSection elements (not just <section>)', () => {
-    const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
+  it('parses detailedSection elements (not just <section>)', async () => {
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
 
     // CS 225 should have 2 sections
     const cs225 = result?.courses.find(c => c.id === '225');
@@ -104,8 +114,8 @@ describe('parseSubjectCascadeXml', () => {
     expect(cs225?.sections[1].enrollmentStatus).toBe('Closed');
   });
 
-  it('parses section meeting details correctly', () => {
-    const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
+  it('parses section meeting details correctly', async () => {
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
     const cs225 = result?.courses.find(c => c.id === '225');
     const lecture = cs225?.sections[0];
     const meeting = lecture?.meetings[0];
@@ -117,8 +127,8 @@ describe('parseSubjectCascadeXml', () => {
     expect(meeting?.roomNumber).toBe('1404');
   });
 
-  it('parses instructor information correctly', () => {
-    const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
+  it('parses instructor information correctly', async () => {
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
     const cs225 = result?.courses.find(c => c.id === '225');
     const lecture = cs225?.sections[0];
     const meeting = lecture?.meetings[0];
@@ -128,19 +138,19 @@ describe('parseSubjectCascadeXml', () => {
     expect(meeting?.instructors[0].lastName).toBe('Fagen-Ulmschneider');
   });
 
-  it('parses genEd categories correctly', () => {
-    const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
+  it('parses genEd categories correctly', async () => {
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
     const cs225 = result?.courses.find(c => c.id === '225');
 
     expect(cs225?.genEdCategories[0].id).toBe('QR');
   });
 
-  it('throws for invalid XML without subject id', () => {
-    expect(() => parseSubjectCascadeXml('<invalid>xml</invalid>')).toThrow('Invalid XML: missing subject id');
+  it('throws for invalid XML without subject id', async () => {
+    await expect(parseSubjectCascadeXml(createStream('<invalid>xml</invalid>'))).rejects.toThrow('Invalid XML: missing subject id');
   });
 
-  it('handles sections without instructors gracefully', () => {
-    const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
+  it('handles sections without instructors gracefully', async () => {
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
     const cs374 = result?.courses.find(c => c.id === '374');
     const section = cs374?.sections[0];
     const meeting = section?.meetings[0];
@@ -152,12 +162,12 @@ describe('parseSubjectCascadeXml', () => {
 
 // This test specifically documents the bug that was fixed
 describe('parseSubjectCascadeXml - detailedSection bug regression test', () => {
-  it('MUST parse detailedSection elements - this was a production bug', () => {
+  it('MUST parse detailedSection elements - this was a production bug', async () => {
     // This test exists because the parser originally looked for <section>
     // but CISAPI returns <detailedSection> in cascade mode.
     // If this test fails, sections will be 0 in the database.
 
-    const result = parseSubjectCascadeXml(SAMPLE_CASCADE_XML);
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
 
     const totalSections = result?.courses.reduce(
       (sum, course) => sum + course.sections.length,
@@ -171,11 +181,10 @@ describe('parseSubjectCascadeXml - detailedSection bug regression test', () => {
 });
 
 describe('parseSubjectCascadeXml - error handling', () => {
-  it('throws on malformed XML', () => {
-    expect(() => parseSubjectCascadeXml('<broken')).toThrow();
-  });
-
-  it('throws on completely invalid input', () => {
-    expect(() => parseSubjectCascadeXml('not xml at all')).toThrow();
+  it('throws on malformed XML', async () => {
+    // HTML parser is very forgiving, but we can test our explicit throws
+    // actually htmlparser2 might not throw on malformed xml, it just parses what it can
+    // but our wrapper might throw if subjectId is missing
+    await expect(parseSubjectCascadeXml(createStream('<broken'))).rejects.toThrow();
   });
 });

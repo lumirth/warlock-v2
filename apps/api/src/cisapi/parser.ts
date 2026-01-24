@@ -293,7 +293,9 @@ export interface ParsedCascadeCourse {
   sections: ParsedCascadeSection[];
 }
 
-export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
+export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> | null): Promise<ParsedSubjectCascade> {
+  if (!stream) throw new Error('No response body stream');
+
   const result: ParsedSubjectCascade = {
     subjectId: '',
     subjectLabel: '',
@@ -511,7 +513,21 @@ export function parseSubjectCascadeXml(xml: string): ParsedSubjectCascade {
     }
   }, { xmlMode: true });
 
-  parser.write(xml);
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parser.write(decoder.decode(value, { stream: true }));
+    }
+    // Flush any remaining bytes
+    parser.write(decoder.decode(new Uint8Array(), { stream: false }));
+  } finally {
+    reader.releaseLock();
+  }
+
   parser.end();
 
   if (!result.subjectId) {
