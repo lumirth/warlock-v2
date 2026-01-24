@@ -46,15 +46,19 @@ export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
   const response = await fetch(GPA_DATASET_URL, {
     headers: {
       'Range': `bytes=${startOffset}-${endOffset}`,
-      'User-Agent': 'Cloudflare-Worker-GPA-Sync',
-      'Accept-Encoding': 'identity'
+      'User-Agent': 'git-fetch', // Try a standard UA to avoid aggressive compression
+      'Accept': '*/*',
+      'Accept-Encoding': 'identity;q=1.0, *;q=0' // Strictly forbid compression
     }
   });
 
-  console.log(`[GPA Sync Debug] Status: ${response.status}`);
-  console.log(`[GPA Sync Debug] Content-Range: ${response.headers.get('content-range')}`);
-  console.log(`[GPA Sync Debug] Content-Length: ${response.headers.get('content-length')}`);
-  console.log(`[GPA Sync Debug] Content-Encoding: ${response.headers.get('content-encoding')}`);
+  const headersDebug = {
+    status: response.status,
+    range: response.headers.get('content-range'),
+    type: response.headers.get('content-type'),
+    encoding: response.headers.get('content-encoding')
+  };
+  console.log(`[GPA Sync Debug] Headers: ${JSON.stringify(headersDebug)}`);
 
   // Handle completion (416 Range Not Satisfiable)
   if (response.status === 416) {
@@ -72,7 +76,15 @@ export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
     throw new Error(`Failed to fetch GPA dataset: ${response.status} ${response.statusText}`);
   }
 
-  const text = await response.text();
+  const arrayBuffer = await response.arrayBuffer();
+  const text = new TextDecoder().decode(arrayBuffer);
+
+  // Hex dump first 16 bytes to detect GZIP (1f 8b)
+  const firstBytes = new Uint8Array(arrayBuffer.slice(0, 16));
+  const hexDump = Array.from(firstBytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+  console.log(`[GPA Sync Debug] First 16 bytes: ${hexDump}`);
+  console.log(`[GPA Sync Debug] First 50 chars: ${text.substring(0, 50)}`);
+
   if (!text) {
      // Empty body?
      return { success: true, rowsProcessed: 0, message: 'Empty response (EOF?)', isComplete: true };
