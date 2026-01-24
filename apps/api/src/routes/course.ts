@@ -116,9 +116,23 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
         instructorLinks.results.map(r => [r.instructor_name, r])
       );
 
+      // Enrich sections with instructor stats
+      const enrichedSections = sections.results.map(section => {
+        const names = section.instructor ? section.instructor.split(';').map(s => s.trim()).filter(Boolean) : [];
+        const stats = names.map(name => linksMap[name]).filter(Boolean);
+        const primaryStats = stats[0];
+
+        return {
+          ...section,
+          instructor_stats: stats,
+          instructor_rmp: primaryStats?.rmp_rating || section.instructor_rmp,
+          instructor_gpa: primaryStats?.avg_gpa || section.instructor_gpa
+        };
+      });
+
       return c.json({
         ...existing,
-        sections: sections.results,
+        sections: enrichedSections,
         instructor_links: linksMap,
         _cached: true,
         _age_seconds: existing.age_seconds
@@ -166,9 +180,23 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
         instructorLinks.results.map(r => [r.instructor_name, r])
       );
 
+      // Enrich sections with instructor stats
+      const enrichedSections = sections.results.map(section => {
+        const names = section.instructor ? section.instructor.split(';').map(s => s.trim()).filter(Boolean) : [];
+        const stats = names.map(name => linksMap[name]).filter(Boolean);
+        const primaryStats = stats[0];
+
+        return {
+          ...section,
+          instructor_stats: stats,
+          instructor_rmp: primaryStats?.rmp_rating || section.instructor_rmp,
+          instructor_gpa: primaryStats?.avg_gpa || section.instructor_gpa
+        };
+      });
+
       return c.json({
         ...existing,
-        sections: sections.results,
+        sections: enrichedSections,
         instructor_links: linksMap,
         _stale: true,
         _stale_reason: rateLimiter.getErrorMessage(),

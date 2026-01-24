@@ -8,6 +8,8 @@ export interface EnrichmentTask {
   instructorName: string;
 }
 
+const ENRICHMENT_BATCH_SIZE = 10;
+
 /**
  * Coordinator: Identifies all unique instructor-course contexts and dispatches batches.
  */
@@ -59,26 +61,48 @@ export async function coordinateEnrichment(db: D1Database, selfBinding: Fetcher)
     }
   }
 
-  console.log(`[Enrichment Coord] Found ${linkTasks.length} unique instructor-course contexts. Dispatching batches...`);
+  console.log(`[Enrichment Coord] Found ${linkTasks.length} unique instructor-course contexts. Checking for missing links...`);
 
-  // 3. Dispatch Batches (Fan-Out)
-  // BATCH_SIZE 100 ensures the batch worker stays well under the 1000 subrequest limit
-  const BATCH_SIZE = 100;
-  let batchCount = 0;
+  // 3. Filter by existing links (Incremental Strategy)
+  const existingLinksResult = await db.prepare(`
+    SELECT term_id, subject, number, instructor_name FROM instructor_course_links
+    WHERE term_id = ?
+  `).bind(termId).all<{ term_id: string; subject: string; number: string; instructor_name: string }>();
 
-  for (let i = 0; i < linkTasks.length; i += BATCH_SIZE) {
-    const chunk = linkTasks.slice(i, i + BATCH_SIZE);
-    batchCount++;
-
-    await selfBinding.fetch('http://internal/internal/enrich-batch', {
-      method: 'POST',
-      body: JSON.stringify({ tasks: chunk }),
-      headers: { 'Content-Type': 'application/json' }
-    });
+  const existingSet = new Set<string>();
+  if (existingLinksResult.success) {
+    for (const row of existingLinksResult.results) {
+      existingSet.add(`${row.term_id}|${row.subject}|${row.number}|${row.instructor_name}`);
+    }
   }
 
-  console.log(`[Enrichment Coord] Dispatched ${batchCount} batches.`);
-  return { taskCount: linkTasks.length, batchCount };
+  const missingTasks = linkTasks.filter(t => !existingSet.has(`${t.termId}|${t.subject}|${t.number}|${t.instructorName}`));
+
+  console.log(`[Enrichment Coord] Total contexts: ${linkTasks.length}, Missing: ${missingTasks.length}`);
+
+  if (missingTasks.length === 0) {
+    return { taskCount: 0, batchCount: 0 };
+  }
+
+  // 4. Shuffle and Slice (Strict limit for Free Tier compatibility)
+  const shuffled = [...missingTasks];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const chunk = shuffled.slice(0, ENRICHMENT_BATCH_SIZE);
+
+  console.log(`[Enrichment Coord] Dispatching 1 batch of ${chunk.length} tasks.`);
+
+  // 5. Dispatch Batch (Fan-Out)
+  await selfBinding.fetch('http://internal/internal/enrich-batch', {
+    method: 'POST',
+    body: JSON.stringify({ tasks: chunk }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  return { taskCount: chunk.length, batchCount: 1 };
 }
 
 /**
@@ -86,7 +110,7 @@ export async function coordinateEnrichment(db: D1Database, selfBinding: Fetcher)
  */
 export async function processEnrichmentBatch(db: D1Database, tasks: EnrichmentTask[]): Promise<number> {
   console.log(`[Enrichment Batch] Processing ${tasks.length} tasks...`);
-  
+
   const statements: any[] = [];
   let resolvedCount = 0;
 
@@ -120,6 +144,29 @@ export async function processEnrichmentBatch(db: D1Database, tasks: EnrichmentTa
         match.gpaId ? 'gpa_bridge' : 'direct_rmp'
       ));
       resolvedCount++;
+    } else {
+      // Mark as failed to prevent infinite retry loop
+      statements.push(db.prepare(`
+        INSERT INTO instructor_course_links (
+          term_id, subject, number, instructor_name,
+          gpa_id, rmp_id, confidence_score, match_method
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
+          gpa_id = excluded.gpa_id,
+          rmp_id = excluded.rmp_id,
+          confidence_score = excluded.confidence_score,
+          match_method = excluded.match_method
+      `).bind(
+        task.termId,
+        task.subject,
+        task.number,
+        task.instructorName,
+        null,
+        null,
+        0,
+        'failed'
+      ));
     }
   }
 
