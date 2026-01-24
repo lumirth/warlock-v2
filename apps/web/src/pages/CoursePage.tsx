@@ -85,6 +85,7 @@ export function CoursePage() {
         </Group>
         <Text size="lg" c="dimmed">
           {course.credit_hours} Credit Hours • {course.term} {course.year}
+          {course.primary_instructor && ` • ${course.primary_instructor}`}
         </Text>
       </Stack>
 
@@ -125,7 +126,10 @@ export function CoursePage() {
             <div>
               <Title order={2} size="h3" mb="md">Sections & Instructors</Title>
               <Paper withBorder radius="md" style={{ overflow: 'hidden' }}>
-                 <SectionsTable sections={course.sections || []} />
+                 <SectionsTable
+                   sections={course.sections || []}
+                   instructorLinks={course.instructor_links}
+                 />
               </Paper>
             </div>
           </Stack>

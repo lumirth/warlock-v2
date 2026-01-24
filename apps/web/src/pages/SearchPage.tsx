@@ -180,6 +180,11 @@ export function SearchPage() {
                         <Text size="xs" c="dimmed">
                           {r.term} {r.year} | {r.credit_hours} credits
                         </Text>
+                        {r.primary_instructor && (
+                          <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-gray-3)', paddingLeft: '8px' }}>
+                            {r.primary_instructor}
+                          </Text>
+                        )}
                         {r._historical && <Badge color="yellow" size="xs">historical</Badge>}
                         {r.gened && <Badge variant="outline" size="xs">{r.gened}</Badge>}
                       </Group>

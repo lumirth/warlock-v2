@@ -66,6 +66,7 @@ class ApiClient {
       primary_instructor: rawData.primary_instructor ?? null,
       quality_score: rawData.quality_score ?? null,
       difficulty_score: rawData.difficulty_score ?? null,
+      instructor_links: rawData.instructor_links,
       _score: rawData._score,
       _historical: rawData._historical,
       sections: normalizedSections
@@ -85,7 +86,8 @@ class ApiClient {
       location: s.location ?? 'TBA',
       instructor: s.instructor ?? 'TBA',
       instructorRmp: s.instructor_rmp ?? null,
-      instructorGpa: s.instructor_gpa ?? null
+      instructorGpa: s.instructor_gpa ?? null,
+      instructorStats: s.instructor_stats ?? null
     }
   }
 }
