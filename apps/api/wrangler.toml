@@ -27,7 +27,7 @@ CLIENT_CACHE_TTL_MS = "30000"
 [triggers]
 crons = [
   "0 10,22 * * *",
-  "0 8 * * 0",
+  "0 8 * * SUN",
   "*/5 * * * *"
 ]
 
