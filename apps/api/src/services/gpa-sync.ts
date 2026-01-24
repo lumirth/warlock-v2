@@ -51,6 +51,11 @@ export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
     }
   });
 
+  console.log(`[GPA Sync Debug] Status: ${response.status}`);
+  console.log(`[GPA Sync Debug] Content-Range: ${response.headers.get('content-range')}`);
+  console.log(`[GPA Sync Debug] Content-Length: ${response.headers.get('content-length')}`);
+  console.log(`[GPA Sync Debug] Content-Encoding: ${response.headers.get('content-encoding')}`);
+
   // Handle completion (416 Range Not Satisfiable)
   if (response.status === 416) {
     await upsertSyncState(db, {
@@ -132,7 +137,7 @@ export async function resumeGpaSync(db: D1Database): Promise<SyncResult> {
   return {
     success: true,
     rowsProcessed: inserted,
-    message: `Processed ${inserted} rows. Cursor moved to ${nextCursor}. ${isEndOfFile ? '(Complete)' : '(Continuing)'}. Debug: ${lines.length} lines parsed. first: ${lines[0]?.substring(0, 20)}...`,
+    message: `Processed ${inserted} rows. Cursor moved to ${nextCursor}. ${isEndOfFile ? '(Complete)' : '(Continuing)'}. Debug: ${lines.length} lines parsed. Content-Type: ${response.headers.get('content-type')}, Encoding: ${response.headers.get('content-encoding')}, Range: ${response.headers.get('content-range')}`,
     isComplete: isEndOfFile
   };
 }
