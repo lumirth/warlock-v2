@@ -21,11 +21,15 @@ interface QuadrantChartProps {
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload
+
+    // Defensive helpers
+    const fmt = (val: any) => (typeof val === 'number' ? val.toFixed(1) : 'N/A')
+
     return (
       <Paper p="xs" shadow="sm" withBorder>
         <Text fw={700} size="sm">{data.code}</Text>
-        <Text size="xs">Quality: {data.quality?.toFixed(1) ?? 'N/A'}</Text>
-        <Text size="xs">Difficulty: {data.difficulty?.toFixed(1) ?? 'N/A'}</Text>
+        <Text size="xs">Quality: {fmt(data.quality)}</Text>
+        <Text size="xs">Difficulty: {fmt(data.difficulty)}</Text>
       </Paper>
     )
   }
@@ -62,8 +66,8 @@ export function QuadrantChart({ currentCourse, contextCourses = [] }: QuadrantCh
   return (
     <Stack gap="xs">
       <Text size="sm" fw={500} ta="center" id="chart-title">Difficulty vs. Quality</Text>
-      <div style={{ width: '100%', height: 250 }} role="img" aria-labelledby="chart-title">
-        <ResponsiveContainer>
+      <div style={{ width: '100%', height: 250, minWidth: 0 }} role="img" aria-labelledby="chart-title">
+        <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
