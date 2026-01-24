@@ -1,8 +1,14 @@
 import { Hono } from 'hono';
+import type { D1Database, Fetcher, KVNamespace } from '@cloudflare/workers-types';
 import { getRateLimiter, resetRateLimiter } from '../services/rate-limiter.js';
 import { browserFetch } from '../http/browser-fetch.js';
+import { coordinateRmpSync } from '../services/rmp-sync.js';
+import { enrichCoursesWithScoring, enrichCoursesWithGpa } from '../services/enrichment.js';
 
 type Bindings = {
+  DB: D1Database;
+  SELF: Fetcher;
+  GPA_CACHE: KVNamespace;
   // API endpoints
   CISAPI_BASE: string;
 
@@ -10,9 +16,32 @@ type Bindings = {
   BACKOFF_BASE_MS: string;
   BACKOFF_MAX_MS: string;
   MAX_RETRIES: string;
+  CURRENT_YEAR: string;
+  CURRENT_TERM: string;
 };
 
 export const debugRoutes = new Hono<{ Bindings: Bindings }>();
+
+// Manual RMP Sync Trigger
+debugRoutes.post('/admin/sync/rmp', async (c) => {
+  try {
+    const result = await coordinateRmpSync(c.env.SELF);
+    return c.json(result);
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// Manual Enrichment Trigger
+debugRoutes.post('/admin/sync/enrich', async (c) => {
+  try {
+    await enrichCoursesWithGpa(c.env.DB);
+    await enrichCoursesWithScoring(c.env.DB);
+    return c.json({ success: true, message: 'Enrichment complete' });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
 
 // Rate limiter status
 debugRoutes.get('/admin/rate-limit-status', (c) => {

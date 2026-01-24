@@ -248,7 +248,8 @@ export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]
     UPDATE instructors
     SET
       rmp_rating = (SELECT rating FROM rmp_cache WHERE instructor_name = instructors.display_name),
-      rmp_difficulty = (SELECT difficulty FROM rmp_cache WHERE instructor_name = instructors.display_name)
+      rmp_difficulty = (SELECT difficulty FROM rmp_cache WHERE instructor_name = instructors.display_name),
+      rmp_num_ratings = (SELECT num_ratings FROM rmp_cache WHERE instructor_name = instructors.display_name)
     WHERE display_name IN (SELECT instructor_name FROM rmp_cache WHERE fetched_at > unixepoch() - 300)
     AND EXISTS (SELECT 1 FROM rmp_cache WHERE instructor_name = instructors.display_name)
   `).run();

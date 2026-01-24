@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS instructors (
     display_name TEXT NOT NULL,
     rmp_rating REAL,
     rmp_difficulty REAL,
+    rmp_num_ratings INTEGER DEFAULT 0,
     avg_gpa REAL,
     gpa_sample_size INTEGER
 );

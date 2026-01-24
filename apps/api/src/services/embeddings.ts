@@ -13,12 +13,13 @@ export interface CourseEmbeddingData {
 
 // Create text for embedding
 function createEmbeddingText(course: CourseEmbeddingData): string {
+  const instructorsText = course.primary_instructor ? `Instructors: ${course.primary_instructor}` : '';
   const parts = [
+    instructorsText,
     `${course.subject} ${course.number}`,
     course.title,
     course.description || '',
     course.gened ? `GenEd: ${course.gened}` : '',
-    course.primary_instructor ? `Instructor: ${course.primary_instructor}` : ''
   ];
 
   return parts.filter(Boolean).join(' ').slice(0, 512); // Limit length

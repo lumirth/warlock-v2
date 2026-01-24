@@ -39,6 +39,7 @@ database_id = "ae2bcf8a-c988-4e93-81a7-0c96c089e5d6"
 [[kv_namespaces]]
 binding = "GPA_CACHE"
 id = "d7e1138ab1344bd2b102ed3502eb0b9f"
+preview_id = "d6493db5a2db45ca8568c9d220a8e2b6"
 
 [[vectorize]]
 binding = "VECTORIZE"

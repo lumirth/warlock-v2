@@ -90,8 +90,12 @@ describe('buildFilterClauses', () => {
       }
       // New Quality/Difficulty check
       if ('min_quality' in DIFFICULTY_THRESHOLDS.easy) {
-        expect(result.where).toContain('c.quality_score >= ?');
+        expect(result.where.some(w => w.includes('c.quality_score >= ?'))).toBe(true);
         expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.min_quality);
+      }
+      if ('max_difficulty' in DIFFICULTY_THRESHOLDS.easy) {
+        expect(result.where.some(w => w.includes('c.difficulty_score <= ?'))).toBe(true);
+        expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.max_difficulty);
       }
     });
 
@@ -105,8 +109,12 @@ describe('buildFilterClauses', () => {
       }
       // New Quality/Difficulty check
       if ('max_quality' in DIFFICULTY_THRESHOLDS.hard) {
-        expect(result.where).toContain('c.quality_score <= ?');
+        expect(result.where.some(w => w.includes('c.quality_score <= ?'))).toBe(true);
         expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.max_quality);
+      }
+      if ('min_difficulty' in DIFFICULTY_THRESHOLDS.hard) {
+        expect(result.where.some(w => w.includes('c.difficulty_score >= ?'))).toBe(true);
+        expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.min_difficulty);
       }
     });
   });

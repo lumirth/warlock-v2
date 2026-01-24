@@ -11,7 +11,7 @@ import { getSubjectsForTerm } from './services/parallel-sync.js';
 import { discoverAndClassifyTerms } from './services/term-discovery.js';
 
 import { resumeGpaSync, resetGpaSync } from './services/gpa-sync.js';
-import { enrichCoursesWithGpa } from './services/enrichment.js';
+import { enrichCoursesWithGpa, enrichCoursesWithScoring } from './services/enrichment.js';
 import { coordinateRmpSync } from './services/rmp-sync.js';
 
 type Bindings = {
@@ -112,6 +112,8 @@ export default {
           if (result.isComplete) {
             console.log('[Cron] GPA Sync Complete! Starting Enrichment...');
             await enrichCoursesWithGpa(env.DB);
+            // Chain scoring enrichment after GPA enrichment
+            await enrichCoursesWithScoring(env.DB);
             console.log('[Cron] Enrichment triggered.');
           }
         } catch (err) {

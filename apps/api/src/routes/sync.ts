@@ -6,7 +6,7 @@ import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
 import { resumeGpaSync, resetGpaSync, retryFailedBatches } from '../services/gpa-sync.js';
-import { enrichCoursesWithGpa } from '../services/enrichment.js';
+import { enrichCoursesWithGpa, enrichCoursesWithScoring } from '../services/enrichment.js';
 import { syncRateMyProfessorData, coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
 
 type Bindings = {
@@ -70,6 +70,16 @@ syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
     return c.json({ status: 'processing', message: 'Batch accepted', count: teachers.length }, 202);
   } catch (error) {
     console.error('[RMP Batch] Error:', error);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+// Admin trigger for Contextual Scoring
+syncRoutes.post('/admin/enrich-scoring', async (c) => {
+  try {
+    await enrichCoursesWithScoring(c.env.DB);
+    return c.json({ message: 'Scoring enrichment complete' });
+  } catch (error) {
     return c.json({ error: String(error) }, 500);
   }
 });

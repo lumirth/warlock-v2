@@ -1,4 +1,121 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { resolveInstructor } from './matcher.js';
+
+/**
+ * Resolves instructor names for active courses and links them to GPA/RMP data.
+ * The results are stored in instructor_course_links for runtime lookup.
+ */
+export async function enrichCoursesWithScoring(db: D1Database): Promise<void> {
+  console.log('[Enrichment] Starting Context-Aware Instructor Linking...');
+
+  // 1. Get Active Term
+  const termResult = await db.prepare(`
+    SELECT term_id, year, term FROM term_state
+    WHERE status = 'active'
+    ORDER BY year DESC, CASE term
+      WHEN 'fall' THEN 4
+      WHEN 'summer' THEN 3
+      WHEN 'spring' THEN 2
+      WHEN 'winter' THEN 1
+    END DESC
+    LIMIT 1
+  `).first<{ term_id: string; year: number; term: string }>();
+
+  if (!termResult) {
+    console.warn('[Enrichment] No active term found. Skipping linking.');
+    return;
+  }
+  const { term_id: termId, year: activeYear, term: activeTerm } = termResult;
+  console.log(`[Enrichment] Using active term: ${termId} (Year: ${activeYear}, Term: ${activeTerm})`);
+
+  // 2. Fetch unique (subject, number, primary_instructor) for the active term
+  const coursesResult = await db.prepare(`
+    SELECT DISTINCT subject, number, primary_instructor
+    FROM courses
+    WHERE year = ? AND term = ? AND primary_instructor IS NOT NULL
+  `).bind(activeYear, activeTerm).all<{ subject: string; number: string; primary_instructor: string }>();
+
+  if (!coursesResult.success) {
+    console.error('[Enrichment] Failed to fetch active courses.');
+    return;
+  }
+
+  const courses = coursesResult.results;
+  console.log(`[Enrichment] Found ${courses.length} courses with instructors for linking.`);
+
+  // 3. Extract unique instructor/course tuples to minimize resolution calls
+  const uniqueLinks = new Set<string>();
+  const linkTasks: { termId: string; subject: string; number: string; instructorName: string }[] = [];
+
+  for (const course of courses) {
+    const instructors = course.primary_instructor.split(';').map(s => s.trim()).filter(Boolean);
+    for (const name of instructors) {
+      const key = `${termId}|${course.subject}|${course.number}|${name}`;
+      if (!uniqueLinks.has(key)) {
+        uniqueLinks.add(key);
+        linkTasks.push({ termId, subject: course.subject, number: course.number, instructorName: name });
+      }
+    }
+  }
+
+  console.log(`[Enrichment] Resolving ${linkTasks.length} unique instructor-course links...`);
+
+  // 4. Resolve and Upsert
+  const BATCH_SIZE = 50;
+  let resolvedCount = 0;
+
+  for (let i = 0; i < linkTasks.length; i += BATCH_SIZE) {
+    const chunk = linkTasks.slice(i, i + BATCH_SIZE);
+    const statements: any[] = [];
+
+    for (const task of chunk) {
+      const match = await resolveInstructor(db, {
+        subject: task.subject,
+        number: task.number,
+        instructorName: task.instructorName
+      });
+
+      if (match) {
+        statements.push(db.prepare(`
+          INSERT INTO instructor_course_links (
+            term_id, subject, number, instructor_name,
+            gpa_id, rmp_id, confidence_score, match_method
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
+            gpa_id = excluded.gpa_id,
+            rmp_id = excluded.rmp_id,
+            confidence_score = excluded.confidence_score,
+            match_method = excluded.match_method
+        `).bind(
+          task.termId,
+          task.subject,
+          task.number,
+          task.instructorName,
+          match.gpaId || null,
+          match.rmpId || null,
+          1.0,
+          'gpa_bridge'
+        ));
+        resolvedCount++;
+      }
+    }
+
+    if (statements.length > 0) {
+      try {
+        await db.batch(statements);
+      } catch (err) {
+        console.error(`[Enrichment] Failed to batch upsert links at index ${i}:`, err);
+      }
+    }
+
+    if (i > 0 && i % 500 === 0) {
+      console.log(`[Enrichment] Progress: ${i} / ${linkTasks.length} links processed...`);
+    }
+  }
+
+  console.log(`[Enrichment] Finished. Linked ${resolvedCount} instructors across ${linkTasks.length} unique contexts.`);
+}
 
 export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
   console.log('[Enrichment] Starting GPA aggregation and enrichment...');
@@ -59,7 +176,7 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
 
   // 3. Update courses in batches using D1 batching
   // We use a larger batch size since we are only processing diffs
-  const BATCH_SIZE = 50;
+  const BATCH_SIZE = 500;
   let updatedCount = 0;
 
   for (let i = 0; i < updates.length; i += BATCH_SIZE) {
@@ -84,4 +201,7 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
   }
 
   console.log(`[Enrichment] Finished. Propagated stats to ${updatedCount} course definitions.`);
+
+  // Chain the new scoring enrichment
+  await enrichCoursesWithScoring(db);
 }

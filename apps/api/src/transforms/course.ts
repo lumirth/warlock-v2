@@ -28,6 +28,11 @@ export function formatInstructorName(
     : instructor.lastName;
 }
 
+export function formatInstructors(instructors: string[]): string | null {
+  if (instructors.length === 0) return null;
+  return instructors.join('; ');
+}
+
 export function fromSubjectCascade(
   parsed: ParsedSubjectCascade,
   year: number,
@@ -54,12 +59,26 @@ export function fromSubjectCascade(
   const coursesWithSections = parsed.courses.map(c => {
     const courseId = makeCourseId(parsed.subjectId, c.id, year, term);
 
-    // Find primary section (prefer lecture)
-    const primarySection = c.sections.find(s =>
-      s.meetings.some(m => m.typeName.toLowerCase().includes('lecture') || m.typeCode === 'LEC')
-    ) ?? c.sections[0];
+    // Find all unique instructors for the course (prefer lectures)
+    const allInstructors = new Set<string>();
+    const lectureInstructors = new Set<string>();
 
-    const primaryMeeting = primarySection?.meetings[0];
+    c.sections.forEach(s => {
+      const isLecture = s.meetings.some(m => m.typeName.toLowerCase().includes('lecture') || m.typeCode === 'LEC');
+      s.meetings.forEach(m => {
+        m.instructors.forEach(inst => {
+          const name = formatInstructorName(inst);
+          if (name) {
+            allInstructors.add(name);
+            if (isLecture) lectureInstructors.add(name);
+          }
+        });
+      });
+    });
+
+    const primaryInstructors = lectureInstructors.size > 0
+      ? Array.from(lectureInstructors)
+      : Array.from(allInstructors);
 
     // Flatten GenEd categories
     const genEdCategories = c.genEdCategories.flatMap(cat =>
@@ -82,7 +101,7 @@ export function fromSubjectCascade(
         gened: c.genEdCategories[0]?.id ?? null, // Keep for backward compat
         year,
         term,
-        primary_instructor: formatInstructorName(primaryMeeting?.instructors[0]),
+        primary_instructor: formatInstructors(primaryInstructors),
         last_synced: now,
         avg_gpa: null,
         gpa_sample_size: null,
@@ -101,6 +120,15 @@ export function fromSubjectCascade(
         // Use first meeting for backward compatibility fields
         const firstMeeting = s.meetings[0];
 
+        // Collect all instructors for this section
+        const sectionInstructors = new Set<string>();
+        s.meetings.forEach(m => {
+          m.instructors.forEach(inst => {
+            const name = formatInstructorName(inst);
+            if (name) sectionInstructors.add(name);
+          });
+        });
+
         const section: Section = {
           crn: s.crn,
           course_id: courseId,
@@ -112,7 +140,7 @@ export function fromSubjectCascade(
           start_time: firstMeeting?.startTime || null,
           end_time: firstMeeting?.endTime || null,
           location: firstMeeting ? `${firstMeeting.buildingName} ${firstMeeting.roomNumber}`.trim() || null : null,
-          instructor: formatInstructorName(firstMeeting?.instructors[0]),
+          instructor: formatInstructors(Array.from(sectionInstructors)),
 
           instructor_rmp: null,
           instructor_gpa: null,

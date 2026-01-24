@@ -165,12 +165,7 @@ export function prepareUpsertCourse(db: D1Database, course: Omit<Course, 'create
       description = excluded.description,
       credit_hours = excluded.credit_hours,
       gened = excluded.gened,
-      avg_gpa = excluded.avg_gpa,
-      gpa_sample_size = excluded.gpa_sample_size,
       primary_instructor = excluded.primary_instructor,
-      primary_instructor_rmp = excluded.primary_instructor_rmp,
-      difficulty_score = excluded.difficulty_score,
-      quality_score = excluded.quality_score,
       last_synced = excluded.last_synced,
       updated_at = unixepoch()
   `).bind(

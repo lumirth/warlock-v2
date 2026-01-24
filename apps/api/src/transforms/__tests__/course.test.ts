@@ -155,6 +155,38 @@ describe('fromSubjectCascade', () => {
     expect(result.coursesWithSections[0].course.primary_instructor).toBe('Fagen, W');
   });
 
+  it('collects multiple unique instructors separated by "; "', () => {
+    const multiInstructorParsed: ParsedSubjectCascade = {
+      ...sampleParsed,
+      courses: [
+        {
+          ...sampleParsed.courses[0],
+          sections: [
+            {
+              ...sampleParsed.courses[0].sections[0],
+              meetings: [
+                {
+                  ...sampleParsed.courses[0].sections[0].meetings[0],
+                  instructors: [
+                    { firstName: 'Wade', lastName: 'Fagen' },
+                    { firstName: 'Geoffrey', lastName: 'Challen' }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+
+    const result = fromSubjectCascade(multiInstructorParsed, 2026, 'spring');
+    const course = result.coursesWithSections[0].course;
+    const section = result.coursesWithSections[0].sections[0].section;
+
+    expect(course.primary_instructor).toBe('Fagen, W; Challen, G');
+    expect(section.instructor).toBe('Fagen, W; Challen, G');
+  });
+
   it('transforms all sections with new fields', () => {
     const result = fromSubjectCascade(sampleParsed, 2026, 'spring');
     const sectionsWithDetails = result.coursesWithSections[0].sections;

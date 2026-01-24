@@ -231,21 +231,27 @@ export function buildFilterClauses(
       params.push((thresholds as any).max_gpa);
     }
 
-    // New Composite Scores (0-100 scale)
+    // New Composite Scores (0-100 scale) with Legacy Fallback
     if ('min_quality' in thresholds) {
-      where.push('c.quality_score >= ?');
+      // (Quality Score >= X) OR (Quality Score IS NULL AND Legacy GPA >= 3.5)
+      where.push('(c.quality_score >= ? OR (c.quality_score IS NULL AND c.avg_gpa >= 3.5))');
       params.push(thresholds.min_quality);
     }
     if ('max_quality' in thresholds) {
-      where.push('c.quality_score <= ?');
+      // (Quality Score <= X) OR (Quality Score IS NULL AND Legacy GPA <= 3.0)
+      where.push('(c.quality_score <= ? OR (c.quality_score IS NULL AND c.avg_gpa <= 3.0))');
       params.push(thresholds.max_quality);
     }
     if ('min_difficulty' in thresholds) {
-      where.push('c.difficulty_score >= ?');
+      // (Difficulty Score >= X) OR (Difficulty Score IS NULL AND Legacy GPA <= 3.0)
+      // Note: Low GPA = High Difficulty
+      where.push('(c.difficulty_score >= ? OR (c.difficulty_score IS NULL AND c.avg_gpa <= 3.0))');
       params.push(thresholds.min_difficulty);
     }
     if ('max_difficulty' in thresholds) {
-      where.push('c.difficulty_score <= ?');
+      // (Difficulty Score <= X) OR (Difficulty Score IS NULL AND Legacy GPA >= 3.5)
+      // Note: High GPA = Low Difficulty
+      where.push('(c.difficulty_score <= ? OR (c.difficulty_score IS NULL AND c.avg_gpa >= 3.5))');
       params.push(thresholds.max_difficulty);
     }
   }
@@ -414,16 +420,21 @@ export async function keywordSearch(
 
   // Sanitize the query
   const cleanQuery = hasKeyword ? sanitizeFtsQuery(keywordQuery) : '';
+  console.log('[Search] Raw query:', keywordQuery);
+  console.log('[Search] Clean query:', cleanQuery);
   let searchParam = cleanQuery;
 
   // Query Expansion: "Computer Science" -> ("Computer Science") OR CS
   if (hasKeyword && !filters.subject && !filters.number) {
     const subjectId = await validateSubject(db, cleanQuery);
     if (subjectId) {
+      console.log('[Search] Expanded subject:', subjectId);
       const escaped = cleanQuery.replace(/"/g, '""');
       searchParam = `"${escaped}" OR ${subjectId}`;
     }
   }
+  const finalParams = hasKeyword ? [...params, searchParam, limit] : [...params, limit];
+
 
   const sql = hasKeyword ? `
     SELECT DISTINCT c.id, bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0) as fts_score
@@ -432,7 +443,7 @@ export async function keywordSearch(
     ${joinClause}
     ${whereClause}
     ${whereClause ? 'AND' : 'WHERE'} courses_fts MATCH ?
-    ORDER BY fts_score
+    ORDER BY fts_score ASC
     LIMIT ?
   ` : `
     SELECT DISTINCT c.id, 0 as fts_score
@@ -443,13 +454,13 @@ export async function keywordSearch(
     LIMIT ?
   `;
 
-  const finalParams = [...params];
   if (hasKeyword) {
-    finalParams.push(searchParam);
+     console.log('[Search] Executing FTS SQL:', sql);
+     console.log('[Search] Params:', [...finalParams]);
   }
-  finalParams.push(limit);
 
   const result = await db.prepare(sql).bind(...finalParams).all<{ id: string; fts_score: number }>();
+  console.log(`[Search] Keyword search found ${result.results.length} results`);
 
   return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
 }
@@ -484,7 +495,7 @@ export async function sectionKeywordSearch(
     ${joinClause}
     ${whereClause}
     ${whereClause ? 'AND' : 'WHERE'} sections_fts MATCH ?
-    ORDER BY fts_score
+    ORDER BY fts_score ASC
     LIMIT ?
   `;
 
@@ -535,6 +546,8 @@ export async function postFilterSemanticResults(
   const validIdsResult = await db.prepare(sql).bind(...finalParams).all<{ id: string }>();
   const validIdSet = new Set(validIdsResult.results.map(r => r.id));
 
+  console.log(`[Search] Semantic post-filter: ${semanticResults.length} -> ${validIdSet.size} results`);
+
   return semanticResults.filter(r => validIdSet.has(r.id));
 }
 
@@ -572,6 +585,8 @@ export async function hybridSearch(
     keywordSearch(db, plan, 50),
     hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, 50) : Promise.resolve([])
   ]);
+
+  console.log(`[Search] Results - Semantic: ${rawSemanticResults.length}, Course Keyword: ${courseKeywordResults.length}, Section Keyword: ${sectionKeywordResults.length}`);
 
   // Post-filter semantic results for hard constraints
   const semanticResults = runSemantic
@@ -634,6 +649,9 @@ export async function hybridSearch(
     }
     return 0;
   });
+
+  console.log('[Search] Top scores:', scores.slice(0, 5).map(s => ({ id: s.id, score: s.score.toFixed(4), sem: s.semanticRank, key: s.keywordRank })));
+
   const topIds = scores.slice(0, limit);
 
   if (topIds.length === 0) {

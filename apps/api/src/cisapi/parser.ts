@@ -48,24 +48,25 @@ export function parseCoursesXml(xml: string, subjectId: string): CISAPICourse[] 
 
 export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
   // Extract basic course info
-  const idMatch = xml.match(/<course\s+id="([^"]+)"/);
-  const subjectMatch = xml.match(/<subject\s+id="([^"]+)"/);
-  const labelMatch = xml.match(/<label>([^<]+)<\/label>/);
-  const descMatch = xml.match(/<description>([^<]*)<\/description>/s);
-  const creditMatch = xml.match(/<creditHours>([^<]*)<\/creditHours>/);
-  const courseInfoMatch = xml.match(/<courseSectionInformation>([^<]*)<\/courseSectionInformation>/s);
-  const classScheduleInfoMatch = xml.match(/<classScheduleInformation>([^<]*)<\/classScheduleInformation>/s);
+  // Handle optional namespaces (e.g. ns2:course) and attributes in any order
+  const idMatch = xml.match(/<(?:[\w]+:)?course[^>]*\s+id="([^"]+)"/);
+  const subjectMatch = xml.match(/<(?:[\w]+:)?subject[^>]*\s+id="([^"]+)"/);
+  const labelMatch = xml.match(/<(?:[\w]+:)?label>([^<]+)<\/(?:[\w]+:)?label>/);
+  const descMatch = xml.match(/<(?:[\w]+:)?description>([^<]*)<\/(?:[\w]+:)?description>/s);
+  const creditMatch = xml.match(/<(?:[\w]+:)?creditHours>([^<]*)<\/(?:[\w]+:)?creditHours>/);
+  const courseInfoMatch = xml.match(/<(?:[\w]+:)?courseSectionInformation>([^<]*)<\/(?:[\w]+:)?courseSectionInformation>/s);
+  const classScheduleInfoMatch = xml.match(/<(?:[\w]+:)?classScheduleInformation>([^<]*)<\/(?:[\w]+:)?classScheduleInformation>/s);
 
   if (!idMatch || !subjectMatch) return null;
 
   // Parse genEd categories
   const genEdCategories: CISAPIGenEd[] = [];
-  const genEdRegex = /<genEdCategory\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/genEdCategory>/g;
+  const genEdRegex = /<(?:[\w]+:)?genEdCategory[^>]*\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:[\w]+:)?genEdCategory>/g;
   let genEdMatch;
   while ((genEdMatch = genEdRegex.exec(xml)) !== null) {
     const id = genEdMatch[1];
     const content = genEdMatch[2];
-    const descMatch = content.match(/<description>([^<]*)<\/description>/);
+    const descMatch = content.match(/<(?:[\w]+:)?description>([^<]*)<\/(?:[\w]+:)?description>/);
     // Attributes are not easily regexable without nested loop, leaving empty for now in this simple parser
     genEdCategories.push({
       id: id,
@@ -98,23 +99,23 @@ function parseSectionsXml(xml: string): CISAPISection[] {
   const sections: CISAPISection[] = [];
 
   // Match each section block
-  // Updated to handle both <section> and <detailedSection> tags
-  const sectionBlockRegex = /<(?:detailedSection|section)\s+id="([^"]+)"[^>]*>[\s\S]*?<\/(?:detailedSection|section)>/g;
+  // Updated to handle both <section> and <detailedSection> tags, and optional namespaces
+  const sectionBlockRegex = /<(?:[\w]+:)?(?:detailedSection|section)[^>]*\s+id="([^"]+)"[^>]*>[\s\S]*?<\/(?:[\w]+:)?(?:detailedSection|section)>/g;
   let sectionMatch;
 
   while ((sectionMatch = sectionBlockRegex.exec(xml)) !== null) {
     const block = sectionMatch[0];
     const crn = sectionMatch[1];
 
-    const sectionNumberMatch = block.match(/<sectionNumber>([^<]*)<\/sectionNumber>/);
-    const statusCodeMatch = block.match(/<statusCode>([^<]*)<\/statusCode>/);
-    const enrollmentStatusMatch = block.match(/<enrollmentStatus>([^<]*)<\/enrollmentStatus>/);
-    const startDateMatch = block.match(/<startDate>([^<]*)<\/startDate>/);
-    const endDateMatch = block.match(/<endDate>([^<]*)<\/endDate>/);
-    const partOfTermMatch = block.match(/<partOfTerm>([^<]*)<\/partOfTerm>/);
-    const sectionStatusCodeMatch = block.match(/<sectionStatusCode>([^<]*)<\/sectionStatusCode>/);
-    const sectionTitleMatch = block.match(/<sectionTitle>([^<]*)<\/sectionTitle>/);
-    const creditHoursMatch = block.match(/<creditHours>([^<]*)<\/creditHours>/);
+    const sectionNumberMatch = block.match(/<(?:[\w]+:)?sectionNumber>([^<]*)<\/(?:[\w]+:)?sectionNumber>/);
+    const statusCodeMatch = block.match(/<(?:[\w]+:)?statusCode>([^<]*)<\/(?:[\w]+:)?statusCode>/);
+    const enrollmentStatusMatch = block.match(/<(?:[\w]+:)?enrollmentStatus>([^<]*)<\/(?:[\w]+:)?enrollmentStatus>/);
+    const startDateMatch = block.match(/<(?:[\w]+:)?startDate>([^<]*)<\/(?:[\w]+:)?startDate>/);
+    const endDateMatch = block.match(/<(?:[\w]+:)?endDate>([^<]*)<\/(?:[\w]+:)?endDate>/);
+    const partOfTermMatch = block.match(/<(?:[\w]+:)?partOfTerm>([^<]*)<\/(?:[\w]+:)?partOfTerm>/);
+    const sectionStatusCodeMatch = block.match(/<(?:[\w]+:)?sectionStatusCode>([^<]*)<\/(?:[\w]+:)?sectionStatusCode>/);
+    const sectionTitleMatch = block.match(/<(?:[\w]+:)?sectionTitle>([^<]*)<\/(?:[\w]+:)?sectionTitle>/);
+    const creditHoursMatch = block.match(/<(?:[\w]+:)?creditHours>([^<]*)<\/(?:[\w]+:)?creditHours>/);
 
     const meetings = parseMeetingsXml(block);
 
@@ -143,27 +144,28 @@ function parseSectionsXml(xml: string): CISAPISection[] {
 function parseMeetingsXml(sectionXml: string): CISAPIMeeting[] {
   const meetings: CISAPIMeeting[] = [];
 
-  const meetingBlockRegex = /<meeting>[\s\S]*?<\/meeting>/g;
+  // Handle meetings with attributes (e.g. id="0")
+  const meetingBlockRegex = /<(?:[\w]+:)?meeting[^>]*>[\s\S]*?<\/(?:[\w]+:)?meeting>/g;
   let meetingMatch;
 
   while ((meetingMatch = meetingBlockRegex.exec(sectionXml)) !== null) {
     const block = meetingMatch[0];
 
-    const typeMatch = block.match(/<type\s+code="([^"]*)"[^>]*>([^<]*)<\/type>/);
-    const startMatch = block.match(/<start>([^<]*)<\/start>/);
-    const endMatch = block.match(/<end>([^<]*)<\/end>/);
-    const daysMatch = block.match(/<daysOfTheWeek>([^<]*)<\/daysOfTheWeek>/);
-    const roomMatch = block.match(/<roomNumber>([^<]*)<\/roomNumber>/);
-    const buildingMatch = block.match(/<buildingName>([^<]*)<\/buildingName>/);
-    const dateRangeMatch = block.match(/<meetingDateRange>([^<]*)<\/meetingDateRange>/);
+    const typeMatch = block.match(/<(?:[\w]+:)?type[^>]*\s+code="([^"]*)"[^>]*>([^<]*)<\/(?:[\w]+:)?type>/);
+    const startMatch = block.match(/<(?:[\w]+:)?start>([^<]*)<\/(?:[\w]+:)?start>/);
+    const endMatch = block.match(/<(?:[\w]+:)?end>([^<]*)<\/(?:[\w]+:)?end>/);
+    const daysMatch = block.match(/<(?:[\w]+:)?daysOfTheWeek>([^<]*)<\/(?:[\w]+:)?daysOfTheWeek>/);
+    const roomMatch = block.match(/<(?:[\w]+:)?roomNumber>([^<]*)<\/(?:[\w]+:)?roomNumber>/);
+    const buildingMatch = block.match(/<(?:[\w]+:)?buildingName>([^<]*)<\/(?:[\w]+:)?buildingName>/);
+    const dateRangeMatch = block.match(/<(?:[\w]+:)?meetingDateRange>([^<]*)<\/(?:[\w]+:)?meetingDateRange>/);
 
     const instructors = parseInstructorsXml(block);
 
     meetings.push({
       type: typeMatch?.[2] ?? '',
       typeCode: typeMatch?.[1] ?? '',
-      start: startMatch?.[1] ?? '',
-      end: endMatch?.[1] ?? '',
+      start: convertTo24Hour(startMatch?.[1] ?? ''),
+      end: convertTo24Hour(endMatch?.[1] ?? ''),
       daysOfTheWeek: daysMatch?.[1] ?? '',
       roomNumber: roomMatch?.[1] ?? '',
       buildingName: buildingMatch?.[1] ?? '',
@@ -178,14 +180,30 @@ function parseMeetingsXml(sectionXml: string): CISAPIMeeting[] {
 function parseInstructorsXml(meetingXml: string): CISAPIInstructor[] {
   const instructors: CISAPIInstructor[] = [];
 
-  const instructorBlockRegex = /<instructor>[\s\S]*?<\/instructor>/g;
+  // Regex to match <instructor> tags, ensuring we don't match <instructors>
+  // Matches <instructor> or <instructor ...>
+  const instructorBlockRegex = /<(?:[\w]+:)?instructor(?:\s+[^>]*|)>[\s\S]*?<\/(?:[\w]+:)?instructor>/g;
   let instructorMatch;
 
   while ((instructorMatch = instructorBlockRegex.exec(meetingXml)) !== null) {
     const block = instructorMatch[0];
+    const openTag = block.match(/<(?:[\w]+:)?instructor([^>]*)>/)?.[1] || '';
 
-    const firstNameMatch = block.match(/<firstName>([^<]*)<\/firstName>/);
-    const lastNameMatch = block.match(/<lastName>([^<]*)<\/lastName>/);
+    // Try attributes first (newer API format)
+    const firstNameAttr = openTag.match(/firstName="([^"]*)"/);
+    const lastNameAttr = openTag.match(/lastName="([^"]*)"/);
+
+    if (lastNameAttr) {
+      instructors.push({
+        firstName: firstNameAttr?.[1] ?? '',
+        lastName: lastNameAttr[1]
+      });
+      continue;
+    }
+
+    // Fallback to child tags (older API format)
+    const firstNameMatch = block.match(/<(?:[\w]+:)?firstName>([^<]*)<\/(?:[\w]+:)?firstName>/);
+    const lastNameMatch = block.match(/<(?:[\w]+:)?lastName>([^<]*)<\/(?:[\w]+:)?lastName>/);
 
     if (lastNameMatch) {
       instructors.push({
