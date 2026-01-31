@@ -1,4 +1,4 @@
-export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level' | 'course_code' | 'crn' | 'days' | 'time' | 'difficulty' | 'online' | 'status' | 'negation';
+export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level' | 'course_code' | 'crn' | 'days' | 'time' | 'difficulty' | 'online' | 'status' | 'negation' | 'partOfTerm';
 
 export interface QueryHint {
   type: QueryHintType;
@@ -27,6 +27,7 @@ export interface SearchFilters {
   // Schedule filters
   days?: string;
   time?: string;              // morning, afternoon, evening, early, midday
+  partOfTerm?: string;        // A, B, 1, etc.
 
   // Attribute filters
   level?: number;
@@ -92,6 +93,7 @@ export type HintType =
   | 'difficulty'
   | 'gened'
   | 'term'
+  | 'partOfTerm'
   | 'negation';
 
 export interface NegationValue {

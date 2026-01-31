@@ -93,6 +93,10 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         plan.filters.time = hint.value as string;
         break;
 
+      case 'partOfTerm':
+        plan.filters.partOfTerm = hint.value as string;
+        break;
+
       case 'level':
         const levelValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
         plan.filters.level = levelValue;

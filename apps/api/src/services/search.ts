@@ -162,6 +162,13 @@ export function buildFilterClauses(
     havingParams.push(filters.gened_all.length);
   }
 
+  // Part of Term filter
+  if (filters.partOfTerm) {
+    joinsSet.add('JOIN sections s ON s.course_id = c.id');
+    where.push('s.part_of_term = ?');
+    params.push(filters.partOfTerm);
+  }
+
   // Instructor filter
   if (filters.instructor_ids?.length) {
     joinsSet.add('JOIN sections s ON s.course_id = c.id');

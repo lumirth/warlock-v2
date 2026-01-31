@@ -56,6 +56,7 @@ export function extract(text: string): ExtractionResult {
 
   // Pass 1.5: Term extraction (Spring 2026, etc.)
   residual = extractTerms(residual, hints);
+  residual = extractPartOfTerm(residual, hints);
 
   // Pass 2: Attributes and Aliases (Level, Credits, Days, Time, etc.)
   residual = extractAttributesAndAliases(residual, hints);
@@ -192,6 +193,60 @@ function extractTerms(text: string, hints: Hint[]): string {
   // Mask matches in reverse order
   for (let i = matches.length - 1; i >= 0; i--) {
     residual = maskRange(residual, matches[i].index, matches[i].length);
+  }
+
+  return residual;
+}
+
+function extractPartOfTerm(text: string, hints: Hint[]): string {
+  let residual = text;
+
+  // 1. Explicit "Part of Term X" or "POT X"
+  const potRegex = /\b(?:part\s+of\s+term|pot)\s+([A-Z0-9])\b/gi;
+  let match;
+  const matches: { index: number; length: number }[] = [];
+
+  while ((match = potRegex.exec(residual)) !== null) {
+    hints.push({
+      type: 'partOfTerm',
+      value: match[1].toUpperCase(),
+      metadata: createMetadata('regex', match[0], 0.95),
+    });
+    matches.push({ index: match.index, length: match[0].length });
+  }
+
+  for (let i = matches.length - 1; i >= 0; i--) {
+    residual = maskRange(residual, matches[i].index, matches[i].length);
+  }
+
+  // 2. "First Half" -> POT A
+  const firstHalfRegex = /\bfirst\s+half\b/gi;
+  const firstHalfMatches: { index: number; length: number }[] = [];
+  while ((match = firstHalfRegex.exec(residual)) !== null) {
+    hints.push({
+      type: 'partOfTerm',
+      value: 'A',
+      metadata: createMetadata('alias', match[0], 0.9),
+    });
+    firstHalfMatches.push({ index: match.index, length: match[0].length });
+  }
+  for (let i = firstHalfMatches.length - 1; i >= 0; i--) {
+    residual = maskRange(residual, firstHalfMatches[i].index, firstHalfMatches[i].length);
+  }
+
+  // 3. "Second Half" -> POT B
+  const secondHalfRegex = /\bsecond\s+half\b/gi;
+  const secondHalfMatches: { index: number; length: number }[] = [];
+  while ((match = secondHalfRegex.exec(residual)) !== null) {
+    hints.push({
+      type: 'partOfTerm',
+      value: 'B',
+      metadata: createMetadata('alias', match[0], 0.9),
+    });
+    secondHalfMatches.push({ index: match.index, length: match[0].length });
+  }
+  for (let i = secondHalfMatches.length - 1; i >= 0; i--) {
+    residual = maskRange(residual, secondHalfMatches[i].index, secondHalfMatches[i].length);
   }
 
   return residual;
