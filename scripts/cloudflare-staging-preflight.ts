@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export type CheckResult = {
@@ -287,7 +286,7 @@ function formatResults(results: CheckResult[]): string {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const cwd = dirname(resolve(DEFAULT_REPORT));
+  const cwd = process.cwd();
   const results = [
     checkWranglerAuth(args.apiDir),
     ...checkStagingConfig(args.wranglerConfigPath),

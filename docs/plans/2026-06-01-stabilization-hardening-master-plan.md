@@ -531,6 +531,7 @@ Some verification may require native Mac UI or user-visible application state th
 
 ## Staging And Cloudflare
 
+- [x] Add executable Cloudflare staging preflight gate that rejects placeholder resource IDs and missing evidence.
 - [ ] Blocked: configure staging Worker and Pages targets after Cloudflare auth exists in this checkout.
 - [ ] Blocked: configure staging D1, KV, Vectorize, AI, and service bindings after Cloudflare auth exists in this checkout.
 - [ ] Blocked: configure `ADMIN_TOKEN`, `INTERNAL_TOKEN`, and `RMP_AUTH_TOKEN` for staging after Cloudflare auth exists in this checkout.
@@ -541,6 +542,7 @@ Some verification may require native Mac UI or user-visible application state th
 
 ## Data Safety
 
+- [x] Add executable D1 backup/restore evidence preflight with script tests.
 - [ ] Blocked: create remote D1 backup/export after Cloudflare auth exists in this checkout.
 - [ ] Blocked: restore backup to non-production D1 after Cloudflare auth exists in this checkout.
 - [ ] Blocked: verify restored schema and data after Cloudflare auth exists in this checkout.

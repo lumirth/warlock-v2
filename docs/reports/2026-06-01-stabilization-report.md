@@ -23,6 +23,8 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `f6e95da` - Opt CI actions into Node 24
 - `1558d72` - Update CI actions for Node 24
 - `e35da43` - Record passing GitHub CI evidence
+- `195afb4` - Add Cloudflare staging preflight gate
+- `2eacee9` - Tighten Cloudflare preflight resource checks
 
 The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
@@ -50,6 +52,7 @@ Additional gate evidence:
 - `npm run security:audit`: 0 vulnerabilities after upgrading Vite/Vitest/Wrangler transitive lockfile.
 - `npm run d1:preflight` has script-level tests for passing restore evidence, missing backup markers, and missing `--restore-verified`; a direct run against this report with a fake backup ref correctly refused to pass because no real remote restore evidence exists yet.
 - `npm run cloudflare:preflight` is now the executable final gate for Cloudflare staging evidence. It currently fails as expected because Wrangler auth, explicit staging bindings, staging smoke artifacts, WAF/rate-limit rule IDs, and D1 restore markers are not present yet.
+- After adding the Cloudflare preflight gate, `npm run typecheck:scripts`, `npm run test:scripts`, and `npm run lint` passed. `npm run cloudflare:preflight` still reports 23 checks, 0 passing, and 23 failing because no real Cloudflare staging evidence exists in this checkout.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
 
@@ -83,8 +86,8 @@ Browser-found fixes completed:
 
 | Plan Area | Status | Evidence |
 | --- | --- | --- |
-| Git checkpoint and hygiene | Complete locally | Multiple coherent commits on `main`; clean status required before final. |
-| CI/lint/warning debt | Complete | `npm run lint` zero output; private GitHub CI passes on `main` for `e35da43`; CI runs typecheck, schema verification, tests, build, bundle budget, lint, secret scan, audit, eval, and eval artifact upload. |
+| Git checkpoint and hygiene | Complete locally | Multiple coherent commits on `main`; latest checked status was clean against `origin/main`. |
+| CI/lint/warning debt | Complete | `npm run lint` zero output; private GitHub CI passes on `main` for `2eacee9`; CI runs typecheck, schema verification, tests, build, bundle budget, lint, secret scan, audit, eval, and eval artifact upload. |
 | Skipped/manual tests | Complete locally | Hermetic Worker search/course integration tests; no active `.skip`. |
 | Search contract/evals | Complete locally | `npm run eval:smoke` passes 58/58; staging eval command requires explicit URL. |
 | Search explainability/result shape | Complete locally | Shared `MatchEvidence`, `ResultWarning`, `SectionMatchDto`; API attaches evidence; web renders chips; tests cover categories. |
@@ -101,6 +104,7 @@ Browser-found fixes completed:
 | Security review | Complete locally | Route matrix added; auth tests pass; secret scan/audit pass. |
 | Data artifact/bootstrap hygiene | Complete locally | `.gitignore` protects generated artifacts while explicitly tracking the canonical baseline migration; `npm run bootstrap:fresh-check` verifies fresh clone bootstrap without `history_chunks/` or `full_history.sql`; remediation report records whole-project backup. |
 | Computer Use QA | Not needed | No native Mac UI task was required; Browser/terminal were stronger signals. |
+| Cloudflare final preflight | Added, currently red by design | `npm run cloudflare:preflight` verifies Wrangler auth, explicit staging bindings, real-looking non-placeholder D1/KV IDs, required staging env vars, staging smoke artifact, staging URL evidence, WAF/rate-limit evidence, and D1 restore evidence. |
 
 ## Cloudflare Auth Blocker
 
@@ -120,6 +124,14 @@ CLOUDFLARE_API_TOKEN=unset
 CF_API_TOKEN=unset
 CLOUDFLARE_ACCOUNT_ID=unset
 CF_ACCOUNT_ID=unset
+```
+
+GitHub repository secret and variable name checks also returned no configured entries:
+
+```bash
+gh secret list --repo lumirth/uiuc-course-search
+gh variable list --repo lumirth/uiuc-course-search
+# no output
 ```
 
 No secret values were exposed or committed.
@@ -149,10 +161,10 @@ The first push to the new remote was rejected because old generated artifacts we
 Observed passing runs:
 
 ```bash
-gh run view 26770916794 --json conclusion,status,url,headSha,createdAt,updatedAt,name,event,jobs
+gh run view 26771922160 --json conclusion,status,url,headSha,createdAt,updatedAt,workflowName,jobs
 # conclusion: success
-# headSha: e35da430a43005014d9b11194a8efe5dc0d1bcf1
-# url: https://github.com/lumirth/uiuc-course-search/actions/runs/26770916794
+# headSha: 2eacee975728943219cf78dfe874206c7ae88089
+# url: https://github.com/lumirth/uiuc-course-search/actions/runs/26771922160
 ```
 
 The run completed every configured step successfully: install, typecheck, schema verification, tests, build, bundle budget, lint, secret scan, dependency audit, search smoke eval, and eval report artifact upload.
