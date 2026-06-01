@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { coordinateEnrichment } from '../enrichment.js';
+import { calculateCourseScores, coordinateEnrichment, enrichCoursesWithScores } from '../enrichment.js';
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 
 function createDb(overrides: {
@@ -100,5 +100,68 @@ describe('coordinateEnrichment', () => {
     expect(selfBinding.fetch).toHaveBeenCalledTimes(40);
     expect(stateWrites[0]).toEqual(['enrichment:2026-spring', 'running', 0, 40, '2026-spring']);
     expect(stateWrites.at(-1)).toEqual(['enrichment:2026-spring', 'partial', 400, 40, '2026-spring']);
+  });
+});
+
+describe('course score enrichment', () => {
+  it('normalizes GPA and RMP data into 0-100 quality and difficulty scores', () => {
+    expect(calculateCourseScores({
+      id: 'CS-225-2026-spring',
+      avg_gpa: 3.6,
+      primary_instructor_rmp: 4.5,
+      linked_rmp_rating: 4.2,
+      linked_rmp_difficulty: 3,
+    })).toEqual({
+      qualityScore: 90,
+      difficultyScore: 35,
+      primaryInstructorRmp: 4.5,
+    });
+  });
+
+  it('falls back to linked RMP rating when the course primary rating is empty', () => {
+    expect(calculateCourseScores({
+      id: 'CS-173-2026-spring',
+      avg_gpa: null,
+      primary_instructor_rmp: null,
+      linked_rmp_rating: 4,
+      linked_rmp_difficulty: 2.5,
+    })).toEqual({
+      qualityScore: 80,
+      difficultyScore: 50,
+      primaryInstructorRmp: 4,
+    });
+  });
+
+  it('updates courses from aggregate GPA and linked RMP data', async () => {
+    const updateBinds: unknown[][] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        all: vi.fn(async () => ({
+          success: true,
+          results: [{
+            id: 'CS-225-2026-spring',
+            avg_gpa: 3.6,
+            primary_instructor_rmp: null,
+            linked_rmp_rating: 4.5,
+            linked_rmp_difficulty: 3,
+          }],
+        })),
+        bind: vi.fn((...args: unknown[]) => {
+          if (sql.includes('UPDATE courses')) {
+            updateBinds.push(args);
+          }
+          return {};
+        }),
+      })),
+      batch: vi.fn(async () => []),
+    };
+
+    const result = await enrichCoursesWithScores(db as unknown as D1Database);
+
+    expect(result).toEqual({ updated: 1 });
+    expect(updateBinds).toEqual([
+      [90, 35, 4.5, 'CS-225-2026-spring'],
+    ]);
+    expect(db.batch).toHaveBeenCalledTimes(1);
   });
 });

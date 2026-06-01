@@ -5,7 +5,7 @@ import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId, type SyncState, type TermState } from '../db/index.js';
 import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
-import { enrichCoursesWithGpa, coordinateEnrichment, processEnrichmentBatch, EnrichmentTask } from '../services/enrichment.js';
+import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment, processEnrichmentBatch, EnrichmentTask } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
 import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
@@ -141,7 +141,8 @@ syncRoutes.post('/internal/enrich-batch', async (c) => {
 syncRoutes.post('/admin/enrich-gpa', async (c) => {
   try {
     await enrichCoursesWithGpa(c.env.DB);
-    return c.json({ message: 'Enrichment complete' });
+    const scores = await enrichCoursesWithScores(c.env.DB);
+    return c.json({ message: 'Enrichment complete', scoreUpdateCount: scores.updated });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }

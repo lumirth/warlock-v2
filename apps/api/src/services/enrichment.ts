@@ -12,6 +12,72 @@ export interface EnrichmentTask {
 
 const ENRICHMENT_BATCH_SIZE = 10;
 const MAX_ENRICHMENT_BATCHES_PER_RUN = 40;
+const SCORE_UPDATE_BATCH_SIZE = 500;
+
+type CourseScoreSource = {
+  id: string;
+  avg_gpa: number | null;
+  primary_instructor_rmp: number | null;
+  linked_rmp_rating: number | null;
+  linked_rmp_difficulty: number | null;
+};
+
+export type CourseScoreResult = {
+  qualityScore: number | null;
+  difficultyScore: number | null;
+  primaryInstructorRmp: number | null;
+};
+
+function clampScore(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function roundScore(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function scoreFromGpa(avgGpa: number): number {
+  return clampScore((avgGpa / 4) * 100);
+}
+
+function scoreFromRmpRating(rating: number): number {
+  return clampScore((rating / 5) * 100);
+}
+
+function difficultyFromGpa(avgGpa: number): number {
+  return clampScore(100 - scoreFromGpa(avgGpa));
+}
+
+function difficultyFromRmp(difficulty: number): number {
+  return clampScore((difficulty / 5) * 100);
+}
+
+export function calculateCourseScores(source: CourseScoreSource): CourseScoreResult {
+  const rmpRating = source.primary_instructor_rmp ?? source.linked_rmp_rating;
+  const qualityParts = [
+    typeof source.avg_gpa === 'number' ? scoreFromGpa(source.avg_gpa) : null,
+    typeof rmpRating === 'number' ? scoreFromRmpRating(rmpRating) : null,
+  ].filter((value): value is number => value !== null);
+
+  const difficultyParts = [
+    typeof source.avg_gpa === 'number' ? difficultyFromGpa(source.avg_gpa) : null,
+    typeof source.linked_rmp_difficulty === 'number' ? difficultyFromRmp(source.linked_rmp_difficulty) : null,
+  ].filter((value): value is number => value !== null);
+
+  const quality = average(qualityParts);
+  const difficulty = average(difficultyParts);
+
+  return {
+    qualityScore: quality === null ? null : roundScore(quality),
+    difficultyScore: difficulty === null ? null : roundScore(difficulty),
+    primaryInstructorRmp: rmpRating ?? null,
+  };
+}
 
 /**
  * Coordinator: Identifies all unique instructor-course contexts and dispatches batches.
@@ -216,6 +282,7 @@ export async function processEnrichmentBatch(db: D1Database, tasks: EnrichmentTa
     for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
       await db.batch(statements.slice(i, i + CHUNK_SIZE));
     }
+    await enrichCoursesWithScores(db);
   }
 
   return resolvedCount;
@@ -281,4 +348,61 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
     await db.batch(statements);
   }
 
+}
+
+/**
+ * Computes normalized 0-100 course quality and difficulty scores from available GPA/RMP data.
+ */
+export async function enrichCoursesWithScores(db: D1Database): Promise<{ updated: number }> {
+  const result = await db.prepare(`
+    SELECT
+      c.id,
+      c.avg_gpa,
+      c.primary_instructor_rmp,
+      AVG(r.rating) as linked_rmp_rating,
+      AVG(r.difficulty) as linked_rmp_difficulty
+    FROM courses c
+    LEFT JOIN instructor_course_links l
+      ON l.term_id = CAST(c.year AS TEXT) || '-' || c.term
+      AND l.subject = c.subject
+      AND l.number = c.number
+    LEFT JOIN rmp_cache r ON l.rmp_id = r.rmp_id
+    GROUP BY c.id
+    HAVING
+      c.avg_gpa IS NOT NULL
+      OR c.primary_instructor_rmp IS NOT NULL
+      OR AVG(r.rating) IS NOT NULL
+      OR AVG(r.difficulty) IS NOT NULL
+  `).all<CourseScoreSource>();
+
+  if (!result.success || result.results.length === 0) {
+    return { updated: 0 };
+  }
+
+  let updated = 0;
+  for (let i = 0; i < result.results.length; i += SCORE_UPDATE_BATCH_SIZE) {
+    const chunk = result.results.slice(i, i + SCORE_UPDATE_BATCH_SIZE);
+    const statements = chunk.map((row) => {
+      const scores = calculateCourseScores(row);
+      updated++;
+      return db.prepare(`
+        UPDATE courses
+        SET
+          quality_score = ?,
+          difficulty_score = ?,
+          primary_instructor_rmp = COALESCE(primary_instructor_rmp, ?),
+          updated_at = unixepoch()
+        WHERE id = ?
+      `).bind(
+        scores.qualityScore,
+        scores.difficultyScore,
+        scores.primaryInstructorRmp,
+        row.id
+      );
+    });
+
+    await db.batch(statements);
+  }
+
+  return { updated };
 }

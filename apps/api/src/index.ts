@@ -13,7 +13,7 @@ import { discoverAndClassifyTerms } from './services/term-discovery.js';
 import { internalAuthHeaders, requireBearerToken } from './middleware/auth.js';
 
 import { resumeGpaSync, resetGpaSync } from './services/gpa-sync.js';
-import { enrichCoursesWithGpa, coordinateEnrichment } from './services/enrichment.js';
+import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from './services/enrichment.js';
 import { coordinateRmpSync } from './services/rmp-sync.js';
 import { createRunId, errorFields, logger } from './observability/logger.js';
 
@@ -154,7 +154,8 @@ export default {
           if (result.isComplete) {
             logger.info('cron.gpaResume.enrichment.start', { runId });
             await enrichCoursesWithGpa(env.DB);
-            // Chain scoring enrichment after GPA enrichment
+            await enrichCoursesWithScores(env.DB);
+            // Chain instructor-link enrichment after GPA scoring.
             await coordinateEnrichment(env.DB, env.SELF, env.INTERNAL_TOKEN);
             logger.info('cron.gpaResume.enrichment.dispatched', { runId });
           }
