@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "deploy:staging": "npm run build && wrangler pages deploy dist --project-name uiuc-course-search-web --branch staging",
+    "deploy:staging": "VITE_API_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev npm run build && wrangler pages deploy dist --project-name uiuc-course-search-web --branch staging",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint src"
