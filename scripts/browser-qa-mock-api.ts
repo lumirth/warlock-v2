@@ -84,6 +84,10 @@ function searchResponse(query: string): SearchResponseDto {
         gened: null,
         primary_instructor: null,
         _score: 0.82,
+        match_evidence: [
+          { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
+          { kind: 'keyword', label: 'Keyword rank #2', source: 'keyword', weight: 'rank', value: '2' },
+        ],
       },
     ],
     meta: {
