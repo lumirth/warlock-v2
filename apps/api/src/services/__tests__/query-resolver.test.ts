@@ -273,6 +273,27 @@ describe('resolveQuery', () => {
       });
     });
 
+    describe('term hints', () => {
+      it('passes structured term and year filters', async () => {
+        const mockStmt = {
+          bind: vi.fn().mockReturnThis(),
+          first: vi.fn().mockResolvedValue(null),
+          all: vi.fn().mockResolvedValue({ results: [] })
+        };
+        (mockDb.prepare as any).mockReturnValue(mockStmt);
+
+        const extracted: ExtractedQuery = {
+          rawQuery: 'spring 2026 CS',
+          hints: [{ type: 'term', value: { term: 'spring', year: 2026 }, confidence: 0.95 }],
+          residual: 'CS'
+        };
+
+        const plan = await resolveQuery(mockDb as any, extracted);
+        expect(plan.filters.term).toBe('spring');
+        expect(plan.filters.year).toBe(2026);
+      });
+    });
+
     describe('difficulty hints', () => {
       it('passes difficulty filter unchanged', async () => {
         const mockStmt = {

@@ -124,7 +124,7 @@ async function main() {
   }
 
   // Close all writers
-  for (const [table, writer] of writers) {
+  for (const writer of writers.values()) {
     writer.end();
   }
 

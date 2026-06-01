@@ -1,11 +1,10 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { extractQuery } from './extractor.js';
-import { resolveQuery } from './query-resolver.js';
+import { parseTermValue, resolveQuery } from './query-resolver.js';
 import { hybridSearchWithTermRanking, sanitizeFtsQuery, type SearchResult } from './search.js';
 import { expandTopics } from './topic-registry.js';
 import { parseQuery } from './query-parser.js';
-import { logSearch } from './query-logger.js';
-import type { SearchPlan, ExtractedQuery, QueryHint, QueryHintType, SearchFilters, Hint } from '@uiuc-course-search/query-types';
+import type { SearchPlan, ExtractedQuery, QueryHint, QueryHintType, SearchFilters, Hint, FieldFilter } from '@uiuc-course-search/query-types';
 
 export interface SearchPipelineResult {
   results: SearchResult[];
@@ -45,8 +44,119 @@ function mapHintType(type: string): QueryHintType {
     'status': 'status',
     'difficulty': 'difficulty',
     'gened': 'gened',
+    'term': 'term',
+    'partOfTerm': 'partOfTerm',
+    'negation': 'negation',
   };
   return (mapping[type] || type) as QueryHintType;
+}
+
+function toQueryHint(hint: Hint): QueryHint {
+  const queryHint: QueryHint = {
+    type: mapHintType(hint.type),
+    value: typeof hint.value === 'object' && hint.value !== null && 'subject' in hint.value
+      ? `${hint.value.subject} ${hint.value.number}`
+      : hint.value,
+    confidence: hint.metadata.confidence,
+    isExplicit: hint.metadata.source === 'regex',
+  };
+
+  if (hint.type === 'courseCode' && typeof hint.value === 'object' && hint.value !== null && 'subject' in hint.value) {
+    queryHint.metadata = { subject: hint.value.subject, number: hint.value.number };
+  }
+
+  return queryHint;
+}
+
+function appendQueryText(current: string, addition: string): string {
+  return [current, addition].filter(Boolean).join(' ').trim();
+}
+
+function parseBoolean(value: string): boolean | undefined {
+  const normalized = value.toLowerCase();
+  if (['true', 'yes', '1', 'online', 'remote'].includes(normalized)) return true;
+  if (['false', 'no', '0', 'in-person', 'in_person', 'inperson'].includes(normalized)) return false;
+  return undefined;
+}
+
+function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
+  switch (filter.field) {
+    case 'subject':
+      plan.filters.subject = filter.value.toUpperCase();
+      break;
+    case 'gened':
+      plan.filters.gened_code = filter.value.toUpperCase();
+      break;
+    case 'credits': {
+      const credits = parseInt(filter.value, 10);
+      if (!Number.isNaN(credits)) plan.filters.credits = credits;
+      break;
+    }
+    case 'level': {
+      const level = parseInt(filter.value, 10);
+      if (!Number.isNaN(level)) plan.filters.level = level;
+      break;
+    }
+    case 'crn':
+      plan.filters.crn = filter.value;
+      break;
+    case 'status':
+      plan.filters.status = filter.value.toLowerCase();
+      break;
+    case 'online': {
+      const online = parseBoolean(filter.value);
+      if (online !== undefined) plan.filters.online = online;
+      break;
+    }
+    case 'days':
+      plan.filters.days = filter.value.toUpperCase();
+      break;
+    case 'time':
+      plan.filters.time = filter.value.toLowerCase();
+      break;
+    case 'term': {
+      const parsed = parseTermValue(filter.value);
+      if (parsed) {
+        plan.filters.term = parsed.term;
+        plan.filters.year = parsed.year;
+      }
+      break;
+    }
+    case 'partofterm':
+    case 'part_of_term':
+    case 'pot':
+      plan.filters.partOfTerm = filter.value.toUpperCase();
+      break;
+    case 'difficulty':
+      if (filter.value === 'easy' || filter.value === 'hard') {
+        plan.filters.difficulty = filter.value;
+      }
+      break;
+  }
+}
+
+function applyNegationToken(token: string, plan: SearchPlan): void {
+  const normalized = token.toLowerCase();
+  const timeWords = new Set(['early', 'morning', 'midday', 'afternoon', 'evening', 'night']);
+  const dayWords = new Set(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'mwf', 'tr', 'mw', 'wf', 'm', 't', 'w', 'r', 'f']);
+
+  if (timeWords.has(normalized)) {
+    plan.filters.not = plan.filters.not || {};
+    plan.filters.not.time = plan.filters.not.time || [];
+    plan.filters.not.time.push(normalized === 'night' ? 'evening' : normalized);
+    return;
+  }
+
+  if (dayWords.has(normalized)) {
+    plan.filters.not = plan.filters.not || {};
+    plan.filters.not.days = plan.filters.not.days || [];
+    plan.filters.not.days.push(normalized);
+    return;
+  }
+
+  if (['online', 'remote', 'virtual'].includes(normalized)) {
+    plan.filters.online = false;
+  }
 }
 
 export class SearchPipeline {
@@ -63,7 +173,7 @@ export class SearchPipeline {
     query: string,
     limit: number = 20,
     overrides?: Partial<SearchFilters>,
-    waitUntil?: (promise: Promise<any>) => void
+    _waitUntil?: (promise: Promise<any>) => void
   ): Promise<SearchPipelineResult> {
     const startTime = performance.now();
 
@@ -77,20 +187,7 @@ export class SearchPipeline {
     // 3. Bridge to old ExtractedQuery format for resolver
     const extracted: ExtractedQuery = {
       rawQuery: query,
-      hints: extraction.hints.map(hint => {
-        const queryHint: QueryHint = {
-          type: mapHintType(hint.type),
-          value: typeof hint.value === 'object' && hint.value !== null && 'subject' in hint.value
-            ? `${(hint.value as any).subject} ${(hint.value as any).number}`
-            : String(hint.value),
-          confidence: hint.metadata.confidence,
-          isExplicit: hint.metadata.source === 'regex',
-          metadata: hint.type === 'courseCode' && typeof hint.value === 'object' && hint.value !== null && 'subject' in hint.value
-            ? { subject: (hint.value as any).subject, number: (hint.value as any).number }
-            : undefined as any,
-        };
-        return queryHint;
-      }),
+      hints: extraction.hints.map(toQueryHint),
       residual: extraction.residual,
     };
 
@@ -100,17 +197,24 @@ export class SearchPipeline {
     // 5. Apply parsed filters from power-user syntax (takes precedence)
     const clause = parsed.clauses[0];
     for (const filter of clause.filters) {
-      if (filter.field === 'subject') plan.filters.subject = filter.value.toUpperCase();
-      if (filter.field === 'gened') plan.filters.gened_code = filter.value.toUpperCase();
-      if (filter.field === 'credits') plan.filters.credits = parseInt(filter.value);
-      if (filter.field === 'level') plan.filters.level = parseInt(filter.value);
-      if (filter.field === 'crn') plan.filters.crn = filter.value;
+      applyFieldFilter(filter, plan);
     }
 
     // 6. Apply gened:any/all from parsed query
     if (clause.genedMode) {
       if (clause.genedMode.any) plan.filters.gened_any = clause.genedMode.any;
       if (clause.genedMode.all) plan.filters.gened_all = clause.genedMode.all;
+    }
+
+    for (const negation of clause.negations) {
+      applyNegationToken(negation, plan);
+    }
+
+    if (clause.phrases.length > 0) {
+      const keywordPhrases = clause.phrases.map(phrase => `"${phrase.replace(/"/g, '""')}"`).join(' ');
+      const semanticPhrases = clause.phrases.join(' ');
+      plan.keywordQuery = appendQueryText(plan.keywordQuery, keywordPhrases);
+      plan.semanticQuery = appendQueryText(plan.semanticQuery, semanticPhrases);
     }
 
     // 7. Apply manual overrides from API call
@@ -123,22 +227,20 @@ export class SearchPipeline {
     plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
 
     const searchStartTime = performance.now();
-    let results: SearchResult[] = [];
-    let tierReached = 1;
+    let results: SearchResult[];
+    let tierReached: number;
     const constraintsRelaxed: string[] = [];
-    let originalResultCount = 0;
+    let originalResultCount: number;
 
     // Tier 1: Navigational (Exact course code or CRN)
     const isNavigational = !!((plan.filters.subject && plan.filters.number) || plan.filters.crn);
     if (isNavigational) {
       tierReached = 1;
-      console.log('Tier 1: Navigational search');
       results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
       originalResultCount = results.length;
     } else {
       // Tier 2: Structured (Search with extracted filters)
       tierReached = 2;
-      console.log('Tier 2: Structured search');
       results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
       originalResultCount = results.length;
 
@@ -148,7 +250,6 @@ export class SearchPipeline {
         const expandedKeywords = expandTopics(extracted.residual);
         if (expandedKeywords.length > 0) {
           tierReached = 3;
-          console.log('Tier 3: Topic expansion', expandedKeywords);
           const expandedPlan: SearchPlan = {
             ...plan,
             keywordQuery: sanitizeFtsQuery(`${plan.keywordQuery} ${expandedKeywords.join(' ')}`),
@@ -157,47 +258,6 @@ export class SearchPipeline {
 
           const expandedResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, expandedPlan, limit);
           results = this.mergeResults(results, expandedResults, limit);
-          originalResultCount = results.length;
-        }
-      }
-
-      // Tier 4: Fallback (Broaden)
-      if (results.length < 3) {
-        console.log(`Tier 4: Broadening search (current results: ${results.length})`);
-        // 1. If we have a level filter, try removing it
-        if (plan.filters.level) {
-          tierReached = 4.1;
-          constraintsRelaxed.push('level');
-          console.log('Tier 4.1: Removing level filter');
-          const broadPlan = { ...plan, filters: { ...plan.filters } };
-          delete broadPlan.filters.level;
-          const broadResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, broadPlan, limit);
-          results = this.mergeResults(results, broadResults, limit);
-        }
-
-        // 2. If we still have few results, broaden while KEEPING subject
-        if (results.length < 3 && (plan.filters.subject || plan.filters.gened_code)) {
-          tierReached = 4.2;
-          console.log('Tier 4.2: Broadening filters while keeping subject');
-          const veryBroadPlan: SearchPlan = {
-            ...plan,
-            filters: { ...plan.filters },
-            semanticQuery: sanitizeFtsQuery(query),
-            keywordQuery: sanitizeFtsQuery(query)
-          };
-          // NEVER drop the Subject filter
-          if (veryBroadPlan.filters.gened_code) constraintsRelaxed.push('gened_code');
-          if (veryBroadPlan.filters.instructor_ids) constraintsRelaxed.push('instructor_ids');
-          if (veryBroadPlan.filters.level && !constraintsRelaxed.includes('level')) constraintsRelaxed.push('level');
-
-          delete veryBroadPlan.filters.gened_code;
-          delete veryBroadPlan.filters.instructor_ids;
-          delete veryBroadPlan.filters.level;
-          delete veryBroadPlan.filters.difficulty;
-          // Note: we explicitly keep veryBroadPlan.filters.subject if it exists
-
-          const veryBroadResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, veryBroadPlan, limit);
-          results = this.mergeResults(results, veryBroadResults, limit);
         }
       }
     }
@@ -227,20 +287,6 @@ export class SearchPipeline {
         }
       }
     };
-
-    // Fire and forget logging (with waitUntil if available)
-    const loggingPromise = logSearch(
-      this.db,
-      query,
-      result,
-      isNavigational,
-      tierReached,
-      constraintsRelaxed
-    ).catch(err => console.error('Error in logSearch:', err));
-
-    if (waitUntil) {
-      waitUntil(loggingPromise);
-    }
 
     return result;
   }

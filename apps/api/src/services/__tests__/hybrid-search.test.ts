@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { hybridSearch, postFilterSemanticResults } from '../search.js';
 import * as embeddings from '../embeddings.js';
 import { validateSubject } from '../query-resolver.js';
-import type { D1Database } from '@cloudflare/workers-types';
 
 // Mock dependencies
 const mockDb = {

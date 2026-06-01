@@ -106,11 +106,24 @@ function extractNegations(text: string, hints: Hint[]): string {
     
     while ((match = patternCopy.exec(residual)) !== null) {
       const target = match[1].toLowerCase();
-      hints.push({
-        type: 'negation',
-        value: { target: guessNegationType(target), value: target },
-        metadata: createMetadata('nlp', match[0], 0.75),
-      });
+      const negationType = guessNegationType(target);
+      if (!negationType) {
+        continue;
+      }
+
+      if (negationType === 'online') {
+        hints.push({
+          type: 'online',
+          value: false,
+          metadata: createMetadata('nlp', match[0], 0.75),
+        });
+      } else {
+        hints.push({
+          type: 'negation',
+          value: { target: negationType, value: target },
+          metadata: createMetadata('nlp', match[0], 0.75),
+        });
+      }
       matches.push({ index: match.index, length: match[0].length });
     }
     
@@ -449,13 +462,15 @@ function extractInstructors(text: string, hints: Hint[]): string {
   return residual;
 }
 
-function guessNegationType(word: string): HintType {
+function guessNegationType(word: string): HintType | null {
   const timeWords = ['morning', 'afternoon', 'evening', 'early', 'night'];
   const daysWords = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'mwf', 'tr'];
+  const onlineWords = ['online', 'remote', 'virtual'];
 
   if (timeWords.includes(word)) return 'time';
   if (daysWords.includes(word)) return 'days';
-  return 'time'; // Default
+  if (onlineWords.includes(word)) return 'online';
+  return null;
 }
 
 function createMetadata(source: 'regex' | 'alias' | 'nlp', raw: string, confidence: number): HintMetadata {

@@ -122,7 +122,67 @@ describe('SearchPipeline', () => {
     expect(result.results.length).toBe(2);
   });
 
-  it('Tier 4: should track relaxed constraints in Tier 4', async () => {
+  it('applies Query Language v1 power fields, quoted phrases, and dash negation', async () => {
+    const query = 'status:open online:true days:MWF time:morning term:spring-2026 "data structures" -friday';
+
+    vi.mocked(extractor.extractQuery).mockReturnValue({ hints: [], residual: '' } as any);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
+      filters: {},
+      semanticQuery: '',
+      keywordQuery: ''
+    } as any);
+    vi.mocked(queryResolver.parseTermValue).mockReturnValue({ term: 'spring', year: 2026 });
+    vi.mocked(search.sanitizeFtsQuery).mockImplementation(query => query);
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([]);
+    vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
+
+    await pipeline.search(query);
+
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3]).toMatchObject({
+      filters: {
+        status: 'open',
+        online: true,
+        days: 'MWF',
+        time: 'morning',
+        term: 'spring',
+        year: 2026,
+        not: { days: ['friday'] },
+      },
+      keywordQuery: '"data structures"',
+      semanticQuery: 'data structures',
+    });
+  });
+
+  it('does not silently drop unsupported dash negation tokens', async () => {
+    const query = 'algorithms -calculus';
+
+    vi.mocked(extractor.extractQuery).mockReturnValue({ hints: [], residual: 'algorithms -calculus' } as any);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
+      filters: {},
+      semanticQuery: 'algorithms -calculus',
+      keywordQuery: 'algorithms -calculus'
+    } as any);
+    vi.mocked(search.sanitizeFtsQuery).mockImplementation(queryText => queryText);
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([]);
+    vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
+
+    await pipeline.search(query);
+
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        semanticQuery: 'algorithms -calculus',
+        keywordQuery: 'algorithms -calculus',
+        filters: {},
+      }),
+      20
+    );
+  });
+
+  it('does not relax explicit hard constraints when exact search is sparse', async () => {
     const query = '400 level CS courses with Fagen';
     const mockExtracted = {
       hints: [
@@ -142,20 +202,18 @@ describe('SearchPipeline', () => {
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
-    // Tier 2: 0 results
-    // Tier 3: skip (no topics)
-    // Tier 4.1: remove level -> 0 results
-    // Tier 4.2: remove instructor_ids -> 5 results
-    vi.mocked(search.hybridSearchWithTermRanking)
-      .mockResolvedValueOnce([]) // Tier 2
-      .mockResolvedValueOnce([]) // Tier 4.1 (remove level)
-      .mockResolvedValueOnce(Array(5).fill(null).map((_, i) => ({ course: mockCourse({ id: `CS-${i}` }), score: 0.7 }))); // Tier 4.2 (remove instructor_ids)
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValueOnce([]);
 
     const result = await pipeline.search(query);
 
     expect(result.meta.fallback).toBeDefined();
-    expect(result.meta.fallback.tierReached).toBe(4.2);
-    expect(result.meta.fallback.constraintsRelaxed).toContain('level');
-    expect(result.meta.fallback.constraintsRelaxed).toContain('instructor_ids');
+    expect(result.meta.fallback.tierReached).toBe(2);
+    expect(result.meta.fallback.constraintsRelaxed).toEqual([]);
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3].filters).toMatchObject({
+      subject: 'CS',
+      level: 400,
+      instructor_ids: ['fagen-id'],
+    });
   });
 });

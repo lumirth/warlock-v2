@@ -313,10 +313,3 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   }
   return result;
 }
-
-/**
- * No-op compatibility export
- */
-export async function retryFailedBatches(db: D1Database): Promise<{ recovered: number; remaining: number }> {
-    return { recovered: 0, remaining: 0 };
-}

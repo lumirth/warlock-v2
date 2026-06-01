@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { upsertTermState, makeTermId, type TermState } from '../db/index.js';
-import { getRateLimiter } from './rate-limiter.js';
+import { upsertTermState, makeTermId } from '../db/index.js';
+import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
 
 export interface TermDiscoveryConfig {
@@ -27,20 +27,20 @@ export async function discoverTermsForYear(
   config: TermDiscoveryConfig,
   year: number
 ): Promise<DiscoveredTerm[]> {
-  const rateLimiter = getRateLimiter();
-  await rateLimiter.waitIfNeeded();
+  const upstreamBackoff = getUpstreamBackoff();
+  await upstreamBackoff.waitIfNeeded();
 
   const url = `${config.frontendBase}/ajax/search/termlist/${year}`;
   const response = await browserFetch(url);
 
   if (!response.ok) {
-    if (rateLimiter.isRateLimited(response.status)) {
-      rateLimiter.recordFailure(`termlist ${year}: ${response.status}`, response.status);
+    if (upstreamBackoff.isRateLimited(response.status)) {
+      upstreamBackoff.recordFailure(`termlist ${year}: ${response.status}`, response.status);
     }
     throw new Error(`Failed to fetch termlist for ${year}: ${response.status}`);
   }
 
-  rateLimiter.recordSuccess();
+  upstreamBackoff.recordSuccess();
 
   const data = await response.json() as Record<string, string>;
   // Response format: {"Winter":"winter","Spring":"spring",...}
@@ -84,20 +84,20 @@ export async function classifyTerm(
   term: DiscoveredTerm,
   sampleSubject: string = 'CS'
 ): Promise<TermClassification> {
-  const rateLimiter = getRateLimiter();
-  await rateLimiter.waitIfNeeded();
+  const upstreamBackoff = getUpstreamBackoff();
+  await upstreamBackoff.waitIfNeeded();
 
   const url = `${config.cisapiBase}/schedule/${term.year}/${term.term}/${sampleSubject}.xml?mode=cascade`;
   const response = await browserFetch(url);
 
   if (!response.ok) {
-    if (rateLimiter.isRateLimited(response.status)) {
-      rateLimiter.recordFailure(`classify ${term.termId}: ${response.status}`, response.status);
+    if (upstreamBackoff.isRateLimited(response.status)) {
+      upstreamBackoff.recordFailure(`classify ${term.termId}: ${response.status}`, response.status);
     }
     throw new Error(`Failed to fetch ${sampleSubject} for ${term.termId}: ${response.status}`);
   }
 
-  rateLimiter.recordSuccess();
+  upstreamBackoff.recordSuccess();
 
   const xml = await response.text();
 

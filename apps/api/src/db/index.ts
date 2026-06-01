@@ -29,7 +29,7 @@ export interface Instructor {
 
 export interface Meeting {
   id: number;
-  section_crn: string;
+  section_id: string;
   meeting_index: number;
   type_code: string | null;
   type_name: string | null;
@@ -79,8 +79,10 @@ export interface Course {
 }
 
 export interface Section {
+  id: string;
   crn: string;
   course_id: string;
+  term_id: string;
   section_number: string | null;
   status: string | null;
   type: string | null;
@@ -133,6 +135,10 @@ export async function getSyncState(db: D1Database, id: string): Promise<SyncStat
   return db.prepare('SELECT * FROM sync_state WHERE id = ?').bind(id).first<SyncState>();
 }
 
+function normalizeInstructorFirstName(firstName: string | null | undefined): string {
+  return firstName?.trim() ?? '';
+}
+
 export async function upsertSyncState(db: D1Database, state: SyncState): Promise<void> {
   await db.prepare(`
     INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
@@ -152,6 +158,10 @@ export function makeCourseId(subject: string, number: string, year: number, term
 
 export function makeTermId(year: number, term: string): string {
   return `${year}-${term}`;
+}
+
+export function makeSectionId(termId: string, crn: string): string {
+  return `${termId}-${crn}`;
 }
 
 export function prepareUpsertCourse(db: D1Database, course: Omit<Course, 'created_at' | 'updated_at'>): D1PreparedStatement {
@@ -182,14 +192,17 @@ export async function upsertCourse(db: D1Database, course: Omit<Course, 'created
 
 export function prepareUpsertSection(db: D1Database, section: Section): D1PreparedStatement {
   return db.prepare(`
-    INSERT INTO sections (crn, course_id, section_number, status, type, days,
+    INSERT INTO sections (id, crn, course_id, term_id, section_number, status, type, days,
                           start_time, end_time, location, instructor,
                           instructor_rmp, instructor_gpa, last_synced,
                           section_title, status_code, section_status_code,
                           section_text, section_notes, capp_area, date_range_text,
                           part_of_term, start_date, end_date, credit_hours)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(crn) DO UPDATE SET
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      crn = excluded.crn,
+      course_id = excluded.course_id,
+      term_id = excluded.term_id,
       section_number = excluded.section_number,
       status = excluded.status,
       type = excluded.type,
@@ -213,7 +226,7 @@ export function prepareUpsertSection(db: D1Database, section: Section): D1Prepar
       end_date = excluded.end_date,
       credit_hours = excluded.credit_hours
   `).bind(
-    section.crn, section.course_id, section.section_number, section.status,
+    section.id, section.crn, section.course_id, section.term_id, section.section_number, section.status,
     section.type, section.days, section.start_time, section.end_time,
     section.location, section.instructor, section.instructor_rmp,
     section.instructor_gpa, section.last_synced,
@@ -338,7 +351,7 @@ export async function createInstructor(
     VALUES (?, ?, ?)
     RETURNING id
   `)
-    .bind(instructor.firstName || null, instructor.lastName, instructor.displayName)
+    .bind(normalizeInstructorFirstName(instructor.firstName), instructor.lastName, instructor.displayName)
     .first<{ id: number }>();
 
   return result!.id;
@@ -349,13 +362,6 @@ export function prepareUpsertInstructor(db: D1Database, instructor: Omit<Instruc
     INSERT INTO instructors (first_name, last_name, display_name, rmp_rating,
                              rmp_difficulty, avg_gpa, gpa_sample_size)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-    -- Note: No unique constraint on names, so we can't do ON CONFLICT UPDATE easily in batch without an ID.
-    -- However, the original upsertInstructor logic did a read-then-write check.
-    -- Batching this is hard if we want deduplication logic.
-    -- Strategy: We will skip deduplication for batching and assume inserts are new or allow dupes for now,
-    -- OR we rely on a unique constraint if we added one (migration 2026-01-20 adds idx_instructors_name but it might not be UNIQUE).
-    -- Checking schema: CREATE UNIQUE INDEX IF NOT EXISTS idx_instructors_name ON instructors(last_name, first_name);
-    -- Yes, it IS unique!
     ON CONFLICT(last_name, first_name) DO UPDATE SET
       display_name = excluded.display_name,
       rmp_rating = excluded.rmp_rating,
@@ -363,42 +369,16 @@ export function prepareUpsertInstructor(db: D1Database, instructor: Omit<Instruc
       avg_gpa = excluded.avg_gpa,
       gpa_sample_size = excluded.gpa_sample_size
   `).bind(
-    instructor.first_name, instructor.last_name, instructor.display_name,
+    normalizeInstructorFirstName(instructor.first_name), instructor.last_name, instructor.display_name,
     instructor.rmp_rating, instructor.rmp_difficulty, instructor.avg_gpa,
     instructor.gpa_sample_size
   );
 }
 
-// Keep old function for backward compatibility during migration
 export async function upsertInstructor(
   db: D1Database,
   instructor: Omit<Instructor, 'id'>
 ): Promise<number> {
-  // Since we removed the unique constraint, we first check if an instructor exists
-  // WAIT: Schema shows CREATE UNIQUE INDEX IF NOT EXISTS idx_instructors_name ON instructors(last_name, first_name);
-  // So we CAN use ON CONFLICT.
-  // The original implementation was doing read-then-write manually.
-  // Let's switch to proper UPSERT using the prepare function if possible, BUT we need the ID back.
-  // D1 batch doesn't return IDs easily.
-  //
-  // For the batch sync, linking meetings to instructors requires the instructor ID.
-  // If we batch insert instructors, we won't get their IDs back immediately to use in the same batch for linking.
-  //
-  // Solution for batching:
-  // 1. Batch insert all instructors first.
-  // 2. We can't link in the same batch if we don't know IDs.
-  //
-  // Alternative:
-  // Don't batch instructors and links. Just batch courses and sections.
-  // Meetings and instructors are "leaves" in the graph.
-  //
-  // Let's stick to batching Courses, Sections, and Geneds.
-  // Meetings and Instructors can be done linearly or in smaller batches if we figure out IDs.
-  // Given time constraints, batching Courses + Sections + Geneds is 90% of the win.
-  //
-  // So I won't use prepareUpsertInstructor for the big batch logic yet. I'll leave it linear.
-
-  // Reverting to original implementation logic for safety
   const existing = await getInstructorByName(db, instructor.last_name, instructor.first_name);
 
   if (existing) {
@@ -411,9 +391,9 @@ export async function upsertInstructor(
         avg_gpa = ?,
         gpa_sample_size = ?
       WHERE id = ?
-    `).bind(
-      instructor.display_name,
-      instructor.rmp_rating,
+  `).bind(
+    instructor.display_name,
+    instructor.rmp_rating,
       instructor.rmp_difficulty,
       instructor.avg_gpa,
       instructor.gpa_sample_size,
@@ -429,7 +409,7 @@ export async function upsertInstructor(
     VALUES (?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).bind(
-    instructor.first_name, instructor.last_name, instructor.display_name,
+    normalizeInstructorFirstName(instructor.first_name), instructor.last_name, instructor.display_name,
     instructor.rmp_rating, instructor.rmp_difficulty, instructor.avg_gpa,
     instructor.gpa_sample_size
   ).first<{ id: number }>();
@@ -446,26 +426,20 @@ export async function getInstructorByName(
   lastName: string,
   firstName: string | null
 ): Promise<Instructor | null> {
-  // Handle NULL comparison properly: use IS NULL when firstName is null, = otherwise
-  if (firstName === null) {
-    return db.prepare(`
-      SELECT * FROM instructors WHERE last_name = ? AND first_name IS NULL
-    `).bind(lastName).first<Instructor>();
-  }
   return db.prepare(`
     SELECT * FROM instructors WHERE last_name = ? AND first_name = ?
-  `).bind(lastName, firstName).first<Instructor>();
+  `).bind(lastName, normalizeInstructorFirstName(firstName)).first<Instructor>();
 }
 
 // Meeting operations
 
 export function prepareUpsertMeeting(db: D1Database, meeting: Omit<Meeting, 'id'>): D1PreparedStatement {
   return db.prepare(`
-    INSERT INTO meetings (section_crn, meeting_index, type_code, type_name,
+    INSERT INTO meetings (section_id, meeting_index, type_code, type_name,
                           days, start_time, end_time, building_name,
                           room_number, date_range_text)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(section_crn, meeting_index) DO UPDATE SET
+    ON CONFLICT(section_id, meeting_index) DO UPDATE SET
       type_code = excluded.type_code,
       type_name = excluded.type_name,
       days = excluded.days,
@@ -475,7 +449,7 @@ export function prepareUpsertMeeting(db: D1Database, meeting: Omit<Meeting, 'id'
       room_number = excluded.room_number,
       date_range_text = excluded.date_range_text
   `).bind(
-    meeting.section_crn, meeting.meeting_index, meeting.type_code, meeting.type_name,
+    meeting.section_id, meeting.meeting_index, meeting.type_code, meeting.type_name,
     meeting.days, meeting.start_time, meeting.end_time, meeting.building_name,
     meeting.room_number, meeting.date_range_text
   );
@@ -486,11 +460,11 @@ export async function upsertMeeting(
   meeting: Omit<Meeting, 'id'>
 ): Promise<number> {
   const result = await db.prepare(`
-    INSERT INTO meetings (section_crn, meeting_index, type_code, type_name,
+    INSERT INTO meetings (section_id, meeting_index, type_code, type_name,
                           days, start_time, end_time, building_name,
                           room_number, date_range_text)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(section_crn, meeting_index) DO UPDATE SET
+    ON CONFLICT(section_id, meeting_index) DO UPDATE SET
       type_code = excluded.type_code,
       type_name = excluded.type_name,
       days = excluded.days,
@@ -501,7 +475,7 @@ export async function upsertMeeting(
       date_range_text = excluded.date_range_text
     RETURNING id
   `).bind(
-    meeting.section_crn, meeting.meeting_index, meeting.type_code, meeting.type_name,
+    meeting.section_id, meeting.meeting_index, meeting.type_code, meeting.type_name,
     meeting.days, meeting.start_time, meeting.end_time, meeting.building_name,
     meeting.room_number, meeting.date_range_text
   ).first<{ id: number }>();
@@ -509,8 +483,8 @@ export async function upsertMeeting(
   if (!result) {
     // If RETURNING didn't work (e.g. conflict but no update?), fetch the existing record
     const existing = await db.prepare(`
-      SELECT id FROM meetings WHERE section_crn = ? AND meeting_index = ?
-    `).bind(meeting.section_crn, meeting.meeting_index).first<{ id: number }>();
+      SELECT id FROM meetings WHERE section_id = ? AND meeting_index = ?
+    `).bind(meeting.section_id, meeting.meeting_index).first<{ id: number }>();
 
     if (!existing) {
       throw new Error('Failed to insert or retrieve meeting');
@@ -523,11 +497,11 @@ export async function upsertMeeting(
 
 export async function getMeetingsForSection(
   db: D1Database,
-  sectionCrn: string
+  sectionId: string
 ): Promise<Meeting[]> {
   const result = await db.prepare(`
-    SELECT * FROM meetings WHERE section_crn = ? ORDER BY meeting_index
-  `).bind(sectionCrn).all<Meeting>();
+    SELECT * FROM meetings WHERE section_id = ? ORDER BY meeting_index
+  `).bind(sectionId).all<Meeting>();
   return result.results;
 }
 
@@ -543,27 +517,19 @@ export function prepareLinkMeetingInstructor(db: D1Database, meetingId: number, 
 
 export function prepareLinkMeetingInstructorByKeys(
   db: D1Database,
-  sectionCrn: string,
+  sectionId: string,
   meetingIndex: number,
   lastName: string,
   firstName: string | null
 ): D1PreparedStatement {
-  // We match instructor by name. If firstName is null, we check IS NULL.
-  const instructorClause = firstName === null
-    ? 'first_name IS NULL'
-    : 'first_name = ?';
-
-  const params = [sectionCrn, meetingIndex, lastName];
-  if (firstName !== null) {
-    params.push(firstName);
-  }
+  const params = [sectionId, meetingIndex, lastName, normalizeInstructorFirstName(firstName)];
 
   return db.prepare(`
     INSERT INTO meeting_instructors (meeting_id, instructor_id)
     SELECT m.id, i.id
     FROM meetings m, instructors i
-    WHERE m.section_crn = ? AND m.meeting_index = ?
-      AND i.last_name = ? AND i.${instructorClause}
+    WHERE m.section_id = ? AND m.meeting_index = ?
+      AND i.last_name = ? AND i.first_name = ?
     ON CONFLICT(meeting_id, instructor_id) DO NOTHING
   `).bind(...params);
 }

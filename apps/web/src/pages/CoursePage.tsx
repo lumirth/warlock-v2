@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { Container, Title, Text, Button, Loader, Flex, Grid, Stack, Badge, Group, Paper, Alert } from '@mantine/core'
+import { Container, Title, Text, Button, Loader, Flex, Grid, Stack, Badge, Group, Paper, Alert, ScrollArea } from '@mantine/core'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { Scorecard } from '../components/Scorecard'
 import { QuadrantChart } from '../components/QuadrantChart'
 import { SectionsTable } from '../components/SectionsTable'
 import { api } from '../lib/api-client'
-import type { Course } from '../lib/api-types'
+import type { CourseDto } from '@uiuc-course-search/query-types'
 
 export function CoursePage() {
   const { subject, number } = useParams()
@@ -14,7 +14,7 @@ export function CoursePage() {
   const term = searchParams.get('term') || undefined
   const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined
 
-  const [course, setCourse] = useState<Course | null>(null)
+  const [course, setCourse] = useState<CourseDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,7 +45,7 @@ export function CoursePage() {
     return () => {
       controller.abort()
     }
-  }, [subject, number])
+  }, [subject, number, term, year])
 
   if (loading) {
     return (
@@ -125,21 +125,18 @@ export function CoursePage() {
             {/* Sections Table */}
             <div>
               <Title order={2} size="h3" mb="md">Sections & Instructors</Title>
-              <Paper withBorder radius="md" style={{ overflow: 'hidden' }}>
-                 <SectionsTable
-                   sections={course.sections || []}
-                   instructorLinks={course.instructor_links}
-                 />
+              <Paper withBorder radius="md">
+                <ScrollArea type="auto" offsetScrollbars>
+                  <SectionsTable
+                    sections={course.sections || []}
+                    instructorLinks={course.instructor_links}
+                  />
+                </ScrollArea>
               </Paper>
             </div>
           </Stack>
         </Grid.Col>
       </Grid>
-
-      {/* Debug Info (Temporary) */}
-      <Text size="xs" c="dimmed" mt="xl" ta="center">
-        Debug: {course.id} | Sections: {course.sections?.length ?? 0} | Term: {course.term} {course.year}
-      </Text>
     </Container>
   )
 }

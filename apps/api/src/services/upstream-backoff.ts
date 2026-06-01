@@ -1,10 +1,10 @@
-export interface RateLimiterConfig {
+export interface UpstreamBackoffConfig {
   backoffBaseMs: number;
   backoffMaxMs: number;
   maxRetries: number;
 }
 
-export interface RateLimitState {
+export interface UpstreamBackoffState {
   isBackingOff: boolean;
   backoffUntil: number | null;
   consecutiveFailures: number;
@@ -12,11 +12,11 @@ export interface RateLimitState {
   lastErrorTime: number | null;
 }
 
-export class RateLimiter {
-  private config: RateLimiterConfig;
-  private state: RateLimitState;
+export class UpstreamBackoff {
+  private config: UpstreamBackoffConfig;
+  private state: UpstreamBackoffState;
 
-  constructor(config: Partial<RateLimiterConfig> = {}) {
+  constructor(config: Partial<UpstreamBackoffConfig> = {}) {
     this.config = {
       backoffBaseMs: config.backoffBaseMs ?? 5000,
       backoffMaxMs: config.backoffMaxMs ?? 60000,
@@ -31,7 +31,7 @@ export class RateLimiter {
     };
   }
 
-  getState(): RateLimitState {
+  getState(): UpstreamBackoffState {
     // Check if backoff period has expired
     if (this.state.backoffUntil && Date.now() >= this.state.backoffUntil) {
       this.state.isBackingOff = false;
@@ -50,7 +50,7 @@ export class RateLimiter {
     this.state.backoffUntil = null;
   }
 
-  recordFailure(error: string, statusCode?: number): number {
+  recordFailure(error: string, _statusCode?: number): number {
     this.state.consecutiveFailures++;
     this.state.lastError = error;
     this.state.lastErrorTime = Date.now();
@@ -106,16 +106,17 @@ export class RateLimiter {
   }
 }
 
-// Global rate limiter instance (per-isolate)
-let globalRateLimiter: RateLimiter | null = null;
+// Per-isolate upstream backoff. This protects external data sources from
+// repeated failing fetches; it is not public caller rate limiting.
+let globalUpstreamBackoff: UpstreamBackoff | null = null;
 
-export function getRateLimiter(config?: Partial<RateLimiterConfig>): RateLimiter {
-  if (!globalRateLimiter) {
-    globalRateLimiter = new RateLimiter(config);
+export function getUpstreamBackoff(config?: Partial<UpstreamBackoffConfig>): UpstreamBackoff {
+  if (!globalUpstreamBackoff) {
+    globalUpstreamBackoff = new UpstreamBackoff(config);
   }
-  return globalRateLimiter;
+  return globalUpstreamBackoff;
 }
 
-export function resetRateLimiter(): void {
-  globalRateLimiter = null;
+export function resetUpstreamBackoff(): void {
+  globalUpstreamBackoff = null;
 }

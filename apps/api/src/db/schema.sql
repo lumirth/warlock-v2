@@ -1,3 +1,13 @@
+-- Schema metadata
+CREATE TABLE IF NOT EXISTS app_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER DEFAULT (unixepoch())
+);
+
+INSERT OR REPLACE INTO app_meta (key, value, updated_at)
+VALUES ('schema_version', '0001_initial_schema', unixepoch());
+
 -- Core course table
 CREATE TABLE IF NOT EXISTS courses (
     id TEXT PRIMARY KEY,              -- "CS-225-2025-fall"
@@ -58,16 +68,16 @@ CREATE TABLE IF NOT EXISTS subjects (
 -- Normalized instructors
 CREATE TABLE IF NOT EXISTS instructors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    first_name TEXT,
+    first_name TEXT NOT NULL DEFAULT '',
     last_name TEXT NOT NULL,
     display_name TEXT NOT NULL,
     rmp_rating REAL,
     rmp_difficulty REAL,
     rmp_num_ratings INTEGER DEFAULT 0,
     avg_gpa REAL,
-    gpa_sample_size INTEGER
+    gpa_sample_size INTEGER,
+    UNIQUE(last_name, first_name)
 );
--- Non-unique index for searching (allows duplicate names for different people)
 CREATE INDEX IF NOT EXISTS idx_instructors_search ON instructors(last_name, first_name);
 
 -- Subject aliases for natural language recognition
@@ -80,33 +90,6 @@ CREATE TABLE IF NOT EXISTS subject_aliases (
     FOREIGN KEY (subject_id) REFERENCES subjects(id)
 );
 CREATE INDEX IF NOT EXISTS idx_subject_aliases_alias ON subject_aliases(alias);
-
--- Multiple meetings per section
-CREATE TABLE IF NOT EXISTS meetings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    section_crn TEXT NOT NULL,
-    meeting_index INTEGER NOT NULL,
-    type_code TEXT,
-    type_name TEXT,
-    days TEXT,
-    start_time TEXT,
-    end_time TEXT,
-    building_name TEXT,
-    room_number TEXT,
-    date_range_text TEXT,
-    UNIQUE(section_crn, meeting_index),
-    FOREIGN KEY (section_crn) REFERENCES sections(crn) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_meetings_section ON meetings(section_crn);
-
--- Many-to-many: meetings <-> instructors
-CREATE TABLE IF NOT EXISTS meeting_instructors (
-    meeting_id INTEGER NOT NULL,
-    instructor_id INTEGER NOT NULL,
-    PRIMARY KEY (meeting_id, instructor_id),
-    FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
-    FOREIGN KEY (instructor_id) REFERENCES instructors(id)
-);
 
 -- Multiple GenEd categories per course
 CREATE TABLE IF NOT EXISTS course_gened (
@@ -123,8 +106,10 @@ CREATE INDEX IF NOT EXISTS idx_course_gened_course ON course_gened(course_id);
 
 -- Sections table
 CREATE TABLE IF NOT EXISTS sections (
-    crn TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY,                 -- "2026-spring-12345"
+    crn TEXT NOT NULL,
     course_id TEXT NOT NULL,
+    term_id TEXT NOT NULL,
     section_number TEXT,
 
     -- Status
@@ -157,7 +142,35 @@ CREATE TABLE IF NOT EXISTS sections (
 
     last_synced INTEGER,
 
-    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+    UNIQUE(term_id, crn)
+);
+
+-- Multiple meetings per section
+CREATE TABLE IF NOT EXISTS meetings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    section_id TEXT NOT NULL,
+    meeting_index INTEGER NOT NULL,
+    type_code TEXT,
+    type_name TEXT,
+    days TEXT,
+    start_time TEXT,
+    end_time TEXT,
+    building_name TEXT,
+    room_number TEXT,
+    date_range_text TEXT,
+    UNIQUE(section_id, meeting_index),
+    FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_meetings_section ON meetings(section_id);
+
+-- Many-to-many: meetings <-> instructors
+CREATE TABLE IF NOT EXISTS meeting_instructors (
+    meeting_id INTEGER NOT NULL,
+    instructor_id INTEGER NOT NULL,
+    PRIMARY KEY (meeting_id, instructor_id),
+    FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE,
+    FOREIGN KEY (instructor_id) REFERENCES instructors(id)
 );
 
 -- GPA statistics
@@ -181,7 +194,7 @@ CREATE TABLE IF NOT EXISTS rmp_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     instructor_name TEXT UNIQUE NOT NULL,
 
-    rmp_id TEXT,
+    rmp_id TEXT UNIQUE,
     rating REAL,
     difficulty REAL,
     would_take_again_pct REAL,
@@ -193,12 +206,30 @@ CREATE TABLE IF NOT EXISTS rmp_cache (
     expires_at INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS instructor_course_links (
+    term_id TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    number TEXT NOT NULL,
+    instructor_name TEXT NOT NULL,
+    gpa_id INTEGER,
+    rmp_id TEXT,
+    confidence_score REAL,
+    match_method TEXT,
+    created_at INTEGER DEFAULT (unixepoch()),
+
+    PRIMARY KEY (term_id, subject, number, instructor_name),
+    FOREIGN KEY (gpa_id) REFERENCES gpa_stats(id),
+    FOREIGN KEY (rmp_id) REFERENCES rmp_cache(rmp_id)
+);
+
 -- Sync state tracking
 CREATE TABLE IF NOT EXISTS sync_state (
     id TEXT PRIMARY KEY,              -- "courses", "gpa", "rmp"
     last_sync INTEGER,
     last_status TEXT,
-    items_synced INTEGER
+    items_synced INTEGER,
+    cursor INTEGER DEFAULT 0,
+    etag TEXT
 );
 
 -- Term state tracking
@@ -222,13 +253,96 @@ CREATE INDEX IF NOT EXISTS idx_courses_subject ON courses(subject);
 CREATE INDEX IF NOT EXISTS idx_courses_term ON courses(year, term);
 CREATE INDEX IF NOT EXISTS idx_courses_gpa ON courses(avg_gpa);
 CREATE INDEX IF NOT EXISTS idx_sections_course ON sections(course_id);
+CREATE INDEX IF NOT EXISTS idx_sections_term_crn ON sections(term_id, crn);
 CREATE INDEX IF NOT EXISTS idx_sections_status ON sections(status);
 CREATE INDEX IF NOT EXISTS idx_sections_instructor ON sections(instructor);
 CREATE INDEX IF NOT EXISTS idx_sections_time ON sections(start_time);
 CREATE INDEX IF NOT EXISTS idx_gpa_course ON gpa_stats(subject, number);
 CREATE INDEX IF NOT EXISTS idx_rmp_expires ON rmp_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_links_context ON instructor_course_links(subject, number);
+CREATE INDEX IF NOT EXISTS idx_links_rmp ON instructor_course_links(rmp_id);
 CREATE INDEX IF NOT EXISTS idx_term_state_status ON term_state(status);
 CREATE INDEX IF NOT EXISTS idx_term_state_year ON term_state(year);
+
+CREATE TABLE IF NOT EXISTS gened_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    gened_code TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    UNIQUE(gened_code, alias)
+);
+CREATE INDEX IF NOT EXISTS idx_gened_aliases_alias ON gened_aliases(alias);
+
+INSERT OR IGNORE INTO gened_aliases (gened_code, alias) VALUES
+  ('CMP', 'composition'),
+  ('CMP', 'writing'),
+  ('CMP', 'freshman comp'),
+  ('ACP', 'advanced composition'),
+  ('ACP', 'adv comp'),
+  ('ACP', 'writing intensive'),
+  ('HUM', 'humanities'),
+  ('HUM', 'humanities and the arts'),
+  ('HUM', 'arts'),
+  ('HP', 'historical'),
+  ('HP', 'philosophical'),
+  ('HP', 'history'),
+  ('HP', 'philosophy'),
+  ('LA', 'literature'),
+  ('LA', 'lit'),
+  ('NAT', 'natural sciences'),
+  ('NAT', 'nat sci'),
+  ('NAT', 'science'),
+  ('PS', 'physical sciences'),
+  ('PS', 'physical'),
+  ('LS', 'life sciences'),
+  ('LS', 'life sci'),
+  ('LS', 'biology'),
+  ('SBS', 'social science'),
+  ('SBS', 'social sciences'),
+  ('SBS', 'behavioral science'),
+  ('SBS', 'behavioral sciences'),
+  ('SBS', 'social and behavioral'),
+  ('CS', 'cultural studies'),
+  ('NW', 'non-western'),
+  ('NW', 'non western'),
+  ('NW', 'nonwestern'),
+  ('US', 'us minority'),
+  ('US', 'minority cultures'),
+  ('WCC', 'western'),
+  ('WCC', 'western comparative'),
+  ('QR', 'quantitative'),
+  ('QR', 'quant'),
+  ('QR', 'quantitative reasoning'),
+  ('QR1', 'qr1'),
+  ('QR1', 'qr 1'),
+  ('QR1', 'quantitative reasoning 1'),
+  ('QR2', 'qr2'),
+  ('QR2', 'qr 2'),
+  ('QR2', 'quantitative reasoning 2');
+
+CREATE TABLE IF NOT EXISTS topic_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    abbreviation TEXT NOT NULL UNIQUE,
+    expansion TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO topic_aliases (abbreviation, expansion) VALUES
+  ('ai', 'artificial intelligence'),
+  ('ml', 'machine learning'),
+  ('os', 'operating systems'),
+  ('ui', 'user interface'),
+  ('vr', 'virtual reality'),
+  ('ar', 'augmented reality'),
+  ('db', 'database'),
+  ('hci', 'human computer interaction'),
+  ('nlp', 'natural language processing'),
+  ('crypto', 'cryptography'),
+  ('sec', 'security'),
+  ('swe', 'software engineering'),
+  ('dist', 'distributed systems'),
+  ('graphics', 'computer graphics'),
+  ('viz', 'visualization'),
+  ('ds', 'data science'),
+  ('stats', 'statistics');
 
 -- Full-text search with trigram tokenizer
 CREATE VIRTUAL TABLE IF NOT EXISTS courses_fts USING fts5(

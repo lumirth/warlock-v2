@@ -8,47 +8,27 @@ UIUC Course Search is a smart course search engine for the University of Illinoi
 
 ## Commands
 
+```bash
+npm run typecheck
+npm test
+npm run build
+npm run lint
+npm run db:verify
+npm run eval:smoke
+```
+
+Default build is offline/deterministic. `npm run generate:subjects` is manual and intentionally separate from `npm run build`.
+
 ### Development
 ```bash
-# API (Cloudflare Worker)
-cd apps/api && npm run dev          # Start local dev server with wrangler
-cd apps/api && npm run typecheck    # TypeScript check only
-cd apps/api && npm run check        # Typecheck + tests
-
-# Web (React + Vite)
-cd apps/web && npm run dev          # Start Vite dev server
-cd apps/web && npm run build        # Build for production
-```
-
-### Testing
-```bash
-# Run all API tests
-cd apps/api && npm test
-
-# Run specific test file
-cd apps/api && npx vitest run src/services/__tests__/query-resolver.test.ts
-
-# Watch mode
-cd apps/api && npm run test:watch
-```
-
-### Deployment
-```bash
-# API (Cloudflare Worker)
-cd apps/api && npm run deploy       # Runs check then wrangler deploy
-
-# Web (Cloudflare Pages)
-cd apps/web && npm run build
-cd apps/web && npx wrangler pages deploy dist --project-name uiuc-course-search-web
+npm run dev -w @uiuc-course-search/api
+npm run dev -w @uiuc-course-search/web
 ```
 
 ### Database (D1)
 ```bash
-# Run migrations
-cd apps/api && npx wrangler d1 execute course-search-db --file=../../migrations/your-migration.sql
-
-# Interactive SQL shell
-cd apps/api && npx wrangler d1 execute course-search-db --command="SELECT * FROM courses LIMIT 5"
+npm run db:verify
+npx wrangler d1 execute course-search-db --file=apps/api/migrations/0001_initial_schema.sql
 ```
 
 ## Architecture
@@ -57,6 +37,7 @@ cd apps/api && npx wrangler d1 execute course-search-db --command="SELECT * FROM
 - `apps/api` - Cloudflare Worker API (Hono framework)
 - `apps/web` - React frontend (Vite)
 - `packages/query-types` - Shared TypeScript types for query processing
+- `docs/archive` - Historical plans and analysis; not current implementation instructions
 
 ### Sync & Discovery Architecture (Fan-Out)
 - **Auto-Discovery**: Twice-daily cron (`0 10,22 * * *`) discovers new terms and classifies them as `active` or `historical`.
@@ -74,6 +55,16 @@ cd apps/api && npx wrangler d1 execute course-search-db --command="SELECT * FROM
 - `VECTORIZE` - Vector index
 - `AI` - Workers AI (`bge-small-en-v1.5`)
 - `SELF` - Service binding for fan-out sync dispatch
+- `ADMIN_TOKEN` - Bearer token for `/admin/*`
+- `INTERNAL_TOKEN` - Bearer token for `/internal/*`
+- `RMP_AUTH_TOKEN` - RMP GraphQL authorization value when RMP sync is enabled
+
+## Active Docs
+
+- `README.md`
+- `docs/deployment-checklist.md`
+- `docs/plans/2026-06-01-search-contract-v1.md`
+- `docs/plans/2026-06-01-pre-alpha-remediation-master-plan.md`
 
 ## GenEd Codes
 Common UIUC gened categories: `HUM`, `NAT`, `SBS`, `CS`, `QR1`, `QR2`, `ACP`, `NW`, `US`, `WCC`.

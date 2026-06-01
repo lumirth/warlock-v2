@@ -1566,71 +1566,71 @@ Use this checklist to track progress.
 
 ## Security And Route Boundaries
 
-- [ ] Classify routes as public, admin, internal, or dev-only.
-- [ ] Add admin auth middleware.
-- [ ] Add internal auth middleware or remove public internal HTTP access.
-- [ ] Delete or protect arbitrary debug fetch.
-- [ ] Add route auth tests.
-- [ ] Restrict CORS to public read routes.
-- [ ] Remove or gate production debug logging.
+- [x] Classify routes as public, admin, internal, or dev-only.
+- [x] Add admin auth middleware.
+- [x] Add internal auth middleware or remove public internal HTTP access.
+- [x] Delete or protect arbitrary debug fetch.
+- [x] Add route auth tests.
+- [x] Restrict CORS to public read routes.
+- [x] Remove or gate production debug logging.
 
 ## Schema And Data Model
 
-- [ ] Choose one migration directory.
-- [ ] Create canonical greenfield schema baseline.
-- [ ] Include all tables/columns used by runtime code.
-- [ ] Add schema version/check.
-- [ ] Fix instructor uniqueness/upsert mismatch.
-- [ ] Make section identity term-scoped.
-- [ ] Verify clean DB bootstrap.
+- [x] Choose one migration directory.
+- [x] Create canonical greenfield schema baseline.
+- [x] Include all tables/columns used by runtime code.
+- [x] Add schema version/check.
+- [x] Fix instructor uniqueness/upsert mismatch.
+- [x] Make section identity term-scoped.
+- [x] Verify clean DB bootstrap.
 
 ## Sync And Enrichment
 
-- [ ] Remove destructive-before-constructive sync writes.
-- [ ] Add stale row pruning after successful sync.
-- [ ] Fix or disable course-detail DB mutation.
-- [ ] Add deterministic enrichment checkpointing.
-- [ ] Move RMP token to secret or disable RMP sync.
-- [ ] Add resumable RMP/enrichment state.
-- [ ] Add sync run state, idempotency, and overlap prevention.
-- [ ] Fix historical sync script or remove it from active workflow.
+- [x] Remove destructive-before-constructive sync writes.
+- [x] Add stale row pruning after successful sync.
+- [x] Fix or disable course-detail DB mutation.
+- [x] Add deterministic enrichment checkpointing.
+- [x] Move RMP token to secret or disable RMP sync.
+- [x] Add resumable RMP/enrichment state.
+- [x] Add sync run state, idempotency, and overlap prevention.
+- [x] Fix historical sync script or remove it from active workflow.
 
 ## Search
 
-- [ ] Define Query Language v1.
-- [ ] Remove unsupported parser features or implement them end to end.
-- [ ] Fix course-level negation semantics.
-- [ ] Validate `/api/search` params.
-- [ ] Separate relaxed suggestions from exact results or disable relaxation.
-- [ ] Batch quality-score lookup in ranking.
-- [ ] Add search integration tests.
+- [x] Define Query Language v1.
+- [x] Remove unsupported parser features or implement them end to end.
+- [x] Fix course-level negation semantics.
+- [x] Validate `/api/search` params.
+- [x] Separate relaxed suggestions from exact results or disable relaxation.
+- [x] Batch quality-score lookup in ranking.
+- [x] Add search integration tests.
 
 ## Frontend And DTOs
 
-- [ ] Create shared API DTOs.
-- [ ] Make fresh/cached course responses same shape.
-- [ ] Fix SearchPage async race and stale results.
-- [ ] Fix CoursePage term/year refetch.
-- [ ] Make section table mobile-safe.
-- [ ] Remove temporary debug UI or gate it to dev.
+- [x] Create shared API DTOs.
+- [x] Make fresh/cached course responses same shape.
+- [x] Fix SearchPage async race and stale results.
+- [x] Fix CoursePage term/year refetch.
+- [x] Make section table mobile-safe.
+- [x] Remove temporary debug UI or gate it to dev.
 
 ## Tooling And CI
 
-- [ ] Add package scripts for `query-types`.
-- [ ] Make root `typecheck` pass.
-- [ ] Make root `test` pass without remote auth.
-- [ ] Make root `build` deterministic and offline by default.
-- [ ] Add lint.
-- [ ] Add web tests.
-- [ ] Fix eval runner exit behavior and assertions.
-- [ ] Add CI workflow.
+- [x] Add package scripts for `query-types`.
+- [x] Make root `typecheck` pass.
+- [x] Make root `test` pass without remote auth.
+- [x] Make root `build` deterministic and offline by default.
+- [x] Add lint.
+- [x] Add web tests.
+- [x] Fix eval runner exit behavior and assertions.
+- [x] Add CI workflow.
 
 ## Data Artifacts And Docs
 
-- [ ] Remove or externalize large generated data artifacts.
-- [ ] Document data bootstrap.
-- [ ] Update README and `CLAUDE.md`.
-- [ ] Archive stale plans.
+- [x] Remove or externalize large generated data artifacts.
+- [x] Document data bootstrap.
+- [x] Update README and `CLAUDE.md`.
+- [x] Archive stale plans.
 
 ---
 

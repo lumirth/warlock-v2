@@ -137,8 +137,6 @@ async function run() {
         const plan = json.meta?.plan || {};
         const filters = JSON.stringify(plan.filters || {});
         const semantic = plan.semanticQuery || '';
-        const keyword = plan.keywordQuery || '';
-
         console.log(`\nQuery: "${query}" (${duration}ms)`);
         console.log(`  Top: ${topResult}`);
         console.log(`  Filters: ${filters}`);

@@ -3,9 +3,9 @@ import { Container, Title, TextInput, Button, Group, Badge, Paper, Text, Stack, 
 import { IconSearch } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
-import type { SearchMeta, Course } from '../lib/api-types'
+import type { CourseDto, Hint, SearchMetaDto } from '@uiuc-course-search/query-types'
 
-function formatHintValue(value: string | number | boolean | { subject?: string; number?: string }): string {
+function formatHintValue(value: Hint['value']): string {
   if (typeof value === 'object' && value !== null) {
     if ('subject' in value && 'number' in value) {
       return `${value.subject} ${value.number}`
@@ -35,8 +35,8 @@ function getHintColor(type: string): string {
 
 export function SearchPage() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<Course[]>([])
-  const [meta, setMeta] = useState<SearchMeta | null>(null)
+  const [results, setResults] = useState<CourseDto[]>([])
+  const [meta, setMeta] = useState<SearchMetaDto | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -51,14 +51,16 @@ export function SearchPage() {
       searchController.current.abort()
     }
     // Create new controller for this request
-    searchController.current = new AbortController()
+    const controller = new AbortController()
+    searchController.current = controller
 
     setLoading(true)
     setMeta(null)
+    setResults([])
     setError(null)
 
     try {
-      const data = await api.search(query, searchController.current.signal)
+      const data = await api.search(query, controller.signal)
       setResults(data.results || [])
       setMeta(data.meta || null)
     } catch (err: unknown) {
@@ -67,7 +69,7 @@ export function SearchPage() {
       setError(err instanceof Error ? err.message : 'An unknown error occurred')
     } finally {
       // Only turn off loading if this is still the active request
-      if (searchController.current && !searchController.current.signal.aborted) {
+      if (searchController.current === controller) {
         setLoading(false)
         searchController.current = null
       }

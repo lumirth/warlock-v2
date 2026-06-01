@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "deploy": "npm run build && wrangler pages deploy dist --project-name uiuc-course-search-web",
     "preview": "vite preview",
-    "test": "echo 'Web tests not yet implemented'"
+    "test": "vitest run",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@mantine/core": "^8.3.13",

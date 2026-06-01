@@ -192,6 +192,8 @@ describe('fromSubjectCascade', () => {
     const sectionsWithDetails = result.coursesWithSections[0].sections;
 
     expect(sectionsWithDetails).toHaveLength(2);
+    expect(sectionsWithDetails[0].section.id).toBe('2026-spring-12345');
+    expect(sectionsWithDetails[0].section.term_id).toBe('2026-spring');
     expect(sectionsWithDetails[0].section.crn).toBe('12345');
     expect(sectionsWithDetails[0].section.section_title).toBe('Lecture 1');
     expect(sectionsWithDetails[0].section.part_of_term).toBe('1');
@@ -199,6 +201,7 @@ describe('fromSubjectCascade', () => {
 
     // Verify meetings
     expect(sectionsWithDetails[0].meetings).toHaveLength(1);
+    expect(sectionsWithDetails[0].meetings[0].section_id).toBe('2026-spring-12345');
     expect(sectionsWithDetails[0].meetings[0].type_code).toBe('LEC');
     expect(sectionsWithDetails[0].meetings[0].instructors).toHaveLength(1);
     expect(sectionsWithDetails[0].meetings[0].instructors[0].lastName).toBe('Fagen');

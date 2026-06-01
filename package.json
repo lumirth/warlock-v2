@@ -8,16 +8,34 @@
   "scripts": {
     "generate:subjects": "tsx scripts/generate-subjects.ts",
     "dev": "npm run generate:subjects && concurrently \"npm run dev -w @uiuc-course-search/api\" \"npm run dev -w @uiuc-course-search/web\"",
-    "build": "npm run generate:subjects && npm run build --workspaces",
-    "test": "npm test --workspaces",
-    "typecheck": "npm run typecheck --workspaces",
+    "build": "npm run build --workspaces",
+    "build:with-generated-subjects": "npm run generate:subjects && npm run build",
+    "test": "npm test --workspaces && npm run test:scripts",
+    "test:workspaces": "npm test --workspaces",
+    "test:scripts": "vitest run scripts/__tests__",
+    "typecheck": "npm run typecheck:workspaces && npm run typecheck:scripts",
+    "typecheck:workspaces": "npm run typecheck --workspaces",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "lint": "eslint .",
+    "db:verify": "bash scripts/verify-schema.sh",
+    "eval:smoke": "npm test -w @uiuc-course-search/api -- --run src/services/__tests__/golden.test.ts",
     "deploy:api": "npm run deploy -w @uiuc-course-search/api",
     "deploy:web": "npm run deploy -w @uiuc-course-search/web",
     "deploy": "concurrently \"npm run deploy:api\" \"npm run deploy:web\""
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.9.1",
     "concurrently": "^9.2.1",
-    "tsx": "^4.21.0"
+    "eslint": "^10.4.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
+    "tsx": "^4.21.0",
+    "typescript-eslint": "^8.60.0",
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "recharts": "^3.7.0"

@@ -53,7 +53,6 @@ function fetchSubjectsFromD1(): string[] {
 async function fetchSubjectsFromCisApi(): Promise<string[]> {
   console.log('Fetching subjects from CISAPI (fallback)...');
   const year = new Date().getFullYear();
-  const term = 'spring'; // Simple default, or try to guess.
   // Actually, better to fetch all terms for current year?
   // For simplicity/robustness, let's just fetch the current valid XML I found earlier.
   // https://courses.illinois.edu/cisapp/explorer/schedule/2026/spring.xml
@@ -78,7 +77,7 @@ async function fetchSubjectsFromCisApi(): Promise<string[]> {
         while ((match = regex.exec(text)) !== null) {
           subjects.add(match[1]);
         }
-      } catch (e) {
+      } catch {
         // Ignore errors for future terms that don't exist
       }
     }

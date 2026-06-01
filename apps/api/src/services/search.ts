@@ -32,6 +32,27 @@ const STATUS_VALUES: Record<string, string[]> = {
   'closed': ['Closed'],
 };
 
+const DAY_ALIASES: Record<string, string> = {
+  monday: 'M',
+  mon: 'M',
+  m: 'M',
+  tuesday: 'T',
+  tue: 'T',
+  tues: 'T',
+  t: 'T',
+  wednesday: 'W',
+  wed: 'W',
+  w: 'W',
+  thursday: 'R',
+  thu: 'R',
+  thur: 'R',
+  thurs: 'R',
+  r: 'R',
+  friday: 'F',
+  fri: 'F',
+  f: 'F',
+};
+
 interface TermInfo {
   term_id: string;
   year: number;
@@ -130,6 +151,16 @@ export function buildFilterClauses(
     params.push(filters.credits);
   }
 
+  if (filters.year !== undefined) {
+    where.push('c.year = ?');
+    params.push(filters.year);
+  }
+
+  if (filters.term) {
+    where.push('c.term = ?');
+    params.push(filters.term);
+  }
+
   // Level filter
   if (filters.level !== undefined) {
     where.push('CAST(SUBSTR(c.number, 1, 1) AS INTEGER) * 100 = ?');
@@ -172,7 +203,7 @@ export function buildFilterClauses(
   // Instructor filter
   if (filters.instructor_ids?.length) {
     joinsSet.add('JOIN sections s ON s.course_id = c.id');
-    joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+    joinsSet.add('JOIN meetings m ON m.section_id = s.id');
     joinsSet.add('JOIN meeting_instructors mi ON mi.meeting_id = m.id');
     const placeholders = filters.instructor_ids.map(() => '?').join(',');
     where.push(`mi.instructor_id IN (${placeholders})`);
@@ -182,7 +213,7 @@ export function buildFilterClauses(
   // Days filter
   if (filters.days) {
     joinsSet.add('JOIN sections s ON s.course_id = c.id');
-    joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+    joinsSet.add('JOIN meetings m ON m.section_id = s.id');
     where.push('m.days = ?');
     params.push(filters.days);
   }
@@ -192,7 +223,7 @@ export function buildFilterClauses(
     const range = TIME_RANGES[filters.time];
     if (range) {
       joinsSet.add('JOIN sections s ON s.course_id = c.id');
-      joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+      joinsSet.add('JOIN meetings m ON m.section_id = s.id');
       if (range.start) {
         where.push('m.start_time >= ?');
         params.push(range.start);
@@ -207,7 +238,7 @@ export function buildFilterClauses(
   // Online filter
   if (filters.online !== undefined) {
     joinsSet.add('JOIN sections s ON s.course_id = c.id');
-    joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
+    joinsSet.add('JOIN meetings m ON m.section_id = s.id');
     if (filters.online) {
       where.push("(m.building_name = '' OR m.building_name IS NULL OR LOWER(m.building_name) LIKE '%online%')");
     } else {
@@ -267,22 +298,33 @@ export function buildFilterClauses(
   if (filters.not) {
     // Negated time ranges
     if (filters.not.time?.length) {
-      joinsSet.add('JOIN sections s ON s.course_id = c.id');
-      joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
       for (const timeNeg of filters.not.time) {
         const range = TIME_RANGES[timeNeg];
         if (range) {
-          // Exclude courses that have meetings in this time range
           if (range.start && range.end) {
-            where.push('NOT (m.start_time >= ? AND m.start_time < ?)');
+            where.push(`NOT EXISTS (
+              SELECT 1 FROM sections s2
+              JOIN meetings m2 ON m2.section_id = s2.id
+              WHERE s2.course_id = c.id
+                AND m2.start_time >= ?
+                AND m2.start_time < ?
+            )`);
             params.push(range.start, range.end);
           } else if (range.end) {
-            // "no morning" = exclude if start_time < 12:00
-            where.push('m.start_time >= ?');
+            where.push(`NOT EXISTS (
+              SELECT 1 FROM sections s2
+              JOIN meetings m2 ON m2.section_id = s2.id
+              WHERE s2.course_id = c.id
+                AND m2.start_time < ?
+            )`);
             params.push(range.end);
           } else if (range.start) {
-            // "no evening" = exclude if start_time >= 17:00
-            where.push('m.start_time < ?');
+            where.push(`NOT EXISTS (
+              SELECT 1 FROM sections s2
+              JOIN meetings m2 ON m2.section_id = s2.id
+              WHERE s2.course_id = c.id
+                AND m2.start_time >= ?
+            )`);
             params.push(range.start);
           }
         }
@@ -291,21 +333,38 @@ export function buildFilterClauses(
 
     // Negated days
     if (filters.not.days?.length) {
-      joinsSet.add('JOIN sections s ON s.course_id = c.id');
-      joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
       for (const daysNeg of filters.not.days) {
-        where.push('m.days != ?');
-        params.push(daysNeg);
+        const dayCode = normalizeDayToken(daysNeg);
+        if (dayCode.length === 1) {
+          where.push(`NOT EXISTS (
+            SELECT 1 FROM sections s2
+            JOIN meetings m2 ON m2.section_id = s2.id
+            WHERE s2.course_id = c.id
+              AND m2.days LIKE ?
+          )`);
+          params.push(`%${dayCode}%`);
+        } else {
+          where.push(`NOT EXISTS (
+            SELECT 1 FROM sections s2
+            JOIN meetings m2 ON m2.section_id = s2.id
+            WHERE s2.course_id = c.id
+              AND m2.days = ?
+          )`);
+          params.push(dayCode);
+        }
       }
     }
 
     // Negated instructors
     if (filters.not.instructor_ids?.length) {
-      joinsSet.add('JOIN sections s ON s.course_id = c.id');
-      joinsSet.add('JOIN meetings m ON m.section_crn = s.crn');
-      joinsSet.add('JOIN meeting_instructors mi ON mi.meeting_id = m.id');
       const placeholders = filters.not.instructor_ids.map(() => '?').join(',');
-      where.push(`mi.instructor_id NOT IN (${placeholders})`);
+      where.push(`NOT EXISTS (
+        SELECT 1 FROM sections s2
+        JOIN meetings m2 ON m2.section_id = s2.id
+        JOIN meeting_instructors mi2 ON mi2.meeting_id = m2.id
+        WHERE s2.course_id = c.id
+          AND mi2.instructor_id IN (${placeholders})
+      )`);
       params.push(...filters.not.instructor_ids);
     }
   }
@@ -318,6 +377,11 @@ export function buildFilterClauses(
     having,
     havingParams,
   };
+}
+
+function normalizeDayToken(day: string): string {
+  const normalized = day.trim().toLowerCase();
+  return DAY_ALIASES[normalized] ?? day.trim().toUpperCase();
 }
 
 const SPECIAL_TOKENS: Record<string, string> = {
@@ -427,15 +491,12 @@ export async function keywordSearch(
 
   // Sanitize the query
   const cleanQuery = hasKeyword ? sanitizeFtsQuery(keywordQuery) : '';
-  console.log('[Search] Raw query:', keywordQuery);
-  console.log('[Search] Clean query:', cleanQuery);
   let searchParam = cleanQuery;
 
   // Query Expansion: "Computer Science" -> ("Computer Science") OR CS
   if (hasKeyword && !filters.subject && !filters.number) {
     const subjectId = await validateSubject(db, cleanQuery);
     if (subjectId) {
-      console.log('[Search] Expanded subject:', subjectId);
       const escaped = cleanQuery.replace(/"/g, '""');
       searchParam = `"${escaped}" OR ${subjectId}`;
     }
@@ -461,13 +522,7 @@ export async function keywordSearch(
     LIMIT ?
   `;
 
-  if (hasKeyword) {
-     console.log('[Search] Executing FTS SQL:', sql);
-     console.log('[Search] Params:', [...finalParams]);
-  }
-
   const result = await db.prepare(sql).bind(...finalParams).all<{ id: string; fts_score: number }>();
-  console.log(`[Search] Keyword search found ${result.results.length} results`);
 
   return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
 }
@@ -553,8 +608,6 @@ export async function postFilterSemanticResults(
   const validIdsResult = await db.prepare(sql).bind(...finalParams).all<{ id: string }>();
   const validIdSet = new Set(validIdsResult.results.map(r => r.id));
 
-  console.log(`[Search] Semantic post-filter: ${semanticResults.length} -> ${validIdSet.size} results`);
-
   return semanticResults.filter(r => validIdSet.has(r.id));
 }
 
@@ -593,8 +646,6 @@ export async function hybridSearch(
     hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, 50) : Promise.resolve([])
   ]);
 
-  console.log(`[Search] Results - Semantic: ${rawSemanticResults.length}, Course Keyword: ${courseKeywordResults.length}, Section Keyword: ${sectionKeywordResults.length}`);
-
   // Post-filter semantic results for hard constraints
   const semanticResults = runSemantic
     ? await postFilterSemanticResults(db, rawSemanticResults, plan.filters)
@@ -618,18 +669,17 @@ export async function hybridSearch(
   // Collect all unique IDs
   const allIds = new Set([...semanticRanks.keys(), ...keywordRanks.keys()]);
 
+  const allIdList = Array.from(allIds);
+  const qualityScores = await fetchQualityScores(db, allIdList);
+
   // Calculate RRF scores
   const scores: { id: string; score: number; semanticRank?: number; keywordRank?: number }[] = [];
 
-  for (const id of allIds) {
+  for (const id of allIdList) {
     let score = 0;
     const semanticRank = semanticRanks.get(id);
     const keywordRank = keywordRanks.get(id);
-
-    // We need to fetch quality score for RRF boost
-    // Wait for the promise to resolve before accessing properties
-    const courseData = await db.prepare('SELECT quality_score FROM courses WHERE id = ?').bind(id).first<{ quality_score: number }>();
-    const qualityScore = courseData?.quality_score;
+    const qualityScore = qualityScores.get(id);
 
     if (semanticRank) {
       score += rrfScore(semanticRank, qualityScore);
@@ -656,8 +706,6 @@ export async function hybridSearch(
     }
     return 0;
   });
-
-  console.log('[Search] Top scores:', scores.slice(0, 5).map(s => ({ id: s.id, score: s.score.toFixed(4), sem: s.semanticRank, key: s.keywordRank })));
 
   const topIds = scores.slice(0, limit);
 
@@ -689,6 +737,26 @@ export async function hybridSearch(
     semanticRank: s.semanticRank,
     keywordRank: s.keywordRank
   })).filter(r => r.course);
+}
+
+async function fetchQualityScores(db: D1Database, courseIds: string[]): Promise<Map<string, number>> {
+  const qualityScores = new Map<string, number>();
+  if (courseIds.length === 0) {
+    return qualityScores;
+  }
+
+  const placeholders = courseIds.map(() => '?').join(',');
+  const result = await db.prepare(`
+    SELECT id, quality_score FROM courses WHERE id IN (${placeholders})
+  `).bind(...courseIds).all<{ id: string; quality_score: number | null }>();
+
+  for (const row of result.results) {
+    if (row.quality_score !== null && row.quality_score !== undefined) {
+      qualityScores.set(row.id, row.quality_score);
+    }
+  }
+
+  return qualityScores;
 }
 
 export async function hybridSearchWithTermRanking(

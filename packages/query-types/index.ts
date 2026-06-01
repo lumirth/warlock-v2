@@ -2,7 +2,7 @@ export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'te
 
 export interface QueryHint {
   type: QueryHintType;
-  value: string;
+  value: string | number | boolean | NegationValue | TermValue;
   confidence: number;
   isExplicit?: boolean;
   metadata?: Record<string, string>; // For course_code: { subject: 'CS', number: '225' }
@@ -43,7 +43,7 @@ export interface SearchFilters {
     instructor_ids?: number[];
   };
 
-  // Legacy (keep for compatibility)
+  // Term filters
   term?: string;
   year?: number;
 }
@@ -140,3 +140,91 @@ export interface FieldFilter {
   value: string;
   negated?: boolean;
 }
+
+export type InstructorLinkDto = {
+  instructor_name: string | null;
+  rmp_rating: number | null;
+  rmp_difficulty: number | null;
+  rmp_id: string | null;
+  avg_gpa: number | null;
+  gpa_sample_size: number | null;
+  num_ratings: number | null;
+};
+
+export type CourseSectionDto = {
+  crn: string;
+  sectionNumber: string;
+  status: string;
+  type: string;
+  days: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  location: string;
+  instructor: string;
+  instructorRmp: number | null;
+  instructorGpa: number | null;
+  instructorStats: InstructorLinkDto[];
+};
+
+export type CourseDto = {
+  id: string;
+  subject: string;
+  number: string;
+  title: string;
+  description: string | null;
+  credit_hours: number | null;
+  gened: string | null;
+  year: number;
+  term: string;
+  primary_instructor: string | null;
+  quality_score: number | null;
+  difficulty_score: number | null;
+  instructor_links: Record<string, InstructorLinkDto>;
+  sections?: CourseSectionDto[];
+  _score?: number;
+  _semanticRank?: number;
+  _keywordRank?: number;
+  _historical?: boolean;
+  _cached?: boolean;
+  _stale?: boolean;
+  _stale_reason?: string | null;
+  _age_seconds?: number;
+  _fetched_at?: number;
+  _term_status?: string;
+};
+
+export type SearchMetaDto = {
+  query: {
+    raw: string;
+    residual: string;
+  };
+  extraction: {
+    hints: Hint[];
+  };
+  plan: SearchPlan;
+  ambiguities?: Ambiguity[];
+  timing: {
+    extraction_ms: number;
+    search_ms: number;
+    total_ms: number;
+  };
+  fallback?: {
+    tierReached: number;
+    constraintsRelaxed: string[];
+    originalResultCount: number;
+  };
+  term?: {
+    activeTermId: string | null;
+    registrableTermId: string | null;
+  };
+};
+
+export type SearchResponseDto = {
+  results: CourseDto[];
+  meta: SearchMetaDto;
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+  };
+};

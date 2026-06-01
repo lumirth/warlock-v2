@@ -4,6 +4,20 @@ Date: 2026-06-01
 
 Status: provisional architecture contract
 
+## Implementation Resolution
+
+During the pre-alpha remediation pass on 2026-06-01, this contract was narrowed to the implemented Query Language v1 surface instead of carrying aspirational response-shape promises as active requirements.
+
+Implemented v1 now means:
+
+- Supported power syntax is applied end to end: `subject`, `gened`, `gened:any`, `gened:all`, `credits`, `level`, `crn`, `status`, `online`, `days`, `time`, `term`, `partOfTerm`/`pot`, and explicit `difficulty`.
+- Unsupported `field:value` syntax remains residual text rather than disappearing silently.
+- Quoted phrases are fed into keyword and semantic query text.
+- Dash negation is supported for schedule/delivery tokens such as `-morning`, `-friday`, and `-online`. Unsupported dash negations remain residual text.
+- Natural-language negation is supported for known time/day/delivery terms such as `no morning`, `avoid Friday`, and `not online`. Unsupported negations such as `no exams` remain residual text.
+- Primary results never silently relax hard filters. Relaxed suggestions are disabled for this pre-alpha version rather than mixed into primary results.
+- The API response is the shared `SearchResponseDto`/`CourseDto` shape in `packages/query-types`. It exposes interpreted query evidence through `meta.extraction`, `meta.plan`, `meta.fallback`, and term metadata. Rich per-result `MatchEvidence` and section-grain result objects are future work, not an active v1 requirement.
+
 This document makes explicit the search contract that is already strongly implied by the current project: the shared query types, golden queries, extractor/parser code, previous query-system plans, and the product's stated desire to be the lowest-friction UIUC course search engine.
 
 This is not immune from revision. It is an extrapolation from established project patterns, not an infallible specification. Implementation agents should question it when evidence from users, data, UI behavior, or platform constraints shows it is wrong. But until it is revised deliberately, it should be used as the organizing contract for schema, sync, indexing, API response shape, UI behavior, and evals.
@@ -612,4 +626,3 @@ Revisions should update:
 - user-facing docs or UI chips
 
 Do not quietly change behavior without updating the contract.
-

@@ -2,10 +2,6 @@ import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
 import {
   upsertSubject,
-  upsertMeeting,
-  upsertInstructor,
-  linkMeetingInstructor,
-  deleteCourseGeneds,
   prepareUpsertCourse,
   prepareUpsertSection,
   prepareInsertCourseGened,
@@ -14,9 +10,16 @@ import {
   prepareLinkMeetingInstructorByKeys
 } from '../db/index.js';
 import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js';
-import { getRateLimiter } from './rate-limiter.js';
+import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
 import { fromSubjectCascade, formatInstructorName } from '../transforms/course.js';
+
+type GenEdCleanup = {
+  courseId: string;
+  currentKeys: { categoryId: string; attributeCode: string | null }[];
+};
+
+const SUBJECT_SYNC_LOCK_TTL_SECONDS = 30 * 60;
 
 export interface ParallelSyncConfig {
   cisapiBase: string;
@@ -31,6 +34,7 @@ export interface SubjectSyncResult {
   coursesCount: number;
   sectionsCount: number;
   error?: string;
+  skipped?: boolean;
   durationMs: number;
 }
 
@@ -60,16 +64,16 @@ async function fetchSubjectCascade(
   term: string,
   subject: string
 ): Promise<ParsedSubjectCascade | null> {
-  const rateLimiter = getRateLimiter();
-  await rateLimiter.waitIfNeeded();
+  const upstreamBackoff = getUpstreamBackoff();
+  await upstreamBackoff.waitIfNeeded();
 
   const url = `${config.cisapiBase}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
 
   const response = await browserFetch(url);
 
   if (!response.ok) {
-    if (rateLimiter.isRateLimited(response.status)) {
-      const backoffMs = rateLimiter.recordFailure(
+    if (upstreamBackoff.isRateLimited(response.status)) {
+      const backoffMs = upstreamBackoff.recordFailure(
         `${subject}: HTTP ${response.status}`,
         response.status
       );
@@ -78,7 +82,7 @@ async function fetchSubjectCascade(
     throw new Error(`HTTP ${response.status} for ${subject}`);
   }
 
-  rateLimiter.recordSuccess();
+  upstreamBackoff.recordSuccess();
 
   // Use streaming parser to avoid loading entire XML into memory
   if (!response.body) {
@@ -109,6 +113,7 @@ async function saveSubjectData(
   ai?: Ai
 ): Promise<{ coursesCount: number; sectionsCount: number }> {
   const { subject, coursesWithSections } = fromSubjectCascade(parsed, year, term);
+  const syncTimestamp = coursesWithSections[0]?.course.last_synced ?? Math.floor(Date.now() / 1000);
   await upsertSubject(db, subject);
 
   let coursesCount = 0;
@@ -120,6 +125,7 @@ async function saveSubjectData(
   const meetingStatements: any[] = [];
   const instructorStatements: any[] = [];
   const linkStatements: any[] = [];
+  const genedCleanup: GenEdCleanup[] = [];
 
   const coursesForEmbedding: any[] = [];
   const uniqueInstructors = new Set<string>();
@@ -127,9 +133,6 @@ async function saveSubjectData(
   for (const { course, sections, genEdCategories } of coursesWithSections) {
     coursesCount++;
     courseStatements.push(prepareUpsertCourse(db, course));
-
-    // Delete existing GenEds first (linear for now as we didn't prepare it)
-    await deleteCourseGeneds(db, course.id);
 
     for (const cat of genEdCategories) {
       genedStatements.push(prepareInsertCourseGened(db, {
@@ -140,6 +143,13 @@ async function saveSubjectData(
         attribute_name: cat.attributeName
       }));
     }
+    genedCleanup.push({
+      courseId: course.id,
+      currentKeys: genEdCategories.map(cat => ({
+        categoryId: cat.categoryId,
+        attributeCode: cat.attributeCode,
+      })),
+    });
 
     if (vectorize && ai) {
       coursesForEmbedding.push(course);
@@ -170,7 +180,7 @@ async function saveSubjectData(
 
           linkStatements.push(prepareLinkMeetingInstructorByKeys(
             db,
-            meeting.section_crn,
+            meeting.section_id,
             meeting.meeting_index,
             instructor.lastName,
             instructor.firstName || null
@@ -193,10 +203,14 @@ async function saveSubjectData(
   // Order matters for FK constraints and linking logic
   await executeBatch(courseStatements);
   await executeBatch(genedStatements);
+  for (const cleanup of genedCleanup) {
+    await pruneStaleCourseGeneds(db, cleanup);
+  }
   await executeBatch(sectionStatements);
   await executeBatch(instructorStatements); // Upsert instructors first so they exist for linking
   await executeBatch(meetingStatements);    // Upsert meetings so they exist for linking
   await executeBatch(linkStatements);       // Link using subqueries
+  await pruneStaleSubjectRows(db, subject.id, year, term, syncTimestamp);
 
   // Process Embeddings
   if (vectorize && ai) {
@@ -226,13 +240,87 @@ async function saveSubjectData(
   return { coursesCount, sectionsCount };
 }
 
+async function pruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): Promise<void> {
+  if (cleanup.currentKeys.length === 0) {
+    await db.prepare('DELETE FROM course_gened WHERE course_id = ?')
+      .bind(cleanup.courseId)
+      .run();
+    return;
+  }
+
+  const keepClauses = cleanup.currentKeys
+    .map(() => '(category_id = ? AND COALESCE(attribute_code, \'\') = ?)')
+    .join(' OR ');
+  const params = cleanup.currentKeys.flatMap(key => [key.categoryId, key.attributeCode ?? '']);
+
+  await db.prepare(`
+    DELETE FROM course_gened
+    WHERE course_id = ?
+      AND NOT (${keepClauses})
+  `).bind(cleanup.courseId, ...params).run();
+}
+
+async function pruneStaleSubjectRows(
+  db: D1Database,
+  subjectId: string,
+  year: number,
+  term: string,
+  syncTimestamp: number
+): Promise<void> {
+  await db.prepare(`
+    DELETE FROM meeting_instructors
+    WHERE meeting_id IN (
+      SELECT m.id
+      FROM meetings m
+      JOIN sections s ON s.id = m.section_id
+      JOIN courses c ON c.id = s.course_id
+      WHERE c.subject = ? AND c.year = ? AND c.term = ?
+        AND (s.last_synced IS NULL OR s.last_synced != ?)
+    )
+  `).bind(subjectId, year, term, syncTimestamp).run();
+
+  await db.prepare(`
+    DELETE FROM meetings
+    WHERE section_id IN (
+      SELECT s.id
+      FROM sections s
+      JOIN courses c ON c.id = s.course_id
+      WHERE c.subject = ? AND c.year = ? AND c.term = ?
+        AND (s.last_synced IS NULL OR s.last_synced != ?)
+    )
+  `).bind(subjectId, year, term, syncTimestamp).run();
+
+  await db.prepare(`
+    DELETE FROM sections
+    WHERE course_id IN (
+      SELECT id FROM courses WHERE subject = ? AND year = ? AND term = ?
+    )
+      AND (last_synced IS NULL OR last_synced != ?)
+  `).bind(subjectId, year, term, syncTimestamp).run();
+
+  await db.prepare(`
+    DELETE FROM course_gened
+    WHERE course_id IN (
+      SELECT id FROM courses
+      WHERE subject = ? AND year = ? AND term = ?
+        AND (last_synced IS NULL OR last_synced != ?)
+    )
+  `).bind(subjectId, year, term, syncTimestamp).run();
+
+  await db.prepare(`
+    DELETE FROM courses
+    WHERE subject = ? AND year = ? AND term = ?
+      AND (last_synced IS NULL OR last_synced != ?)
+  `).bind(subjectId, year, term, syncTimestamp).run();
+}
+
 export async function getSubjectsForTerm(
   config: ParallelSyncConfig,
   year: number,
   term: string
 ): Promise<string[]> {
-  const rateLimiter = getRateLimiter();
-  await rateLimiter.waitIfNeeded();
+  const upstreamBackoff = getUpstreamBackoff();
+  await upstreamBackoff.waitIfNeeded();
 
   const url = `${config.cisapiBase}/schedule/${year}/${term}.xml`;
   const response = await browserFetch(url);
@@ -241,7 +329,7 @@ export async function getSubjectsForTerm(
     throw new Error(`Failed to get subjects: HTTP ${response.status}`);
   }
 
-  rateLimiter.recordSuccess();
+  upstreamBackoff.recordSuccess();
 
   const xml = await response.text();
   const subjectRegex = /<subject id="([^"]+)"/g;
@@ -275,11 +363,23 @@ export async function syncSubjects(
 
     const batchPromises = batch.map(async (subject): Promise<SubjectSyncResult> => {
       const subjectStart = Date.now();
+      const lockAcquired = await acquireSubjectSyncLock(db, termId, subject);
+      if (!lockAcquired) {
+        return {
+          subject,
+          success: true,
+          skipped: true,
+          coursesCount: 0,
+          sectionsCount: 0,
+          durationMs: Date.now() - subjectStart
+        };
+      }
 
       try {
         const parsed = await fetchSubjectCascade(config, year, term, subject);
 
         if (!parsed) {
+          await updateSubjectSyncState(db, termId, subject, 'failed', 0, 0, 'Failed to parse response');
           return {
             subject,
             success: false,
@@ -293,6 +393,7 @@ export async function syncSubjects(
         const { coursesCount, sectionsCount } = await saveSubjectData(
           db, parsed, year, term, vectorize, ai
         );
+        await updateSubjectSyncState(db, termId, subject, 'complete', coursesCount, sectionsCount);
 
         return {
           subject,
@@ -303,6 +404,7 @@ export async function syncSubjects(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
+        await updateSubjectSyncState(db, termId, subject, 'failed', 0, 0, errorMsg);
         if (errorMsg.includes('Rate limited')) {
           rateLimitHits++;
         }
@@ -322,8 +424,8 @@ export async function syncSubjects(
     results.push(...batchResults);
   }
 
-  const rateLimiter = getRateLimiter();
-  const staleWarning = rateLimiter.getStaleDataWarning();
+  const upstreamBackoff = getUpstreamBackoff();
+  const staleWarning = upstreamBackoff.getStaleDataWarning();
 
   return {
     termId,
@@ -346,6 +448,58 @@ export async function syncSubjects(
   };
 }
 
+async function acquireSubjectSyncLock(db: D1Database, termId: string, subject: string): Promise<boolean> {
+  const id = subjectSyncStateId(termId, subject);
+  const existing = await db.prepare(`
+    SELECT last_sync, last_status
+    FROM sync_state
+    WHERE id = ?
+  `).bind(id).first<{ last_sync: number | null; last_status: string | null }>();
+
+  const now = Math.floor(Date.now() / 1000);
+  if (existing?.last_status === 'running' && existing.last_sync && now - existing.last_sync < SUBJECT_SYNC_LOCK_TTL_SECONDS) {
+    return false;
+  }
+
+  await db.prepare(`
+    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
+    VALUES (?, unixepoch(), 'running', 0, 0, NULL)
+    ON CONFLICT(id) DO UPDATE SET
+      last_sync = excluded.last_sync,
+      last_status = excluded.last_status,
+      items_synced = excluded.items_synced,
+      cursor = excluded.cursor,
+      etag = excluded.etag
+  `).bind(id).run();
+
+  return true;
+}
+
+async function updateSubjectSyncState(
+  db: D1Database,
+  termId: string,
+  subject: string,
+  status: string,
+  coursesCount: number,
+  sectionsCount: number,
+  error?: string
+): Promise<void> {
+  await db.prepare(`
+    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
+    VALUES (?, unixepoch(), ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      last_sync = excluded.last_sync,
+      last_status = excluded.last_status,
+      items_synced = excluded.items_synced,
+      cursor = excluded.cursor,
+      etag = excluded.etag
+  `).bind(subjectSyncStateId(termId, subject), status, coursesCount, sectionsCount, error ?? null).run();
+}
+
+function subjectSyncStateId(termId: string, subject: string): string {
+  return `course-sync:${termId}:${subject}`;
+}
+
 export async function syncTerm(
   db: D1Database,
   config: ParallelSyncConfig,
@@ -354,8 +508,6 @@ export async function syncTerm(
   vectorize?: VectorizeIndex,
   ai?: Ai
 ): Promise<TermSyncResult> {
-  const termId = `${year}-${term}`;
-
   const allSubjects = await getSubjectsForTerm(config, year, term);
   const totalSubjects = allSubjects.length;
 

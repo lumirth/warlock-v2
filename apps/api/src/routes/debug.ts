@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import type { D1Database, Fetcher, KVNamespace } from '@cloudflare/workers-types';
-import { getRateLimiter, resetRateLimiter } from '../services/rate-limiter.js';
-import { browserFetch } from '../http/browser-fetch.js';
+import { getUpstreamBackoff, resetUpstreamBackoff } from '../services/upstream-backoff.js';
 import { coordinateRmpSync } from '../services/rmp-sync.js';
 import { coordinateEnrichment, enrichCoursesWithGpa } from '../services/enrichment.js';
 import { resolveInstructor } from '../services/matcher.js';
@@ -16,6 +15,8 @@ type Bindings = {
   MAX_RETRIES: string;
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
+  INTERNAL_TOKEN?: string;
+  RMP_AUTH_TOKEN?: string;
 };
 
 // Admin routes mounted at /
@@ -23,7 +24,10 @@ export const adminRoutes = new Hono<{ Bindings: Bindings }>();
 
 adminRoutes.post('/admin/sync/rmp', async (c) => {
   try {
-    const result = await coordinateRmpSync(c.env.SELF);
+    const result = await coordinateRmpSync(c.env.DB, c.env.SELF, {
+      rmpAuthToken: c.env.RMP_AUTH_TOKEN,
+      internalToken: c.env.INTERNAL_TOKEN,
+    });
     return c.json(result);
   } catch (err) {
     return c.json({ error: String(err) }, 500);
@@ -33,23 +37,23 @@ adminRoutes.post('/admin/sync/rmp', async (c) => {
 adminRoutes.post('/admin/sync/enrich', async (c) => {
   try {
     await enrichCoursesWithGpa(c.env.DB);
-    const result = await coordinateEnrichment(c.env.DB, c.env.SELF);
+    const result = await coordinateEnrichment(c.env.DB, c.env.SELF, c.env.INTERNAL_TOKEN);
     return c.json({ success: true, message: 'Enrichment dispatched', ...result });
   } catch (err) {
     return c.json({ error: String(err) }, 500);
   }
 });
 
-adminRoutes.get('/admin/rate-limit-status', (c) => {
-  const rateLimiter = getRateLimiter({
+adminRoutes.get('/admin/upstream-backoff-status', (c) => {
+  const upstreamBackoff = getUpstreamBackoff({
     backoffBaseMs: parseInt(c.env.BACKOFF_BASE_MS) || 5000,
     backoffMaxMs: parseInt(c.env.BACKOFF_MAX_MS) || 60000,
     maxRetries: parseInt(c.env.MAX_RETRIES) || 3,
   });
 
-  const state = rateLimiter.getState();
-  const errorMessage = rateLimiter.getErrorMessage();
-  const staleWarning = rateLimiter.getStaleDataWarning();
+  const state = upstreamBackoff.getState();
+  const errorMessage = upstreamBackoff.getErrorMessage();
+  const staleWarning = upstreamBackoff.getStaleDataWarning();
 
   return c.json({
     ...state,
@@ -58,47 +62,13 @@ adminRoutes.get('/admin/rate-limit-status', (c) => {
   });
 });
 
-adminRoutes.post('/admin/reset-rate-limiter', (c) => {
-  resetRateLimiter();
-  return c.json({ message: 'Rate limiter reset' });
+adminRoutes.post('/admin/reset-upstream-backoff', (c) => {
+  resetUpstreamBackoff();
+  return c.json({ message: 'Upstream backoff reset' });
 });
 
 // Debug routes mounted at /admin/debug
 export const debugRoutes = new Hono<{ Bindings: Bindings }>();
-
-debugRoutes.get('/fetch', async (c) => {
-  const testUrl = c.req.query('url');
-  const useBrowserHeaders = c.req.query('browser') !== 'false';
-
-  if (!testUrl) {
-    return c.json({ error: 'Missing ?url= parameter' });
-  }
-
-  try {
-    const response = useBrowserHeaders
-      ? await browserFetch(testUrl)
-      : await fetch(testUrl, { headers: { 'Accept': 'application/xml' } });
-
-    const respHeaders: Record<string, string> = {};
-    response.headers.forEach((value, key) => {
-      respHeaders[key] = value;
-    });
-
-    const body = await response.text();
-
-    return c.json({
-      url: testUrl,
-      status: response.status,
-      statusText: response.statusText,
-      bodyLength: body.length,
-      bodySnippet: body.substring(0, 1000),
-      headers: respHeaders,
-      usedBrowserHeaders: useBrowserHeaders
-    });
-  } catch (error) {
-    return c.json({ error: String(error), url: testUrl });
-  }
-});
 
 debugRoutes.get('/subjects/:year/:term', async (c) => {
   const { year, term } = c.req.param();

@@ -1,0 +1,47 @@
+# UIUC Course Search
+
+Pre-alpha UIUC course search app with a React/Vite frontend, Cloudflare Worker API, D1 storage, Vectorize-backed semantic search, and scheduled sync/enrichment jobs.
+
+## Current Commands
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npm run lint
+npm run db:verify
+npm run eval:smoke
+```
+
+Default `npm run build` is deterministic and does not regenerate subject data or fetch network data. Use `npm run generate:subjects` only when intentionally refreshing the committed subject list.
+
+## Route Classes
+
+- Public: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`
+- Admin: `/admin/*`, protected by `Authorization: Bearer $ADMIN_TOKEN`
+- Internal service fan-out: `/internal/*`, protected by `Authorization: Bearer $INTERNAL_TOKEN`
+- Admin diagnostics: `/admin/debug/*`, admin-protected and limited to fixed diagnostics
+
+## Database
+
+The canonical greenfield schema is `apps/api/migrations/0001_initial_schema.sql`. It must remain byte-for-byte identical to `apps/api/src/db/schema.sql`.
+
+Verify clean local bootstrap with:
+
+```bash
+npm run db:verify
+```
+
+Remote destructive D1 work should first create and verify a restorable backup/export of the target database.
+
+## Data Artifacts
+
+Normal clone/build/test should not depend on large generated historical SQL artifacts. Generated historical chunks are ignored and local-only; a verified whole-project backup was created before removing them from git tracking.
+
+## Active Docs
+
+- `docs/plans/2026-06-01-pre-alpha-remediation-master-plan.md`
+- `docs/plans/2026-06-01-search-contract-v1.md`
+- `docs/deployment-checklist.md`
+
+Older plans and analysis notes live under `docs/archive/` as historical context, not current implementation instructions.

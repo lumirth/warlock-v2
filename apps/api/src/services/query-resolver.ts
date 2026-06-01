@@ -1,5 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { ExtractedQuery, SearchPlan, QueryHint, Ambiguity } from '@uiuc-course-search/query-types';
+import type { ExtractedQuery, SearchPlan, QueryHint } from '@uiuc-course-search/query-types';
 
 const GENED_SYNONYMS: Record<string, string[]> = {
   // Composition
@@ -59,30 +59,33 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         await resolveCourseCode(db, hint, plan, extracted.rawQuery);
         break;
 
-      case 'instructor':
-        const instructorIds = await resolveInstructor(db, hint.value);
+      case 'instructor': {
+        const instructorIds = await resolveInstructor(db, String(hint.value));
         if (instructorIds.length > 0) {
           plan.filters.instructor_ids = instructorIds;
         }
         break;
+      }
 
       case 'gened':
-        resolveGened(hint.value, plan);
+        resolveGened(String(hint.value), plan);
         break;
 
-      case 'subject':
-        const validSubj = await validateSubject(db, hint.value);
+      case 'subject': {
+        const subjectValue = String(hint.value);
+        const validSubj = await validateSubject(db, subjectValue);
         if (validSubj) {
           plan.filters.subject = validSubj;
         } else {
-          plan.keywordQuery = (plan.keywordQuery + " " + hint.value).trim();
-          plan.semanticQuery = (plan.semanticQuery + " " + hint.value).trim();
+          plan.keywordQuery = (plan.keywordQuery + " " + subjectValue).trim();
+          plan.semanticQuery = (plan.semanticQuery + " " + subjectValue).trim();
         }
         break;
+      }
 
       case 'crn':
         // CRN is a direct lookup - handled specially in search
-        plan.filters.crn = hint.value;
+        plan.filters.crn = String(hint.value);
         break;
 
       case 'days':
@@ -97,15 +100,31 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         plan.filters.partOfTerm = hint.value as string;
         break;
 
-      case 'level':
+      case 'term': {
+        if (typeof hint.value === 'object' && hint.value !== null && 'term' in hint.value && 'year' in hint.value) {
+          plan.filters.term = hint.value.term;
+          plan.filters.year = hint.value.year;
+        } else if (typeof hint.value === 'string') {
+          const parsed = parseTermValue(hint.value);
+          if (parsed) {
+            plan.filters.term = parsed.term;
+            plan.filters.year = parsed.year;
+          }
+        }
+        break;
+      }
+
+      case 'level': {
         const levelValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
         plan.filters.level = levelValue;
         break;
+      }
 
-      case 'credits':
+      case 'credits': {
         const creditsValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
         plan.filters.credits = creditsValue;
         break;
+      }
 
       case 'online':
         if (typeof hint.value === 'boolean') {
@@ -123,7 +142,7 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         plan.filters.difficulty = hint.value as 'easy' | 'hard';
         break;
 
-      case 'negation':
+      case 'negation': {
         // Handle negation hints - they come as { target: HintType, value: string }
         const negValue = hint.value as { target: string; value: string } | string;
         if (typeof negValue === 'object' && 'target' in negValue) {
@@ -137,6 +156,7 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
           }
         }
         break;
+      }
     }
   }
 
@@ -146,6 +166,22 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
   }
 
   return plan;
+}
+
+export function parseTermValue(value: string): { term: string; year: number } | null {
+  const normalized = value.trim().toLowerCase();
+  const match = /^(spring|fall|summer|winter)[-_ ]?(20\d{2})$/.exec(normalized)
+    ?? /^(20\d{2})[-_ ]?(spring|fall|summer|winter)$/.exec(normalized);
+
+  if (!match) {
+    return null;
+  }
+
+  if (match[1].startsWith('20')) {
+    return { year: parseInt(match[1], 10), term: match[2] };
+  }
+
+  return { term: match[1], year: parseInt(match[2], 10) };
 }
 
 async function resolveCourseCode(
@@ -185,12 +221,14 @@ async function resolveCourseCode(
     }
 
     // Clear residual since we've fully resolved this
-    plan.semanticQuery = plan.semanticQuery.replace(hint.value, '').trim();
-    plan.keywordQuery = plan.keywordQuery.replace(hint.value, '').trim();
+    const rawValue = String(hint.value);
+    plan.semanticQuery = plan.semanticQuery.replace(rawValue, '').trim();
+    plan.keywordQuery = plan.keywordQuery.replace(rawValue, '').trim();
   } else {
     // Subject not found - keep in queries for fuzzy matching
-    plan.semanticQuery = (hint.value + " " + plan.semanticQuery).trim();
-    plan.keywordQuery = (hint.value + " " + plan.keywordQuery).trim();
+    const rawValue = String(hint.value);
+    plan.semanticQuery = (rawValue + " " + plan.semanticQuery).trim();
+    plan.keywordQuery = (rawValue + " " + plan.keywordQuery).trim();
   }
 }
 

@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
-import type { TooltipProps } from 'recharts'
 import { Paper, Text, Stack } from '@mantine/core'
 
 interface QuadrantChartProps {

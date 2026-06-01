@@ -85,7 +85,7 @@ function calculateReciprocalRank(query: GoldQuery, results: ApiSearchResult[]): 
   return 0;  // Not found in top 10
 }
 
-export async function runEvaluation(baseUrl: string): Promise<void> {
+export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
   console.log(`Running evaluation against ${baseUrl}...`);
   console.log(`Total queries: ${GOLDEN_QUERIES.length}\n`);
 
@@ -137,9 +137,26 @@ export async function runEvaluation(baseUrl: string): Promise<void> {
 
   const metrics = calculateMetrics(evalResults);
   console.log(generateReport(metrics));
+  return evalResults;
 }
 
 // CLI entry point
 declare const process: any;
 const baseUrl = process.argv[2] || 'http://localhost:8787';
-runEvaluation(baseUrl).catch(console.error);
+runEvaluation(baseUrl)
+  .then((results) => {
+    const violationCount = results.reduce((sum, result) => sum + result.violations.length, 0);
+    const missingExpectedTop = results.filter(result =>
+      (result.query.expected_top1 || result.query.expected_top1_title)
+      && result.reciprocalRank === 0
+    ).length;
+
+    if (violationCount > 0 || missingExpectedTop > 0) {
+      console.error(`Evaluation failed: ${violationCount} invariant violations, ${missingExpectedTop} missing expected top results.`);
+      process.exitCode = 1;
+    }
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });

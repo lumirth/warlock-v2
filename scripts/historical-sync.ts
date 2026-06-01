@@ -31,11 +31,19 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseSubjectCascadeXml, type ParsedSubjectCascade, type ParsedCascadeCourse, type ParsedCascadeSection, type ParsedMeeting, type ParsedGenEdCategory } from '../apps/api/src/cisapi/parser.ts';
+import { parseSubjectCascadeXmlFromString, type ParsedSubjectCascade } from '../apps/api/src/cisapi/parser.ts';
 
 // Inline makeCourseId to avoid D1 type issues
 function makeCourseId(subject: string, number: string, year: number, term: string): string {
   return `${subject}-${number}-${year}-${term}`;
+}
+
+function makeTermId(year: number, term: string): string {
+  return `${year}-${term}`;
+}
+
+function makeSectionId(termId: string, crn: string): string {
+  return `${termId}-${crn}`;
 }
 
 // Format instructor name as "LastName, F" or just "LastName" if no first name
@@ -83,8 +91,10 @@ interface CourseData {
 }
 
 interface SectionData {
+  id: string;
   crn: string;
   course_id: string;
+  term_id: string;
   section_number: string | null;
   status: string | null;
   type: string | null;
@@ -107,7 +117,7 @@ interface SectionData {
 }
 
 interface MeetingData {
-  section_crn: string;
+  section_id: string;
   meeting_index: number;
   type_code: string | null;
   type_name: string | null;
@@ -141,6 +151,7 @@ interface TransformResult {
 // Transform parsed XML into our database format
 function fromSubjectCascade(parsed: ParsedSubjectCascade, year: number, term: string): TransformResult {
   const meta = parsed.subjectMetadata;
+  const termId = makeTermId(year, term);
 
   const subject: SubjectData = {
     id: parsed.subjectId,
@@ -227,8 +238,10 @@ function fromSubjectCascade(parsed: ParsedSubjectCascade, year: number, term: st
         : null;
 
       const sectionData: SectionData = {
+        id: makeSectionId(termId, sec.crn),
         crn: sec.crn,
         course_id: courseId,
+        term_id: termId,
         section_number: sec.sectionNumber || null,
         status: sec.enrollmentStatus || null,
         type: firstMeeting?.typeName || null,
@@ -251,7 +264,7 @@ function fromSubjectCascade(parsed: ParsedSubjectCascade, year: number, term: st
       };
 
       const meetings: MeetingData[] = sec.meetings.map((m, idx) => ({
-        section_crn: sec.crn,
+        section_id: makeSectionId(termId, sec.crn),
         meeting_index: idx,
         type_code: m.typeCode || null,
         type_name: m.typeName || null,
@@ -359,7 +372,6 @@ function clearCheckpoint(): void {
 // =============================================================================
 
 // Global state for rate limiting
-let isRateLimited = false;
 let rateLimitPromise: Promise<void> | null = null;
 let burstStartTime: number | null = null;
 
@@ -421,7 +433,6 @@ async function triggerRateLimitWait(): Promise<void> {
     return;
   }
 
-  isRateLimited = true;
   const waitTime = getRateLimitWaitTime();
   const waitMin = (waitTime / 1000 / 60).toFixed(1);
   writeLog(`\n[RATE LIMIT] Blocked - pausing all requests for ${waitMin}m...`);
@@ -429,7 +440,6 @@ async function triggerRateLimitWait(): Promise<void> {
   rateLimitPromise = new Promise<void>((resolve) => {
     setTimeout(() => {
       writeLog(`[RATE LIMIT] Window expired - resuming`);
-      isRateLimited = false;
       burstStartTime = null;
       rateLimitPromise = null;
       resolve();
@@ -482,7 +492,6 @@ async function fetchOnce(url: string): Promise<FetchResult> {
 
 // Fetch with coordinated rate limit handling
 async function robustFetch(url: string): Promise<string> {
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     // Wait if currently rate limited
     if (rateLimitPromise) {
@@ -548,7 +557,7 @@ function parseArgs(): Args {
   const args = process.argv.slice(2);
   const currentYear = new Date().getFullYear();
 
-  let startYear = CONFIG.START_YEAR;
+  let startYear: number = CONFIG.START_YEAR;
   let endYear = currentYear;
   let termFilter: string | null = null;
   let dryRun = false;
@@ -895,7 +904,7 @@ async function main() {
       try {
         const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
         const xml = await robustFetch(url);
-        const parsed = parseSubjectCascadeXml(xml);
+        const parsed = await parseSubjectCascadeXmlFromString(xml);
         const { subject: subjectMeta, coursesWithSections } = fromSubjectCascade(parsed, year, term);
 
         const now = Math.floor(Date.now() / 1000);
@@ -916,22 +925,20 @@ async function main() {
 
             for (const { section, meetings } of sections) {
               // 4. Section
-              sqlStatements.push(`INSERT OR REPLACE INTO sections (crn, course_id, section_number, status, type, days, start_time, end_time, location, instructor, section_title, status_code, section_status_code, section_text, section_notes, capp_area, date_range_text, part_of_term, start_date, end_date, credit_hours, last_synced) VALUES (${escapeSQL(section.crn)}, ${escapeSQL(section.course_id)}, ${escapeSQL(section.section_number)}, ${escapeSQL(section.status)}, ${escapeSQL(section.type)}, ${escapeSQL(section.days)}, ${escapeSQL(section.start_time)}, ${escapeSQL(section.end_time)}, ${escapeSQL(section.location)}, ${escapeSQL(section.instructor)}, ${escapeSQL(section.section_title)}, ${escapeSQL(section.status_code)}, ${escapeSQL(section.section_status_code)}, ${escapeSQL(section.section_text)}, ${escapeSQL(section.section_notes)}, ${escapeSQL(section.capp_area)}, ${escapeSQL(section.date_range_text)}, ${escapeSQL(section.part_of_term)}, ${escapeSQL(section.start_date)}, ${escapeSQL(section.end_date)}, ${escapeSQL(section.credit_hours)}, ${now});`);
+              sqlStatements.push(`INSERT OR REPLACE INTO sections (id, crn, course_id, term_id, section_number, status, type, days, start_time, end_time, location, instructor, section_title, status_code, section_status_code, section_text, section_notes, capp_area, date_range_text, part_of_term, start_date, end_date, credit_hours, last_synced) VALUES (${escapeSQL(section.id)}, ${escapeSQL(section.crn)}, ${escapeSQL(section.course_id)}, ${escapeSQL(section.term_id)}, ${escapeSQL(section.section_number)}, ${escapeSQL(section.status)}, ${escapeSQL(section.type)}, ${escapeSQL(section.days)}, ${escapeSQL(section.start_time)}, ${escapeSQL(section.end_time)}, ${escapeSQL(section.location)}, ${escapeSQL(section.instructor)}, ${escapeSQL(section.section_title)}, ${escapeSQL(section.status_code)}, ${escapeSQL(section.section_status_code)}, ${escapeSQL(section.section_text)}, ${escapeSQL(section.section_notes)}, ${escapeSQL(section.capp_area)}, ${escapeSQL(section.date_range_text)}, ${escapeSQL(section.part_of_term)}, ${escapeSQL(section.start_date)}, ${escapeSQL(section.end_date)}, ${escapeSQL(section.credit_hours)}, ${now});`);
 
               for (const meeting of meetings) {
                 // 5. Meeting
-                sqlStatements.push(`INSERT OR REPLACE INTO meetings (section_crn, meeting_index, type_code, type_name, days, start_time, end_time, building_name, room_number, date_range_text) VALUES (${escapeSQL(section.crn)}, ${meeting.meeting_index}, ${escapeSQL(meeting.type_code)}, ${escapeSQL(meeting.type_name)}, ${escapeSQL(meeting.days)}, ${escapeSQL(meeting.start_time)}, ${escapeSQL(meeting.end_time)}, ${escapeSQL(meeting.building_name)}, ${escapeSQL(meeting.room_number)}, ${escapeSQL(meeting.date_range_text)});`);
+                sqlStatements.push(`INSERT OR REPLACE INTO meetings (section_id, meeting_index, type_code, type_name, days, start_time, end_time, building_name, room_number, date_range_text) VALUES (${escapeSQL(meeting.section_id)}, ${meeting.meeting_index}, ${escapeSQL(meeting.type_code)}, ${escapeSQL(meeting.type_name)}, ${escapeSQL(meeting.days)}, ${escapeSQL(meeting.start_time)}, ${escapeSQL(meeting.end_time)}, ${escapeSQL(meeting.building_name)}, ${escapeSQL(meeting.room_number)}, ${escapeSQL(meeting.date_range_text)});`);
 
                 for (const inst of meeting.instructors) {
                   // 6. Instructor
                   const displayName = formatInstructorName(inst) || inst.lastName;
-                  sqlStatements.push(`INSERT OR IGNORE INTO instructors (first_name, last_name, display_name) VALUES (${escapeSQL(inst.firstName)}, ${escapeSQL(inst.lastName)}, ${escapeSQL(displayName)});`);
+                  const firstName = inst.firstName || '';
+                  sqlStatements.push(`INSERT OR IGNORE INTO instructors (first_name, last_name, display_name) VALUES (${escapeSQL(firstName)}, ${escapeSQL(inst.lastName)}, ${escapeSQL(displayName)});`);
 
-                  // 7. Meeting Instructor link (handle NULL first_name with IS/= appropriately)
-                  const firstNameCondition = inst.firstName
-                    ? `i.first_name = ${escapeSQL(inst.firstName)}`
-                    : `i.first_name IS NULL`;
-                  sqlStatements.push(`INSERT OR IGNORE INTO meeting_instructors (meeting_id, instructor_id) SELECT m.id, i.id FROM meetings m, instructors i WHERE m.section_crn = ${escapeSQL(section.crn)} AND m.meeting_index = ${meeting.meeting_index} AND i.last_name = ${escapeSQL(inst.lastName)} AND ${firstNameCondition};`);
+                  // 7. Meeting Instructor link
+                  sqlStatements.push(`INSERT OR IGNORE INTO meeting_instructors (meeting_id, instructor_id) SELECT m.id, i.id FROM meetings m, instructors i WHERE m.section_id = ${escapeSQL(meeting.section_id)} AND m.meeting_index = ${meeting.meeting_index} AND i.last_name = ${escapeSQL(inst.lastName)} AND i.first_name = ${escapeSQL(firstName)};`);
                 }
               }
             }

@@ -36,6 +36,24 @@ describe('parseQuery', () => {
       const result = parseQuery('gened:HUM difficulty:easy');
       expect(result.clauses[0].filters).toHaveLength(2);
     });
+
+    it('extracts supported schedule and term fields', () => {
+      const result = parseQuery('status:open online:true days:MWF time:morning term:spring-2026 algorithms');
+      expect(result.clauses[0].filters).toEqual([
+        { field: 'status', value: 'open' },
+        { field: 'online', value: 'true' },
+        { field: 'days', value: 'MWF' },
+        { field: 'time', value: 'morning' },
+        { field: 'term', value: 'spring-2026' },
+      ]);
+      expect(result.clauses[0].residual).toBe('algorithms');
+    });
+
+    it('leaves unsupported fields in residual text', () => {
+      const result = parseQuery('unknown:thing algorithms');
+      expect(result.clauses[0].filters).toEqual([]);
+      expect(result.clauses[0].residual).toBe('unknown:thing algorithms');
+    });
   });
 
   describe('gened:any/all syntax', () => {
@@ -52,16 +70,22 @@ describe('parseQuery', () => {
   });
 
   describe('negation syntax', () => {
-    it('extracts -term as negation', () => {
+    it('leaves unsupported dash negation in residual text', () => {
       const result = parseQuery('algorithms -calculus');
-      expect(result.clauses[0].negations).toContain('calculus');
-      expect(result.clauses[0].residual).toBe('algorithms');
+      expect(result.clauses[0].negations).toEqual([]);
+      expect(result.clauses[0].residual).toBe('algorithms -calculus');
     });
 
     it('extracts multiple negations', () => {
       const result = parseQuery('-morning -evening');
       expect(result.clauses[0].negations).toContain('morning');
       expect(result.clauses[0].negations).toContain('evening');
+    });
+
+    it('extracts -online as an in-person constraint token', () => {
+      const result = parseQuery('cs -online');
+      expect(result.clauses[0].negations).toContain('online');
+      expect(result.clauses[0].residual).toBe('cs');
     });
   });
 

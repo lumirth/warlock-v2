@@ -1,5 +1,22 @@
 import type { ParsedQuery, ParsedClause, FieldFilter } from '@uiuc-course-search/query-types';
 
+const SUPPORTED_FIELD_FILTERS = new Set([
+  'subject',
+  'gened',
+  'credits',
+  'level',
+  'crn',
+  'status',
+  'online',
+  'days',
+  'time',
+  'term',
+  'partofterm',
+  'part_of_term',
+  'pot',
+  'difficulty',
+]);
+
 /**
  * Parse power-user syntax from a query string.
  * Extracts: field:value, gened:any(...), gened:all(...), -negations, "phrases"
@@ -25,14 +42,14 @@ function parseClause(text: string): ParsedClause {
   const genedAnyRegex = /gened:any\(([^)]+)\)/gi;
   const genedAllRegex = /gened:all\(([^)]+)\)/gi;
 
-  let anyMatch = genedAnyRegex.exec(residual);
+  const anyMatch = genedAnyRegex.exec(residual);
   if (anyMatch) {
     genedMode = genedMode || {};
     genedMode.any = anyMatch[1].split(',').map(s => s.trim().toUpperCase());
     residual = residual.replace(anyMatch[0], ' ');
   }
 
-  let allMatch = genedAllRegex.exec(residual);
+  const allMatch = genedAllRegex.exec(residual);
   if (allMatch) {
     genedMode = genedMode || {};
     genedMode.all = allMatch[1].split(',').map(s => s.trim().toUpperCase());
@@ -47,24 +64,40 @@ function parseClause(text: string): ParsedClause {
   }
   residual = residual.replace(phraseRegex, ' ');
 
-  // 3. Extract -negations (must be preceded by space or start of string)
+  // 3. Extract supported -negations (must be preceded by space or start of string).
+  // Unsupported dash terms stay in residual text rather than disappearing.
   const negationRegex = /(?:^|\s)-(\w+)/g;
   let negMatch;
+  const negationsToRemove: string[] = [];
   while ((negMatch = negationRegex.exec(residual)) !== null) {
-    negations.push(negMatch[1]);
+    if (isSupportedNegationToken(negMatch[1])) {
+      negations.push(negMatch[1]);
+      negationsToRemove.push(negMatch[0]);
+    }
   }
-  residual = residual.replace(negationRegex, ' ');
+  for (const negationText of negationsToRemove) {
+    residual = residual.replace(negationText, ' ');
+  }
 
-  // 4. Extract field:value pairs
-  const fieldValueRegex = /(\w+):(\w+)/g;
+  // 4. Extract supported field:value pairs. Unknown fields stay in residual text
+  // so power syntax never disappears silently.
+  const fieldValueRegex = /([a-zA-Z_][\w-]*):([^\s]+)/g;
   let fieldMatch;
+  const fieldMatchesToRemove: string[] = [];
   while ((fieldMatch = fieldValueRegex.exec(residual)) !== null) {
+    const normalizedField = normalizeFieldName(fieldMatch[1]);
+    if (!SUPPORTED_FIELD_FILTERS.has(normalizedField)) {
+      continue;
+    }
     filters.push({
-      field: fieldMatch[1].toLowerCase(),
+      field: normalizedField,
       value: fieldMatch[2],
     });
+    fieldMatchesToRemove.push(fieldMatch[0]);
   }
-  residual = residual.replace(fieldValueRegex, ' ');
+  for (const fieldText of fieldMatchesToRemove) {
+    residual = residual.replace(fieldText, ' ');
+  }
 
   // Clean up residual
   residual = residual.replace(/\s+/g, ' ').trim();
@@ -76,4 +109,32 @@ function parseClause(text: string): ParsedClause {
     genedMode,
     residual,
   };
+}
+
+function normalizeFieldName(field: string): string {
+  return field.toLowerCase().replace(/-/g, '_');
+}
+
+function isSupportedNegationToken(token: string): boolean {
+  const normalized = token.toLowerCase();
+  return [
+    'early',
+    'morning',
+    'midday',
+    'afternoon',
+    'evening',
+    'night',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'mwf',
+    'tr',
+    'mw',
+    'wf',
+    'online',
+    'remote',
+    'virtual',
+  ].includes(normalized);
 }

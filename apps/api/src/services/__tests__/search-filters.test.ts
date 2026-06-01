@@ -10,7 +10,7 @@ describe('buildFilterClauses', () => {
       expect(result.where).toContain('m.days = ?');
       expect(result.params).toContain('MWF');
       expect(result.joins).toContain('JOIN sections s ON s.course_id = c.id');
-      expect(result.joins).toContain('JOIN meetings m ON m.section_crn = s.crn');
+      expect(result.joins).toContain('JOIN meetings m ON m.section_id = s.id');
     });
   });
 
@@ -54,6 +54,17 @@ describe('buildFilterClauses', () => {
       const result = buildFilterClauses(filters);
       expect(result.where).toContain('c.credit_hours = ?');
       expect(result.params).toContain(3);
+    });
+  });
+
+  describe('term filters', () => {
+    it('generates SQL for year and term filters', () => {
+      const filters: SearchFilters = { year: 2026, term: 'spring' };
+      const result = buildFilterClauses(filters);
+      expect(result.where).toContain('c.year = ?');
+      expect(result.where).toContain('c.term = ?');
+      expect(result.params).toContain(2026);
+      expect(result.params).toContain('spring');
     });
   });
 
@@ -135,6 +146,23 @@ describe('buildFilterClauses', () => {
       const result = buildFilterClauses(filters);
       const sectionJoins = result.joins.filter(j => j.includes('sections s'));
       expect(sectionJoins.length).toBe(1);
+    });
+  });
+
+  describe('negation filters', () => {
+    it('uses course-level anti-join semantics for negated time filters', () => {
+      const filters: SearchFilters = { not: { time: ['morning'] } };
+      const result = buildFilterClauses(filters);
+      expect(result.where.some(w => w.includes('NOT EXISTS') && w.includes('m2.start_time < ?'))).toBe(true);
+      expect(result.params).toContain('12:00');
+      expect(result.joins.some(j => j.includes('JOIN meetings m '))).toBe(false);
+    });
+
+    it('uses course-level anti-join semantics for negated day filters', () => {
+      const filters: SearchFilters = { not: { days: ['friday'] } };
+      const result = buildFilterClauses(filters);
+      expect(result.where.some(w => w.includes('NOT EXISTS') && w.includes('m2.days LIKE ?'))).toBe(true);
+      expect(result.params).toContain('%F%');
     });
   });
 });

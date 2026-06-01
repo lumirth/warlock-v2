@@ -67,4 +67,53 @@ describe('Search Routes', () => {
     expect(data.results[0].id).toBe('CS-225');
     expect(searchSpy).toHaveBeenCalledWith('CS 225', 20, {}, expect.any(Function));
   });
+
+  it('rejects malformed public search params before running search', async () => {
+    const searchSpy = vi.fn();
+    (SearchPipeline as any).mockImplementation(() => ({
+      search: searchSpy
+    }));
+
+    const res = await app.request('/api/search?q=cs&limit=999999', {}, {
+      DB: mockDB,
+      VECTORIZE: mockVectorize,
+      AI: mockAI
+    });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'limit must be between 1 and 50' });
+    expect(searchSpy).not.toHaveBeenCalled();
+  });
+
+  it('normalizes bounded manual search filters', async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: 'systems', residual: 'systems' },
+        extraction: { hints: [] },
+        plan: { filters: {}, semanticQuery: 'systems', keywordQuery: 'systems' },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 }
+      }
+    });
+    (SearchPipeline as any).mockImplementation(() => ({
+      search: searchSpy
+    }));
+
+    const res = await app.request('/api/search?q=systems&subject=cs&credits=4&difficulty=easy', {}, {
+      DB: mockDB,
+      VECTORIZE: mockVectorize,
+      AI: mockAI
+    }, {
+      waitUntil: vi.fn(),
+      passThroughOnException: vi.fn()
+    } as any);
+
+    expect(res.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith(
+      'systems',
+      20,
+      { subject: 'CS', credits: 4, difficulty: 'easy' },
+      expect.any(Function)
+    );
+  });
 });

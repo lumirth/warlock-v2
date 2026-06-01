@@ -147,7 +147,7 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     expect(result.results[0].course.id).toBe('CS-440');
   });
 
-  it('Tier 4: should KEEP subject filter when broadening search', async () => {
+  it('does not broaden by dropping subject, level, or gened hard filters', async () => {
     const query = 'CS 400 level gened:HUM';
     
     vi.mocked(extractor.extractQuery).mockReturnValue({
@@ -165,34 +165,23 @@ describe('SearchPipeline Tiered Logic Integration', () => {
       keywordQuery: ''
     } as any);
 
-    // Tier 2: 0 results (CS 400 level HUM)
-    // Tier 3: No topic expansion
-    // Tier 4.1: Broaden by removing level -> 0 results (CS HUM)
-    // Tier 4.2: Broaden by removing gened, but KEEPING subject CS -> results
-    
-    vi.mocked(search.hybridSearchWithTermRanking)
-      .mockResolvedValueOnce([]) // Tier 2
-      .mockResolvedValueOnce([]) // Tier 4.1 (CS HUM)
-      .mockResolvedValueOnce([   // Tier 4.2 (CS)
-        { course: mockCourse({ id: 'CS-101', subject: 'CS', title: 'Intro to CS' }), score: 0.7, termPriority: 0 }
-      ]);
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValueOnce([]);
     
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
     const result = await pipeline.search(query);
 
-    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(3);
-    
-    // Check filters in last call (Tier 4.2)
-    const lastSearchCallFilters = vi.mocked(search.hybridSearchWithTermRanking).mock.calls[2][3].filters;
-    expect(lastSearchCallFilters.subject).toBe('CS');
-    expect(lastSearchCallFilters.level).toBeUndefined();
-    expect(lastSearchCallFilters.gened_code).toBeUndefined();
-    
-    expect(result.results[0].course.subject).toBe('CS');
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(result.results).toEqual([]);
+
+    const filters = vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3].filters;
+    expect(filters.subject).toBe('CS');
+    expect(filters.level).toBe(400);
+    expect(filters.gened_code).toBe('HUM');
+    expect(result.meta.fallback.constraintsRelaxed).toEqual([]);
   });
 
-  it('Tier 4: should NOT return results from other subjects even if no results in current subject', async () => {
+  it('does not return results from other subjects when exact subject search is empty', async () => {
     const query = 'CS nonexistenttopic';
     
     vi.mocked(extractor.extractQuery).mockReturnValue({
@@ -206,16 +195,11 @@ describe('SearchPipeline Tiered Logic Integration', () => {
       keywordQuery: 'nonexistenttopic'
     } as any);
 
-    // Tier 2: 0 results
-    // Tier 3: 0 results
-    // Tier 4: Broadening... should still have subject: 'CS'
-    
     vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([]);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
-    const result = await pipeline.search(query);
+    await pipeline.search(query);
 
-    // Verify all search calls kept the subject
     for (const call of vi.mocked(search.hybridSearchWithTermRanking).mock.calls) {
       expect(call[3].filters.subject).toBe('CS');
     }

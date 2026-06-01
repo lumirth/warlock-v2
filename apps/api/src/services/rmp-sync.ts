@@ -1,8 +1,10 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
+import { internalAuthHeaders } from '../middleware/auth.js';
 
 const RMP_GRAPHQL_URL = 'https://www.ratemyprofessors.com/graphql';
-const RMP_AUTH_TOKEN = 'Basic dGVzdDp0ZXN0'; // Public test token
 const UIUC_SCHOOL_ID = 'U2Nob29sLTExMTI='; // School-1112 (UIUC)
+const RMP_SYNC_ID = 'rmp';
+const RUNNING_LOCK_TTL_SECONDS = 60 * 60;
 
 // GraphQL Queries
 const TEACHER_SEARCH_QUERY = `
@@ -63,6 +65,19 @@ interface RmpResponse {
   errors?: any[];
 }
 
+interface RmpSyncState {
+  last_sync: number | null;
+  last_status: string | null;
+  items_synced: number | null;
+  cursor: number | null;
+  etag: string | null;
+}
+
+export interface CoordinateRmpSyncOptions {
+  rmpAuthToken?: string;
+  internalToken?: string;
+}
+
 export interface RmpPageResult {
   teachers: RmpTeacherNode[];
   hasNextPage: boolean;
@@ -81,13 +96,11 @@ function normalizeRmpName(first: string, last: string): string {
 /**
  * Fetches a single page of professors from RMP.
  */
-export async function fetchRmpPage(cursor: string | null): Promise<RmpPageResult> {
-  console.log(`[RMP Fetch] Requesting page with cursor: ${cursor || 'start'}`);
-
+export async function fetchRmpPage(cursor: string | null, authToken: string): Promise<RmpPageResult> {
   const response = await fetch(RMP_GRAPHQL_URL, {
     method: 'POST',
     headers: {
-      'Authorization': RMP_AUTH_TOKEN,
+      'Authorization': authToken,
       'Content-Type': 'application/json',
       'User-Agent': 'UIUC-Course-Search-Bot/1.0 (+https://github.com/magical-course-search)'
     },
@@ -111,7 +124,6 @@ export async function fetchRmpPage(cursor: string | null): Promise<RmpPageResult
   const json = await response.json() as RmpResponse;
 
   if (json.errors) {
-    console.error('[RMP Fetch] GraphQL Errors:', json.errors);
     throw new Error('GraphQL query returned errors');
   }
 
@@ -127,49 +139,102 @@ export async function fetchRmpPage(cursor: string | null): Promise<RmpPageResult
 /**
  * Coordinator function: Fetches all pages serially and dispatches batch workers.
  */
-export async function coordinateRmpSync(selfBinding: Fetcher): Promise<{ count: number; pages: number }> {
-  console.log('[RMP Coord] Starting sync coordination...');
+export async function coordinateRmpSync(
+  db: D1Database,
+  selfBinding: Fetcher,
+  options: CoordinateRmpSyncOptions = {}
+): Promise<{ count: number; pages: number }> {
+  if (!options.rmpAuthToken) {
+    throw new Error('RMP_AUTH_TOKEN binding is required to run RMP sync.');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const previous = await db.prepare(`
+    SELECT last_sync, last_status, items_synced, cursor, etag
+    FROM sync_state
+    WHERE id = ?
+  `).bind(RMP_SYNC_ID).first<RmpSyncState>();
+
+  if (previous?.last_status === 'running' && previous.last_sync && now - previous.last_sync < RUNNING_LOCK_TTL_SECONDS) {
+    throw new Error('RMP sync is already running.');
+  }
+
+  const shouldResume = previous?.last_status === 'failed' || previous?.last_status === 'running';
 
   let hasNextPage = true;
-  let cursor: string | null = null;
-  let totalSynced = 0;
-  let pageCount = 0;
+  let cursor = shouldResume ? previous?.etag ?? null : null;
+  let totalSynced = shouldResume ? previous?.items_synced ?? 0 : 0;
+  let pageCount = shouldResume ? previous?.cursor ?? 0 : 0;
 
-  while (hasNextPage) {
-    // 1. Fetch Page
-    const result = await fetchRmpPage(cursor);
-    pageCount++;
-    totalSynced += result.teachers.length;
+  await updateRmpSyncState(db, {
+    status: 'running',
+    totalSynced,
+    pageCount,
+    cursor,
+  });
 
-    if (result.teachers.length > 0) {
-      // 2. Dispatch Batch Worker (Fan-Out)
-      console.log(`[RMP Coord] Dispatching batch ${pageCount} with ${result.teachers.length} teachers...`);
+  try {
+    while (hasNextPage) {
+      const result = await fetchRmpPage(cursor, options.rmpAuthToken);
+      pageCount++;
+      totalSynced += result.teachers.length;
 
-      // Fire and forget dispatch via Service Binding
-      // We don't await the response body, just the dispatch
-      const dispatch = await selfBinding.fetch('http://internal/internal/sync-rmp-batch', {
-        method: 'POST',
-        body: JSON.stringify({ teachers: result.teachers }),
-        headers: { 'Content-Type': 'application/json' }
+      if (result.teachers.length > 0) {
+        const dispatch = await selfBinding.fetch('http://internal/internal/sync-rmp-batch', {
+          method: 'POST',
+          body: JSON.stringify({ teachers: result.teachers }),
+          headers: {
+            'Content-Type': 'application/json',
+            ...internalAuthHeaders(options.internalToken),
+          }
+        });
+
+        if (!dispatch.ok) {
+          throw new Error(`Failed to dispatch RMP batch ${pageCount}: ${dispatch.status}`);
+        }
+      }
+
+      hasNextPage = result.hasNextPage;
+      cursor = result.endCursor;
+
+      await updateRmpSyncState(db, {
+        status: hasNextPage ? 'running' : 'complete',
+        totalSynced,
+        pageCount,
+        cursor,
       });
 
-      if (!dispatch.ok) {
-        console.error(`[RMP Coord] Failed to dispatch batch ${pageCount}: ${dispatch.status}`);
+      if (hasNextPage) {
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
 
-    // 3. Prepare next loop
-    hasNextPage = result.hasNextPage;
-    cursor = result.endCursor;
-
-    // Polite backoff between fetches
-    if (hasNextPage) {
-      await new Promise(r => setTimeout(r, 1000));
-    }
+    return { count: totalSynced, pages: pageCount };
+  } catch (error) {
+    await updateRmpSyncState(db, {
+      status: 'failed',
+      totalSynced,
+      pageCount,
+      cursor,
+    });
+    throw error;
   }
+}
 
-  console.log(`[RMP Coord] Coordination complete. Dispatched ${pageCount} batches (${totalSynced} total teachers).`);
-  return { count: totalSynced, pages: pageCount };
+async function updateRmpSyncState(
+  db: D1Database,
+  state: { status: string; totalSynced: number; pageCount: number; cursor: string | null }
+): Promise<void> {
+  await db.prepare(`
+    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
+    VALUES (?, unixepoch(), ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      last_sync = excluded.last_sync,
+      last_status = excluded.last_status,
+      items_synced = excluded.items_synced,
+      cursor = excluded.cursor,
+      etag = excluded.etag
+  `).bind(RMP_SYNC_ID, state.status, state.totalSynced, state.pageCount, state.cursor).run();
 }
 
 /**
@@ -177,8 +242,6 @@ export async function coordinateRmpSync(selfBinding: Fetcher): Promise<{ count: 
  */
 export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]): Promise<void> {
   if (teachers.length === 0) return;
-
-  console.log(`[RMP Batch] Processing ${teachers.length} teachers...`);
 
   // 1. Prepare statements for rmp_cache
   const statements = teachers.map(node => {
@@ -232,9 +295,6 @@ export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]
 
   // 3. Propagate to main tables (Optimization: Only for these specific teachers)
   // We can do this efficiently by only updating records where the name matches the batch
-  const names = teachers.map(t => normalizeRmpName(t.firstName, t.lastName));
-  const uniqueNames = [...new Set(names)];
-
   // We can't bind thousands of names, so we'll do a general update for now
   // Or better, we can just run the general update queries which are fast enough on indexed columns
   // For simplicity and correctness, we'll run the propagation queries.
@@ -265,14 +325,8 @@ export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]
     WHERE primary_instructor IN (SELECT instructor_name FROM rmp_cache WHERE fetched_at > unixepoch() - 300)
   `).run();
 
-  console.log(`[RMP Batch] Finished processing batch.`);
 }
 
-/**
- * Legacy/Dev wrapper for full sync (kept for admin endpoint compatibility)
- */
-export async function syncRateMyProfessorData(db: D1Database): Promise<{ count: number; message: string }> {
-  // This is now deprecated for production use, but we can shim it if needed.
-  // Ideally, the admin endpoint should trigger the coordinator.
+export async function syncRateMyProfessorData(_db: D1Database): Promise<{ count: number; message: string }> {
   throw new Error("Use coordinateRmpSync or processRmpBatch instead.");
 }

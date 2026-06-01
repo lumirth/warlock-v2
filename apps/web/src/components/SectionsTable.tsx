@@ -1,11 +1,11 @@
 import { Table, Badge, Text, Group, Stack, Anchor } from '@mantine/core'
-import type { Section, InstructorLink } from '../lib/api-types'
+import type { CourseSectionDto, InstructorLinkDto } from '@uiuc-course-search/query-types'
 import { formatTime } from '../utils/formatters'
 import { RMP_THRESHOLDS } from '../config/constants'
 
 interface SectionsTableProps {
-  sections: Section[]
-  instructorLinks?: Record<string, InstructorLink>
+  sections: CourseSectionDto[]
+  instructorLinks?: Record<string, InstructorLinkDto>
 }
 
 export function SectionsTable({ sections, instructorLinks }: SectionsTableProps) {

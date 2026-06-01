@@ -1,6 +1,6 @@
-import type { ParsedSubjectCascade, ParsedCascadeSection } from '../cisapi/parser.js';
+import type { ParsedSubjectCascade } from '../cisapi/parser.js';
 import type { Course, Section, Subject, Meeting } from '../db/index.js';
-import { makeCourseId } from '../db/index.js';
+import { makeCourseId, makeSectionId, makeTermId } from '../db/index.js';
 
 export interface SectionWithDetails {
   section: Section;
@@ -39,6 +39,7 @@ export function fromSubjectCascade(
   term: string
 ): TransformResult {
   const now = Math.floor(Date.now() / 1000);
+  const termId = makeTermId(year, term);
 
   const subject: Subject = {
     id: parsed.subjectId,
@@ -117,7 +118,7 @@ export function fromSubjectCascade(
         approval_code: c.approvalCode || null,
       },
       sections: c.sections.map(s => {
-        // Use first meeting for backward compatibility fields
+        // Use the first meeting for section-level summary fields.
         const firstMeeting = s.meetings[0];
 
         // Collect all instructors for this section
@@ -129,12 +130,14 @@ export function fromSubjectCascade(
           });
         });
 
+        const sectionId = makeSectionId(termId, s.crn);
         const section: Section = {
+          id: sectionId,
           crn: s.crn,
           course_id: courseId,
+          term_id: termId,
           section_number: s.sectionNumber || null,
           status: s.enrollmentStatus || null,
-          // Backward compatibility fields
           type: firstMeeting?.typeName || null,
           days: firstMeeting?.days || null,
           start_time: firstMeeting?.startTime || null,
@@ -161,7 +164,7 @@ export function fromSubjectCascade(
         };
 
         const meetings = s.meetings.map(m => ({
-          section_crn: s.crn,
+          section_id: sectionId,
           meeting_index: m.index,
           type_code: m.typeCode || null,
           type_name: m.typeName || null,
@@ -182,4 +185,3 @@ export function fromSubjectCascade(
 
   return { subject, coursesWithSections };
 }
-

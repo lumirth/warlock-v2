@@ -6,9 +6,10 @@ import { searchRoutes } from './routes/search.js';
 import { syncRoutes } from './routes/sync.js';
 import { courseRoutes } from './routes/course.js';
 import { adminRoutes, debugRoutes } from './routes/debug.js';
-import { getTermsByStatus, upsertTermState, makeTermId } from './db/index.js';
+import { getTermsByStatus, upsertTermState } from './db/index.js';
 import { getSubjectsForTerm } from './services/parallel-sync.js';
 import { discoverAndClassifyTerms } from './services/term-discovery.js';
+import { internalAuthHeaders, requireBearerToken } from './middleware/auth.js';
 
 import { resumeGpaSync, resetGpaSync } from './services/gpa-sync.js';
 import { enrichCoursesWithGpa, coordinateEnrichment } from './services/enrichment.js';
@@ -31,6 +32,9 @@ type Bindings = {
   BACKOFF_MAX_MS: string;
   MAX_RETRIES: string;
   CLIENT_CACHE_TTL_MS: string;
+  ADMIN_TOKEN?: string;
+  INTERNAL_TOKEN?: string;
+  RMP_AUTH_TOKEN?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -40,6 +44,9 @@ app.use('/api/*', cors({
   origin: '*',
   allowHeaders: ['X-Search-Hints', 'Content-Type', 'Authorization'],
 }));
+
+app.use('/admin/*', requireBearerToken('ADMIN_TOKEN'));
+app.use('/internal/*', requireBearerToken('INTERNAL_TOKEN'));
 
 app.route('/', healthRoutes);
 app.route('/', searchRoutes);
@@ -92,7 +99,10 @@ export default {
       ctx.waitUntil((async () => {
         try {
           console.log('[Cron] Starting RMP Sync Coordination...');
-          await coordinateRmpSync(env.SELF);
+          await coordinateRmpSync(env.DB, env.SELF, {
+            rmpAuthToken: env.RMP_AUTH_TOKEN,
+            internalToken: env.INTERNAL_TOKEN,
+          });
           console.log('[Cron] RMP Sync triggered successfully.');
         } catch (err) {
           console.error('[Cron] Failed to coordinate RMP sync:', err);
@@ -114,7 +124,7 @@ export default {
             console.log('[Cron] GPA Sync Complete! Starting Enrichment...');
             await enrichCoursesWithGpa(env.DB);
             // Chain scoring enrichment after GPA enrichment
-            await coordinateEnrichment(env.DB, env.SELF);
+            await coordinateEnrichment(env.DB, env.SELF, env.INTERNAL_TOKEN);
             console.log('[Cron] Enrichment triggered.');
           }
         } catch (err) {
@@ -170,7 +180,10 @@ export default {
                   term: termState.term,
                   subjects: batchSubjects
                 }),
-                headers: { 'Content-Type': 'application/json' }
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...internalAuthHeaders(env.INTERNAL_TOKEN),
+                }
               });
 
               if (!response.ok) {

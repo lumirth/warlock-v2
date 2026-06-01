@@ -8,6 +8,7 @@ apps/web/dist/
 .DS_Store
 
 # Sync artifacts (large SQL dumps, logs, checkpoints)
+history_chunks/
 *.sql
 *.log
 historical-sync-checkpoint.json

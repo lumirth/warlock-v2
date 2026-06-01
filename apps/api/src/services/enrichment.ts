@@ -1,5 +1,6 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 import { resolveInstructor } from './matcher.js';
+import { internalAuthHeaders } from '../middleware/auth.js';
 
 export interface EnrichmentTask {
   termId: string;
@@ -9,14 +10,16 @@ export interface EnrichmentTask {
 }
 
 const ENRICHMENT_BATCH_SIZE = 10;
+const MAX_ENRICHMENT_BATCHES_PER_RUN = 40;
 
 /**
  * Coordinator: Identifies all unique instructor-course contexts and dispatches batches.
  */
-export async function coordinateEnrichment(db: D1Database, selfBinding: Fetcher): Promise<{ taskCount: number; batchCount: number }> {
-  console.log('[Enrichment Coord] Starting Context-Aware Instructor Linking...');
-
-  // 1. Get Active Term
+export async function coordinateEnrichment(
+  db: D1Database,
+  selfBinding: Fetcher,
+  internalToken?: string
+): Promise<{ taskCount: number; batchCount: number }> {
   const termResult = await db.prepare(`
     SELECT term_id, year, term FROM term_state
     WHERE status = 'active'
@@ -30,12 +33,10 @@ export async function coordinateEnrichment(db: D1Database, selfBinding: Fetcher)
   `).first<{ term_id: string; year: number; term: string }>();
 
   if (!termResult) {
-    console.warn('[Enrichment Coord] No active term found. Skipping linking.');
     return { taskCount: 0, batchCount: 0 };
   }
   const { term_id: termId, year: activeYear, term: activeTerm } = termResult;
 
-  // 2. Fetch unique (subject, number, primary_instructor) for the active term
   const coursesResult = await db.prepare(`
     SELECT DISTINCT subject, number, primary_instructor
     FROM courses
@@ -61,9 +62,8 @@ export async function coordinateEnrichment(db: D1Database, selfBinding: Fetcher)
     }
   }
 
-  console.log(`[Enrichment Coord] Found ${linkTasks.length} unique instructor-course contexts. Checking for missing links...`);
+  linkTasks.sort(compareEnrichmentTasks);
 
-  // 3. Filter by existing links (Incremental Strategy)
   const existingLinksResult = await db.prepare(`
     SELECT term_id, subject, number, instructor_name FROM instructor_course_links
     WHERE term_id = ?
@@ -78,39 +78,79 @@ export async function coordinateEnrichment(db: D1Database, selfBinding: Fetcher)
 
   const missingTasks = linkTasks.filter(t => !existingSet.has(`${t.termId}|${t.subject}|${t.number}|${t.instructorName}`));
 
-  console.log(`[Enrichment Coord] Total contexts: ${linkTasks.length}, Missing: ${missingTasks.length}`);
-
   if (missingTasks.length === 0) {
+    await updateEnrichmentState(db, termId, 'complete', 0, 0);
     return { taskCount: 0, batchCount: 0 };
   }
 
-  // 4. Shuffle and Slice (Strict limit for Free Tier compatibility)
-  const shuffled = [...missingTasks];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  const maxTasks = ENRICHMENT_BATCH_SIZE * MAX_ENRICHMENT_BATCHES_PER_RUN;
+  const tasksForRun = missingTasks.slice(0, maxTasks);
+  const batches = chunkTasks(tasksForRun, ENRICHMENT_BATCH_SIZE);
+
+  await updateEnrichmentState(db, termId, 'running', 0, batches.length);
+
+  let dispatchedTasks = 0;
+  for (const batch of batches) {
+    const response = await selfBinding.fetch('http://internal/internal/enrich-batch', {
+      method: 'POST',
+      body: JSON.stringify({ tasks: batch }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...internalAuthHeaders(internalToken),
+      }
+    });
+
+    if (!response.ok) {
+      await updateEnrichmentState(db, termId, 'failed', dispatchedTasks, batches.length);
+      throw new Error(`Failed to dispatch enrichment batch: ${response.status}`);
+    }
+
+    dispatchedTasks += batch.length;
+    await updateEnrichmentState(db, termId, 'running', dispatchedTasks, batches.length);
   }
 
-  const chunk = shuffled.slice(0, ENRICHMENT_BATCH_SIZE);
+  const status = tasksForRun.length < missingTasks.length ? 'partial' : 'complete';
+  await updateEnrichmentState(db, termId, status, dispatchedTasks, batches.length);
 
-  console.log(`[Enrichment Coord] Dispatching 1 batch of ${chunk.length} tasks.`);
+  return { taskCount: dispatchedTasks, batchCount: batches.length };
+}
 
-  // 5. Dispatch Batch (Fan-Out)
-  await selfBinding.fetch('http://internal/internal/enrich-batch', {
-    method: 'POST',
-    body: JSON.stringify({ tasks: chunk }),
-    headers: { 'Content-Type': 'application/json' }
-  });
+function compareEnrichmentTasks(a: EnrichmentTask, b: EnrichmentTask): number {
+  return `${a.termId}|${a.subject}|${a.number}|${a.instructorName}`
+    .localeCompare(`${b.termId}|${b.subject}|${b.number}|${b.instructorName}`);
+}
 
-  return { taskCount: chunk.length, batchCount: 1 };
+function chunkTasks<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function updateEnrichmentState(
+  db: D1Database,
+  termId: string,
+  status: string,
+  taskCount: number,
+  batchCount: number
+): Promise<void> {
+  await db.prepare(`
+    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
+    VALUES (?, unixepoch(), ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      last_sync = excluded.last_sync,
+      last_status = excluded.last_status,
+      items_synced = excluded.items_synced,
+      cursor = excluded.cursor,
+      etag = excluded.etag
+  `).bind(`enrichment:${termId}`, status, taskCount, batchCount, termId).run();
 }
 
 /**
  * Batch Worker: Processes a subset of instructor-course contexts.
  */
 export async function processEnrichmentBatch(db: D1Database, tasks: EnrichmentTask[]): Promise<number> {
-  console.log(`[Enrichment Batch] Processing ${tasks.length} tasks...`);
-
   const statements: any[] = [];
   let resolvedCount = 0;
 
@@ -184,8 +224,6 @@ export async function processEnrichmentBatch(db: D1Database, tasks: EnrichmentTa
  * Propagates course-wide GPA averages from gpa_stats to the courses table.
  */
 export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
-  console.log('[Enrichment] Starting GPA aggregation...');
-
   try {
     await db.prepare(`
       INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, median_gpa, sample_size, last_updated)
@@ -242,5 +280,4 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
     await db.batch(statements);
   }
 
-  console.log(`[Enrichment] Propagated stats to ${updates.length} courses.`);
 }

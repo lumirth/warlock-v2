@@ -201,7 +201,6 @@ describe('TaxonomyCache', () => {
 
     it('matches whole words only', () => {
       // "MATH" shouldn't match "Mathematics" if we only look for "MATH"
-      const result = cache.findSubjectInText('Mathematics 200');
       // MATH is an alias for MATH (id). Mathematics is the name.
       // "Mathematics" (name) is also added as an alias in loadTaxonomyCache.
       // So "Mathematics" should match "Mathematics".

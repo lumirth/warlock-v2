@@ -206,6 +206,23 @@ describe('extract', () => {
       const timeHints = result.hints.filter(h => h.type === 'time');
       expect(timeHints).toHaveLength(0);
     });
+
+    it('leaves unsupported negations in residual text', () => {
+      const result = extract('no exams');
+      expect(result.hints.find(h => h.type === 'negation')).toBeUndefined();
+      expect(result.residual).toBe('no exams');
+    });
+
+    it('extracts not online as an in-person constraint', () => {
+      const result = extract('not online');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'online',
+          value: false,
+        })
+      );
+      expect(result.residual).toBe('');
+    });
   });
 
   describe('residual handling', () => {

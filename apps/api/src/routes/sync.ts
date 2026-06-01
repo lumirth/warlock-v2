@@ -4,9 +4,12 @@ import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
-import { resumeGpaSync, resetGpaSync, retryFailedBatches } from '../services/gpa-sync.js';
+import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa, coordinateEnrichment, processEnrichmentBatch, EnrichmentTask } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
+import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
+
+const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
 
 type Bindings = {
   DB: D1Database;
@@ -23,24 +26,19 @@ type Bindings = {
 
   // Sync settings
   SYNC_CONCURRENCY: string;
+  INTERNAL_TOKEN?: string;
+  RMP_AUTH_TOKEN?: string;
 };
 
 export const syncRoutes = new Hono<{ Bindings: Bindings }>();
 
-// Admin trigger for Retry Failures
-syncRoutes.post('/admin/retry-gpa-failures', async (c) => {
-  try {
-    const result = await retryFailedBatches(c.env.DB);
-    return c.json(result);
-  } catch (error) {
-    return c.json({ error: String(error) }, 500);
-  }
-});
-
 // Admin trigger for RMP Sync
 syncRoutes.post('/admin/sync-rmp', async (c) => {
   try {
-    const result = await coordinateRmpSync(c.env.SELF);
+    const result = await coordinateRmpSync(c.env.DB, c.env.SELF, {
+      rmpAuthToken: c.env.RMP_AUTH_TOKEN,
+      internalToken: c.env.INTERNAL_TOKEN,
+    });
     return c.json(result);
   } catch (error) {
     return c.json({ error: String(error) }, 500);
@@ -74,7 +72,7 @@ syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
 // Admin trigger for Contextual Scoring (Coordinator)
 syncRoutes.post('/admin/enrich-scoring', async (c) => {
   try {
-    const result = await coordinateEnrichment(c.env.DB, c.env.SELF);
+    const result = await coordinateEnrichment(c.env.DB, c.env.SELF, c.env.INTERNAL_TOKEN);
     return c.json({ message: 'Scoring enrichment dispatched', ...result });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
@@ -215,30 +213,47 @@ syncRoutes.get('/admin/terms', async (c) => {
 // Sync a specific term
 syncRoutes.post('/admin/sync/:year/:term', async (c) => {
   const { year, term } = c.req.param();
-  const offset = parseInt(c.req.query('offset') || '0');
-  const limit = parseInt(c.req.query('limit') || '40');
+  const parsedYear = parseBoundedIntParam(year, 'year', { min: 2004, max: new Date().getFullYear() + 2 });
+  if (!parsedYear.ok) return c.json({ error: parsedYear.error }, 400);
+
+  const parsedTerm = parseEnumParam(term, 'term', TERMS);
+  if (!parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
+
+  const parsedOffset = parseBoundedIntParam(c.req.query('offset'), 'offset', {
+    min: 0,
+    max: 10000,
+    defaultValue: 0,
+  });
+  if (!parsedOffset.ok) return c.json({ error: parsedOffset.error }, 400);
+
+  const parsedLimit = parseBoundedIntParam(c.req.query('limit'), 'limit', {
+    min: 1,
+    max: 40,
+    defaultValue: 40,
+  });
+  if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
 
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
     concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
-    offset,
-    limit,
+    offset: parsedOffset.value,
+    limit: parsedLimit.value,
   };
 
   try {
     const result = await syncTerm(
       c.env.DB,
       config,
-      parseInt(year),
-      term,
+      parsedYear.value,
+      parsedTerm.value,
       c.env.VECTORIZE,
       c.env.AI
     );
 
     await upsertTermState(c.env.DB, {
-      term_id: makeTermId(parseInt(year), term),
-      year: parseInt(year),
-      term,
+      term_id: makeTermId(parsedYear.value, parsedTerm.value),
+      year: parsedYear.value,
+      term: parsedTerm.value,
       status: 'active',
       last_checked: Math.floor(Date.now() / 1000),
       last_synced: Math.floor(Date.now() / 1000),
@@ -266,14 +281,25 @@ syncRoutes.post('/admin/sync-active', async (c) => {
     return c.json({ message: 'No active terms found. Run /admin/discover-terms first.' });
   }
 
-  const offset = parseInt(c.req.query('offset') || '0');
-  const limit = parseInt(c.req.query('limit') || '40');
+  const parsedOffset = parseBoundedIntParam(c.req.query('offset'), 'offset', {
+    min: 0,
+    max: 10000,
+    defaultValue: 0,
+  });
+  if (!parsedOffset.ok) return c.json({ error: parsedOffset.error }, 400);
+
+  const parsedLimit = parseBoundedIntParam(c.req.query('limit'), 'limit', {
+    min: 1,
+    max: 40,
+    defaultValue: 40,
+  });
+  if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
 
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
     concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
-    offset,
-    limit,
+    offset: parsedOffset.value,
+    limit: parsedLimit.value,
   };
 
   const results = [];
