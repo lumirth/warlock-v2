@@ -28,6 +28,8 @@ export const SCORING = {
   RANGES: {
     GPA_MAX: 4.0,
     GPA_MIN: 2.0, // We cap "bad" GPA at 2.0 for scaling purposes
+    GPA_DIFFICULTY_EASY: 3.5,
+    GPA_DIFFICULTY_HARD: 2.7,
     RMP_MAX: 5.0,
     RMP_MIN: 1.0,
   }
@@ -51,6 +53,21 @@ export function normalizeGpa(gpa: number): number {
 export function normalizeRmp(rating: number): number {
   const clamped = Math.min(Math.max(rating, SCORING.RANGES.RMP_MIN), SCORING.RANGES.RMP_MAX);
   return ((clamped - SCORING.RANGES.RMP_MIN) / (SCORING.RANGES.RMP_MAX - SCORING.RANGES.RMP_MIN)) * 100;
+}
+
+/**
+ * Normalizes course GPA into a difficulty score.
+ * 3.5+ -> 0 difficulty, 2.7 or below -> 100 difficulty.
+ */
+export function normalizeGpaDifficulty(gpa: number): number {
+  const clamped = Math.min(
+    Math.max(gpa, SCORING.RANGES.GPA_DIFFICULTY_HARD),
+    SCORING.RANGES.GPA_DIFFICULTY_EASY
+  );
+  return (
+    (SCORING.RANGES.GPA_DIFFICULTY_EASY - clamped) /
+    (SCORING.RANGES.GPA_DIFFICULTY_EASY - SCORING.RANGES.GPA_DIFFICULTY_HARD)
+  ) * 100;
 }
 
 /**

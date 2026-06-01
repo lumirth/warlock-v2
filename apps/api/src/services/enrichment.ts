@@ -1,17 +1,7 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
-import { resolveInstructor } from './matcher.js';
-import { internalAuthHeaders } from '../middleware/auth.js';
 import { errorFields, logger } from '../observability/logger.js';
+import { SCORING, normalizeGpa, normalizeGpaDifficulty, normalizeRmp } from './scoring-constants.js';
 
-export interface EnrichmentTask {
-  termId: string;
-  subject: string;
-  number: string;
-  instructorName: string;
-}
-
-const ENRICHMENT_BATCH_SIZE = 10;
-const MAX_ENRICHMENT_BATCHES_PER_RUN = 40;
 const SCORE_UPDATE_BATCH_SIZE = 500;
 
 type CourseScoreSource = {
@@ -36,41 +26,59 @@ function roundScore(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function average(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((total, value) => total + value, 0) / values.length;
+function weightedAverage(parts: Array<{ value: number | null; weight: number }>): number | null {
+  const availableParts = parts.filter((part): part is { value: number; weight: number } => part.value !== null);
+  const totalWeight = availableParts.reduce((total, part) => total + part.weight, 0);
+
+  if (totalWeight === 0) return null;
+
+  return availableParts.reduce((total, part) => total + part.value * part.weight, 0) / totalWeight;
 }
 
 function scoreFromGpa(avgGpa: number): number {
-  return clampScore((avgGpa / 4) * 100);
+  return clampScore(normalizeGpa(avgGpa));
 }
 
 function scoreFromRmpRating(rating: number): number {
-  return clampScore((rating / 5) * 100);
+  return clampScore(normalizeRmp(rating));
+}
+
+function validRmpMetric(value: number | null | undefined): number | null {
+  return typeof value === 'number' && value > 0 ? value : null;
 }
 
 function difficultyFromGpa(avgGpa: number): number {
-  return clampScore(100 - scoreFromGpa(avgGpa));
+  return clampScore(normalizeGpaDifficulty(avgGpa));
 }
 
 function difficultyFromRmp(difficulty: number): number {
-  return clampScore((difficulty / 5) * 100);
+  return clampScore(normalizeRmp(difficulty));
 }
 
 export function calculateCourseScores(source: CourseScoreSource): CourseScoreResult {
-  const rmpRating = source.primary_instructor_rmp ?? source.linked_rmp_rating;
-  const qualityParts = [
-    typeof source.avg_gpa === 'number' ? scoreFromGpa(source.avg_gpa) : null,
-    typeof rmpRating === 'number' ? scoreFromRmpRating(rmpRating) : null,
-  ].filter((value): value is number => value !== null);
+  const rmpRating = validRmpMetric(source.linked_rmp_rating) ?? validRmpMetric(source.primary_instructor_rmp);
+  const rmpDifficulty = validRmpMetric(source.linked_rmp_difficulty);
+  const quality = weightedAverage([
+    {
+      value: typeof source.avg_gpa === 'number' ? scoreFromGpa(source.avg_gpa) : null,
+      weight: SCORING.QUALITY.GPA_WEIGHT,
+    },
+    {
+      value: typeof rmpRating === 'number' ? scoreFromRmpRating(rmpRating) : null,
+      weight: SCORING.QUALITY.RMP_WEIGHT,
+    },
+  ]);
 
-  const difficultyParts = [
-    typeof source.avg_gpa === 'number' ? difficultyFromGpa(source.avg_gpa) : null,
-    typeof source.linked_rmp_difficulty === 'number' ? difficultyFromRmp(source.linked_rmp_difficulty) : null,
-  ].filter((value): value is number => value !== null);
-
-  const quality = average(qualityParts);
-  const difficulty = average(difficultyParts);
+  const difficulty = weightedAverage([
+    {
+      value: typeof source.avg_gpa === 'number' ? difficultyFromGpa(source.avg_gpa) : null,
+      weight: SCORING.DIFFICULTY.GPA_WEIGHT,
+    },
+    {
+      value: rmpDifficulty === null ? null : difficultyFromRmp(rmpDifficulty),
+      weight: SCORING.DIFFICULTY.RMP_WEIGHT,
+    },
+  ]);
 
   return {
     qualityScore: quality === null ? null : roundScore(quality),
@@ -84,9 +92,9 @@ export function calculateCourseScores(source: CourseScoreSource): CourseScoreRes
  */
 export async function coordinateEnrichment(
   db: D1Database,
-  selfBinding: Fetcher,
-  internalToken?: string
-): Promise<{ taskCount: number; batchCount: number }> {
+  _selfBinding: Fetcher,
+  _internalToken?: string
+): Promise<{ taskCount: number; batchCount: number; linkCount: number; scoreUpdateCount: number }> {
   const termResult = await db.prepare(`
     SELECT term_id, year, term FROM term_state
     WHERE status = 'active'
@@ -100,99 +108,168 @@ export async function coordinateEnrichment(
   `).first<{ term_id: string; year: number; term: string }>();
 
   if (!termResult) {
-    return { taskCount: 0, batchCount: 0 };
+    return { taskCount: 0, batchCount: 0, linkCount: 0, scoreUpdateCount: 0 };
   }
   const { term_id: termId, year: activeYear, term: activeTerm } = termResult;
 
-  const coursesResult = await db.prepare(`
-    SELECT DISTINCT subject, number, primary_instructor
-    FROM courses
-    WHERE year = ? AND term = ? AND primary_instructor IS NOT NULL
-  `).bind(activeYear, activeTerm).all<{ subject: string; number: string; primary_instructor: string }>();
+  await updateEnrichmentState(db, termId, 'running', 0, 1);
+  const linkResult = await rebuildInstructorCourseLinks(db, {
+    termId,
+    year: activeYear,
+    term: activeTerm,
+  });
+  const scores = await enrichCoursesWithScores(db);
+  await updateEnrichmentState(db, termId, 'complete', linkResult.contextCount, 1);
 
-  if (!coursesResult.success) {
-    throw new Error('[Enrichment Coord] Failed to fetch active courses.');
-  }
-
-  const courses = coursesResult.results;
-  const uniqueLinks = new Set<string>();
-  const linkTasks: EnrichmentTask[] = [];
-
-  for (const course of courses) {
-    const instructors = course.primary_instructor.split(';').map(s => s.trim()).filter(Boolean);
-    for (const name of instructors) {
-      const key = `${termId}|${course.subject}|${course.number}|${name}`;
-      if (!uniqueLinks.has(key)) {
-        uniqueLinks.add(key);
-        linkTasks.push({ termId, subject: course.subject, number: course.number, instructorName: name });
-      }
-    }
-  }
-
-  linkTasks.sort(compareEnrichmentTasks);
-
-  const existingLinksResult = await db.prepare(`
-    SELECT term_id, subject, number, instructor_name FROM instructor_course_links
-    WHERE term_id = ?
-  `).bind(termId).all<{ term_id: string; subject: string; number: string; instructor_name: string }>();
-
-  const existingSet = new Set<string>();
-  if (existingLinksResult.success) {
-    for (const row of existingLinksResult.results) {
-      existingSet.add(`${row.term_id}|${row.subject}|${row.number}|${row.instructor_name}`);
-    }
-  }
-
-  const missingTasks = linkTasks.filter(t => !existingSet.has(`${t.termId}|${t.subject}|${t.number}|${t.instructorName}`));
-
-  if (missingTasks.length === 0) {
-    await updateEnrichmentState(db, termId, 'complete', 0, 0);
-    return { taskCount: 0, batchCount: 0 };
-  }
-
-  const maxTasks = ENRICHMENT_BATCH_SIZE * MAX_ENRICHMENT_BATCHES_PER_RUN;
-  const tasksForRun = missingTasks.slice(0, maxTasks);
-  const batches = chunkTasks(tasksForRun, ENRICHMENT_BATCH_SIZE);
-
-  await updateEnrichmentState(db, termId, 'running', 0, batches.length);
-
-  let dispatchedTasks = 0;
-  for (const batch of batches) {
-    const response = await selfBinding.fetch('http://internal/internal/enrich-batch', {
-      method: 'POST',
-      body: JSON.stringify({ tasks: batch }),
-      headers: {
-        'Content-Type': 'application/json',
-        ...internalAuthHeaders(internalToken),
-      }
-    });
-
-    if (!response.ok) {
-      await updateEnrichmentState(db, termId, 'failed', dispatchedTasks, batches.length);
-      throw new Error(`Failed to dispatch enrichment batch: ${response.status}`);
-    }
-
-    dispatchedTasks += batch.length;
-    await updateEnrichmentState(db, termId, 'running', dispatchedTasks, batches.length);
-  }
-
-  const status = tasksForRun.length < missingTasks.length ? 'partial' : 'complete';
-  await updateEnrichmentState(db, termId, status, dispatchedTasks, batches.length);
-
-  return { taskCount: dispatchedTasks, batchCount: batches.length };
+  return {
+    taskCount: linkResult.contextCount,
+    batchCount: 1,
+    linkCount: linkResult.linkCount,
+    scoreUpdateCount: scores.updated,
+  };
 }
 
-function compareEnrichmentTasks(a: EnrichmentTask, b: EnrichmentTask): number {
-  return `${a.termId}|${a.subject}|${a.number}|${a.instructorName}`
-    .localeCompare(`${b.termId}|${b.subject}|${b.number}|${b.instructorName}`);
-}
+export async function rebuildInstructorCourseLinks(
+  db: D1Database,
+  options: { termId: string; year: number; term: string }
+): Promise<{ contextCount: number; linkCount: number }> {
+  const countResult = await db.prepare(`
+    WITH RECURSIVE split(term_id, subject, number, rest, instructor_name) AS (
+      SELECT ?, subject, number, primary_instructor || ';', ''
+      FROM courses
+      WHERE year = ? AND term = ? AND primary_instructor IS NOT NULL
+      UNION ALL
+      SELECT
+        term_id,
+        subject,
+        number,
+        substr(rest, instr(rest, ';') + 1),
+        trim(substr(rest, 1, instr(rest, ';') - 1))
+      FROM split
+      WHERE rest <> ''
+    )
+    SELECT COUNT(*) AS context_count
+    FROM (
+      SELECT DISTINCT term_id, subject, number, instructor_name
+      FROM split
+      WHERE instructor_name <> ''
+    )
+  `).bind(options.termId, options.year, options.term).first<{ context_count: number }>();
 
-function chunkTasks<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
+  const insertResult = await db.prepare(`
+    WITH RECURSIVE split(term_id, subject, number, rest, instructor_name) AS (
+      SELECT ?, subject, number, primary_instructor || ';', ''
+      FROM courses
+      WHERE year = ? AND term = ? AND primary_instructor IS NOT NULL
+      UNION ALL
+      SELECT
+        term_id,
+        subject,
+        number,
+        substr(rest, instr(rest, ';') + 1),
+        trim(substr(rest, 1, instr(rest, ';') - 1))
+      FROM split
+      WHERE rest <> ''
+    ),
+    contexts AS (
+      SELECT DISTINCT term_id, subject, number, instructor_name
+      FROM split
+      WHERE instructor_name <> ''
+    ),
+    gpa_matches AS (
+      SELECT
+        c.term_id,
+        c.subject,
+        c.number,
+        c.instructor_name,
+        (
+          SELECT g.id
+          FROM gpa_stats g
+          WHERE g.subject = c.subject
+            AND g.number = c.number
+            AND g.instructor LIKE c.instructor_name || '%'
+          ORDER BY g.sample_size DESC
+          LIMIT 1
+        ) AS gpa_id,
+        (
+          SELECT g.instructor
+          FROM gpa_stats g
+          WHERE g.subject = c.subject
+            AND g.number = c.number
+            AND g.instructor LIKE c.instructor_name || '%'
+          ORDER BY g.sample_size DESC
+          LIMIT 1
+        ) AS gpa_instructor
+      FROM contexts c
+    ),
+    resolved AS (
+      SELECT
+        g.term_id,
+        g.subject,
+        g.number,
+        g.instructor_name,
+        g.gpa_id,
+        (
+          SELECT r.rmp_id
+          FROM rmp_cache r
+          WHERE r.instructor_name = CASE
+            WHEN g.gpa_instructor IS NOT NULL AND instr(g.gpa_instructor, ',') > 0
+              THEN trim(substr(g.gpa_instructor, 1, instr(g.gpa_instructor, ',') - 1))
+                || ', '
+                || upper(substr(trim(substr(g.gpa_instructor, instr(g.gpa_instructor, ',') + 1)), 1, 1))
+            ELSE g.gpa_instructor
+          END
+          LIMIT 1
+        ) AS bridge_rmp_id,
+        (
+          SELECT r.rmp_id
+          FROM rmp_cache r
+          WHERE r.instructor_name = CASE
+            WHEN instr(g.instructor_name, ',') > 0
+              THEN trim(substr(g.instructor_name, 1, instr(g.instructor_name, ',') - 1))
+                || ', '
+                || upper(substr(trim(substr(g.instructor_name, instr(g.instructor_name, ',') + 1)), 1, 1))
+            ELSE g.instructor_name
+          END
+          LIMIT 1
+        ) AS direct_rmp_id
+      FROM gpa_matches g
+    )
+    INSERT INTO instructor_course_links (
+      term_id, subject, number, instructor_name,
+      gpa_id, rmp_id, confidence_score, match_method
+    )
+    SELECT
+      term_id,
+      subject,
+      number,
+      instructor_name,
+      gpa_id,
+      COALESCE(bridge_rmp_id, direct_rmp_id),
+      CASE
+        WHEN gpa_id IS NOT NULL OR COALESCE(bridge_rmp_id, direct_rmp_id) IS NOT NULL THEN 1.0
+        ELSE 0
+      END,
+      CASE
+        WHEN gpa_id IS NOT NULL THEN 'gpa_bridge'
+        WHEN COALESCE(bridge_rmp_id, direct_rmp_id) IS NOT NULL THEN 'direct_rmp'
+        ELSE 'failed'
+      END
+    FROM resolved
+    WHERE true
+    ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
+      gpa_id = excluded.gpa_id,
+      rmp_id = excluded.rmp_id,
+      confidence_score = excluded.confidence_score,
+      match_method = excluded.match_method
+  `).bind(options.termId, options.year, options.term).run();
+
+  const linkCount = insertResult.meta?.changes ?? 0;
+
+  return {
+    contextCount: countResult?.context_count ?? 0,
+    linkCount,
+  };
 }
 
 async function updateEnrichmentState(
@@ -212,80 +289,6 @@ async function updateEnrichmentState(
       cursor = excluded.cursor,
       etag = excluded.etag
   `).bind(`enrichment:${termId}`, status, taskCount, batchCount, termId).run();
-}
-
-/**
- * Batch Worker: Processes a subset of instructor-course contexts.
- */
-export async function processEnrichmentBatch(db: D1Database, tasks: EnrichmentTask[]): Promise<number> {
-  const statements: D1PreparedStatement[] = [];
-  let resolvedCount = 0;
-
-  for (const task of tasks) {
-    const match = await resolveInstructor(db, {
-      subject: task.subject,
-      number: task.number,
-      instructorName: task.instructorName
-    });
-
-    if (match) {
-      statements.push(db.prepare(`
-        INSERT INTO instructor_course_links (
-          term_id, subject, number, instructor_name,
-          gpa_id, rmp_id, confidence_score, match_method
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
-          gpa_id = excluded.gpa_id,
-          rmp_id = excluded.rmp_id,
-          confidence_score = excluded.confidence_score,
-          match_method = excluded.match_method
-      `).bind(
-        task.termId,
-        task.subject,
-        task.number,
-        task.instructorName,
-        match.gpaId || null,
-        match.rmpId || null,
-        1.0,
-        match.gpaId ? 'gpa_bridge' : 'direct_rmp'
-      ));
-      resolvedCount++;
-    } else {
-      // Mark as failed to prevent infinite retry loop
-      statements.push(db.prepare(`
-        INSERT INTO instructor_course_links (
-          term_id, subject, number, instructor_name,
-          gpa_id, rmp_id, confidence_score, match_method
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
-          gpa_id = excluded.gpa_id,
-          rmp_id = excluded.rmp_id,
-          confidence_score = excluded.confidence_score,
-          match_method = excluded.match_method
-      `).bind(
-        task.termId,
-        task.subject,
-        task.number,
-        task.instructorName,
-        null,
-        null,
-        0,
-        'failed'
-      ));
-    }
-  }
-
-  if (statements.length > 0) {
-    const CHUNK_SIZE = 50; 
-    for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
-      await db.batch(statements.slice(i, i + CHUNK_SIZE));
-    }
-    await enrichCoursesWithScores(db);
-  }
-
-  return resolvedCount;
 }
 
 /**
@@ -359,8 +362,8 @@ export async function enrichCoursesWithScores(db: D1Database): Promise<{ updated
       c.id,
       c.avg_gpa,
       c.primary_instructor_rmp,
-      AVG(r.rating) as linked_rmp_rating,
-      AVG(r.difficulty) as linked_rmp_difficulty
+      AVG(CASE WHEN r.rating > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.rating END) as linked_rmp_rating,
+      AVG(CASE WHEN r.difficulty > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.difficulty END) as linked_rmp_difficulty
     FROM courses c
     LEFT JOIN instructor_course_links l
       ON l.term_id = CAST(c.year AS TEXT) || '-' || c.term
@@ -370,9 +373,9 @@ export async function enrichCoursesWithScores(db: D1Database): Promise<{ updated
     GROUP BY c.id
     HAVING
       c.avg_gpa IS NOT NULL
-      OR c.primary_instructor_rmp IS NOT NULL
-      OR AVG(r.rating) IS NOT NULL
-      OR AVG(r.difficulty) IS NOT NULL
+      OR (c.primary_instructor_rmp IS NOT NULL AND c.primary_instructor_rmp > 0)
+      OR AVG(CASE WHEN r.rating > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.rating END) IS NOT NULL
+      OR AVG(CASE WHEN r.difficulty > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.difficulty END) IS NOT NULL
   `).all<CourseScoreSource>();
 
   if (!result.success || result.results.length === 0) {
@@ -390,7 +393,7 @@ export async function enrichCoursesWithScores(db: D1Database): Promise<{ updated
         SET
           quality_score = ?,
           difficulty_score = ?,
-          primary_instructor_rmp = COALESCE(primary_instructor_rmp, ?),
+          primary_instructor_rmp = ?,
           updated_at = unixepoch()
         WHERE id = ?
       `).bind(

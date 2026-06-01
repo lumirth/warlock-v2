@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Course } from '../../db/index.js';
 import type { SearchResult } from '../../services/search.js';
-import { buildMatchEvidence, buildResultWarnings, searchResultToCourseDto } from '../course.js';
+import { buildMatchEvidence, buildResultWarnings, searchResultToCourseDto, toCourseDto, toInstructorLinkDto } from '../course.js';
 
 const course: Course = {
   id: 'CS-225-2026-spring',
@@ -106,5 +106,28 @@ describe('search result DTO evidence', () => {
   it('keeps warning construction narrow and non-secret', () => {
     expect(buildResultWarnings(searchResult())).toEqual([]);
     expect(buildResultWarnings(searchResult({ historical: true }))[0].message).toBe('Historical term result');
+  });
+
+  it('does not surface zero-valued RMP rows as ratings', () => {
+    const dto = toCourseDto({
+      ...course,
+      primary_instructor_rmp: 0,
+    });
+    const link = toInstructorLinkDto({
+      instructor_name: 'Fox, E',
+      rmp_rating: 0,
+      rmp_difficulty: 0,
+      rmp_id: 'fox',
+      num_ratings: 0,
+    });
+
+    expect(dto.primary_instructor_rmp).toBeNull();
+    expect(link).toMatchObject({
+      instructor_name: 'Fox, E',
+      rmp_rating: null,
+      rmp_difficulty: null,
+      rmp_id: 'fox',
+      num_ratings: 0,
+    });
   });
 });

@@ -65,6 +65,12 @@ export type CourseDtoOptions = {
   sectionMatches?: SectionMatchDto[];
 };
 
+function validRmpMetric(value: number | null | undefined, numRatings?: number | null): number | null {
+  if (typeof value !== 'number' || value <= 0) return null;
+  if (typeof numRatings === 'number' && numRatings <= 0) return null;
+  return value;
+}
+
 export type SearchResultEvidenceContext = {
   plan: SearchPlan;
   rawQuery: string;
@@ -74,8 +80,8 @@ export type SearchResultEvidenceContext = {
 export function toInstructorLinkDto(row: InstructorLinkRow | null | undefined): InstructorLinkDto {
   return {
     instructor_name: row?.instructor_name ?? null,
-    rmp_rating: row?.rmp_rating ?? null,
-    rmp_difficulty: row?.rmp_difficulty ?? null,
+    rmp_rating: validRmpMetric(row?.rmp_rating, row?.num_ratings),
+    rmp_difficulty: validRmpMetric(row?.rmp_difficulty, row?.num_ratings),
     rmp_id: row?.rmp_id ?? null,
     avg_gpa: row?.avg_gpa ?? null,
     gpa_sample_size: row?.gpa_sample_size ?? null,
@@ -103,7 +109,7 @@ export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto 
     endTime: section.end_time ?? null,
     location: section.location ?? 'TBA',
     instructor: section.instructor ?? 'TBA',
-    instructorRmp: section.instructor_rmp ?? null,
+    instructorRmp: validRmpMetric(section.instructor_rmp),
     instructorGpa: section.instructor_gpa ?? null,
     instructorStats: section.instructor_stats ?? [],
   };
@@ -121,7 +127,7 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     year: course.year,
     term: course.term,
     primary_instructor: course.primary_instructor ?? null,
-    primary_instructor_rmp: course.primary_instructor_rmp ?? null,
+    primary_instructor_rmp: validRmpMetric(course.primary_instructor_rmp),
     avg_gpa: course.avg_gpa ?? null,
     gpa_sample_size: course.gpa_sample_size ?? null,
     quality_score: course.quality_score ?? null,

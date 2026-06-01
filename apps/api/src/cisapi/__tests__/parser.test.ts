@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSubjectCascadeXml } from '../parser.js';
+import { parseCourseDetailXml, parseSubjectCascadeXml } from '../parser.js';
 
 // Helper to create a stream from a string for testing
 function createStream(str: string): ReadableStream<Uint8Array> {
@@ -157,6 +157,34 @@ describe('parseSubjectCascadeXml', () => {
 
     // Should have empty instructors array, not crash
     expect(meeting?.instructors).toEqual([]);
+  });
+});
+
+describe('parseCourseDetailXml', () => {
+  it('decodes XML entities in course detail text', () => {
+    const result = parseCourseDetailXml(`
+      <course id="CS 374">
+        <subject id="CS">Computer Science</subject>
+        <label>Introduction to Algorithms &amp; Models of Computation</label>
+        <description>Algorithms &amp; proofs use &lt;models&gt;.</description>
+        <creditHours>4 hours.</creditHours>
+        <detailedSection id="12345">
+          <sectionNumber>AL1</sectionNumber>
+          <enrollmentStatus>Open</enrollmentStatus>
+          <meeting>
+            <type code="LEC">Lecture &amp; Lab</type>
+            <buildingName>Electrical &amp; Computer Eng Bldg</buildingName>
+            <roomNumber>2015</roomNumber>
+            <instructor firstName="Ada" lastName="Lovelace"></instructor>
+          </meeting>
+        </detailedSection>
+      </course>
+    `);
+
+    expect(result?.label).toBe('Introduction to Algorithms & Models of Computation');
+    expect(result?.description).toBe('Algorithms & proofs use <models>.');
+    expect(result?.sections[0].meetings[0].type).toBe('Lecture & Lab');
+    expect(result?.sections[0].meetings[0].buildingName).toBe('Electrical & Computer Eng Bldg');
   });
 });
 

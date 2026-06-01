@@ -12,6 +12,26 @@ import { Parser } from 'htmlparser2';
 // Simple XML parser for Workers (no external dependencies)
 // CISAPI returns well-formed XML, so we can use regex-based parsing
 
+function decodeXmlText(value: string | undefined): string {
+  if (!value) return '';
+
+  return value.replace(/&(#x[0-9a-f]+|#\\d+|amp|lt|gt|quot|apos);/gi, (entity, code: string) => {
+    const normalizedCode = code.toLowerCase();
+    if (normalizedCode === 'amp') return '&';
+    if (normalizedCode === 'lt') return '<';
+    if (normalizedCode === 'gt') return '>';
+    if (normalizedCode === 'quot') return '"';
+    if (normalizedCode === 'apos') return "'";
+    if (normalizedCode.startsWith('#x')) {
+      return String.fromCodePoint(parseInt(normalizedCode.slice(2), 16));
+    }
+    if (normalizedCode.startsWith('#')) {
+      return String.fromCodePoint(parseInt(normalizedCode.slice(1), 10));
+    }
+    return entity;
+  });
+}
+
 export function parseSubjectsXml(xml: string): CISAPISubject[] {
   const subjects: CISAPISubject[] = [];
   const subjectRegex = /<subject\s+id="([^"]+)"\s+href="([^"]+)"[^>]*>([^<]*)<\/subject>/g;
@@ -21,7 +41,7 @@ export function parseSubjectsXml(xml: string): CISAPISubject[] {
     subjects.push({
       id: match[1],
       href: match[2],
-      label: match[3] || undefined
+      label: decodeXmlText(match[3]) || undefined
     });
   }
 
@@ -37,7 +57,7 @@ export function parseCoursesXml(xml: string, subjectId: string): CISAPICourse[] 
     courses.push({
       id: match[1],
       href: match[2],
-      label: match[3],
+      label: decodeXmlText(match[3]),
       subject: subjectId
     });
   }
@@ -69,7 +89,7 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
     // Attributes are not easily regexable without nested loop, leaving empty for now in this simple parser
     genEdCategories.push({
       id: id,
-      description: descMatch ? descMatch[1] : '',
+      description: decodeXmlText(descMatch?.[1]),
       attributes: []
     });
   }
@@ -80,11 +100,11 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
   return {
     id: idMatch[1],
     subjectId: subjectMatch[1],
-    label: labelMatch?.[1] ?? '',
-    description: descMatch?.[1]?.trim() ?? '',
-    creditHours: creditMatch?.[1] ?? '',
-    courseSectionInformation: courseInfoMatch?.[1]?.trim() ?? '',
-    classScheduleInformation: classScheduleInfoMatch?.[1]?.trim() ?? '',
+    label: decodeXmlText(labelMatch?.[1]),
+    description: decodeXmlText(descMatch?.[1]).trim(),
+    creditHours: decodeXmlText(creditMatch?.[1]),
+    courseSectionInformation: decodeXmlText(courseInfoMatch?.[1]).trim(),
+    classScheduleInformation: decodeXmlText(classScheduleInfoMatch?.[1]).trim(),
     sectionDegreeAttributes: '', // Not implemented in regex parser yet
     sectionDateRange: '',        // Not implemented in regex parser yet
     sectionRegistrationNotes: '', // Not implemented in regex parser yet
@@ -120,19 +140,19 @@ function parseSectionsXml(xml: string): CISAPISection[] {
 
     sections.push({
       crn,
-      sectionNumber: sectionNumberMatch?.[1] ?? '',
-      sectionTitle: sectionTitleMatch?.[1] ?? '',
-      statusCode: statusCodeMatch?.[1] ?? '',
-      sectionStatusCode: sectionStatusCodeMatch?.[1] ?? '',
-      enrollmentStatus: enrollmentStatusMatch?.[1] ?? 'Unknown',
+      sectionNumber: decodeXmlText(sectionNumberMatch?.[1]),
+      sectionTitle: decodeXmlText(sectionTitleMatch?.[1]),
+      statusCode: decodeXmlText(statusCodeMatch?.[1]),
+      sectionStatusCode: decodeXmlText(sectionStatusCodeMatch?.[1]),
+      enrollmentStatus: decodeXmlText(enrollmentStatusMatch?.[1]) || 'Unknown',
       sectionText: '', // Not implemented in regex parser
       sectionNotes: '', // Not implemented in regex parser
       sectionCappArea: '', // Not implemented in regex parser
       sectionDateRange: '', // Not implemented in regex parser
-      startDate: startDateMatch?.[1] ?? '',
-      endDate: endDateMatch?.[1] ?? '',
-      partOfTerm: partOfTermMatch?.[1] ?? '',
-      creditHours: creditHoursMatch?.[1] ?? '',
+      startDate: decodeXmlText(startDateMatch?.[1]),
+      endDate: decodeXmlText(endDateMatch?.[1]),
+      partOfTerm: decodeXmlText(partOfTermMatch?.[1]),
+      creditHours: decodeXmlText(creditHoursMatch?.[1]),
       meetings
     });
   }
@@ -161,14 +181,14 @@ function parseMeetingsXml(sectionXml: string): CISAPIMeeting[] {
     const instructors = parseInstructorsXml(block);
 
     meetings.push({
-      type: typeMatch?.[2] ?? '',
-      typeCode: typeMatch?.[1] ?? '',
-      start: convertTo24Hour(startMatch?.[1] ?? ''),
-      end: convertTo24Hour(endMatch?.[1] ?? ''),
-      daysOfTheWeek: daysMatch?.[1] ?? '',
-      roomNumber: roomMatch?.[1] ?? '',
-      buildingName: buildingMatch?.[1] ?? '',
-      meetingDateRange: dateRangeMatch?.[1] ?? '',
+      type: decodeXmlText(typeMatch?.[2]),
+      typeCode: decodeXmlText(typeMatch?.[1]),
+      start: convertTo24Hour(decodeXmlText(startMatch?.[1])),
+      end: convertTo24Hour(decodeXmlText(endMatch?.[1])),
+      daysOfTheWeek: decodeXmlText(daysMatch?.[1]),
+      roomNumber: decodeXmlText(roomMatch?.[1]),
+      buildingName: decodeXmlText(buildingMatch?.[1]),
+      meetingDateRange: decodeXmlText(dateRangeMatch?.[1]),
       instructors
     });
   }
@@ -194,8 +214,8 @@ function parseInstructorsXml(meetingXml: string): CISAPIInstructor[] {
 
     if (lastNameAttr) {
       instructors.push({
-        firstName: firstNameAttr?.[1] ?? '',
-        lastName: lastNameAttr[1]
+        firstName: decodeXmlText(firstNameAttr?.[1]),
+        lastName: decodeXmlText(lastNameAttr[1])
       });
       continue;
     }
@@ -206,8 +226,8 @@ function parseInstructorsXml(meetingXml: string): CISAPIInstructor[] {
 
     if (lastNameMatch) {
       instructors.push({
-        firstName: firstNameMatch?.[1] ?? '',
-        lastName: lastNameMatch[1]
+        firstName: decodeXmlText(firstNameMatch?.[1]),
+        lastName: decodeXmlText(lastNameMatch[1])
       });
     }
   }

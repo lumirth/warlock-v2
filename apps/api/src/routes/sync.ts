@@ -5,7 +5,7 @@ import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
 import { getTermsByStatus, upsertTermState, makeTermId, type SyncState, type TermState } from '../db/index.js';
 import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
-import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment, processEnrichmentBatch, EnrichmentTask } from '../services/enrichment.js';
+import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
 import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
@@ -106,33 +106,8 @@ syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
 syncRoutes.post('/admin/enrich-scoring', async (c) => {
   try {
     const result = await coordinateEnrichment(c.env.DB, c.env.SELF, c.env.INTERNAL_TOKEN);
-    return c.json({ message: 'Scoring enrichment dispatched', ...result });
+    return c.json({ message: 'Scoring enrichment complete', ...result });
   } catch (error) {
-    return c.json({ error: String(error) }, 500);
-  }
-});
-
-// Internal batch sync endpoint for Enrichment
-syncRoutes.post('/internal/enrich-batch', async (c) => {
-  const runId = createRunId('enrich-batch');
-  try {
-    const { tasks } = await c.req.json<{ tasks: EnrichmentTask[] }>();
-
-    if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
-      return c.json({ error: 'No tasks provided' }, 400);
-    }
-
-    c.executionCtx.waitUntil((async () => {
-      try {
-        await processEnrichmentBatch(c.env.DB, tasks);
-      } catch (err) {
-        logger.error('internal.enrichmentBatch.backgroundFailed', { runId, taskCount: tasks.length, ...errorFields(err) });
-      }
-    })());
-
-    return c.json({ status: 'processing', message: 'Batch accepted', count: tasks.length }, 202);
-  } catch (error) {
-    logger.error('internal.enrichmentBatch.failed', { runId, ...errorFields(error) });
     return c.json({ error: String(error) }, 500);
   }
 });

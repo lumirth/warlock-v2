@@ -179,10 +179,10 @@ export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promis
 
   results.push(await check(
     'internal rejects missing token',
-    new Request(endpoint(baseUrl, 'internal/enrich-batch'), {
+    new Request(endpoint(baseUrl, 'internal/sync-batch'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tasks: [] }),
+      body: JSON.stringify({ year: Number(smokeYear), term: smokeTerm, subjects: [] }),
     }),
     fetcher,
     (response) => response.status === 401 ? null : `expected 401, got ${response.status}`
@@ -190,13 +190,13 @@ export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promis
 
   results.push(await check(
     'internal accepts staging token',
-    new Request(endpoint(baseUrl, 'internal/enrich-batch'), {
+    new Request(endpoint(baseUrl, 'internal/sync-batch'), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${internalToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ tasks: [] }),
+      body: JSON.stringify({ year: Number(smokeYear), term: smokeTerm, subjects: [] }),
     }),
     fetcher,
     (response) => response.status === 400 ? null : `expected authenticated validation 400, got ${response.status}`

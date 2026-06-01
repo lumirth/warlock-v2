@@ -51,7 +51,7 @@ function makeFetcher(options: MockOptions = {}) {
         })
         : json(401, { error: 'Unauthorized' });
     }
-    if (url.pathname === '/internal/enrich-batch') {
+    if (url.pathname === '/internal/sync-batch') {
       return auth === 'Bearer internal-token'
         ? json(400, { error: 'Validation failed' })
         : json(401, { error: 'Unauthorized' });
