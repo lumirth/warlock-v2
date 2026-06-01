@@ -48,7 +48,7 @@ The canonical baseline migration in `apps/api/migrations/0001_initial_schema.sql
 
 ### Sync & Discovery Architecture (Fan-Out)
 - **Auto-Discovery**: Twice-daily cron (`0 10,22 * * *`) discovers new terms and classifies them as `active` or `historical`.
-- **Fan-Out Sync**: Every 3 minutes, the coordinator identifies active terms, splits subjects into batches of 40, and dispatches them via Service Bindings for parallel processing.
+- **Fan-Out Sync**: Every 5 minutes (`*/5 * * * *`), the coordinator identifies active terms, splits subjects into batches of 40, and dispatches them via Service Bindings for parallel processing.
 - **Batch Workers**: Handle XML cascade parsing, D1 upserts, and Vectorize embedding generation.
 
 ### Search Pipeline

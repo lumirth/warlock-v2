@@ -12,9 +12,7 @@ CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 FRONTEND_BASE = "https://courses.illinois.edu"
 
 # Sync settings
-SYNC_INTERVAL_MS = "180000"
 SYNC_CONCURRENCY = "25"
-TERM_CHECK_INTERVAL_MS = "86400000"
 
 # Rate limiting
 BACKOFF_BASE_MS = "5000"

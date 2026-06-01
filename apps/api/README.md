@@ -1,6 +1,6 @@
 # UIUC Course Search API
 
-This is the backend for the UIUC Course Search engine, built as a Cloudflare Worker using Hono.
+This is the backend for the pre-alpha UIUC Course Search engine, built as a Cloudflare Worker using Hono. Treat this package as greenfield: remove stale routes/config instead of preserving compatibility aliases.
 
 ## Data Sync Architecture
 
@@ -9,7 +9,7 @@ The API implements a sophisticated synchronization system to ingest course data 
 ### Fan-Out Sync Architecture
 To stay within Cloudflare Worker resource limits (subrequests, memory, and CPU time), the sync process uses a fan-out pattern:
 
-1.  **Coordinator (Cron Triggers):** A scheduled task runs every 3 minutes.
+1.  **Coordinator (Cron Triggers):** A scheduled task runs every 5 minutes via `*/5 * * * *`.
 2.  **Subject Discovery:** The coordinator fetches the master list of subjects for all active terms.
 3.  **Batch Dispatch:** Subjects are divided into batches of **40 subjects** each.
 4.  **Parallel Execution:** The coordinator dispatches these batches via **Service Bindings** (`env.SELF.fetch`) to internal worker endpoints.
@@ -19,7 +19,7 @@ To stay within Cloudflare Worker resource limits (subrequests, memory, and CPU t
 The system automatically discovers new academic terms to sync:
 
 *   **Twice-Daily Discovery:** A cron job runs daily at 4:00 AM & 4:00 PM CST (10:00 & 22:00 UTC).
-*   **Term Classification:** New terms are probed for "enrollmentStatus". If sections have real statuses (not "UNKNOWN"), the term is marked as `active` and added to the 3-minute sync rotation.
+*   **Term Classification:** New terms are probed for "enrollmentStatus". If sections have real statuses (not "UNKNOWN"), the term is marked as `active` and added to the 5-minute sync rotation.
 *   **Historical Archive:** Terms with no active enrollment are marked as `historical` and kept in the database for reference but synced less frequently.
 
 ## Key Services
@@ -31,6 +31,10 @@ The system automatically discovers new academic terms to sync:
 ## Configuration
 
 Settings are managed in `wrangler.toml`:
-*   `SYNC_INTERVAL_MS`: Duration between sync attempts.
 *   `SYNC_CONCURRENCY`: Number of subjects to process in parallel within a single batch worker.
-*   `TERM_CHECK_INTERVAL_MS`: Frequency of term status re-classification.
+
+Deploy staging explicitly from the repository root:
+
+```bash
+npm run deploy:api:staging
+```

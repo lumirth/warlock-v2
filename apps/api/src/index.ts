@@ -26,9 +26,7 @@ type Bindings = {
   CURRENT_TERM: string;
   CISAPI_BASE: string;
   FRONTEND_BASE: string;
-  SYNC_INTERVAL_MS: string;
   SYNC_CONCURRENCY: string;
-  TERM_CHECK_INTERVAL_MS: string;
   BACKOFF_BASE_MS: string;
   BACKOFF_MAX_MS: string;
   MAX_RETRIES: string;

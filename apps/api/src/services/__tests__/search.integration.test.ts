@@ -28,9 +28,7 @@ type TestBindings = {
   CURRENT_TERM: string;
   CISAPI_BASE: string;
   FRONTEND_BASE: string;
-  SYNC_INTERVAL_MS: string;
   SYNC_CONCURRENCY: string;
-  TERM_CHECK_INTERVAL_MS: string;
   BACKOFF_BASE_MS: string;
   BACKOFF_MAX_MS: string;
   MAX_RETRIES: string;
@@ -164,9 +162,7 @@ function createEnv(): TestBindings {
     CURRENT_TERM: 'spring',
     CISAPI_BASE: 'https://courses.illinois.edu/cisapp/explorer/catalog',
     FRONTEND_BASE: 'http://localhost:5173',
-    SYNC_INTERVAL_MS: '1000',
     SYNC_CONCURRENCY: '1',
-    TERM_CHECK_INTERVAL_MS: '1000',
     BACKOFF_BASE_MS: '1000',
     BACKOFF_MAX_MS: '1000',
     MAX_RETRIES: '1',
