@@ -3,7 +3,6 @@ import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { Container, Title, Text, Button, Loader, Flex, Grid, Stack, Badge, Group, Paper, Alert, ScrollArea } from '@mantine/core'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { Scorecard } from '../components/Scorecard'
-import { QuadrantChart } from '../components/QuadrantChart'
 import { SectionsTable } from '../components/SectionsTable'
 import { api } from '../lib/api-client'
 import type { CourseDto } from '@uiuc-course-search/query-types'
@@ -68,9 +67,6 @@ export function CoursePage() {
     )
   }
 
-  // Only show chart if we have valid scores
-  const hasScores = course.quality_score !== null && course.difficulty_score !== null
-
   return (
     <Container size="lg" py="xl">
       <Button component={Link} to="/" variant="subtle" mb="md">
@@ -97,19 +93,6 @@ export function CoursePage() {
               qualityScore={course.quality_score}
               difficultyScore={course.difficulty_score}
             />
-
-            {hasScores && (
-              <Paper p="md" withBorder radius="md">
-                <QuadrantChart
-                  currentCourse={{
-                    code: `${course.subject} ${course.number}`,
-                    quality: course.quality_score,
-                    difficulty: course.difficulty_score
-                  }}
-                  contextCourses={[]} // TODO: Fetch department context
-                />
-              </Paper>
-            )}
           </Stack>
         </Grid.Col>
 

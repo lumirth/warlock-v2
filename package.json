@@ -36,8 +36,5 @@
     "tsx": "^4.21.0",
     "typescript-eslint": "^8.60.0",
     "vitest": "^3.2.4"
-  },
-  "dependencies": {
-    "recharts": "^3.7.0"
   }
 }

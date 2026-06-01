@@ -23,7 +23,7 @@ export interface EvalResult {
   results: Array<{ id: string; title: string; subject: string; number: string; gened?: string; avg_gpa?: number }>;
   reciprocalRank: number | null;  // null if no expected_top1
   violations: string[];  // list of violated invariants
-  tierReached: number;
+  tierReached: number | null;
 }
 
 export interface EvalMetrics {

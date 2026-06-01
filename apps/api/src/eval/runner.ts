@@ -25,6 +25,9 @@ interface SearchResponse {
     query: {
       residual: string;
     };
+    fallback?: {
+      tierReached: number;
+    };
   };
 }
 
@@ -113,7 +116,7 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
         results,
         reciprocalRank,
         violations,
-        tierReached: 0  // TODO: extract from meta
+        tierReached: data.meta.fallback?.tierReached ?? null
       });
 
       // Progress indicator
@@ -130,7 +133,7 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
         results: [],
         reciprocalRank: 0,
         violations: [`Fetch error: ${error}`],
-        tierReached: 0
+        tierReached: null
       });
     }
   }
@@ -141,7 +144,10 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
 }
 
 // CLI entry point
-declare const process: any;
+declare const process: {
+  argv: string[];
+  exitCode?: number;
+};
 const baseUrl = process.argv[2] || 'http://localhost:8787';
 runEvaluation(baseUrl)
   .then((results) => {
