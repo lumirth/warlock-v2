@@ -36,6 +36,7 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `91a0d9d` - Refresh stabilization audit evidence
 - `9d4d9f0` - Cut over staging deploy and debug routes
 - `e1d290f` - Reduce public health and stale doc surface
+- `1b5bfbb` - Remove stale sync timing config
 
 The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
@@ -72,10 +73,11 @@ Additional gate evidence:
 - Cloudflare preflight now requires abuse-control route, action, and threshold evidence in addition to a real-looking WAF or rate-limit rule ID, so a standalone opaque rule ID is not enough to satisfy the public abuse-control requirement.
 - Cloudflare preflight now requires separate API and web staging URL evidence plus `Pages Project: uiuc-course-search-web` and `Pages Branch: staging`, so the Pages deployment cannot be skipped while the API worker is green.
 - Cloudflare preflight now requires `D1 Restore Verified: yes` as a concrete report label; prose or checklist text mentioning that label does not count.
-- Completion audit refresh on 2026-06-01T18:49:27Z reran `npm run typecheck`, `npm test`, `npm run build`, `npm run lint`, `npm run db:verify`, `npm run eval:smoke`, `npm run bundle:budget`, and `npm run security:secrets`; all passed. GitHub CI passed on `e1d290f`. `npm run test:staging`, `npm run eval:staging`, and `npm run cloudflare:preflight` remain auth/evidence-gated because Cloudflare staging/auth evidence is absent.
+- Completion audit refresh on 2026-06-01T18:56:59Z reran `npm run typecheck`, the affected hermetic search integration test, `npm run lint`, and `npm run security:secrets`; all passed. GitHub CI passed on `1b5bfbb`. `npm run test:staging`, `npm run eval:staging`, and `npm run cloudflare:preflight` remain auth/evidence-gated because Cloudflare staging/auth evidence is absent.
 - Staging deployment commands are now explicit: `npm run deploy:api:staging`, `npm run deploy:web:staging`, and `npm run deploy:staging`. Ambiguous default deploy scripts were removed so a pre-alpha deploy does not accidentally target the wrong Worker or Pages branch.
 - Legacy admin sync aliases `/admin/sync/rmp` and `/admin/sync/enrich` and the raw `/admin/debug/link-instructor` diagnostic were removed. Active stale `apps/web/docs/plans` files that pointed at those paths were deleted, and `docs/security-route-matrix.md` now lists the remaining admin/debug surface explicitly.
 - Undocumented public DB-count diagnostics `/stats` and `/health/data` were removed; `/` and `/health` are the only public health endpoints. Stale active app-local prompt/plan files were deleted so current guidance lives in README, `docs/plans`, and the release/runbook docs.
+- Dead sync timing env vars `SYNC_INTERVAL_MS` and `TERM_CHECK_INTERVAL_MS` were removed from `wrangler.toml` and Worker bindings; active docs now describe the actual `*/5 * * * *` fan-out cron instead of a stale 3-minute rotation.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
 
@@ -110,7 +112,7 @@ Browser-found fixes completed:
 | Plan Area | Status | Evidence |
 | --- | --- | --- |
 | Git checkpoint and hygiene | Complete locally | Multiple coherent commits on `main`; stale side worktree/branch removed after verified backups; latest checked status was clean against `origin/main`. |
-| CI/lint/warning debt | Complete | `npm run lint` zero output; private GitHub CI passes on `main` for `e1d290f`; CI runs typecheck, schema verification, tests, build, bundle budget, lint, secret scan, audit, eval, and eval artifact upload. |
+| CI/lint/warning debt | Complete | `npm run lint` zero output; private GitHub CI passes on `main` for `1b5bfbb`; CI runs typecheck, schema verification, tests, build, bundle budget, lint, secret scan, audit, eval, and eval artifact upload. |
 | Skipped/manual tests | Complete locally | Hermetic Worker search/course integration tests; no active `.skip`. |
 | Search contract/evals | Complete locally | `npm run eval:smoke` passes 58/58; staging eval command requires explicit URL. |
 | Search explainability/result shape | Complete locally | Shared `MatchEvidence`, `ResultWarning`, `SectionMatchDto`; API attaches evidence; web renders chips; tests cover categories. |
@@ -196,10 +198,10 @@ The run completed every configured step successfully: install, typecheck, schema
 Latest observed passing run:
 
 ```bash
-gh run view 26774922866 --json conclusion,status,url,headSha,workflowName,jobs
+gh run view 26775309432 --json conclusion,status,url,headSha,workflowName,jobs
 # conclusion: success
-# headSha: e1d290f86c578dcc44a1715676018e6de56d6bee
-# url: https://github.com/lumirth/uiuc-course-search/actions/runs/26774922866
+# headSha: 1b5bfbb69d777ca068b2eaf727a548c716ff96f2
+# url: https://github.com/lumirth/uiuc-course-search/actions/runs/26775309432
 ```
 
 This latest run completed the same configured CI gate successfully, including typecheck, schema verification, tests, build, bundle budget, lint, secret scan, dependency audit, search smoke eval, and eval report artifact upload.
