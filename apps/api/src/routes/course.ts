@@ -139,7 +139,7 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
     }
   }
 
-  // Check rate limiter
+  // Check upstream backoff before live CISAPI fetches.
   const upstreamBackoff = getUpstreamBackoff({
     backoffBaseMs: parseInt(c.env.BACKOFF_BASE_MS) || 5000,
     backoffMaxMs: parseInt(c.env.BACKOFF_MAX_MS) || 60000,
