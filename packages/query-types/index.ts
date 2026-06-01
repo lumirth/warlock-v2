@@ -220,6 +220,9 @@ export type CourseDto = {
   year: number;
   term: string;
   primary_instructor: string | null;
+  primary_instructor_rmp: number | null;
+  avg_gpa: number | null;
+  gpa_sample_size: number | null;
   quality_score: number | null;
   difficulty_score: number | null;
   instructor_links: Record<string, InstructorLinkDto>;

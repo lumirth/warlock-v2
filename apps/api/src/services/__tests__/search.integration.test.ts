@@ -286,6 +286,11 @@ describe('Worker API integration', () => {
       id: string;
       subject: string;
       number: string;
+      avg_gpa: number | null;
+      gpa_sample_size: number | null;
+      primary_instructor_rmp: number | null;
+      quality_score: number | null;
+      difficulty_score: number | null;
       sections?: Array<{ crn: string; status: string }>;
       _cached?: boolean;
       _term_status?: string;
@@ -295,6 +300,11 @@ describe('Worker API integration', () => {
       id: courseRow.id,
       subject: 'CS',
       number: '225',
+      avg_gpa: 3.4,
+      gpa_sample_size: 100,
+      primary_instructor_rmp: null,
+      quality_score: 88,
+      difficulty_score: 42,
       _cached: true,
       _term_status: 'active',
     });

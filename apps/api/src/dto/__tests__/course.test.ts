@@ -16,7 +16,7 @@ const course: Course = {
   avg_gpa: 3.5,
   gpa_sample_size: 100,
   primary_instructor: 'Lovelace, A',
-  primary_instructor_rmp: null,
+  primary_instructor_rmp: 4.8,
   difficulty_score: 22,
   quality_score: 91,
   subject_id: 'CS',
@@ -96,6 +96,11 @@ describe('search result DTO evidence', () => {
 
     expect(dto.match_evidence?.some(item => item.kind === 'course_code')).toBe(true);
     expect(dto.warnings).toEqual([{ kind: 'historical', message: 'Historical term result' }]);
+    expect(dto.avg_gpa).toBe(3.5);
+    expect(dto.gpa_sample_size).toBe(100);
+    expect(dto.primary_instructor_rmp).toBe(4.8);
+    expect(dto.quality_score).toBe(91);
+    expect(dto.difficulty_score).toBe(22);
   });
 
   it('keeps warning construction narrow and non-secret', () => {

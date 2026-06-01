@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import type { CourseSectionDto } from '@uiuc-course-search/query-types';
+import type { CourseSectionDto, InstructorLinkDto } from '@uiuc-course-search/query-types';
 import {
   makeCourseId,
   type Course,
@@ -20,6 +20,14 @@ import { parseBoundedIntParam, parseCourseNumberParam, parseEnumParam, parseSubj
 import { errorFields, logger } from '../observability/logger.js';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
+
+function firstInstructorMetric(
+  linksMap: Record<string, InstructorLinkDto>,
+  metric: keyof Pick<InstructorLinkDto, 'rmp_rating' | 'avg_gpa' | 'gpa_sample_size'>
+): number | null {
+  const link = Object.values(linksMap).find((entry) => typeof entry[metric] === 'number');
+  return link?.[metric] ?? null;
+}
 
 type Bindings = {
   DB: D1Database;
@@ -102,6 +110,7 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
           r.rating as rmp_rating,
           r.difficulty as rmp_difficulty,
           r.rmp_id,
+          r.num_ratings,
           g.avg_gpa,
           g.sample_size as gpa_sample_size
         FROM instructor_course_links l
@@ -164,6 +173,7 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
           r.rating as rmp_rating,
           r.difficulty as rmp_difficulty,
           r.rmp_id,
+          r.num_ratings,
           g.avg_gpa,
           g.sample_size as gpa_sample_size
         FROM instructor_course_links l
@@ -313,6 +323,7 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
         r.rating as rmp_rating,
         r.difficulty as rmp_difficulty,
         r.rmp_id,
+        r.num_ratings,
         g.avg_gpa,
         g.sample_size as gpa_sample_size
       FROM instructor_course_links l
@@ -335,6 +346,18 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
       };
     });
 
+    const existingMetadata = await c.env.DB.prepare(`
+      SELECT avg_gpa, gpa_sample_size, primary_instructor_rmp, quality_score, difficulty_score
+      FROM courses
+      WHERE id = ?
+    `).bind(courseId).first<Pick<Course,
+      'avg_gpa'
+      | 'gpa_sample_size'
+      | 'primary_instructor_rmp'
+      | 'quality_score'
+      | 'difficulty_score'
+    >>();
+
     return c.json(toCourseDto({
       id: courseId,
       subject,
@@ -345,9 +368,12 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
       gened: parsed.genEdCategories[0]?.id ?? null,
       year: resolvedTerm.year,
       term,
+      avg_gpa: existingMetadata?.avg_gpa ?? firstInstructorMetric(linksMap, 'avg_gpa'),
+      gpa_sample_size: existingMetadata?.gpa_sample_size ?? firstInstructorMetric(linksMap, 'gpa_sample_size'),
       primary_instructor: primaryInstructorName,
-      quality_score: null,
-      difficulty_score: null,
+      primary_instructor_rmp: existingMetadata?.primary_instructor_rmp ?? firstInstructorMetric(linksMap, 'rmp_rating'),
+      quality_score: existingMetadata?.quality_score ?? null,
+      difficulty_score: existingMetadata?.difficulty_score ?? null,
     }, {
       sections: sectionsWithStats,
       instructorLinks: linksMap,

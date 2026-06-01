@@ -8,12 +8,38 @@ interface SectionsTableProps {
   instructorLinks?: Record<string, InstructorLinkDto>
 }
 
+function splitInstructorNames(section: CourseSectionDto): string[] {
+  return section.instructor
+    ? section.instructor.split(';').map((name) => name.trim()).filter(Boolean)
+    : []
+}
+
+function getSectionStats(
+  section: CourseSectionDto,
+  instructorLinks?: Record<string, InstructorLinkDto>
+): InstructorLinkDto[] {
+  if (section.instructorStats.length > 0) {
+    return section.instructorStats
+  }
+
+  return splitInstructorNames(section)
+    .map((name) => instructorLinks?.[name])
+    .filter((stat): stat is InstructorLinkDto => Boolean(stat))
+}
+
 export function SectionsTable({ sections, instructorLinks }: SectionsTableProps) {
   if (sections.length === 0) {
     return <Text c="dimmed" fs="italic">No sections found for this term.</Text>
   }
 
   const rows = sections.map((section) => {
+    const sectionStats = getSectionStats(section, instructorLinks)
+    const ratingStat = sectionStats.find((stat) => typeof stat.rmp_rating === 'number')
+    const gpaStat = sectionStats.find((stat) => typeof stat.avg_gpa === 'number')
+    const displayedRating = section.instructorRmp ?? ratingStat?.rmp_rating ?? null
+    const displayedGpa = section.instructorGpa ?? gpaStat?.avg_gpa ?? null
+    const displayedGpaSampleSize = gpaStat?.gpa_sample_size ?? null
+
     // Determine how to display instructors and their stats
     const renderInstructors = () => {
       if (!section.instructor || section.instructor === 'TBA') {
@@ -21,11 +47,11 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
       }
 
       // If we have enriched stats, use them
-      if (section.instructorStats && section.instructorStats.length > 0) {
+      if (sectionStats.length > 0) {
         return (
           <Stack gap={4}>
-            {section.instructorStats.map((stat, idx) => (
-              <Group key={idx} gap="xs" wrap="nowrap">
+            {sectionStats.map((stat, idx) => (
+              <Group key={`${stat.instructor_name ?? 'instructor'}-${idx}`} gap="xs" wrap="nowrap">
                 {stat.rmp_id ? (
                   <Anchor
                     href={`https://www.ratemyprofessors.com/professor/${stat.rmp_id}`}
@@ -81,17 +107,22 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
           {renderInstructors()}
         </Table.Td>
         <Table.Td>
-           {typeof section.instructorRmp === 'number' ? (
-               <Badge size="xs" color={section.instructorRmp > RMP_THRESHOLDS.GOOD ? 'teal' : 'orange'}>
-                   {section.instructorRmp.toFixed(1)} ★
-               </Badge>
-           ) : (
-               <Text size="xs" c="dimmed">-</Text>
-           )}
+          {typeof displayedRating === 'number' ? (
+            <Badge size="xs" color={displayedRating > RMP_THRESHOLDS.GOOD ? 'teal' : 'orange'}>
+              {displayedRating.toFixed(1)} ★
+            </Badge>
+          ) : (
+            <Text size="xs" c="dimmed">-</Text>
+          )}
         </Table.Td>
         <Table.Td>
-            {typeof section.instructorGpa === 'number' ? (
-                <Text size="sm" fw={500}>{section.instructorGpa.toFixed(2)}</Text>
+            {typeof displayedGpa === 'number' ? (
+              <Stack gap={0}>
+                <Text size="sm" fw={500}>{displayedGpa.toFixed(2)}</Text>
+                {typeof displayedGpaSampleSize === 'number' && (
+                  <Text size="xs" c="dimmed">n={displayedGpaSampleSize}</Text>
+                )}
+              </Stack>
             ) : (
                 <Text size="xs" c="dimmed">-</Text>
             )}

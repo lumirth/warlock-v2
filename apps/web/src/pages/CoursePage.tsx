@@ -91,6 +91,9 @@ export function CoursePage() {
             <Scorecard
               qualityScore={course.quality_score}
               difficultyScore={course.difficulty_score}
+              avgGpa={course.avg_gpa}
+              gpaSampleSize={course.gpa_sample_size}
+              primaryInstructorRmp={course.primary_instructor_rmp}
             />
           </Stack>
         </Grid.Col>

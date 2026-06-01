@@ -24,6 +24,9 @@ function course(overrides: Partial<CourseDto> = {}): CourseDto {
     year: 2026,
     term: 'spring',
     primary_instructor: null,
+    primary_instructor_rmp: null,
+    avg_gpa: null,
+    gpa_sample_size: null,
     quality_score: null,
     difficulty_score: null,
     instructor_links: {},
@@ -83,5 +86,54 @@ describe('CoursePage request state', () => {
     expect(alert).toHaveTextContent(/Course API unavailable/i)
     expect(consoleError).not.toHaveBeenCalled()
     consoleError.mockRestore()
+  })
+
+  it('renders course scores, rating, GPA, and section stat fallbacks', async () => {
+    vi.mocked(api.getCourse).mockResolvedValueOnce(course({
+      primary_instructor: 'Lovelace, A',
+      primary_instructor_rmp: 4.8,
+      avg_gpa: 3.62,
+      gpa_sample_size: 820,
+      quality_score: 88,
+      difficulty_score: 42,
+      sections: [
+        {
+          crn: '12345',
+          sectionNumber: 'AL1',
+          status: 'Open',
+          type: 'Lecture',
+          days: 'MWF',
+          startTime: '09:00',
+          endTime: '09:50',
+          location: 'Siebel Center',
+          instructor: 'Lovelace, A',
+          instructorRmp: null,
+          instructorGpa: null,
+          instructorStats: [{
+            instructor_name: 'Lovelace, A',
+            rmp_rating: 4.8,
+            rmp_difficulty: 3.1,
+            rmp_id: 'ada',
+            avg_gpa: 3.62,
+            gpa_sample_size: 820,
+            num_ratings: 140,
+          }],
+        },
+      ],
+    }))
+
+    renderCoursePage('/course/CS/225?term=spring&year=2026')
+
+    await screen.findByText('B+')
+    expect(screen.getByText('Easy')).toBeInTheDocument()
+    expect(screen.getByText('Rating 4.8')).toBeInTheDocument()
+    expect(screen.getByText('Avg GPA 3.62 n=820')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Lovelace, A' })).toHaveAttribute(
+      'href',
+      'https://www.ratemyprofessors.com/professor/ada'
+    )
+    expect(screen.getByText('4.8 ★')).toBeInTheDocument()
+    expect(screen.getByText('3.62')).toBeInTheDocument()
+    expect(screen.getByText('n=820')).toBeInTheDocument()
   })
 })

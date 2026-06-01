@@ -14,6 +14,9 @@ const course: CourseDto = {
   year: 2026,
   term: 'spring',
   primary_instructor: 'Lovelace, A; Hopper, G',
+  primary_instructor_rmp: 4.8,
+  avg_gpa: 3.62,
+  gpa_sample_size: 820,
   quality_score: 88,
   difficulty_score: 42,
   instructor_links: {

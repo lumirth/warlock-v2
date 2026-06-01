@@ -46,6 +46,9 @@ function course(overrides: Partial<CourseDto>): CourseDto {
     year: 2026,
     term: 'spring',
     primary_instructor: null,
+    primary_instructor_rmp: null,
+    avg_gpa: null,
+    gpa_sample_size: null,
     quality_score: null,
     difficulty_score: null,
     instructor_links: {},
@@ -169,5 +172,32 @@ describe('SearchPage request state', () => {
     await screen.findByText(/CS 225: Data Structures/i)
     expect(screen.getByText('Course CS 225')).toBeInTheDocument()
     expect(screen.getByText('Keyword rank #1')).toBeInTheDocument()
+  })
+
+  it('surfaces quality, difficulty, instructor rating, and GPA on result cards', async () => {
+    vi.mocked(api.search).mockResolvedValueOnce(searchResponse([
+      course({
+        id: 'CS-225-2026-spring',
+        number: '225',
+        title: 'Data Structures',
+        quality_score: 88,
+        difficulty_score: 42,
+        primary_instructor_rmp: 4.8,
+        avg_gpa: 3.62,
+        gpa_sample_size: 820,
+      }),
+    ]))
+
+    renderSearchPage()
+
+    setQuery('cs 225')
+    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+
+    await screen.findByText(/CS 225: Data Structures/i)
+    expect(screen.getByText('Quality B+ (88)')).toBeInTheDocument()
+    expect(screen.getByText('Difficulty Easy')).toBeInTheDocument()
+    expect(screen.getByText('Rating 4.8')).toBeInTheDocument()
+    expect(screen.getByText('GPA 3.62')).toBeInTheDocument()
+    expect(screen.getByTitle('GPA sample size 820')).toBeInTheDocument()
   })
 })

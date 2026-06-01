@@ -4,6 +4,8 @@ import { IconAlertCircle, IconSearch } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
 import type { CourseDto, Hint, MatchEvidence, SearchMetaDto } from '@uiuc-course-search/query-types'
+import { getLetterGrade } from '../utils/grading'
+import { DIFFICULTY } from '../config/constants'
 
 function formatHintValue(value: Hint['value']): string {
   if (typeof value === 'object' && value !== null) {
@@ -37,6 +39,65 @@ function getEvidenceColor(evidence: MatchEvidence): string {
   if (evidence.weight === 'hard') return 'blue'
   if (evidence.weight === 'rank') return evidence.kind === 'semantic' ? 'violet' : 'gray'
   return 'teal'
+}
+
+function getDifficultyLabel(score: number): string {
+  if (score > DIFFICULTY.HARD) return 'Hard'
+  if (score > DIFFICULTY.MODERATE) return 'Moderate'
+  return 'Easy'
+}
+
+function getDifficultyColor(score: number): string {
+  if (score > DIFFICULTY.HARD) return 'red'
+  if (score > DIFFICULTY.MODERATE) return 'yellow'
+  return 'teal'
+}
+
+function renderScoreBadges(course: CourseDto) {
+  const qualityScore = course.quality_score
+  const difficultyScore = course.difficulty_score
+  const primaryInstructorRmp = course.primary_instructor_rmp
+  const avgGpa = course.avg_gpa
+
+  const hasQuality = typeof qualityScore === 'number'
+  const hasDifficulty = typeof difficultyScore === 'number'
+  const hasRating = typeof primaryInstructorRmp === 'number'
+  const hasGpa = typeof avgGpa === 'number'
+
+  if (!hasQuality && !hasDifficulty && !hasRating && !hasGpa) {
+    return null
+  }
+
+  return (
+    <Group gap={4} mt={6}>
+      {hasQuality && (
+        <Badge size="xs" variant="light" color="blue" tt="none">
+          Quality {getLetterGrade(qualityScore)} ({qualityScore.toFixed(0)})
+        </Badge>
+      )}
+      {hasDifficulty && (
+        <Badge size="xs" variant="light" color={getDifficultyColor(difficultyScore)} tt="none">
+          Difficulty {getDifficultyLabel(difficultyScore)}
+        </Badge>
+      )}
+      {hasRating && (
+        <Badge size="xs" variant="light" color={primaryInstructorRmp >= 3.5 ? 'teal' : 'orange'} tt="none">
+          Rating {primaryInstructorRmp.toFixed(1)}
+        </Badge>
+      )}
+      {hasGpa && (
+        <Badge
+          size="xs"
+          variant="light"
+          color="cyan"
+          tt="none"
+          title={typeof course.gpa_sample_size === 'number' ? `GPA sample size ${course.gpa_sample_size}` : undefined}
+        >
+          GPA {avgGpa.toFixed(2)}
+        </Badge>
+      )}
+    </Group>
+  )
 }
 
 export function SearchPage() {
@@ -212,6 +273,7 @@ export function SearchPage() {
                           ))}
                         </Group>
                       )}
+                      {renderScoreBadges(r)}
                     </Box>
                     {typeof r._score === 'number' && (
                       <Badge variant="light" style={{ flexShrink: 0 }}>Match {r._score.toFixed(2)}</Badge>

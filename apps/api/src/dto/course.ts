@@ -25,7 +25,10 @@ type CourseSource = Pick<
   | 'gened'
   | 'year'
   | 'term'
+  | 'avg_gpa'
+  | 'gpa_sample_size'
   | 'primary_instructor'
+  | 'primary_instructor_rmp'
   | 'quality_score'
   | 'difficulty_score'
 >;
@@ -118,6 +121,9 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     year: course.year,
     term: course.term,
     primary_instructor: course.primary_instructor ?? null,
+    primary_instructor_rmp: course.primary_instructor_rmp ?? null,
+    avg_gpa: course.avg_gpa ?? null,
+    gpa_sample_size: course.gpa_sample_size ?? null,
     quality_score: course.quality_score ?? null,
     difficulty_score: course.difficulty_score ?? null,
     instructor_links: options.instructorLinks ?? {},
