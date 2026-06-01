@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
-type SmokeResult = {
+export type SmokeResult = {
   name: string;
   ok: boolean;
   status?: number;
@@ -8,9 +9,18 @@ type SmokeResult = {
 };
 
 type JsonRecord = Record<string, unknown>;
+type Fetcher = (request: Request) => Promise<Response>;
 
-function requiredEnv(name: string): string {
-  const value = process.env[name];
+type StagingSmokeOptions = {
+  env?: NodeJS.ProcessEnv;
+  fetcher?: Fetcher;
+  artifactDir?: string;
+  writeArtifacts?: boolean;
+  log?: (report: string) => void;
+};
+
+function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
+  const value = env[name];
   if (!value) {
     throw new Error(`${name} is required`);
   }
@@ -35,10 +45,11 @@ async function readJson(response: Response): Promise<JsonRecord | null> {
 async function check(
   name: string,
   request: Request,
+  fetcher: Fetcher,
   assert: (response: Response, body: JsonRecord | null) => string | null
 ): Promise<SmokeResult> {
   try {
-    const response = await fetch(request);
+    const response = await fetcher(request);
     const body = await readJson(response);
     const failure = assert(response, body);
     return {
@@ -67,7 +78,7 @@ function hasSyncStatusBody(body: JsonRecord | null): boolean {
     && hasArray(body, 'runningSyncStates');
 }
 
-function formatReport(results: SmokeResult[]): string {
+export function formatReport(results: SmokeResult[]): string {
   const failed = results.filter(result => !result.ok);
   const lines = [
     '# Staging Smoke Report',
@@ -87,26 +98,33 @@ function formatReport(results: SmokeResult[]): string {
   return `${lines.join('\n')}\n`;
 }
 
-async function main(): Promise<void> {
-  const baseUrl = requiredEnv('STAGING_API_BASE_URL');
-  const adminToken = requiredEnv('STAGING_ADMIN_TOKEN');
-  const internalToken = requiredEnv('STAGING_INTERNAL_TOKEN');
-  const smokeSubject = process.env.STAGING_SMOKE_SUBJECT ?? 'CS';
-  const smokeNumber = process.env.STAGING_SMOKE_NUMBER ?? '225';
-  const smokeTerm = process.env.STAGING_SMOKE_TERM ?? 'spring';
-  const smokeYear = process.env.STAGING_SMOKE_YEAR ?? '2026';
+export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promise<SmokeResult[]> {
+  const env = options.env ?? process.env;
+  const fetcher = options.fetcher ?? ((request: Request) => fetch(request));
+  const artifactDir = options.artifactDir ?? 'artifacts';
+  const writeArtifacts = options.writeArtifacts ?? true;
+  const log = options.log ?? ((report: string) => console.log(report));
+  const baseUrl = requiredEnv(env, 'STAGING_API_BASE_URL');
+  const adminToken = requiredEnv(env, 'STAGING_ADMIN_TOKEN');
+  const internalToken = requiredEnv(env, 'STAGING_INTERNAL_TOKEN');
+  const smokeSubject = env.STAGING_SMOKE_SUBJECT ?? 'CS';
+  const smokeNumber = env.STAGING_SMOKE_NUMBER ?? '225';
+  const smokeTerm = env.STAGING_SMOKE_TERM ?? 'spring';
+  const smokeYear = env.STAGING_SMOKE_YEAR ?? '2026';
 
   const results: SmokeResult[] = [];
 
   results.push(await check(
     'health',
     new Request(endpoint(baseUrl, 'health')),
+    fetcher,
     (response) => response.status === 200 ? null : `expected 200, got ${response.status}`
   ));
 
   results.push(await check(
     'search public route',
     new Request(endpoint(baseUrl, 'api/search?q=CS%20225')),
+    fetcher,
     (response, body) => {
       if (response.status !== 200) return `expected 200, got ${response.status}`;
       if (!hasArray(body, 'results')) return 'expected results array';
@@ -120,6 +138,7 @@ async function main(): Promise<void> {
       baseUrl,
       `api/course/${encodeURIComponent(smokeSubject)}/${encodeURIComponent(smokeNumber)}?term=${encodeURIComponent(smokeTerm)}&year=${encodeURIComponent(smokeYear)}`
     )),
+    fetcher,
     (response, body) => {
       if (response.status !== 200) return `expected 200, got ${response.status}`;
       if (body?.subject !== smokeSubject || body?.number !== smokeNumber) {
@@ -132,6 +151,7 @@ async function main(): Promise<void> {
   results.push(await check(
     'admin rejects missing token',
     new Request(endpoint(baseUrl, 'admin/upstream-backoff-status')),
+    fetcher,
     (response) => response.status === 401 ? null : `expected 401, got ${response.status}`
   ));
 
@@ -140,6 +160,7 @@ async function main(): Promise<void> {
     new Request(endpoint(baseUrl, 'admin/upstream-backoff-status'), {
       headers: { Authorization: `Bearer ${adminToken}` },
     }),
+    fetcher,
     (response) => response.status === 200 ? null : `expected 200, got ${response.status}`
   ));
 
@@ -148,6 +169,7 @@ async function main(): Promise<void> {
     new Request(endpoint(baseUrl, 'admin/sync/status'), {
       headers: { Authorization: `Bearer ${adminToken}` },
     }),
+    fetcher,
     (response, body) => {
       if (response.status !== 200) return `expected 200, got ${response.status}`;
       if (!hasSyncStatusBody(body)) return 'expected sync status arrays';
@@ -162,6 +184,7 @@ async function main(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tasks: [] }),
     }),
+    fetcher,
     (response) => response.status === 401 ? null : `expected 401, got ${response.status}`
   ));
 
@@ -175,21 +198,33 @@ async function main(): Promise<void> {
       },
       body: JSON.stringify({ tasks: [] }),
     }),
+    fetcher,
     (response) => response.status === 400 ? null : `expected authenticated validation 400, got ${response.status}`
   ));
 
-  mkdirSync('artifacts', { recursive: true });
-  writeFileSync('artifacts/staging-smoke-report.md', formatReport(results));
-  writeFileSync('artifacts/staging-smoke-results.json', `${JSON.stringify(results, null, 2)}\n`);
+  const report = formatReport(results);
+  if (writeArtifacts) {
+    mkdirSync(artifactDir, { recursive: true });
+    writeFileSync(`${artifactDir}/staging-smoke-report.md`, report);
+    writeFileSync(`${artifactDir}/staging-smoke-results.json`, `${JSON.stringify(results, null, 2)}\n`);
+  }
 
-  console.log(formatReport(results));
+  log(report);
 
+  return results;
+}
+
+async function main(): Promise<void> {
+  const results = await runStagingSmoke();
   if (results.some(result => !result.ok)) {
     process.exitCode = 1;
   }
 }
 
-void main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirectRun) {
+  void main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}
