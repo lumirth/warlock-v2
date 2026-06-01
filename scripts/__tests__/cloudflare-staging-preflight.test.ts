@@ -73,6 +73,9 @@ describe('Cloudflare staging preflight', () => {
     const validEvidence = [
       'Staging API URL: https://uiuc-course-search-staging.lu-uiuc.workers.dev',
       'WAF Rule ID: 3f1e2d4c-5b6a-4789-9abc-def012345678',
+      'Abuse Control Routes: /api/search*, /api/course/*',
+      'Abuse Control Action: managed_challenge',
+      'Abuse Control Thresholds: /api/search*=60/min/IP, /api/course/*=120/min/IP',
       'D1 Backup Ref: 20260601T170000Z',
       'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
       'D1 Restore Database: course-search-db-staging-restore-20260601T170000Z',
@@ -95,6 +98,24 @@ describe('Cloudflare staging preflight', () => {
       ''
     );
     expect(checkEvidenceReportText(missingBackupLocation).find(result => result.name === 'D1 backup location evidence')?.ok).toBe(false);
+
+    const missingRouteCoverage = validEvidence.replace(
+      'Abuse Control Routes: /api/search*, /api/course/*',
+      'Abuse Control Routes: /api/search*'
+    );
+    expect(checkEvidenceReportText(missingRouteCoverage).find(result => result.name === 'WAF or rate-limit route coverage evidence')?.ok).toBe(false);
+
+    const weakAction = validEvidence.replace(
+      'Abuse Control Action: managed_challenge',
+      'Abuse Control Action: log'
+    );
+    expect(checkEvidenceReportText(weakAction).find(result => result.name === 'WAF or rate-limit action evidence')?.ok).toBe(false);
+
+    const weakThresholds = validEvidence.replace(
+      'Abuse Control Thresholds: /api/search*=60/min/IP, /api/course/*=120/min/IP',
+      'Abuse Control Thresholds: /api/search*=60/min/IP'
+    );
+    expect(checkEvidenceReportText(weakThresholds).find(result => result.name === 'WAF or rate-limit threshold evidence')?.ok).toBe(false);
   });
 
   it('requires every staging environment variable by name', () => {

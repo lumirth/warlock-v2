@@ -93,7 +93,7 @@ function isRealHexId(value: string | null): boolean {
 
 function labelValue(text: string, label: string): string | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^\\s*${escaped}\\s*:\\s*(\\S+)`, 'im').exec(text)?.[1] ?? null;
+  return new RegExp(`^\\s*${escaped}\\s*:\\s*(.+)$`, 'im').exec(text)?.[1]?.trim() ?? null;
 }
 
 function isRealHttpsUrl(value: string | null): boolean {
@@ -129,6 +129,28 @@ function isRealBackupLocation(value: string | null, backupRef: string | null): b
     && !isPlaceholder(value)
     && Boolean(backupRef)
     && value!.includes(backupRef!);
+}
+
+function hasPublicReadRoutes(value: string | null): boolean {
+  if (!value || isPlaceholder(value)) return false;
+  const normalized = value.toLowerCase();
+  return normalized.includes('/api/search') && normalized.includes('/api/course');
+}
+
+function hasEnforcingAction(value: string | null): boolean {
+  if (!value || isPlaceholder(value)) return false;
+  const normalized = value.toLowerCase();
+  return normalized.includes('block')
+    || normalized.includes('managed_challenge')
+    || normalized.includes('js_challenge')
+    || normalized.includes('challenge');
+}
+
+function hasThresholdEvidence(value: string | null): boolean {
+  if (!value || isPlaceholder(value) || !hasPublicReadRoutes(value)) return false;
+  const normalized = value.toLowerCase();
+  const thresholdMentions = normalized.match(/\d+\s*(?:(?:requests?)?\s*\/\s*)?(?:minute|min)/g) ?? [];
+  return thresholdMentions.length >= 2 && normalized.includes('ip');
 }
 
 function stripAnsi(text: string): string {
@@ -242,6 +264,14 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
   const stagingUrl = labelValue(text, 'Staging API URL');
   const wafRuleId = labelValue(text, 'WAF Rule ID');
   const rateLimitRuleId = labelValue(text, 'Rate-Limit Rule ID');
+  const abuseRoutes = labelValue(text, 'Abuse Control Routes')
+    ?? labelValue(text, 'WAF Protected Routes')
+    ?? labelValue(text, 'Rate-Limit Protected Routes');
+  const abuseAction = labelValue(text, 'Abuse Control Action')
+    ?? labelValue(text, 'WAF Action')
+    ?? labelValue(text, 'Rate-Limit Action');
+  const abuseThresholds = labelValue(text, 'Abuse Control Thresholds')
+    ?? labelValue(text, 'Rate-Limit Thresholds');
   const backupRef = labelValue(text, 'D1 Backup Ref');
   const backupLocation = labelValue(text, 'D1 Backup Location') ?? labelValue(text, 'D1 Backup Path');
   const restoreDatabase = labelValue(text, 'D1 Restore Database');
@@ -256,6 +286,21 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
       'WAF or rate-limit rule evidence',
       isRealCloudflareRuleId(wafRuleId) || isRealCloudflareRuleId(rateLimitRuleId),
       'requires real-looking WAF Rule ID or Rate-Limit Rule ID'
+    ),
+    result(
+      'WAF or rate-limit route coverage evidence',
+      hasPublicReadRoutes(abuseRoutes),
+      'requires Abuse Control Routes covering /api/search and /api/course'
+    ),
+    result(
+      'WAF or rate-limit action evidence',
+      hasEnforcingAction(abuseAction),
+      'requires enforcing block or challenge action'
+    ),
+    result(
+      'WAF or rate-limit threshold evidence',
+      hasThresholdEvidence(abuseThresholds),
+      'requires per-IP minute thresholds for /api/search and /api/course'
     ),
     result(
       'D1 backup ref evidence',

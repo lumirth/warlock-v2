@@ -28,6 +28,8 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `de30d20` - Record latest stabilization evidence
 - `6bc3ac4` - Audit stabilization completion state
 - `6fa22e4` - Tighten Cloudflare evidence gate
+- `a15db81` - Expand staging smoke observability proof
+- `30be492` - Cover staging smoke runner
 
 The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
@@ -61,6 +63,7 @@ Additional gate evidence:
 - After tightening Cloudflare report-evidence validation, `npm run typecheck:scripts` and `npm run test:scripts` passed; `npm run cloudflare:preflight` reports 24 checks, 0 passing, and 24 failing because no real Cloudflare staging evidence exists in this checkout.
 - Staging smoke now requires `/admin/sync/status` to accept the staging admin token and return sync/term health arrays, so live staging must prove operator visibility as well as admin/internal auth.
 - Staging smoke runner now has script tests for the full expected check list, malformed sync-status bodies, and missing staging env; direct CLI missing-env failures print a concise error instead of a stack trace.
+- Cloudflare preflight now requires abuse-control route, action, and threshold evidence in addition to a real-looking WAF or rate-limit rule ID, so a standalone opaque rule ID is not enough to satisfy the public abuse-control requirement.
 - Completion audit refresh on 2026-06-01T17:59:16Z reran `npm run typecheck`, `npm test`, `npm run build`, `npm run lint`, `npm run db:verify`, `npm run eval:smoke`, `npm run bundle:budget`, `npm run security:secrets`, and `npm run security:audit`; all passed. `npm run test:staging`, `npm run eval:staging`, and `npm run cloudflare:preflight` failed only because Cloudflare staging/auth evidence is absent.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
@@ -114,7 +117,7 @@ Browser-found fixes completed:
 | Data artifact/bootstrap hygiene | Complete locally | `.gitignore` protects generated artifacts while explicitly tracking the canonical baseline migration; `npm run bootstrap:fresh-check` verifies fresh clone bootstrap without `history_chunks/` or `full_history.sql`; remediation report records whole-project backup. |
 | Computer Use QA | Not needed | No native Mac UI task was required; Browser/terminal were stronger signals. |
 | Completion audit | Complete, not achieved | `docs/reports/2026-06-01-completion-audit.md` maps the active goal requirement-by-requirement and records the remaining auth-dependent gaps. |
-| Cloudflare final preflight | Added, currently red by design | `npm run cloudflare:preflight` verifies Wrangler auth, explicit staging bindings, real-looking non-placeholder D1/KV IDs, required staging env vars, staging smoke artifact, real HTTPS staging URL evidence, real-looking WAF/rate-limit evidence, backup ref/location evidence, and D1 restore evidence. |
+| Cloudflare final preflight | Added, currently red by design | `npm run cloudflare:preflight` verifies Wrangler auth, explicit staging bindings, real-looking non-placeholder D1/KV IDs, required staging env vars, staging smoke artifact, real HTTPS staging URL evidence, real-looking WAF/rate-limit ID plus route/action/threshold evidence, backup ref/location evidence, and D1 restore evidence. |
 
 ## Cloudflare Auth Blocker
 
@@ -152,9 +155,9 @@ Current Cloudflare evidence gate:
 
 ```bash
 npm run cloudflare:preflight
-# 24 checks, 0 passing, 24 failing
+# 27 checks, 0 passing, 27 failing
 # Missing: Wrangler auth, env.staging bindings, staging env vars, staging smoke artifact,
-# staging URL evidence, WAF/rate-limit rule ID evidence, D1 backup location, and D1 restore evidence.
+# staging URL evidence, WAF/rate-limit rule ID/route/action/threshold evidence, D1 backup location, and D1 restore evidence.
 ```
 
 ## GitHub CI Evidence

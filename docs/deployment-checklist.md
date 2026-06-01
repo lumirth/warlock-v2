@@ -29,7 +29,7 @@ Before a public demo deployment, configure Cloudflare WAF or route-level rate li
 - Use a lower threshold for repeated 4xx/5xx responses if Cloudflare rules allow it.
 - Leave `/admin/*` and `/internal/*` protected by token auth regardless of WAF settings.
 
-Record rule IDs, expressions, thresholds, action, and dashboard evidence in the stabilization report. See `docs/cloudflare-hardening-runbook.md`.
+Record rule IDs, expressions, thresholds, action, and dashboard evidence in the stabilization report. `npm run cloudflare:preflight` requires `WAF Rule ID` or `Rate-Limit Rule ID`, plus `Abuse Control Routes`, `Abuse Control Action`, and `Abuse Control Thresholds`. See `docs/cloudflare-hardening-runbook.md`.
 
 ## Database Bootstrap
 

@@ -63,6 +63,15 @@ Configure Cloudflare WAF or Rate Limiting Rules outside the app for public read 
 
 Admin/internal token checks remain mandatory regardless of WAF rules.
 
+Record the verified rule shape in the stabilization report using these labels:
+
+```text
+WAF Rule ID: <uuid>
+Abuse Control Routes: /api/search*, /api/course/*
+Abuse Control Action: block-or-managed_challenge
+Abuse Control Thresholds: /api/search*=60/min/IP, /api/course/*=120/min/IP
+```
+
 Non-destructive smoke:
 
 ```bash
@@ -104,4 +113,4 @@ After staging smoke, staging eval, WAF/rate-limit configuration, and D1 restore 
 npm run cloudflare:preflight
 ```
 
-This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, `artifacts/staging-smoke-results.json`, real HTTPS staging URL evidence, real-looking WAF/rate-limit rule IDs, D1 backup ref/location markers, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.
+This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, `artifacts/staging-smoke-results.json`, real HTTPS staging URL evidence, real-looking WAF/rate-limit rule IDs with route/action/threshold evidence, D1 backup ref/location markers, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.

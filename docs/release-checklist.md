@@ -62,7 +62,14 @@ Before a public demo, configure Cloudflare rate limiting or WAF rules for:
 - `GET /api/search*`: start at 60 requests/minute/IP.
 - `GET /api/course/*`: start at 120 requests/minute/IP.
 
-Record the rule IDs, expressions, thresholds, action, and observed dashboard state in the final report. Use `WAF Rule ID: <uuid>` or `Rate-Limit Rule ID: <uuid-or-32-hex-id>` so `npm run cloudflare:preflight` can verify it.
+Record the rule IDs, expressions, thresholds, action, and observed dashboard state in the final report. Use these labels so `npm run cloudflare:preflight` can verify the control shape:
+
+```text
+WAF Rule ID: <uuid>
+Abuse Control Routes: /api/search*, /api/course/*
+Abuse Control Action: block-or-managed_challenge
+Abuse Control Thresholds: /api/search*=60/min/IP, /api/course/*=120/min/IP
+```
 
 ## Data Safety
 

@@ -46,11 +46,11 @@ The goal is complete only when all of these deliverables are true at the same ti
 | Fresh clone/bootstrap hygiene | `npm run bootstrap:fresh-check` previously passed and is documented; baseline migration is tracked. | Complete |
 | Staging smoke command exists | `npm run test:staging` exists and fails fast without `STAGING_API_BASE_URL`; current audit run failed because staging env is not available. Script tests prove the expected smoke checklist, malformed sync-status failure, and missing-env behavior. Once configured, it must prove health, public search/course routes, admin/internal auth boundaries, and authenticated `/admin/sync/status` operator visibility. | Command complete; live proof missing |
 | Staging eval command exists | `npm run eval:staging` exists and fails fast without `EVAL_BASE_URL`; current audit run failed because staging env is not available. | Command complete; live proof missing |
-| Cloudflare final preflight | `npm run cloudflare:preflight` ran and failed 24/24 checks: no Wrangler auth, no `[env.staging]`, no staging env vars, no smoke artifact, no real HTTPS staging URL, no real-looking WAF/rate-limit evidence, no D1 backup location, and no D1 restore evidence. | Incomplete |
+| Cloudflare final preflight | `npm run cloudflare:preflight` ran and failed 27/27 checks: no Wrangler auth, no `[env.staging]`, no staging env vars, no smoke artifact, no real HTTPS staging URL, no real-looking WAF/rate-limit ID, no WAF/rate-limit route/action/threshold evidence, no D1 backup location, and no D1 restore evidence. | Incomplete |
 | Cloudflare credentials/secrets availability | `printenv` found no Cloudflare/staging env vars; `gh secret list` and `gh variable list` for `lumirth/uiuc-course-search` returned no entries; no Wrangler auth cache exists. | Incomplete |
 | Staging Worker/Pages/bindings/secrets | `apps/api/wrangler.toml` has production bindings only; no real `[env.staging]` resource IDs are present. | Incomplete |
 | Staging deploy/auth/search/course smoke | No staging URL or token env exists; `npm run test:staging` cannot run live. | Incomplete |
-| Public WAF/rate-limit verification | Runbook/checklists define required controls, but no Cloudflare rule ID or dashboard/API evidence exists. | Incomplete |
+| Public WAF/rate-limit verification | Runbook/checklists define required controls and the final preflight requires rule ID plus route/action/threshold evidence, but no Cloudflare rule ID or dashboard/API evidence exists. | Incomplete |
 | Remote D1 backup/restore proof | `d1:preflight` tooling exists, but no real `D1 Backup Ref`, `D1 Backup Location`, restore database, or `D1 Restore Verified: yes` evidence exists. | Incomplete |
 | Final report with staging URL/backup/residual risk | Stabilization report is accurate about local completion and Cloudflare blockers, but cannot include real staging URL, WAF rule ID, or D1 restore proof yet. | Incomplete |
 
@@ -68,6 +68,6 @@ Local stabilization, CI, Browser QA, test/eval/lint/build/security/bundle gates,
 - Configure and verify WAF or rate-limit controls for `GET /api/search*` and `GET /api/course/*`.
 - Export staging D1, restore to a non-production D1, verify restored schema/data, and run `npm run d1:preflight`.
 - Update `docs/reports/2026-06-01-stabilization-report.md` and deployment docs with real staging URL, rule ID, backup ref, restore database, and restore verification.
-- Run `npm run cloudflare:preflight` until all 24 checks pass.
+- Run `npm run cloudflare:preflight` until all 27 checks pass.
 
 Wrangler OAuth reached a GitHub permission grant for Cloudflare account access. Per Computer Use confirmation policy, the next UI click that grants persistent account/OAuth access requires explicit action-time user confirmation or user handoff.
