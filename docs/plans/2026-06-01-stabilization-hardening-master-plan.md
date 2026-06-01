@@ -497,79 +497,79 @@ Some verification may require native Mac UI or user-visible application state th
 
 ## Git And Review
 
-- [ ] Confirm work is on `main`.
-- [ ] Commit remediation checkpoint on `main`.
-- [ ] Confirm clean git status after commit.
-- [ ] Prepare review summary grouped by risk area.
+- [x] Confirm work is on `main`.
+- [x] Commit remediation checkpoint on `main`.
+- [x] Confirm clean git status after commit.
+- [x] Prepare review summary grouped by risk area.
 
 ## Local Quality Gates
 
-- [ ] `npm run typecheck` passes.
-- [ ] `npm test` passes.
-- [ ] `npm run build` passes.
-- [ ] `npm run lint` passes with zero warnings.
-- [ ] `npm run db:verify` passes.
-- [ ] `npm run eval:smoke` passes.
-- [ ] No active `.skip` tests remain.
+- [x] `npm run typecheck` passes.
+- [x] `npm test` passes.
+- [x] `npm run build` passes.
+- [x] `npm run lint` passes with zero warnings.
+- [x] `npm run db:verify` passes.
+- [x] `npm run eval:smoke` passes.
+- [x] No active `.skip` tests remain.
 
 ## Integration And Evals
 
-- [ ] Add hermetic API integration tests.
-- [ ] Add staging integration command.
-- [ ] Expand Query Language eval assertions.
-- [ ] Remove placeholder eval metadata.
-- [ ] Save eval report artifact in CI.
+- [x] Add hermetic API integration tests.
+- [x] Add staging integration command.
+- [x] Expand Query Language eval assertions.
+- [x] Remove placeholder eval metadata.
+- [x] Save eval report artifact in CI.
 
 ## Browser QA
 
-- [ ] Start local API and web servers.
-- [ ] Verify desktop search flow with Browser.
-- [ ] Verify mobile search flow with Browser.
-- [ ] Verify course detail and sections overflow with Browser.
-- [ ] Inspect browser console and network logs.
-- [ ] Save Browser screenshots or report evidence.
+- [x] Start local API and web servers.
+- [x] Verify desktop search flow with Browser.
+- [x] Verify mobile search flow with Browser.
+- [x] Verify course detail and sections overflow with Browser.
+- [x] Inspect browser console and network logs.
+- [x] Save Browser screenshots or report evidence.
 
 ## Staging And Cloudflare
 
-- [ ] Configure staging Worker and Pages targets.
-- [ ] Configure staging D1, KV, Vectorize, AI, and service bindings.
-- [ ] Configure `ADMIN_TOKEN`, `INTERNAL_TOKEN`, and `RMP_AUTH_TOKEN` for staging.
-- [ ] Deploy API and web to staging.
-- [ ] Run staging auth smoke tests.
-- [ ] Run staging search/course smoke tests.
-- [ ] Configure and verify public WAF/rate limits.
+- [ ] Blocked: configure staging Worker and Pages targets after Cloudflare auth exists in this checkout.
+- [ ] Blocked: configure staging D1, KV, Vectorize, AI, and service bindings after Cloudflare auth exists in this checkout.
+- [ ] Blocked: configure `ADMIN_TOKEN`, `INTERNAL_TOKEN`, and `RMP_AUTH_TOKEN` for staging after Cloudflare auth exists in this checkout.
+- [ ] Blocked: deploy API and web to staging after Cloudflare auth exists in this checkout.
+- [ ] Blocked: run staging auth smoke tests after staging deployment exists.
+- [ ] Blocked: run staging search/course smoke tests after staging deployment exists.
+- [ ] Blocked: configure and verify public WAF/rate limits after Cloudflare auth exists in this checkout.
 
 ## Data Safety
 
-- [ ] Create remote D1 backup/export.
-- [ ] Restore backup to non-production D1.
-- [ ] Verify restored schema and data.
-- [ ] Document backup and restore commands.
-- [ ] Add destructive-operation preflight.
+- [ ] Blocked: create remote D1 backup/export after Cloudflare auth exists in this checkout.
+- [ ] Blocked: restore backup to non-production D1 after Cloudflare auth exists in this checkout.
+- [ ] Blocked: verify restored schema and data after Cloudflare auth exists in this checkout.
+- [x] Document backup and restore commands.
+- [x] Add destructive-operation preflight.
 
 ## Product And Frontend
 
-- [ ] Implement or remove empty quadrant chart context.
-- [ ] Add result match evidence UI.
-- [ ] Add polished empty/error/loading states.
-- [ ] Pass accessibility checks.
-- [ ] Resolve build chunk warning or enforce explicit budget.
+- [x] Implement or remove empty quadrant chart context.
+- [x] Add result match evidence UI.
+- [x] Add polished empty/error/loading states.
+- [x] Pass accessibility checks.
+- [x] Resolve build chunk warning or enforce explicit budget.
 
 ## Security And Observability
 
-- [ ] Create route security matrix.
-- [ ] Add or update route auth tests.
-- [ ] Add secret scan.
-- [ ] Replace runtime ad hoc logs with structured redacted logging.
-- [ ] Add sync/enrichment/RMP health visibility.
+- [x] Create route security matrix.
+- [x] Add or update route auth tests.
+- [x] Add secret scan.
+- [x] Replace runtime ad hoc logs with structured redacted logging.
+- [x] Add sync/enrichment/RMP health visibility.
 
 ## Docs And Release
 
-- [ ] Update README.
-- [ ] Update deployment checklist with real staging evidence.
-- [ ] Add pre-alpha release checklist.
-- [ ] Add rollback checklist.
-- [ ] Add final stabilization report.
+- [x] Update README.
+- [ ] Blocked: update deployment checklist with real staging evidence after Cloudflare auth and staging deployment exist.
+- [x] Add pre-alpha release checklist.
+- [x] Add rollback checklist.
+- [x] Add final stabilization report.
 
 ---
 

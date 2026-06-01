@@ -13,6 +13,10 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `b1d94d0` - Harden Browser QA flows
 - `ae28d72` - Add search result evidence DTOs
 - `4a00fc8` - Enforce budgets security and structured logs
+- `fb12fe4` - Document stabilization operations and blockers
+- `2b2a0da` - Record external CI blocker
+- `dfa828e` - Harden scheduler reliability coverage
+- `6b597aa` - Verify fresh clone bootstrap
 
 ## Local Verification Evidence
 
@@ -37,7 +41,7 @@ Additional gate evidence:
 - `npm run security:secrets`: no committed secret-looking values found.
 - `npm run security:audit`: 0 vulnerabilities after upgrading Vite/Vitest/Wrangler transitive lockfile.
 - `npm run d1:preflight` tested successfully against a temporary evidence file.
-- `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`.
+- `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
 
 ## Browser QA Evidence
@@ -86,7 +90,7 @@ Browser-found fixes completed:
 | Performance/bundle budgets | Complete locally | Vite 8 build has no chunk warning; `bundle:budget` enforced in CI. |
 | Docs/release readiness | Complete locally | README, deployment checklist, Cloudflare runbook, security matrix, release checklist, rollback checklist updated. |
 | Security review | Complete locally | Route matrix added; auth tests pass; secret scan/audit pass. |
-| Data artifact/bootstrap hygiene | Complete locally | `.gitignore` protects artifacts; `npm run bootstrap:fresh-check` verifies fresh clone bootstrap without `history_chunks/` or `full_history.sql`; remediation report records whole-project backup. |
+| Data artifact/bootstrap hygiene | Complete locally | `.gitignore` protects generated artifacts while explicitly tracking the canonical baseline migration; `npm run bootstrap:fresh-check` verifies fresh clone bootstrap without `history_chunks/` or `full_history.sql`; remediation report records whole-project backup. |
 | Computer Use QA | Not needed | No native Mac UI task was required; Browser/terminal were stronger signals. |
 
 ## Cloudflare Auth Blocker
