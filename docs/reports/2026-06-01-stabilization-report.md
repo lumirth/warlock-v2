@@ -6,17 +6,21 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 
 ## Current Git Checkpoints
 
-- `428de48` - Complete pre-alpha remediation checkpoint
-- `627c133` - Harden local integration and remove dead chart
-- `da0b135` - Enforce zero-warning lint gate
-- `5cafd55` - Harden query eval gates
-- `b1d94d0` - Harden Browser QA flows
-- `ae28d72` - Add search result evidence DTOs
-- `4a00fc8` - Enforce budgets security and structured logs
-- `fb12fe4` - Document stabilization operations and blockers
-- `2b2a0da` - Record external CI blocker
-- `dfa828e` - Harden scheduler reliability coverage
-- `6b597aa` - Verify fresh clone bootstrap
+- `26c9dcc` - Complete pre-alpha remediation checkpoint
+- `418d23a` - Harden local integration and remove dead chart
+- `b14c129` - Enforce zero-warning lint gate
+- `d2d8752` - Harden query eval gates
+- `15b04f1` - Harden Browser QA flows
+- `553aa58` - Add search result evidence DTOs
+- `c69d2da` - Enforce budgets security and structured logs
+- `7eb6ffc` - Document stabilization operations and blockers
+- `f1045b3` - Record external CI blocker
+- `1048c67` - Harden scheduler reliability coverage
+- `789c413` - Verify fresh clone bootstrap
+- `fbd1ff2` - Update stabilization checklist evidence
+- `88b1fe8` - Cover D1 backup preflight
+
+The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
 ## Local Verification Evidence
 
@@ -75,7 +79,7 @@ Browser-found fixes completed:
 | Plan Area | Status | Evidence |
 | --- | --- | --- |
 | Git checkpoint and hygiene | Complete locally | Multiple coherent commits on `main`; clean status required before final. |
-| CI/lint/warning debt | Complete locally; GitHub run blocked by missing remote | `npm run lint` zero output; CI runs lint, bundle budget, secret scan, audit, eval. `git remote -v` produced no remote, and `gh repo view` returned no repo context. |
+| CI/lint/warning debt | Complete locally; GitHub run pending | `npm run lint` zero output; CI runs lint, bundle budget, secret scan, audit, eval. Private remote created at `https://github.com/lumirth/uiuc-course-search`; a follow-up push is required to record the live Actions result. |
 | Skipped/manual tests | Complete locally | Hermetic Worker search/course integration tests; no active `.skip`. |
 | Search contract/evals | Complete locally | `npm run eval:smoke` passes 58/58; staging eval command requires explicit URL. |
 | Search explainability/result shape | Complete locally | Shared `MatchEvidence`, `ResultWarning`, `SectionMatchDto`; API attaches evidence; web renders chips; tests cover categories. |
@@ -115,19 +119,16 @@ CF_ACCOUNT_ID=unset
 
 No secret values were exposed or committed.
 
-## GitHub CI Blocker
+## GitHub CI Evidence
 
-GitHub Actions is configured in `.github/workflows/ci.yml` to run the core checks, bundle budget, secret scan, dependency audit, and eval artifact upload. Passing CI on `main` could not be proven from this checkout because no Git remote is configured:
+GitHub Actions is configured in `.github/workflows/ci.yml` to run the core checks, bundle budget, secret scan, dependency audit, and eval artifact upload. The repository is private:
 
 ```bash
-git remote -v
-# no output
-
-gh repo view --json nameWithOwner,url
-# no repository context
+gh repo view --json nameWithOwner,url,visibility,defaultBranchRef
+# lumirth/uiuc-course-search, PRIVATE, default branch main
 ```
 
-No push or PR could be made without a repository remote.
+The first push to the new remote was rejected because old generated artifacts were still reachable in history. After verifying the local backup bundle, history was rewritten to purge those generated payloads and `main` was pushed successfully. A live Actions result must be appended after the next CI run completes.
 
 ## Next Auth-Dependent Commands
 
