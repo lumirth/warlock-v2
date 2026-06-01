@@ -1,6 +1,6 @@
 # Completion Audit
 
-Date: 2026-06-01T17:59:16Z
+Date: 2026-06-01T18:36:26Z
 
 Scope: audit the active stabilization goal against the actual `main` checkout, local command output, GitHub CI, and committed evidence.
 
@@ -23,12 +23,12 @@ The goal is complete only when all of these deliverables are true at the same ti
 
 | Requirement | Evidence Inspected | Status |
 | --- | --- | --- |
-| Work directly on `main` | `git status --short --branch` showed `## main...origin/main`; `git log -1` is `de30d20 Record latest stabilization evidence`. | Complete |
+| Work directly on `main` | `git status --short --branch` showed `## main...origin/main`; `git log -1` is `e0560e0 Require Pages staging evidence`. | Complete |
 | No side branches/worktrees | Found stale `.worktrees/smart-search` on `feature/smart-hybrid-search` with staged `historical-data.sql`; backed it up, removed the worktree, deleted the branch, and verified `git worktree list --porcelain` only lists `/Users/lu/uiuc-course-search` on `main`. | Complete after audit cleanup |
 | Rollback backup before destructive local cleanup | Created and verified `artifacts/backups/feature-smart-hybrid-search-20260601T175844Z.bundle`; created `artifacts/backups/side-worktree-smart-search-20260601T175844Z.tgz` preserving the dirty worktree contents. | Complete |
-| GitHub CI on `main` | `gh run view 26772167161` reports `conclusion: success`, `headSha: de30d2044eb97aaf8dd6b347c56c0185ff9b1ac2`; every configured CI step succeeded. | Complete |
+| GitHub CI on `main` | `gh run view 26774074170` reports `conclusion: success`, `headSha: e0560e064cc33f265eabc8e6f0c01e1527b2b64c`; every configured CI step succeeded. | Complete |
 | Root typecheck | `npm run typecheck` exited 0. | Complete |
-| Root tests | `npm test` exited 0: API 33 files / 253 tests, web 4 files / 9 tests, query-types pass-with-no-tests, scripts 3 files / 18 tests. | Complete |
+| Root tests | `npm test` exited 0: API 33 files / 253 tests, web 4 files / 9 tests, query-types pass-with-no-tests, scripts 4 files / 23 tests. | Complete |
 | Root build | `npm run build` exited 0; Vite built web assets without warnings. | Complete |
 | Zero-warning lint | `npm run lint` exited 0 with no output; `eslint.config.mjs` sets `@typescript-eslint/no-explicit-any` to `error`. | Complete |
 | DB bootstrap | `npm run db:verify` exited 0: `Schema bootstrap verified: 0001_initial_schema`. | Complete |
