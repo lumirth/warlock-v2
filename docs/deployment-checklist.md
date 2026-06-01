@@ -7,7 +7,7 @@ This project is pre-alpha, so deployment should stay small and explicit. Do not 
 - Public: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`.
 - Admin: `/admin/*`. Requires `Authorization: Bearer $ADMIN_TOKEN`.
 - Internal: `/internal/*`. Requires `Authorization: Bearer $INTERNAL_TOKEN`.
-- Dev diagnostics: `/admin/debug/*`. Requires admin auth and must not include arbitrary URL fetch tools.
+- Admin diagnostics: `/admin/debug/subjects/:year/:term`. Requires admin auth and must not include arbitrary URL fetch tools or raw database dumps.
 
 ## Required Secrets
 

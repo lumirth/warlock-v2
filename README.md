@@ -24,7 +24,7 @@ Default `npm run build` is deterministic and does not regenerate subject data or
 - Public: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`
 - Admin: `/admin/*`, protected by `Authorization: Bearer $ADMIN_TOKEN`
 - Internal service fan-out: `/internal/*`, protected by `Authorization: Bearer $INTERNAL_TOKEN`
-- Admin diagnostics: `/admin/debug/*`, admin-protected and limited to fixed diagnostics
+- Admin diagnostics: `/admin/debug/subjects/:year/:term`, admin-protected and limited to a fixed CISAPI subject-list diagnostic
 
 ## Database
 
