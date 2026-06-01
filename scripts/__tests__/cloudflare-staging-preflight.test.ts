@@ -13,7 +13,7 @@ name = "uiuc-course-search-staging"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "course-search-db-staging"
-database_id = "11111111-2222-3333-4444-555555555555"
+database_id = "3f1e2d4c-5b6a-4789-9abc-def012345678"
 
 [[env.staging.kv_namespaces]]
 binding = "GPA_CACHE"
@@ -41,6 +41,16 @@ describe('Cloudflare staging preflight', () => {
     const results = checkStagingConfigText('name = "uiuc-course-search"');
     expect(results.some(result => !result.ok)).toBe(true);
     expect(results.find(result => result.name === 'wrangler env.staging block')?.ok).toBe(false);
+  });
+
+  it('rejects placeholder-looking staging resource ids', () => {
+    const fakeConfig = VALID_STAGING_CONFIG
+      .replace('3f1e2d4c-5b6a-4789-9abc-def012345678', '11111111-1111-1111-1111-111111111111')
+      .replace('abcdefabcdefabcdefabcdefabcdefab', 'replace-with-staging-kv-id');
+
+    const results = checkStagingConfigText(fakeConfig);
+    expect(results.find(result => result.name === 'staging D1 id')?.ok).toBe(false);
+    expect(results.find(result => result.name === 'staging KV id')?.ok).toBe(false);
   });
 
   it('requires all staging smoke checks to pass', () => {

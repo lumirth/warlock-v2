@@ -96,4 +96,4 @@ After staging smoke, staging eval, WAF/rate-limit configuration, and D1 restore 
 npm run cloudflare:preflight
 ```
 
-This gate verifies Wrangler auth, explicit `env.staging` bindings, required staging environment variable names, `artifacts/staging-smoke-results.json`, non-placeholder staging URL evidence, WAF/rate-limit rule IDs, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.
+This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, `artifacts/staging-smoke-results.json`, non-placeholder staging URL evidence, WAF/rate-limit rule IDs, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.

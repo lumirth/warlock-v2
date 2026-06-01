@@ -46,6 +46,51 @@ function has(text: string, pattern: RegExp): boolean {
   return pattern.test(text);
 }
 
+function blockFor(text: string, header: string): string {
+  const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`^${escaped}\\s*$`, 'm').exec(text);
+  if (!match) return '';
+  const start = match.index;
+  const rest = text.slice(start + match[0].length);
+  const nextHeader = /^\s*\[/.exec(rest);
+  return nextHeader ? text.slice(start, start + match[0].length + nextHeader.index) : text.slice(start);
+}
+
+function stringValue(block: string, key: string): string | null {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped}\\s*=\\s*"([^"]+)"`, 'm').exec(block)?.[1] ?? null;
+}
+
+function isPlaceholder(value: string | null): boolean {
+  if (!value) return true;
+  const normalized = value.toLowerCase();
+  return normalized.includes('placeholder')
+    || normalized.includes('replace')
+    || normalized.includes('example')
+    || normalized.includes('changeme')
+    || normalized.includes('<')
+    || normalized.includes('>');
+}
+
+function hasRepeatedCharacterOnly(value: string): boolean {
+  const stripped = value.replace(/-/g, '');
+  return stripped.length > 0 && stripped.split('').every(char => char === stripped[0]);
+}
+
+function isRealUuid(value: string | null): boolean {
+  return Boolean(value)
+    && !isPlaceholder(value)
+    && !hasRepeatedCharacterOnly(value!)
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value!);
+}
+
+function isRealHexId(value: string | null): boolean {
+  return Boolean(value)
+    && !isPlaceholder(value)
+    && !hasRepeatedCharacterOnly(value!)
+    && /^[0-9a-f]{32}$/i.test(value!);
+}
+
 function stripAnsi(text: string): string {
   return text
     .split(String.fromCharCode(27))
@@ -86,17 +131,25 @@ export function checkWranglerAuth(apiDir: string = DEFAULT_API_DIR): CheckResult
 }
 
 export function checkStagingConfigText(text: string): CheckResult[] {
+  const stagingBlock = blockFor(text, '[env.staging]');
+  const d1Block = blockFor(text, '[[env.staging.d1_databases]]');
+  const kvBlock = blockFor(text, '[[env.staging.kv_namespaces]]');
+  const vectorizeBlock = blockFor(text, '[[env.staging.vectorize]]');
+  const serviceBlock = blockFor(text, '[[env.staging.services]]');
+
   return [
-    result('wrangler env.staging block', has(text, /^\[env\.staging\]/m), 'requires [env.staging]'),
-    result('staging worker name', has(text, /^\[env\.staging\][\s\S]*?name\s*=\s*"uiuc-course-search-staging"/m), 'requires uiuc-course-search-staging'),
-    result('staging D1 binding', has(text, /^\[\[env\.staging\.d1_databases\]\]/m), 'requires env.staging.d1_databases'),
-    result('staging D1 database', has(text, /^\[\[env\.staging\.d1_databases\]\][\s\S]*?database_name\s*=\s*"course-search-db-staging"/m), 'requires course-search-db-staging'),
-    result('staging D1 id', has(text, /^\[\[env\.staging\.d1_databases\]\][\s\S]*?database_id\s*=\s*"[0-9a-f-]{16,}"/m), 'requires real non-secret D1 id'),
-    result('staging KV binding', has(text, /^\[\[env\.staging\.kv_namespaces\]\]/m), 'requires env.staging.kv_namespaces'),
-    result('staging Vectorize binding', has(text, /^\[\[env\.staging\.vectorize\]\]/m), 'requires env.staging.vectorize'),
-    result('staging Vectorize index', has(text, /^\[\[env\.staging\.vectorize\]\][\s\S]*?index_name\s*=\s*"course-embeddings-staging"/m), 'requires course-embeddings-staging'),
+    result('wrangler env.staging block', stagingBlock.length > 0, 'requires [env.staging]'),
+    result('staging worker name', stringValue(stagingBlock, 'name') === 'uiuc-course-search-staging', 'requires uiuc-course-search-staging'),
+    result('staging D1 binding', d1Block.length > 0, 'requires env.staging.d1_databases'),
+    result('staging D1 database', stringValue(d1Block, 'database_name') === 'course-search-db-staging', 'requires course-search-db-staging'),
+    result('staging D1 id', isRealUuid(stringValue(d1Block, 'database_id')), 'requires real non-secret D1 id'),
+    result('staging KV binding', kvBlock.length > 0, 'requires env.staging.kv_namespaces'),
+    result('staging KV id', isRealHexId(stringValue(kvBlock, 'id')), 'requires real non-secret KV namespace id'),
+    result('staging Vectorize binding', vectorizeBlock.length > 0, 'requires env.staging.vectorize'),
+    result('staging Vectorize index', stringValue(vectorizeBlock, 'index_name') === 'course-embeddings-staging', 'requires course-embeddings-staging'),
     result('staging AI binding', has(text, /^\[env\.staging\.ai\]/m), 'requires env.staging.ai'),
-    result('staging SELF service binding', has(text, /^\[\[env\.staging\.services\]\]/m), 'requires env.staging.services'),
+    result('staging SELF service binding', serviceBlock.length > 0, 'requires env.staging.services'),
+    result('staging SELF service name', stringValue(serviceBlock, 'service') === 'uiuc-course-search-staging', 'requires staging SELF service target'),
   ];
 }
 

@@ -130,7 +130,7 @@ Current Cloudflare evidence gate:
 
 ```bash
 npm run cloudflare:preflight
-# 21 checks, 0 passing, 21 failing
+# 23 checks, 0 passing, 23 failing
 # Missing: Wrangler auth, env.staging bindings, staging env vars, staging smoke artifact,
 # staging URL evidence, WAF/rate-limit rule ID evidence, and D1 restore evidence.
 ```
