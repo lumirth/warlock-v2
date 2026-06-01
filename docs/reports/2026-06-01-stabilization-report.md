@@ -27,6 +27,7 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `2eacee9` - Tighten Cloudflare preflight resource checks
 - `de30d20` - Record latest stabilization evidence
 - `6bc3ac4` - Audit stabilization completion state
+- `6fa22e4` - Tighten Cloudflare evidence gate
 
 The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
@@ -58,6 +59,7 @@ Additional gate evidence:
 - `npm run cloudflare:preflight` is now the executable final gate for Cloudflare staging evidence. It currently fails as expected because Wrangler auth, explicit staging bindings, staging smoke artifacts, WAF/rate-limit rule IDs, and D1 restore markers are not present yet.
 - After adding the Cloudflare preflight gate, `npm run typecheck:scripts`, `npm run test:scripts`, and `npm run lint` passed. The gate now rejects example-like staging URLs, toy WAF/rate-limit rule IDs, missing backup-location markers, and placeholder resource IDs.
 - After tightening Cloudflare report-evidence validation, `npm run typecheck:scripts` and `npm run test:scripts` passed; `npm run cloudflare:preflight` reports 24 checks, 0 passing, and 24 failing because no real Cloudflare staging evidence exists in this checkout.
+- Staging smoke now requires `/admin/sync/status` to accept the staging admin token and return sync/term health arrays, so live staging must prove operator visibility as well as admin/internal auth.
 - Completion audit refresh on 2026-06-01T17:59:16Z reran `npm run typecheck`, `npm test`, `npm run build`, `npm run lint`, `npm run db:verify`, `npm run eval:smoke`, `npm run bundle:budget`, `npm run security:secrets`, and `npm run security:audit`; all passed. `npm run test:staging`, `npm run eval:staging`, and `npm run cloudflare:preflight` failed only because Cloudflare staging/auth evidence is absent.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.

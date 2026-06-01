@@ -33,6 +33,7 @@ const REQUIRED_SMOKE_CHECKS = [
   'course public route',
   'admin rejects missing token',
   'admin accepts staging token',
+  'admin sync status accepts staging token',
   'internal rejects missing token',
   'internal accepts staging token',
 ];

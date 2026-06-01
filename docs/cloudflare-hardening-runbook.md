@@ -69,10 +69,11 @@ Non-destructive smoke:
 curl -i "https://<staging-worker-host>/api/search?q=CS%20225"
 curl -i "https://<staging-worker-host>/api/course/CS/225?term=spring&year=2026"
 curl -i "https://<staging-worker-host>/admin/terms"
+curl -i "https://<staging-worker-host>/admin/sync/status"
 curl -i "https://<staging-worker-host>/internal/sync-batch"
 ```
 
-Expected: public read routes return `200`, unauthenticated admin/internal routes return `401`.
+Expected: public read routes return `200`, unauthenticated admin/internal routes return `401`, and authenticated `npm run test:staging` proves `/admin/sync/status` returns sync and term health arrays.
 
 ## D1 Backup And Restore Test
 

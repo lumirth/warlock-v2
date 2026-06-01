@@ -60,6 +60,13 @@ function hasArray(body: JsonRecord | null, key: string): boolean {
   return Array.isArray(body?.[key]);
 }
 
+function hasSyncStatusBody(body: JsonRecord | null): boolean {
+  return hasArray(body, 'syncStates')
+    && hasArray(body, 'termStates')
+    && hasArray(body, 'unhealthySyncStates')
+    && hasArray(body, 'runningSyncStates');
+}
+
 function formatReport(results: SmokeResult[]): string {
   const failed = results.filter(result => !result.ok);
   const lines = [
@@ -134,6 +141,18 @@ async function main(): Promise<void> {
       headers: { Authorization: `Bearer ${adminToken}` },
     }),
     (response) => response.status === 200 ? null : `expected 200, got ${response.status}`
+  ));
+
+  results.push(await check(
+    'admin sync status accepts staging token',
+    new Request(endpoint(baseUrl, 'admin/sync/status'), {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    }),
+    (response, body) => {
+      if (response.status !== 200) return `expected 200, got ${response.status}`;
+      if (!hasSyncStatusBody(body)) return 'expected sync status arrays';
+      return null;
+    }
   ));
 
   results.push(await check(
