@@ -69,7 +69,7 @@ Browser-found fixes completed:
 | Plan Area | Status | Evidence |
 | --- | --- | --- |
 | Git checkpoint and hygiene | Complete locally | Multiple coherent commits on `main`; clean status required before final. |
-| CI/lint/warning debt | Complete locally | `npm run lint` zero output; CI runs lint, bundle budget, secret scan, audit, eval. |
+| CI/lint/warning debt | Complete locally; GitHub run blocked by missing remote | `npm run lint` zero output; CI runs lint, bundle budget, secret scan, audit, eval. `git remote -v` produced no remote, and `gh repo view` returned no repo context. |
 | Skipped/manual tests | Complete locally | Hermetic Worker search/course integration tests; no active `.skip`. |
 | Search contract/evals | Complete locally | `npm run eval:smoke` passes 58/58; staging eval command requires explicit URL. |
 | Search explainability/result shape | Complete locally | Shared `MatchEvidence`, `ResultWarning`, `SectionMatchDto`; API attaches evidence; web renders chips; tests cover categories. |
@@ -108,6 +108,20 @@ CF_ACCOUNT_ID=unset
 ```
 
 No secret values were exposed or committed.
+
+## GitHub CI Blocker
+
+GitHub Actions is configured in `.github/workflows/ci.yml` to run the core checks, bundle budget, secret scan, dependency audit, and eval artifact upload. Passing CI on `main` could not be proven from this checkout because no Git remote is configured:
+
+```bash
+git remote -v
+# no output
+
+gh repo view --json nameWithOwner,url
+# no repository context
+```
+
+No push or PR could be made without a repository remote.
 
 ## Next Auth-Dependent Commands
 
