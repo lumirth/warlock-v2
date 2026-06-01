@@ -22,6 +22,7 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `574543e` - Record GitHub CI remote setup
 - `f6e95da` - Opt CI actions into Node 24
 - `1558d72` - Update CI actions for Node 24
+- `e35da43` - Record passing GitHub CI evidence
 
 The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
@@ -82,7 +83,7 @@ Browser-found fixes completed:
 | Plan Area | Status | Evidence |
 | --- | --- | --- |
 | Git checkpoint and hygiene | Complete locally | Multiple coherent commits on `main`; clean status required before final. |
-| CI/lint/warning debt | Complete | `npm run lint` zero output; private GitHub CI passes on `main` for `1558d72`; CI runs typecheck, schema verification, tests, build, bundle budget, lint, secret scan, audit, eval, and eval artifact upload. |
+| CI/lint/warning debt | Complete | `npm run lint` zero output; private GitHub CI passes on `main` for `e35da43`; CI runs typecheck, schema verification, tests, build, bundle budget, lint, secret scan, audit, eval, and eval artifact upload. |
 | Skipped/manual tests | Complete locally | Hermetic Worker search/course integration tests; no active `.skip`. |
 | Search contract/evals | Complete locally | `npm run eval:smoke` passes 58/58; staging eval command requires explicit URL. |
 | Search explainability/result shape | Complete locally | Shared `MatchEvidence`, `ResultWarning`, `SectionMatchDto`; API attaches evidence; web renders chips; tests cover categories. |
@@ -122,6 +123,8 @@ CF_ACCOUNT_ID=unset
 
 No secret values were exposed or committed.
 
+Wrangler OAuth was attempted with `npx wrangler login --browser=false`. The flow reached a GitHub permission grant asking to authorize Cloudflare to read the `lumirth` account's email address and redirect to `https://oidc.iam.cfapi.net`. That account-permission grant requires user action, so the local OAuth listener was stopped and no Cloudflare token was created or committed.
+
 ## GitHub CI Evidence
 
 GitHub Actions is configured in `.github/workflows/ci.yml` to run the core checks, bundle budget, secret scan, dependency audit, and eval artifact upload. The repository is private:
@@ -133,13 +136,13 @@ gh repo view --json nameWithOwner,url,visibility,defaultBranchRef
 
 The first push to the new remote was rejected because old generated artifacts were still reachable in history. After verifying the local backup bundle, history was rewritten to purge those generated payloads and `main` was pushed successfully.
 
-Latest observed passing run:
+Observed passing runs:
 
 ```bash
-gh run view 26770789698 --json conclusion,status,url,headSha,createdAt,updatedAt,name,event,jobs
+gh run view 26770916794 --json conclusion,status,url,headSha,createdAt,updatedAt,name,event,jobs
 # conclusion: success
-# headSha: 1558d728771c2db9d0916c13dc84a81d9a3d840a
-# url: https://github.com/lumirth/uiuc-course-search/actions/runs/26770789698
+# headSha: e35da430a43005014d9b11194a8efe5dc0d1bcf1
+# url: https://github.com/lumirth/uiuc-course-search/actions/runs/26770916794
 ```
 
 The run completed every configured step successfully: install, typecheck, schema verification, tests, build, bundle budget, lint, secret scan, dependency audit, search smoke eval, and eval report artifact upload.
