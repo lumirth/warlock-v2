@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaxonomyCache, loadTaxonomyCache } from '../taxonomy-cache.js';
+import type { D1Database } from '@cloudflare/workers-types';
 
 const mockDb = {
   prepare: vi.fn(() => ({
@@ -33,7 +34,7 @@ describe('TaxonomyCache', () => {
           .mockResolvedValueOnce(mockTopicAliases)
       });
 
-      const cache = await loadTaxonomyCache(mockDb as any);
+      const cache = await loadTaxonomyCache(mockDb as unknown as D1Database);
 
       expect(cache.subjects.byCode.get('CS')).toEqual({ id: 'CS', name: 'Computer Science' });
       expect(cache.subjects.byAlias.get('computer science')).toBe('CS');
@@ -54,7 +55,7 @@ describe('TaxonomyCache', () => {
           .mockResolvedValueOnce(mockTopicAliases)
       });
 
-      const cache = await loadTaxonomyCache(mockDb as any);
+      const cache = await loadTaxonomyCache(mockDb as unknown as D1Database);
 
       expect(cache.subjects.byAlias.get('comp sci')).toBe('CS');
     });
@@ -75,7 +76,7 @@ describe('TaxonomyCache', () => {
           .mockResolvedValueOnce(mockTopicAliases)
       });
 
-      const cache = await loadTaxonomyCache(mockDb as any);
+      const cache = await loadTaxonomyCache(mockDb as unknown as D1Database);
 
       expect(cache.resolveSubject('CS')).toBe('CS');
       expect(cache.resolveSubject('cs')).toBe('CS');
@@ -95,7 +96,7 @@ describe('TaxonomyCache', () => {
           .mockResolvedValueOnce(mockTopicAliases)
       });
 
-      const cache = await loadTaxonomyCache(mockDb as any);
+      const cache = await loadTaxonomyCache(mockDb as unknown as D1Database);
 
       expect(cache.resolveSubject('computer science')).toBe('CS');
     });
@@ -114,7 +115,7 @@ describe('TaxonomyCache', () => {
           .mockResolvedValueOnce(mockTopicAliases)
       });
 
-      const cache = await loadTaxonomyCache(mockDb as any);
+      const cache = await loadTaxonomyCache(mockDb as unknown as D1Database);
 
       expect(cache.resolveSubject('xyz')).toBeNull();
     });
@@ -135,7 +136,7 @@ describe('TaxonomyCache', () => {
           .mockResolvedValueOnce(mockTopicAliases)
       });
 
-      const cache = await loadTaxonomyCache(mockDb as any);
+      const cache = await loadTaxonomyCache(mockDb as unknown as D1Database);
       expect(cache.resolveGened('humanities')).toBe('HUM');
       expect(cache.resolveGened('HUM')).toBe('HUM');
     });
@@ -156,7 +157,7 @@ describe('TaxonomyCache', () => {
           .mockResolvedValueOnce(mockTopicAliases)
       });
 
-      const cache = await loadTaxonomyCache(mockDb as any);
+      const cache = await loadTaxonomyCache(mockDb as unknown as D1Database);
       expect(cache.expandTopic('ml')).toBe('machine learning');
       expect(cache.expandTopic('ML')).toBe('machine learning');
     });
@@ -185,7 +186,7 @@ describe('TaxonomyCache', () => {
           .mockResolvedValueOnce(mockTopicAliases)
       });
 
-      cache = await loadTaxonomyCache(mockDb as any);
+      cache = await loadTaxonomyCache(mockDb as unknown as D1Database);
     });
 
     it('finds longest matching alias first', () => {

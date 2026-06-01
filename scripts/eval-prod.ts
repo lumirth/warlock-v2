@@ -3,6 +3,22 @@ import { fetch } from 'undici';
 
 const BASE_URL = 'https://uiuc-course-search.lumirth.workers.dev/api/search';
 
+interface SearchApiResult {
+  subject?: string;
+  number?: string;
+  title?: string;
+}
+
+interface SearchApiResponse {
+  results?: SearchApiResult[];
+  meta?: {
+    plan?: {
+      filters?: unknown;
+      semanticQuery?: string;
+    };
+  };
+}
+
 const categories = [
   {
     name: "1) I know what course I want",
@@ -129,10 +145,10 @@ async function run() {
         const start = Date.now();
         const url = `${BASE_URL}?q=${encodeURIComponent(query)}`;
         const res = await fetch(url);
-        const json = await res.json() as any;
+        const json = await res.json() as SearchApiResponse;
         const duration = Date.now() - start;
 
-        const results = json.results || [];
+        const results = Array.isArray(json.results) ? json.results : [];
         const topResult = results[0] ? `${results[0].subject} ${results[0].number}: ${results[0].title}` : 'NO RESULTS';
         const plan = json.meta?.plan || {};
         const filters = JSON.stringify(plan.filters || {});

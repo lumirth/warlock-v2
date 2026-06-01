@@ -70,14 +70,14 @@ export async function searchCourses(
 ): Promise<{ id: string; score: number }[]> {
   const queryEmbedding = await generateEmbedding(ai, query);
 
-  const vectorizeOptions: any = {
+  const vectorizeOptions: VectorizeQueryOptions = {
     topK,
     returnMetadata: 'none'
   };
 
   // Apply metadata filters if supported
   if (filters) {
-    const filterConditions: Record<string, any> = {};
+    const filterConditions: VectorizeVectorMetadataFilter = {};
 
     if (filters.subject) {
       filterConditions.subject = filters.subject;

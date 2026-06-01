@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { D1Database, VectorizeIndex, Ai, Fetcher } from '@cloudflare/workers-types';
+import type { D1Database, VectorizeIndex, Ai, Fetcher, KVNamespace } from '@cloudflare/workers-types';
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
@@ -116,7 +116,7 @@ syncRoutes.post('/admin/enrich-gpa', async (c) => {
 // Admin trigger: Reset GPA Sync Cursor
 syncRoutes.post('/admin/reset-gpa-sync', async (c) => {
   try {
-    await resetGpaSync(c.env.DB, c.env.GPA_CACHE as any);
+    await resetGpaSync(c.env.DB, c.env.GPA_CACHE);
     return c.json({ message: 'GPA sync cursor reset to 0.' });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
@@ -126,7 +126,7 @@ syncRoutes.post('/admin/reset-gpa-sync', async (c) => {
 // Admin trigger: Resume GPA Sync (Process next chunk)
 syncRoutes.post('/admin/sync-gpa', async (c) => {
   try {
-    const result = await resumeGpaSync(c.env.DB, c.env.GPA_CACHE as any);
+    const result = await resumeGpaSync(c.env.DB, c.env.GPA_CACHE);
     return c.json(result);
   } catch (error) {
     return c.json({ error: String(error) }, 500);

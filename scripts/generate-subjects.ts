@@ -27,7 +27,7 @@ const CONFIG = {
 interface D1Result {
   results: { id: string }[];
   success: boolean;
-  meta: any;
+  meta: unknown;
 }
 
 function fetchSubjectsFromD1(): string[] {

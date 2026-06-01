@@ -151,7 +151,7 @@ async function updateEnrichmentState(
  * Batch Worker: Processes a subset of instructor-course contexts.
  */
 export async function processEnrichmentBatch(db: D1Database, tasks: EnrichmentTask[]): Promise<number> {
-  const statements: any[] = [];
+  const statements: D1PreparedStatement[] = [];
   let resolvedCount = 0;
 
   for (const task of tasks) {

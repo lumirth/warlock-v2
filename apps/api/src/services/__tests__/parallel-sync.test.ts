@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { syncSubjects } from '../parallel-sync.js';
+import type { D1Database } from '@cloudflare/workers-types';
 
 describe('syncSubjects', () => {
   it('skips a subject when a fresh running sync lock already exists', async () => {
@@ -15,7 +16,7 @@ describe('syncSubjects', () => {
     };
 
     const result = await syncSubjects(
-      db as any,
+      db as unknown as D1Database,
       { cisapiBase: 'https://example.invalid', concurrency: 1 },
       2026,
       'spring',

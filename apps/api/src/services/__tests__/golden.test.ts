@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { parseQuery } from '../query-parser.js';
 import { extract } from '../extractor.js';
 import goldenQueries from './golden-queries.json';
+import type { SearchFilters } from '@uiuc-course-search/query-types';
 
 interface GoldenTestCase {
   input: string;
   expected: {
-    hints: Array<{ type: string; value?: any }>;
-    filters: Record<string, any>;
+    hints: Array<{ type: string; value?: string | number | boolean | Record<string, unknown> }>;
+    filters: Partial<SearchFilters>;
     residual: string;
   };
   note?: string;

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { coordinateRmpSync } from '../rmp-sync.js';
+import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 
 type SyncStateRow = {
   last_sync: number | null;
@@ -64,7 +65,10 @@ describe('coordinateRmpSync', () => {
     const { db } = createDb();
     const selfBinding = { fetch: vi.fn() };
 
-    await expect(coordinateRmpSync(db as any, selfBinding as any)).rejects.toThrow('RMP_AUTH_TOKEN');
+    await expect(coordinateRmpSync(
+      db as unknown as D1Database,
+      selfBinding as unknown as Fetcher
+    )).rejects.toThrow('RMP_AUTH_TOKEN');
     expect(selfBinding.fetch).not.toHaveBeenCalled();
   });
 
@@ -73,7 +77,7 @@ describe('coordinateRmpSync', () => {
     const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 202 })) };
     mockRmpResponse('cursor-1');
 
-    const result = await coordinateRmpSync(db as any, selfBinding as any, {
+    const result = await coordinateRmpSync(db as unknown as D1Database, selfBinding as unknown as Fetcher, {
       rmpAuthToken: 'Basic public-token',
       internalToken: 'internal-token',
     });
@@ -107,7 +111,7 @@ describe('coordinateRmpSync', () => {
     const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 202 })) };
     mockRmpResponse('new-cursor');
 
-    const result = await coordinateRmpSync(db as any, selfBinding as any, {
+    const result = await coordinateRmpSync(db as unknown as D1Database, selfBinding as unknown as Fetcher, {
       rmpAuthToken: 'Basic public-token',
     });
 

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { resolveQuery } from '../query-resolver.js';
 import type { ExtractedQuery } from '@uiuc-course-search/query-types';
+import type { D1Database } from '@cloudflare/workers-types';
 
 const mockDb = {
-  prepare: vi.fn(() => ({
+  prepare: vi.fn<(sql: string) => unknown>(() => ({
     bind: vi.fn(() => ({
       first: vi.fn(),
       all: vi.fn()
@@ -23,7 +24,7 @@ describe('resolveQuery', () => {
         first: vi.fn().mockResolvedValue({ id: 'CS', name: 'Computer Science' }),
         all: vi.fn().mockResolvedValue({ results: [] })
       };
-      (mockDb.prepare as any).mockReturnValue(mockStmt);
+      mockDb.prepare.mockReturnValue(mockStmt);
 
       const extracted: ExtractedQuery = {
         rawQuery: 'CS 225',
@@ -36,7 +37,7 @@ describe('resolveQuery', () => {
         residual: ''
       };
 
-      const plan = await resolveQuery(mockDb as any, extracted);
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
 
       expect(plan.filters.subject).toBe('CS');
       expect(plan.filters.number).toBe('225');
@@ -48,7 +49,7 @@ describe('resolveQuery', () => {
         first: vi.fn().mockResolvedValue(null),
         all: vi.fn().mockResolvedValue({ results: [] })
       };
-      (mockDb.prepare as any).mockReturnValue(mockStmt);
+      mockDb.prepare.mockReturnValue(mockStmt);
 
       const extracted: ExtractedQuery = {
         rawQuery: 'XYZ 999',
@@ -61,7 +62,7 @@ describe('resolveQuery', () => {
         residual: ''
       };
 
-      const plan = await resolveQuery(mockDb as any, extracted);
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
 
       // Should NOT set filters if subject invalid
       expect(plan.filters.subject).toBeUndefined();
@@ -78,7 +79,7 @@ describe('resolveQuery', () => {
         all: vi.fn().mockResolvedValue({ results: [{ id: 123, match_score: 0.9 }] }),
         first: vi.fn()
       };
-      (mockDb.prepare as any).mockReturnValue(mockStmt);
+      mockDb.prepare.mockReturnValue(mockStmt);
 
       const extracted: ExtractedQuery = {
         rawQuery: 'cs 225 by fagen',
@@ -86,7 +87,7 @@ describe('resolveQuery', () => {
         residual: 'cs 225'
       };
 
-      const plan = await resolveQuery(mockDb as any, extracted);
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
       expect(plan.filters.instructor_ids).toEqual([123]);
       expect(plan.semanticQuery).toBe('cs 225');
     });
@@ -99,7 +100,7 @@ describe('resolveQuery', () => {
         first: vi.fn(),
         all: vi.fn().mockResolvedValue({ results: [] })
       };
-      (mockDb.prepare as any).mockReturnValue(mockStmt);
+      mockDb.prepare.mockReturnValue(mockStmt);
 
       const extracted: ExtractedQuery = {
         rawQuery: 'easy humanities gened',
@@ -107,7 +108,7 @@ describe('resolveQuery', () => {
         residual: 'easy'
       };
 
-      const plan = await resolveQuery(mockDb as any, extracted);
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
       // For now, we expect it to map 'humanities' to a known code or keep it
       expect(plan.filters.gened_code).toBeDefined();
       expect(plan.semanticQuery).toBe('easy');
@@ -121,7 +122,7 @@ describe('resolveQuery', () => {
         first: vi.fn(),
         all: vi.fn().mockResolvedValue({ results: [] })
       };
-      (mockDb.prepare as any).mockReturnValue(mockStmt);
+      mockDb.prepare.mockReturnValue(mockStmt);
 
       const extracted: ExtractedQuery = {
         rawQuery: '12345',
@@ -129,7 +130,7 @@ describe('resolveQuery', () => {
         residual: ''
       };
 
-      const plan = await resolveQuery(mockDb as any, extracted);
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
       expect(plan.filters.crn).toBe('12345');
     });
   });
@@ -142,7 +143,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: 'MWF classes',
@@ -150,7 +151,7 @@ describe('resolveQuery', () => {
           residual: 'classes'
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.days).toBe('MWF');
       });
     });
@@ -162,7 +163,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: 'morning classes',
@@ -170,7 +171,7 @@ describe('resolveQuery', () => {
           residual: 'classes'
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.time).toBe('morning');
       });
     });
@@ -182,7 +183,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: '400 level',
@@ -190,7 +191,7 @@ describe('resolveQuery', () => {
           residual: ''
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.level).toBe(400);
       });
     });
@@ -202,7 +203,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: '3 credits',
@@ -210,7 +211,7 @@ describe('resolveQuery', () => {
           residual: ''
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.credits).toBe(3);
       });
     });
@@ -222,7 +223,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: 'online class',
@@ -230,7 +231,7 @@ describe('resolveQuery', () => {
           residual: 'class'
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.online).toBe(true);
       });
 
@@ -240,7 +241,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: 'in person class',
@@ -248,7 +249,7 @@ describe('resolveQuery', () => {
           residual: 'class'
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.online).toBe(false);
       });
     });
@@ -260,7 +261,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: 'open sections',
@@ -268,7 +269,7 @@ describe('resolveQuery', () => {
           residual: 'sections'
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.status).toBe('open');
       });
     });
@@ -280,7 +281,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: 'spring 2026 CS',
@@ -288,7 +289,7 @@ describe('resolveQuery', () => {
           residual: 'CS'
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.term).toBe('spring');
         expect(plan.filters.year).toBe(2026);
       });
@@ -301,7 +302,7 @@ describe('resolveQuery', () => {
           first: vi.fn().mockResolvedValue(null),
           all: vi.fn().mockResolvedValue({ results: [] })
         };
-        (mockDb.prepare as any).mockReturnValue(mockStmt);
+        mockDb.prepare.mockReturnValue(mockStmt);
 
         const extracted: ExtractedQuery = {
           rawQuery: 'easy class',
@@ -309,7 +310,7 @@ describe('resolveQuery', () => {
           residual: 'class'
         };
 
-        const plan = await resolveQuery(mockDb as any, extracted);
+        const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
         expect(plan.filters.difficulty).toBe('easy');
       });
     });

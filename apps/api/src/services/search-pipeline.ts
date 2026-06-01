@@ -173,7 +173,7 @@ export class SearchPipeline {
     query: string,
     limit: number = 20,
     overrides?: Partial<SearchFilters>,
-    _waitUntil?: (promise: Promise<any>) => void
+    _waitUntil?: (promise: Promise<unknown>) => void
   ): Promise<SearchPipelineResult> {
     const startTime = performance.now();
 

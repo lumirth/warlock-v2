@@ -259,17 +259,6 @@ export function buildFilterClauses(
   if (filters.difficulty) {
     const thresholds = DIFFICULTY_THRESHOLDS[filters.difficulty];
 
-    // Legacy GPA support (if thresholds still use min_gpa/max_gpa)
-    if ('min_gpa' in thresholds) {
-      where.push('c.avg_gpa >= ?');
-      params.push((thresholds as any).min_gpa);
-    }
-    if ('max_gpa' in thresholds) {
-      where.push('c.avg_gpa <= ?');
-      params.push((thresholds as any).max_gpa);
-    }
-
-    // New Composite Scores (0-100 scale) with Legacy Fallback
     if ('min_quality' in thresholds) {
       // (Quality Score >= X) OR (Quality Score IS NULL AND Legacy GPA >= 3.5)
       where.push('(c.quality_score >= ? OR (c.quality_score IS NULL AND c.avg_gpa >= 3.5))');

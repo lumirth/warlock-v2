@@ -12,7 +12,7 @@ import {
 import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
-import { fromSubjectCascade, formatInstructorName } from '../transforms/course.js';
+import { fromSubjectCascade, formatInstructorName, type CourseWithSections } from '../transforms/course.js';
 
 type GenEdCleanup = {
   courseId: string;
@@ -20,6 +20,8 @@ type GenEdCleanup = {
 };
 
 const SUBJECT_SYNC_LOCK_TTL_SECONDS = 30 * 60;
+
+type CourseForEmbedding = CourseWithSections['course'];
 
 export interface ParallelSyncConfig {
   cisapiBase: string;
@@ -119,15 +121,15 @@ async function saveSubjectData(
   let coursesCount = 0;
   let sectionsCount = 0;
 
-  const courseStatements: any[] = [];
-  const genedStatements: any[] = [];
-  const sectionStatements: any[] = [];
-  const meetingStatements: any[] = [];
-  const instructorStatements: any[] = [];
-  const linkStatements: any[] = [];
+  const courseStatements: D1PreparedStatement[] = [];
+  const genedStatements: D1PreparedStatement[] = [];
+  const sectionStatements: D1PreparedStatement[] = [];
+  const meetingStatements: D1PreparedStatement[] = [];
+  const instructorStatements: D1PreparedStatement[] = [];
+  const linkStatements: D1PreparedStatement[] = [];
   const genedCleanup: GenEdCleanup[] = [];
 
-  const coursesForEmbedding: any[] = [];
+  const coursesForEmbedding: CourseForEmbedding[] = [];
   const uniqueInstructors = new Set<string>();
 
   for (const { course, sections, genEdCategories } of coursesWithSections) {
@@ -193,7 +195,7 @@ async function saveSubjectData(
   // Execute batches in chunks to avoid limits
   const BATCH_SIZE = 50;
 
-  const executeBatch = async (stmts: any[]) => {
+  const executeBatch = async (stmts: D1PreparedStatement[]) => {
     for (let i = 0; i < stmts.length; i += BATCH_SIZE) {
       const chunk = stmts.slice(i, i + BATCH_SIZE);
       if (chunk.length > 0) await db.batch(chunk);
@@ -218,7 +220,7 @@ async function saveSubjectData(
     const EMBEDDING_CONCURRENCY = 5;
     for (let i = 0; i < coursesForEmbedding.length; i += EMBEDDING_CONCURRENCY) {
       const chunk = coursesForEmbedding.slice(i, i + EMBEDDING_CONCURRENCY);
-      await Promise.all(chunk.map(async (course: any) => {
+      await Promise.all(chunk.map(async (course) => {
         try {
           const embeddingData: CourseEmbeddingData = {
             id: course.id,

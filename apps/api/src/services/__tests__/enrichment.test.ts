@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { coordinateEnrichment } from '../enrichment.js';
+import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 
 function createDb() {
   const stateWrites: unknown[][] = [];
@@ -53,7 +54,11 @@ describe('coordinateEnrichment', () => {
       fetch: vi.fn(async () => new Response(null, { status: 202 })),
     };
 
-    const result = await coordinateEnrichment(db as any, selfBinding as any, 'internal-token');
+    const result = await coordinateEnrichment(
+      db as unknown as D1Database,
+      selfBinding as unknown as Fetcher,
+      'internal-token'
+    );
 
     expect(result).toEqual({ taskCount: 2, batchCount: 1 });
     const request = selfBinding.fetch.mock.calls[0]?.[1] as RequestInit;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extract } from '../extractor.js';
+import type { Hint } from '@uiuc-course-search/query-types';
 
 describe('extract', () => {
   describe('phase 1: entities', () => {
@@ -137,8 +138,8 @@ describe('extract', () => {
       const res1 = extract('CS 400 level');
       const res2 = extract('400 level CS');
 
-      const getSubject = (h: any[]) => h.find(x => x.type === 'subject')?.value;
-      const getLevel = (h: any[]) => h.find(x => x.type === 'level')?.value;
+      const getSubject = (h: Hint[]) => h.find(x => x.type === 'subject')?.value;
+      const getLevel = (h: Hint[]) => h.find(x => x.type === 'level')?.value;
 
       expect(getSubject(res1.hints)).toBe('CS');
       expect(getLevel(res1.hints)).toBe(400);
@@ -150,8 +151,8 @@ describe('extract', () => {
       const res1 = extract('3 credit CS course');
       const res2 = extract('CS course 3 credit');
 
-      const getSubject = (h: any[]) => h.find(x => x.type === 'subject')?.value;
-      const getCredits = (h: any[]) => h.find(x => x.type === 'credits')?.value;
+      const getSubject = (h: Hint[]) => h.find(x => x.type === 'subject')?.value;
+      const getCredits = (h: Hint[]) => h.find(x => x.type === 'credits')?.value;
 
       expect(getSubject(res1.hints)).toBe('CS');
       expect(getCredits(res1.hints)).toBe(3);

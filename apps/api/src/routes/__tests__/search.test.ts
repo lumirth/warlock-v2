@@ -2,19 +2,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { searchRoutes } from '../search.js';
 import { SearchPipeline } from '../../services/search-pipeline.js';
+import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
+import type { SearchResponseDto } from '@uiuc-course-search/query-types';
 
 vi.mock('../../services/search-pipeline.js');
 
+type SearchRouteBindings = {
+  DB: D1Database;
+  VECTORIZE: VectorizeIndex;
+  AI: Ai;
+};
+
 describe('Search Routes', () => {
-  let app: Hono<any>;
-  let mockDB: any;
-  let mockVectorize: any;
-  let mockAI: any;
+  let app: Hono<{ Bindings: SearchRouteBindings }>;
+  let mockDB: D1Database;
+  let mockVectorize: VectorizeIndex;
+  let mockAI: Ai;
 
   beforeEach(() => {
-    mockDB = { prepare: vi.fn().mockReturnThis(), bind: vi.fn().mockReturnThis(), all: vi.fn().mockResolvedValue({ results: [] }) };
-    mockVectorize = {};
-    mockAI = {};
+    mockDB = {
+      prepare: vi.fn().mockReturnThis(),
+      bind: vi.fn().mockReturnThis(),
+      all: vi.fn().mockResolvedValue({ results: [] }),
+    } as unknown as D1Database;
+    mockVectorize = {} as unknown as VectorizeIndex;
+    mockAI = {} as unknown as Ai;
     
     app = new Hono();
     app.route('/', searchRoutes);
@@ -44,9 +56,9 @@ describe('Search Routes', () => {
     };
 
     const searchSpy = vi.fn().mockResolvedValue(mockPipelineResult);
-    (SearchPipeline as any).mockImplementation(() => ({
+    vi.mocked(SearchPipeline).mockImplementation(() => ({
       search: searchSpy
-    }));
+    }) as unknown as SearchPipeline);
 
     const res = await app.request('/api/search?q=CS+225', {}, {
       DB: mockDB,
@@ -55,14 +67,14 @@ describe('Search Routes', () => {
     }, {
       waitUntil: vi.fn(),
       passThroughOnException: vi.fn()
-    } as any);
+    } as unknown as ExecutionContext);
 
     if (res.status !== 200) {
       console.error(await res.text());
     }
 
     expect(res.status).toBe(200);
-    const data = await res.json() as any;
+    const data = await res.json() as SearchResponseDto;
     expect(data.results).toBeDefined();
     expect(data.results[0].id).toBe('CS-225');
     expect(searchSpy).toHaveBeenCalledWith('CS 225', 20, {}, expect.any(Function));
@@ -70,9 +82,9 @@ describe('Search Routes', () => {
 
   it('rejects malformed public search params before running search', async () => {
     const searchSpy = vi.fn();
-    (SearchPipeline as any).mockImplementation(() => ({
+    vi.mocked(SearchPipeline).mockImplementation(() => ({
       search: searchSpy
-    }));
+    }) as unknown as SearchPipeline);
 
     const res = await app.request('/api/search?q=cs&limit=999999', {}, {
       DB: mockDB,
@@ -95,9 +107,9 @@ describe('Search Routes', () => {
         timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 }
       }
     });
-    (SearchPipeline as any).mockImplementation(() => ({
+    vi.mocked(SearchPipeline).mockImplementation(() => ({
       search: searchSpy
-    }));
+    }) as unknown as SearchPipeline);
 
     const res = await app.request('/api/search?q=systems&subject=cs&credits=4&difficulty=easy', {}, {
       DB: mockDB,
@@ -106,7 +118,7 @@ describe('Search Routes', () => {
     }, {
       waitUntil: vi.fn(),
       passThroughOnException: vi.fn()
-    } as any);
+    } as unknown as ExecutionContext);
 
     expect(res.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(

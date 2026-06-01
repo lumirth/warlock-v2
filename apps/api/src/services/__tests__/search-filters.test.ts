@@ -94,39 +94,19 @@ describe('buildFilterClauses', () => {
     it('generates SQL for difficulty=easy', () => {
       const filters: SearchFilters = { difficulty: 'easy' };
       const result = buildFilterClauses(filters);
-      // Legacy GPA check
-      if ('min_gpa' in DIFFICULTY_THRESHOLDS.easy) {
-        expect(result.where).toContain('c.avg_gpa >= ?');
-        expect(result.params).toContain((DIFFICULTY_THRESHOLDS.easy as any).min_gpa);
-      }
-      // New Quality/Difficulty check
-      if ('min_quality' in DIFFICULTY_THRESHOLDS.easy) {
-        expect(result.where.some(w => w.includes('c.quality_score >= ?'))).toBe(true);
-        expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.min_quality);
-      }
-      if ('max_difficulty' in DIFFICULTY_THRESHOLDS.easy) {
-        expect(result.where.some(w => w.includes('c.difficulty_score <= ?'))).toBe(true);
-        expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.max_difficulty);
-      }
+      expect(result.where.some(w => w.includes('c.quality_score >= ?'))).toBe(true);
+      expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.min_quality);
+      expect(result.where.some(w => w.includes('c.difficulty_score <= ?'))).toBe(true);
+      expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.max_difficulty);
     });
 
     it('generates SQL for difficulty=hard', () => {
       const filters: SearchFilters = { difficulty: 'hard' };
       const result = buildFilterClauses(filters);
-      // Legacy GPA check
-      if ('max_gpa' in DIFFICULTY_THRESHOLDS.hard) {
-        expect(result.where).toContain('c.avg_gpa <= ?');
-        expect(result.params).toContain((DIFFICULTY_THRESHOLDS.hard as any).max_gpa);
-      }
-      // New Quality/Difficulty check
-      if ('max_quality' in DIFFICULTY_THRESHOLDS.hard) {
-        expect(result.where.some(w => w.includes('c.quality_score <= ?'))).toBe(true);
-        expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.max_quality);
-      }
-      if ('min_difficulty' in DIFFICULTY_THRESHOLDS.hard) {
-        expect(result.where.some(w => w.includes('c.difficulty_score >= ?'))).toBe(true);
-        expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.min_difficulty);
-      }
+      expect(result.where.some(w => w.includes('c.quality_score <= ?'))).toBe(true);
+      expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.max_quality);
+      expect(result.where.some(w => w.includes('c.difficulty_score >= ?'))).toBe(true);
+      expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.min_difficulty);
     });
   });
 

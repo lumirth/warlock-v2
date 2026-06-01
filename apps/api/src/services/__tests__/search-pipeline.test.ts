@@ -6,6 +6,9 @@ import * as queryResolver from '../query-resolver.js';
 import * as search from '../search.js';
 import * as topicRegistry from '../topic-registry.js';
 import type { Course } from '../../db/index.js';
+import type { ExtractionResult } from '../extractor.js';
+import type { SearchResult } from '../search.js';
+import type { SearchPlan } from '@uiuc-course-search/query-types';
 
 vi.mock('../extractor.js');
 vi.mock('../query-resolver.js');
@@ -48,16 +51,16 @@ describe('SearchPipeline', () => {
   let pipeline: SearchPipeline;
 
   beforeEach(() => {
-    db = { prepare: vi.fn() } as any;
-    vectorize = {} as any;
-    ai = {} as any;
+    db = { prepare: vi.fn() } as unknown as D1Database;
+    vectorize = {} as unknown as VectorizeIndex;
+    ai = {} as unknown as Ai;
     pipeline = new SearchPipeline(db, vectorize, ai);
     vi.clearAllMocks();
   });
 
   it('Tier 1: should return results immediately for navigational queries', async () => {
     const query = 'CS 225';
-    const mockExtracted = { 
+    const mockExtracted: ExtractionResult = {
       hints: [{ 
         type: 'courseCode', 
         value: { subject: 'CS', number: '225' }, 
@@ -65,12 +68,12 @@ describe('SearchPipeline', () => {
       }], 
       residual: '' 
     };
-    const mockPlan = { filters: { subject: 'CS', number: '225' }, semanticQuery: '', keywordQuery: '' };
-    const mockResults = [{ course: mockCourse({ id: 'CS-225', subject: 'CS', number: '225' }), score: 1.0 }];
+    const mockPlan: SearchPlan = { filters: { subject: 'CS', number: '225' }, semanticQuery: '', keywordQuery: '' };
+    const mockResults: SearchResult[] = [{ course: mockCourse({ id: 'CS-225', subject: 'CS', number: '225' }), score: 1.0 }];
 
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted as any);
-    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
-    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue(mockResults as any);
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue(mockResults);
 
     const result = await pipeline.search(query);
 
@@ -80,19 +83,19 @@ describe('SearchPipeline', () => {
 
   it('Tier 2: should stop if structured search returns >= 3 results', async () => {
     const query = 'CS 400 level';
-    const mockExtracted = { 
+    const mockExtracted: ExtractionResult = {
       hints: [
         { type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } }, 
         { type: 'level', value: 400, metadata: { source: 'regex', confidence: 0.9, raw: '400 level' } }
       ], 
       residual: '' 
     };
-    const mockPlan = { filters: { subject: 'CS', level: 400 }, semanticQuery: '', keywordQuery: '' };
-    const mockResults = Array(5).fill(null).map((_, i) => ({ course: mockCourse({ id: `CS-${i}`, subject: 'CS' }), score: 0.8 }));
+    const mockPlan: SearchPlan = { filters: { subject: 'CS', level: 400 }, semanticQuery: '', keywordQuery: '' };
+    const mockResults: SearchResult[] = Array(5).fill(null).map((_, i) => ({ course: mockCourse({ id: `CS-${i}`, subject: 'CS' }), score: 0.8 }));
 
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted as any);
-    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
-    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue(mockResults as any);
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue(mockResults);
 
     const result = await pipeline.search(query);
 
@@ -102,11 +105,11 @@ describe('SearchPipeline', () => {
 
   it('Tier 3: should expand topics if Tier 2 returns few results', async () => {
     const query = 'ml courses';
-    const mockExtracted = { hints: [], residual: 'ml' };
-    const mockPlan = { filters: {}, semanticQuery: 'ml', keywordQuery: 'ml' };
+    const mockExtracted: ExtractionResult = { hints: [], residual: 'ml' };
+    const mockPlan: SearchPlan = { filters: {}, semanticQuery: 'ml', keywordQuery: 'ml' };
     
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted as any);
-    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue(['machine learning']);
     
     // Tier 2 returns 1 result, trigger Tier 3
@@ -125,12 +128,12 @@ describe('SearchPipeline', () => {
   it('applies Query Language v1 power fields, quoted phrases, and dash negation', async () => {
     const query = 'status:open online:true days:MWF time:morning term:spring-2026 "data structures" -friday';
 
-    vi.mocked(extractor.extractQuery).mockReturnValue({ hints: [], residual: '' } as any);
+    vi.mocked(extractor.extractQuery).mockReturnValue({ hints: [], residual: '' });
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
       filters: {},
       semanticQuery: '',
       keywordQuery: ''
-    } as any);
+    });
     vi.mocked(queryResolver.parseTermValue).mockReturnValue({ term: 'spring', year: 2026 });
     vi.mocked(search.sanitizeFtsQuery).mockImplementation(query => query);
     vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([]);
@@ -157,12 +160,12 @@ describe('SearchPipeline', () => {
   it('does not silently drop unsupported dash negation tokens', async () => {
     const query = 'algorithms -calculus';
 
-    vi.mocked(extractor.extractQuery).mockReturnValue({ hints: [], residual: 'algorithms -calculus' } as any);
+    vi.mocked(extractor.extractQuery).mockReturnValue({ hints: [], residual: 'algorithms -calculus' });
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
       filters: {},
       semanticQuery: 'algorithms -calculus',
       keywordQuery: 'algorithms -calculus'
-    } as any);
+    });
     vi.mocked(search.sanitizeFtsQuery).mockImplementation(queryText => queryText);
     vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([]);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
@@ -184,7 +187,7 @@ describe('SearchPipeline', () => {
 
   it('does not relax explicit hard constraints when exact search is sparse', async () => {
     const query = '400 level CS courses with Fagen';
-    const mockExtracted = {
+    const mockExtracted: ExtractionResult = {
       hints: [
         { type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } },
         { type: 'level', value: 400, metadata: { source: 'regex', confidence: 0.9, raw: '400 level' } },
@@ -193,13 +196,13 @@ describe('SearchPipeline', () => {
       residual: ''
     };
     const mockPlan = {
-      filters: { subject: 'CS', level: 400, instructor_ids: ['fagen-id'] },
+      filters: { subject: 'CS', level: 400, instructor_ids: [123] },
       semanticQuery: '',
       keywordQuery: ''
     };
 
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted as any);
-    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan as any);
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
     vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValueOnce([]);
@@ -213,7 +216,7 @@ describe('SearchPipeline', () => {
     expect(vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3].filters).toMatchObject({
       subject: 'CS',
       level: 400,
-      instructor_ids: ['fagen-id'],
+      instructor_ids: [123],
     });
   });
 });

@@ -62,7 +62,7 @@ interface RmpResponse {
       };
     };
   };
-  errors?: any[];
+  errors?: unknown[];
 }
 
 interface RmpSyncState {

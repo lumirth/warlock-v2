@@ -134,13 +134,13 @@ debugRoutes.get('/link-instructor', async (c) => {
       SELECT * FROM courses
       WHERE subject = ? AND number = ? AND term = ? AND year = ?
       LIMIT 1
-    `).bind(subject, number, term, year).first();
+    `).bind(subject, number, term, year).first<{ primary_instructor: string | null }>();
 
     if (!course) {
       return c.json({ error: 'Course not found', params: { subject, number, term, year } }, 404);
     }
 
-    const instructorName = (course as any).primary_instructor || '';
+    const instructorName = course.primary_instructor || '';
     const instructors = instructorName.split(';').map((s: string) => s.trim()).filter(Boolean);
 
     if (instructors.length === 0) {
