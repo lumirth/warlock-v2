@@ -41,15 +41,6 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
                     {stat.instructor_name || section.instructor.split(';')[idx]?.trim() || 'Instructor'}
                   </Text>
                 )}
-                {stat.rmp_rating && (
-                  <Badge
-                    size="xs"
-                    variant="light"
-                    color={stat.rmp_rating > RMP_THRESHOLDS.GOOD ? 'teal' : 'orange'}
-                  >
-                    {stat.rmp_rating.toFixed(1)} ★
-                  </Badge>
-                )}
               </Group>
             ))}
           </Stack>
@@ -76,15 +67,6 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
                   </Anchor>
                 ) : (
                   <Text size="sm" fw={500}>{trimmedName}</Text>
-                )}
-                {linkData?.rmp_rating && (
-                  <Badge
-                    size="xs"
-                    variant="light"
-                    color={linkData.rmp_rating > RMP_THRESHOLDS.GOOD ? 'teal' : 'orange'}
-                  >
-                    {linkData.rmp_rating.toFixed(1)} ★
-                  </Badge>
                 )}
               </Group>
             );
@@ -123,11 +105,13 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
         <Table.Td>
           <Text size="sm">{section.location || 'TBA'}</Text>
         </Table.Td>
-        <Table.Td>
+        <Table.Td style={{ width: '7.5rem', whiteSpace: 'nowrap' }}>
           <Badge
               size="sm"
-              variant="dot"
+              variant="light"
               color={section.status.toLowerCase().includes('open') ? 'green' : 'red'}
+              style={{ maxWidth: 'none' }}
+              tt="none"
           >
               {section.status}
           </Badge>
@@ -137,7 +121,7 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
   })
 
   return (
-    <Table>
+    <Table miw={700}>
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Instructor</Table.Th>

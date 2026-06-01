@@ -71,4 +71,17 @@ describe('CoursePage request state', () => {
     expect(api.getCourse).toHaveBeenNthCalledWith(1, 'CS', '225', 'fall', 2026, expect.any(AbortSignal))
     expect(api.getCourse).toHaveBeenNthCalledWith(2, 'CS', '225', 'spring', 2026, expect.any(AbortSignal))
   })
+
+  it('renders request failures without writing expected errors to the console', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    vi.mocked(api.getCourse).mockRejectedValueOnce(new Error('Course API unavailable'))
+
+    renderCoursePage('/course/CS/225?term=fall&year=2026')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/Course API unavailable/i)
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+  })
 })

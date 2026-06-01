@@ -122,6 +122,8 @@ describe('SearchPage request state', () => {
   })
 
   it('clears stale results when a new search fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
     vi.mocked(api.search)
       .mockResolvedValueOnce(searchResponse([
         course({ id: 'CS-225-2026-spring', number: '225', title: 'Data Structures' }),
@@ -137,9 +139,12 @@ describe('SearchPage request state', () => {
     setQuery('broken')
     fireEvent.click(screen.getByRole('button', { name: /search/i }))
 
-    await screen.findByText(/Error: Search failed/i)
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/Search failed/i)
     await waitFor(() => {
       expect(screen.queryByText(/CS 225: Data Structures/i)).not.toBeInTheDocument()
     })
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
   })
 })

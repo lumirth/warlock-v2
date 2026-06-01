@@ -30,7 +30,6 @@ export function CoursePage() {
         setCourse(data)
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return
-        console.error(err)
         setError(err instanceof Error ? err.message : 'Failed to load course')
       } finally {
         if (!controller.signal.aborted) {
@@ -49,8 +48,8 @@ export function CoursePage() {
   if (loading) {
     return (
       <Container size="lg" py="xl">
-        <Flex justify="center" align="center" mih="50vh">
-          <Loader size="lg" />
+        <Flex justify="center" align="center" mih="50vh" role="status" aria-live="polite" aria-label="Loading course">
+          <Loader size="lg" aria-hidden />
         </Flex>
       </Container>
     )
@@ -60,7 +59,7 @@ export function CoursePage() {
     return (
       <Container size="lg" py="xl">
         <Button component={Link} to="/" variant="subtle" mb="md">← Back to Search</Button>
-        <Alert variant="light" color="red" title="Error loading course" icon={<IconAlertCircle />}>
+        <Alert role="alert" variant="light" color="red" title="Error loading course" icon={<IconAlertCircle />}>
           {error || 'Course not found'}
         </Alert>
       </Container>

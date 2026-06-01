@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
-import { Container, Title, TextInput, Button, Group, Badge, Paper, Text, Stack, Card, Flex, Loader, Box } from '@mantine/core'
-import { IconSearch } from '@tabler/icons-react'
+import { Alert, Container, Title, TextInput, Button, Group, Badge, Paper, Text, Stack, Card, Flex, Loader, Box } from '@mantine/core'
+import { IconAlertCircle, IconSearch } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
 import type { CourseDto, Hint, SearchMetaDto } from '@uiuc-course-search/query-types'
@@ -65,7 +65,6 @@ export function SearchPage() {
       setMeta(data.meta || null)
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
-      console.error('Search failed:', err)
       setError(err instanceof Error ? err.message : 'An unknown error occurred')
     } finally {
       // Only turn off loading if this is still the active request
@@ -91,6 +90,7 @@ export function SearchPage() {
 
       <Group mb="md">
         <TextInput
+          aria-label="Course search query"
           placeholder="e.g., easy cs gened, MWF morning 3 credits"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -99,14 +99,14 @@ export function SearchPage() {
           leftSection={<IconSearch size={16} />}
           size="md"
         />
-        <Button onClick={handleSearch} size="md">Search</Button>
+        <Button onClick={handleSearch} size="md" leftSection={<IconSearch size={16} />}>Search</Button>
       </Group>
 
       {/* Error Message */}
       {error && (
-        <Paper p="sm" withBorder bg="red.0" c="red.9" mb="md">
-            <Text fw={500}>Error: {error}</Text>
-        </Paper>
+        <Alert role="alert" variant="light" color="red" title="Search failed" icon={<IconAlertCircle />} mb="md">
+          {error}
+        </Alert>
       )}
 
       {/* Show extraction results after search */}
@@ -155,14 +155,14 @@ export function SearchPage() {
         </Paper>
       )}
 
-      <Box>
+      <Box aria-busy={loading}>
         {loading ? (
-          <Flex justify="center" py="xl">
-            <Loader />
+          <Flex justify="center" py="xl" role="status" aria-live="polite" aria-label="Searching courses">
+            <Loader aria-hidden />
           </Flex>
         ) : (
           results.length === 0 && meta ? (
-            <Text c="dimmed" ta="center" py="xl">No courses found matching your criteria.</Text>
+            <Text c="dimmed" ta="center" py="xl" role="status">No courses found matching your criteria.</Text>
           ) : (
             <Stack gap="md">
               {results.map((r) => (
@@ -175,8 +175,8 @@ export function SearchPage() {
                   style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
                   shadow="sm"
                 >
-                  <Flex justify="space-between" align="flex-start">
-                    <div>
+                  <Flex justify="space-between" align="flex-start" gap="sm" wrap="wrap">
+                    <Box style={{ minWidth: 0, flex: '1 1 18rem' }}>
                       <Text fw={700}>{r.subject} {r.number}: {r.title}</Text>
                       <Group gap="xs" mt={4}>
                         <Text size="xs" c="dimmed">
@@ -190,9 +190,9 @@ export function SearchPage() {
                         {r._historical && <Badge color="yellow" size="xs">historical</Badge>}
                         {r.gened && <Badge variant="outline" size="xs">{r.gened}</Badge>}
                       </Group>
-                    </div>
+                    </Box>
                     {typeof r._score === 'number' && (
-                        <Badge variant="light">Match: {r._score.toFixed(2)}</Badge>
+                      <Badge variant="light" style={{ flexShrink: 0 }}>Match {r._score.toFixed(2)}</Badge>
                     )}
                   </Flex>
                   <Text size="sm" mt="xs" lineClamp={3} c="dimmed">
