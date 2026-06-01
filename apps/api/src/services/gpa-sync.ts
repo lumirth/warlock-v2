@@ -1,5 +1,6 @@
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
 import { getSyncState, upsertSyncState } from '../db/index.js';
+import { errorFields, logger } from '../observability/logger.js';
 
 const GPA_DATASET_URL = 'https://cdn.jsdelivr.net/gh/wadefagen/datasets@main/gpa/uiuc-gpa-dataset.csv';
 // 50K chars is safe for 10ms CPU limit (approx 500 lines)
@@ -40,13 +41,13 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
   const state = await getSyncState(db, 'gpa');
   const cursor = state?.cursor || 0;
 
-  console.log(`[GPA Sync] Resuming from cursor ${cursor}...`);
+  logger.info('gpa.resume.start', { cursor });
 
   // 2. Get Data (Cache-First)
   let fullText = await kv.get(KV_KEY, 'text');
 
   if (!fullText) {
-    console.log('[GPA Sync] Cache miss. Fetching from JSDelivr...');
+    logger.info('gpa.resume.cacheMiss');
     const response = await fetch(GPA_DATASET_URL);
     if (!response.ok) {
       throw new Error(`Failed to fetch GPA dataset: ${response.status} ${response.statusText}`);
@@ -59,12 +60,12 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
 
     // Cache for 2 hours (plenty of time to sync)
     await kv.put(KV_KEY, fullText, { expirationTtl: 7200 });
-    console.log(`[GPA Sync] Cached ${fullText.length} chars to KV.`);
+    logger.info('gpa.resume.cachedDataset', { characters: fullText.length });
   }
 
   // 3. Check for completion
   if (cursor >= fullText.length) {
-    console.log('[GPA Sync] Cursor reached end of file. Cleaning up...');
+    logger.info('gpa.resume.complete', { cursor });
     await kv.delete(KV_KEY); // Cleanup
 
     await upsertSyncState(db, {
@@ -99,7 +100,7 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
       // Force break or extend (extending is dangerous for CPU).
       // Let's force break and hope parser handles it or extend slightly.
       // Actually, if a line is > 50KB, we have other problems.
-      console.warn('[GPA Sync] Warning: No newline found in chunk. Extending search...');
+      logger.warn('gpa.resume.noNewlineInChunk', { cursor, endEstimate });
       const nextNewline = fullText.indexOf('\n', endEstimate);
       if (nextNewline !== -1) {
         nextCursor = nextNewline + 1;
@@ -119,7 +120,7 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
     }
   }
 
-  console.log(`[GPA Sync] Processing chunk ${cursor}-${nextCursor} (${lines.length} lines)`);
+  logger.info('gpa.resume.processingChunk', { cursor, nextCursor, lineCount: lines.length });
   const { inserted } = await processGpaBatch(db, lines);
 
   // 6. Update state
@@ -145,7 +146,7 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
  * Returns 'skipped_no_changes' or 'reset_initiated'.
  */
 export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<string> {
-  console.log('[GPA Reset] Checking for updates...');
+  logger.info('gpa.reset.checkingForUpdates');
 
   // 1. Check current ETag from JSDelivr
   const response = await fetch(GPA_DATASET_URL, { method: 'HEAD' });
@@ -155,7 +156,7 @@ export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<str
 
   const newEtag = response.headers.get('etag');
   if (!newEtag) {
-    console.warn('[GPA Reset] No ETag header found. Forcing reset.');
+    logger.warn('gpa.reset.missingEtag');
   }
 
   // 2. Check stored ETag
@@ -164,11 +165,11 @@ export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<str
 
   // 3. Compare (only skip if we have a completed sync with matching ETag)
   if (newEtag && currentEtag === newEtag && state?.last_status === 'completed') {
-    console.log(`[GPA Reset] ETag matched (${newEtag}). No changes detected. Skipping reset.`);
+    logger.info('gpa.reset.skippedNoChanges');
     return 'skipped_no_changes';
   }
 
-  console.log(`[GPA Reset] Change detected (Old: ${currentEtag}, New: ${newEtag}). Resetting...`);
+  logger.info('gpa.reset.changeDetected', { hadCurrentEtag: Boolean(currentEtag), hasNewEtag: Boolean(newEtag) });
 
   // 4. Reset
   await kv.delete(KV_KEY);
@@ -257,7 +258,7 @@ async function processGpaBatch(db: D1Database, lines: string[]): Promise<{ inser
       await db.batch(statements);
       totalInserted += chunk.length;
     } catch (err) {
-      console.error('[GPA Worker] Batch Insert Error:', err);
+      logger.error('gpa.worker.batchInsertFailed', { ...errorFields(err) });
       // We throw here because we want the whole Range Chunk to fail and retry
       // We don't want to skip data in the stream.
       throw err;

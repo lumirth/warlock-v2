@@ -1,6 +1,7 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 import { resolveInstructor } from './matcher.js';
 import { internalAuthHeaders } from '../middleware/auth.js';
+import { errorFields, logger } from '../observability/logger.js';
 
 export interface EnrichmentTask {
   termId: string;
@@ -244,7 +245,7 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
         last_updated = excluded.last_updated
     `).run();
   } catch (err) {
-    console.error('[Enrichment] Failed to aggregate course stats:', err);
+    logger.error('enrichment.aggregateCourseStats.failed', { ...errorFields(err) });
   }
 
   const result = await db.prepare(`

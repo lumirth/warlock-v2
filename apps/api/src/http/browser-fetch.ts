@@ -1,3 +1,5 @@
+import { errorFields, logger } from '../observability/logger.js';
+
 /**
  * Browser-like fetch utility to bypass AWS WAF JavaScript challenges.
  *
@@ -55,7 +57,7 @@ export async function browserFetch(
 
       // Check for WAF challenge - retry if challenged
       if (isWafChallenge(response) && attempt < retries) {
-        console.log(`WAF challenge on attempt ${attempt + 1} for ${url}, retrying...`);
+        logger.warn('browserFetch.wafChallenge', { attempt: attempt + 1 });
         await sleep(retryDelay * (attempt + 1));
         continue;
       }
@@ -65,7 +67,7 @@ export async function browserFetch(
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (attempt < retries) {
-        console.log(`Fetch error on attempt ${attempt + 1} for ${url}: ${lastError.message}, retrying...`);
+        logger.warn('browserFetch.retryableFailure', { attempt: attempt + 1, ...errorFields(lastError) });
         await sleep(retryDelay * (attempt + 1));
         continue;
       }

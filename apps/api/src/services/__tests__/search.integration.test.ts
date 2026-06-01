@@ -197,17 +197,19 @@ function mockSearchResult(): SearchResult {
 describe('Worker API integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(SearchPipeline).mockImplementation(() => ({
-      search: vi.fn().mockResolvedValue({
-        results: [mockSearchResult()],
-        meta: {
-          query: { raw: 'CS 225', residual: '' },
-          extraction: { hints: [] },
-          plan: { filters: { subject: 'CS', number: '225' }, semanticQuery: '', keywordQuery: '' },
-          timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
-        },
-      }),
-    } as unknown as SearchPipeline));
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: vi.fn().mockResolvedValue({
+          results: [mockSearchResult()],
+          meta: {
+            query: { raw: 'CS 225', residual: '' },
+            extraction: { hints: [] },
+            plan: { filters: { subject: 'CS', number: '225' }, semanticQuery: '', keywordQuery: '' },
+            timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+          },
+        }),
+      } as unknown as SearchPipeline;
+    });
   });
 
   it('serves search through the Worker fetch handler without a live server', async () => {

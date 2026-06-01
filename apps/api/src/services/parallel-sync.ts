@@ -13,6 +13,7 @@ import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
 import { fromSubjectCascade, formatInstructorName, type CourseWithSections } from '../transforms/course.js';
+import { errorFields, logger } from '../observability/logger.js';
 
 type GenEdCleanup = {
   courseId: string;
@@ -233,7 +234,7 @@ async function saveSubjectData(
           };
           await upsertCourseEmbedding(vectorize, ai, embeddingData);
         } catch (e) {
-          console.error(`Embedding error for ${course.id}:`, e);
+          logger.error('parallelSync.embedding.failed', { courseId: course.id, ...errorFields(e) });
         }
       }));
     }

@@ -17,6 +17,10 @@
     "typecheck:workspaces": "npm run typecheck --workspaces",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint .",
+    "bundle:budget": "tsx scripts/check-bundle-budget.ts",
+    "security:audit": "npm audit --audit-level=moderate",
+    "security:secrets": "tsx scripts/check-secrets.ts",
+    "d1:preflight": "tsx scripts/d1-backup-preflight.ts",
     "db:verify": "bash scripts/verify-schema.sh",
     "eval:smoke": "tsx scripts/eval-smoke.ts",
     "eval:staging": "if [ -z \"$EVAL_BASE_URL\" ]; then echo \"EVAL_BASE_URL is required, for example https://api-staging.example.workers.dev\" >&2; exit 1; fi; npm run eval -w @uiuc-course-search/api -- \"$EVAL_BASE_URL\"",
@@ -31,6 +35,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.9.1",
+    "axe-core": "^4.11.4",
     "concurrently": "^9.2.1",
     "eslint": "^10.4.1",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -38,6 +43,6 @@
     "jsdom": "^29.1.1",
     "tsx": "^4.21.0",
     "typescript-eslint": "^8.60.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.8"
   }
 }

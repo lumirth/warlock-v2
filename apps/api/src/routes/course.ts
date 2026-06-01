@@ -17,6 +17,7 @@ import {
 } from '../dto/course.js';
 import { resolveTermContext } from '../services/term-state.js';
 import { parseBoundedIntParam, parseCourseNumberParam, parseEnumParam, parseSubjectParam } from '../http/params.js';
+import { errorFields, logger } from '../observability/logger.js';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
 
@@ -359,7 +360,7 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
     });
 
   } catch (error) {
-    console.error('Course route failed:', error);
+    logger.error('route.course.failed', { subject, number, ...errorFields(error) });
     return c.json({ error: 'Internal server error' }, 500);
   }
 });

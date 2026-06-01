@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { errorFields, logger } from '../observability/logger.js';
 
 export interface SubjectInfo {
   id: string;
@@ -121,7 +122,7 @@ export async function loadTaxonomyCache(db: D1Database): Promise<TaxonomyCache> 
 
     return cache;
   } catch (error) {
-    console.error('Failed to load taxonomy cache:', error);
+    logger.error('taxonomyCache.load.failed', { ...errorFields(error) });
     throw error;
   }
 }

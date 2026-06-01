@@ -14,6 +14,7 @@ import { internalAuthHeaders, requireBearerToken } from './middleware/auth.js';
 import { resumeGpaSync, resetGpaSync } from './services/gpa-sync.js';
 import { enrichCoursesWithGpa, coordinateEnrichment } from './services/enrichment.js';
 import { coordinateRmpSync } from './services/rmp-sync.js';
+import { createRunId, errorFields, logger } from './observability/logger.js';
 
 type Bindings = {
   DB: D1Database;
@@ -60,10 +61,11 @@ export default {
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     // Handle specific cron schedules
     const cron = event.cron;
+    const runId = createRunId('cron');
 
     // Daily Term Discovery (4:00 AM & 4:00 PM CST)
     if (cron === "0 10,22 * * *") {
-      console.log('[Cron] Starting scheduled term discovery...');
+      logger.info('cron.termDiscovery.start', { runId, cron });
       ctx.waitUntil((async () => {
         try {
           const config = {
@@ -71,11 +73,15 @@ export default {
             cisapiBase: env.CISAPI_BASE,
           };
           const classifications = await discoverAndClassifyTerms(env.DB, config);
-          console.log(`[Cron] Discovery complete. Found ${classifications.length} terms.`);
           const active = classifications.filter(c => c.status === 'active');
-          console.log(`[Cron] Active terms: ${active.map(c => c.term.termId).join(', ')}`);
+          logger.info('cron.termDiscovery.complete', {
+            runId,
+            termCount: classifications.length,
+            activeTermCount: active.length,
+            activeTerms: active.map(c => c.term.termId).join(','),
+          });
         } catch (err) {
-          console.error('[Cron] Term discovery failed:', err);
+          logger.error('cron.termDiscovery.failed', { runId, ...errorFields(err) });
         }
       })());
       return;
@@ -83,29 +89,29 @@ export default {
 
     // Weekly GPA Reset (Sunday 2:00 AM CST / 8:00 AM UTC)
     if (cron === "0 8 * * 0") {
-      console.log('[Cron] Triggering Weekly Tasks (GPA Reset + RMP Sync)...');
+      logger.info('cron.weekly.start', { runId, cron });
 
       // 1. Reset GPA Sync
       ctx.waitUntil((async () => {
         try {
           await resetGpaSync(env.DB, env.GPA_CACHE);
-          console.log('[Cron] GPA sync cursor reset to 0.');
+          logger.info('cron.weekly.gpaReset.complete', { runId });
         } catch (err) {
-          console.error('[Cron] Failed to reset GPA sync:', err);
+          logger.error('cron.weekly.gpaReset.failed', { runId, ...errorFields(err) });
         }
       })());
 
       // 2. Trigger RMP Sync
       ctx.waitUntil((async () => {
         try {
-          console.log('[Cron] Starting RMP Sync Coordination...');
+          logger.info('cron.weekly.rmp.start', { runId });
           await coordinateRmpSync(env.DB, env.SELF, {
             rmpAuthToken: env.RMP_AUTH_TOKEN,
             internalToken: env.INTERNAL_TOKEN,
           });
-          console.log('[Cron] RMP Sync triggered successfully.');
+          logger.info('cron.weekly.rmp.dispatched', { runId });
         } catch (err) {
-          console.error('[Cron] Failed to coordinate RMP sync:', err);
+          logger.error('cron.weekly.rmp.failed', { runId, ...errorFields(err) });
         }
       })());
 
@@ -114,21 +120,25 @@ export default {
 
     // Frequent GPA Resume (Every 5 minutes)
     if (cron === "*/5 * * * *") {
-      console.log('[Cron] Resuming GPA sync chunk...');
+      logger.info('cron.gpaResume.start', { runId, cron });
       ctx.waitUntil((async () => {
         try {
           const result = await resumeGpaSync(env.DB, env.GPA_CACHE);
-          console.log(`[Cron] GPA chunk processed: ${result.message}`);
+          logger.info('cron.gpaResume.chunkComplete', {
+            runId,
+            rowsProcessed: result.rowsProcessed,
+            isComplete: result.isComplete,
+          });
 
           if (result.isComplete) {
-            console.log('[Cron] GPA Sync Complete! Starting Enrichment...');
+            logger.info('cron.gpaResume.enrichment.start', { runId });
             await enrichCoursesWithGpa(env.DB);
             // Chain scoring enrichment after GPA enrichment
             await coordinateEnrichment(env.DB, env.SELF, env.INTERNAL_TOKEN);
-            console.log('[Cron] Enrichment triggered.');
+            logger.info('cron.gpaResume.enrichment.dispatched', { runId });
           }
         } catch (err) {
-          console.error('[Cron] GPA sync chunk failed:', err);
+          logger.error('cron.gpaResume.failed', { runId, ...errorFields(err) });
         }
       })());
       // Fall through to allow Fan-Out sync to run as well
@@ -136,12 +146,12 @@ export default {
 
     // Default: Regular Course Sync (Fan-Out Mode)
     // Runs on every cron trigger that reaches here (including */5 * * * *)
-    console.log('[Cron] Starting scheduled sync (Fan-Out Mode)...');
+    logger.info('cron.courseSync.start', { runId, cron });
 
     const activeTerms = await getTermsByStatus(env.DB, 'active');
 
     if (activeTerms.length === 0) {
-      console.log('[Cron] No active terms to sync.');
+      logger.info('cron.courseSync.noActiveTerms', { runId });
       return;
     }
 
@@ -155,9 +165,13 @@ export default {
       ctx.waitUntil((async () => {
         try {
           // 1. Get all subjects for the term
-          console.log(`[Cron] Fetching subject list for ${termState.term_id}...`);
+          logger.info('cron.courseSync.subjects.start', { runId, termId: termState.term_id });
           const allSubjects = await getSubjectsForTerm(config, termState.year, termState.term);
-          console.log(`[Cron] Found ${allSubjects.length} subjects for ${termState.term_id}`);
+          logger.info('cron.courseSync.subjects.complete', {
+            runId,
+            termId: termState.term_id,
+            subjectCount: allSubjects.length,
+          });
 
           // 2. Chunk into batches of 40 (safe limit for free tier to avoid 50-subrequest limit)
           const BATCH_SIZE = 40;
@@ -166,7 +180,11 @@ export default {
             batches.push(allSubjects.slice(i, i + BATCH_SIZE));
           }
 
-          console.log(`[Cron] Dispatching ${batches.length} batches...`);
+          logger.info('cron.courseSync.dispatch.start', {
+            runId,
+            termId: termState.term_id,
+            batchCount: batches.length,
+          });
 
           // 3. Dispatch batches via Service Binding (Fan-Out)
           const dispatchPromises = batches.map(async (batchSubjects, index) => {
@@ -187,17 +205,29 @@ export default {
               });
 
               if (!response.ok) {
-                console.error(`[Cron] Failed to dispatch batch ${index}: HTTP ${response.status}`);
-                const text = await response.text();
-                console.error(`[Cron] Error details: ${text}`);
+                logger.error('cron.courseSync.dispatch.failed', {
+                  runId,
+                  termId: termState.term_id,
+                  batchIndex: index,
+                  responseStatus: response.status,
+                });
               }
             } catch (e) {
-               console.error(`[Cron] Network error dispatching batch ${index}:`, e);
+               logger.error('cron.courseSync.dispatch.networkError', {
+                 runId,
+                 termId: termState.term_id,
+                 batchIndex: index,
+                 ...errorFields(e),
+               });
             }
           });
 
           await Promise.all(dispatchPromises);
-          console.log(`[Cron] Successfully dispatched all batches for ${termState.term_id}`);
+          logger.info('cron.courseSync.dispatch.complete', {
+            runId,
+            termId: termState.term_id,
+            batchCount: batches.length,
+          });
 
           // Update last_checked timestamp
           await upsertTermState(env.DB, {
@@ -208,7 +238,11 @@ export default {
           });
 
         } catch (err) {
-          console.error(`[Cron] Failed to process ${termState.term_id}:`, err);
+          logger.error('cron.courseSync.term.failed', {
+            runId,
+            termId: termState.term_id,
+            ...errorFields(err),
+          });
         }
       })());
     }

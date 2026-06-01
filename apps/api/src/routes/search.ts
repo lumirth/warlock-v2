@@ -5,6 +5,7 @@ import type { SearchFilters, SearchResponseDto } from '@uiuc-course-search/query
 import { searchResultToCourseDto } from '../dto/course.js';
 import { parseBoundedIntParam, parseSubjectParam } from '../http/params.js';
 import { getSearchTermSummary } from '../services/term-state.js';
+import { errorFields, logger } from '../observability/logger.js';
 
 type Bindings = {
   DB: D1Database;
@@ -84,7 +85,7 @@ searchRoutes.get('/api/search', async (c) => {
 
     return c.json(response);
   } catch (error) {
-    console.error('Search error:', error);
+    logger.error('route.search.failed', { ...errorFields(error) });
     return c.json({ error: String(error) }, 500);
   }
 });

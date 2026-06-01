@@ -35,8 +35,17 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Enforce bundle budget
+        run: npm run bundle:budget
+
       - name: Lint
         run: npm run lint
+
+      - name: Secret scan
+        run: npm run security:secrets
+
+      - name: Dependency audit
+        run: npm run security:audit
 
       - name: Search smoke eval
         run: npm run eval:smoke

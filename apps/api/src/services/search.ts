@@ -3,6 +3,7 @@ import { searchCourses as semanticSearch } from './embeddings.js';
 import { validateSubject } from './query-resolver.js';
 import type { Course } from '../db/index.js';
 import type { SearchPlan, SearchFilters } from '@uiuc-course-search/query-types';
+import { errorFields, logger } from '../observability/logger.js';
 
 export interface SearchResult {
   course: Course;
@@ -627,7 +628,7 @@ export async function hybridSearch(
   const [rawSemanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
     runSemantic
       ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50).catch(err => {
-          console.warn('Semantic search failed, ignoring:', err);
+          logger.warn('search.semantic.failed', { ...errorFields(err) });
           return [];
         })
       : Promise.resolve([]),

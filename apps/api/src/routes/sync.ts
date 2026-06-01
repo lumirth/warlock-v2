@@ -8,6 +8,7 @@ import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa, coordinateEnrichment, processEnrichmentBatch, EnrichmentTask } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
 import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
+import { createRunId, errorFields, logger } from '../observability/logger.js';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
 
@@ -47,6 +48,7 @@ syncRoutes.post('/admin/sync-rmp', async (c) => {
 
 // Internal batch sync endpoint for RMP
 syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
+  const runId = createRunId('rmp-batch');
   try {
     const { teachers } = await c.req.json<{ teachers: RmpTeacherNode[] }>();
 
@@ -58,13 +60,13 @@ syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
       try {
         await processRmpBatch(c.env.DB, teachers);
       } catch (err) {
-        console.error('[RMP Batch] Background processing failed:', err);
+        logger.error('internal.rmpBatch.backgroundFailed', { runId, teacherCount: teachers.length, ...errorFields(err) });
       }
     })());
 
     return c.json({ status: 'processing', message: 'Batch accepted', count: teachers.length }, 202);
   } catch (error) {
-    console.error('[RMP Batch] Error:', error);
+    logger.error('internal.rmpBatch.failed', { runId, ...errorFields(error) });
     return c.json({ error: String(error) }, 500);
   }
 });
@@ -81,6 +83,7 @@ syncRoutes.post('/admin/enrich-scoring', async (c) => {
 
 // Internal batch sync endpoint for Enrichment
 syncRoutes.post('/internal/enrich-batch', async (c) => {
+  const runId = createRunId('enrich-batch');
   try {
     const { tasks } = await c.req.json<{ tasks: EnrichmentTask[] }>();
 
@@ -92,13 +95,13 @@ syncRoutes.post('/internal/enrich-batch', async (c) => {
       try {
         await processEnrichmentBatch(c.env.DB, tasks);
       } catch (err) {
-        console.error('[Enrichment Batch] Background processing failed:', err);
+        logger.error('internal.enrichmentBatch.backgroundFailed', { runId, taskCount: tasks.length, ...errorFields(err) });
       }
     })());
 
     return c.json({ status: 'processing', message: 'Batch accepted', count: tasks.length }, 202);
   } catch (error) {
-    console.error('[Enrichment Batch] Error:', error);
+    logger.error('internal.enrichmentBatch.failed', { runId, ...errorFields(error) });
     return c.json({ error: String(error) }, 500);
   }
 });
@@ -135,6 +138,7 @@ syncRoutes.post('/admin/sync-gpa', async (c) => {
 
 // Internal batch sync endpoint (Fan-Out Worker)
 syncRoutes.post('/internal/sync-batch', async (c) => {
+  const runId = createRunId('sync-batch');
   try {
     const { year, term, subjects } = await c.req.json<{ year: number; term: string; subjects: string[] }>();
 
@@ -149,7 +153,7 @@ syncRoutes.post('/internal/sync-batch', async (c) => {
       limit: subjects.length,
     };
 
-    console.log(`[Batch Worker] Syncing ${subjects.length} subjects: ${subjects.join(', ')}`);
+    logger.info('internal.syncBatch.start', { runId, year, term, subjectCount: subjects.length });
 
     const result = await syncSubjects(
       c.env.DB,
@@ -163,7 +167,7 @@ syncRoutes.post('/internal/sync-batch', async (c) => {
 
     return c.json(result);
   } catch (error) {
-    console.error('[Batch Worker] Error:', error);
+    logger.error('internal.syncBatch.failed', { runId, ...errorFields(error) });
     return c.json({ error: String(error) }, 500);
   }
 });

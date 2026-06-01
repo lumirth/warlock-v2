@@ -56,9 +56,11 @@ describe('Search Routes', () => {
     };
 
     const searchSpy = vi.fn().mockResolvedValue(mockPipelineResult);
-    vi.mocked(SearchPipeline).mockImplementation(() => ({
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
       search: searchSpy
-    }) as unknown as SearchPipeline);
+      } as unknown as SearchPipeline;
+    });
 
     const res = await app.request('/api/search?q=CS+225', {}, {
       DB: mockDB,
@@ -82,9 +84,11 @@ describe('Search Routes', () => {
 
   it('rejects malformed public search params before running search', async () => {
     const searchSpy = vi.fn();
-    vi.mocked(SearchPipeline).mockImplementation(() => ({
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
       search: searchSpy
-    }) as unknown as SearchPipeline);
+      } as unknown as SearchPipeline;
+    });
 
     const res = await app.request('/api/search?q=cs&limit=999999', {}, {
       DB: mockDB,
@@ -107,9 +111,11 @@ describe('Search Routes', () => {
         timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 }
       }
     });
-    vi.mocked(SearchPipeline).mockImplementation(() => ({
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
       search: searchSpy
-    }) as unknown as SearchPipeline);
+      } as unknown as SearchPipeline;
+    });
 
     const res = await app.request('/api/search?q=systems&subject=cs&credits=4&difficulty=easy', {}, {
       DB: mockDB,

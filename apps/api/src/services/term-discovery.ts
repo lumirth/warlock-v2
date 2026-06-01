@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { errorFields, logger } from '../observability/logger.js';
 import { upsertTermState, makeTermId } from '../db/index.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
@@ -68,7 +69,7 @@ export async function discoverAllTerms(
       const terms = await discoverTermsForYear(config, year);
       allTerms.push(...terms);
     } catch (error) {
-      console.error(`Failed to discover terms for ${year}:`, error);
+      logger.error('termDiscovery.discoverYear.failed', { year, ...errorFields(error) });
     }
   }
 
@@ -148,7 +149,7 @@ export async function discoverAndClassifyTerms(
         sync_errors: null,
       });
     } catch (error) {
-      console.error(`Failed to classify term ${term.termId}:`, error);
+      logger.error('termDiscovery.classifyTerm.failed', { termId: term.termId, ...errorFields(error) });
     }
   }
 
