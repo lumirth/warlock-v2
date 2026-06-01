@@ -161,7 +161,7 @@ export function createDefaultRegistry(): AliasRegistry {
     { kind: 'gened', canonical: 'NW', aliases: ['nw', 'non western', 'non-western'] },
     { kind: 'gened', canonical: 'US', aliases: ['us minority', 'minority cultures'] },
     { kind: 'gened', canonical: 'WCC', aliases: ['wcc', 'western comparative'] },
-    { kind: 'gened', canonical: 'ACP', aliases: ['acp', 'advanced composition'] },
+    { kind: 'gened', canonical: 'ACP', aliases: ['acp', 'advanced composition', 'writing intensive'] },
   ]);
 
   return registry;

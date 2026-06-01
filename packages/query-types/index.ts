@@ -1,4 +1,4 @@
-export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level' | 'course_code' | 'crn' | 'days' | 'time' | 'difficulty' | 'online' | 'status' | 'negation' | 'partOfTerm';
+export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level' | 'levelBoost' | 'course_code' | 'crn' | 'days' | 'time' | 'difficulty' | 'online' | 'status' | 'negation' | 'partOfTerm';
 
 export interface QueryHint {
   type: QueryHintType;
@@ -56,6 +56,7 @@ export interface Ambiguity {
 
 export interface SearchPlan {
   filters: SearchFilters;
+  softPreferences?: Record<string, unknown>;
   semanticQuery: string;
   keywordQuery: string;
   ambiguities?: Ambiguity[];

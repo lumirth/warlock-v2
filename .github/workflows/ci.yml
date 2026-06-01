@@ -40,3 +40,11 @@ jobs:
 
       - name: Search smoke eval
         run: npm run eval:smoke
+
+      - name: Upload eval smoke report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-smoke-report
+          path: artifacts/eval-smoke-*
+          if-no-files-found: error

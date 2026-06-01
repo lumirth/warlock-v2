@@ -31,6 +31,13 @@ export function calculateMetrics(results: EvalResult[]): EvalMetrics {
   // Zero result rate
   const zeroResults = results.filter(r => r.results.length === 0);
   const zeroResultRate = totalQueries > 0 ? zeroResults.length / totalQueries : 0;
+  const violationCount = results.reduce((sum, result) => sum + result.violations.length, 0);
+  const failedQueries = results.filter(result => result.violations.length > 0).length;
+  const passingQueries = totalQueries - failedQueries;
+  const missingExpectedTopCount = results.filter(result =>
+    (result.query.expected_top1 || result.query.expected_top1_title)
+    && result.reciprocalRank === 0
+  ).length;
 
   // By category
   const byCategory: Record<string, { count: number; mrr: number; violations: number }> = {};
@@ -57,6 +64,10 @@ export function calculateMetrics(results: EvalResult[]): EvalMetrics {
 
   return {
     totalQueries,
+    passingQueries,
+    failedQueries,
+    violationCount,
+    missingExpectedTopCount,
     mrr10,
     top1Accuracy,
     constraintViolationRate,

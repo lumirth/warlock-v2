@@ -436,11 +436,11 @@ function extractInstructors(text: string, hints: Hint[]): string {
   let residual = text;
   // Improved regex to handle apostrophes and hyphens in names
   const instructorPatterns = [
-    /\bwith\s+([A-Z][a-z']+(?:-[A-Z][a-z']+)?(?:\s+[A-Z][a-z']+(?:-[A-Z][a-z']+)?)*)\b/g,
-    /\bby\s+([A-Z][a-z']+(?:-[A-Z][a-z']+)?(?:\s+[A-Z][a-z']+(?:-[A-Z][a-z']+)?)*)\b/g,
-    /\bprofessor\s+([A-Z][a-z']+(?:-[A-Z][a-z']+)?(?:\s+[A-Z][a-z']+(?:-[A-Z][a-z']+)?)*)\b/gi,
-    /\bprof\.?\s+([A-Z][a-z']+(?:-[A-Z][a-z']+)?(?:\s+[A-Z][a-z']+(?:-[A-Z][a-z']+)?)*)\b/gi,
-    /\bdr\.?\s+([A-Z][a-z']+(?:-[A-Z][a-z']+)?(?:\s+[A-Z][a-z']+(?:-[A-Z][a-z']+)?)*)\b/gi,
+    /\bwith\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
+    /\bby\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
+    /\b[Pp]rofessor\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
+    /\b[Pp]rof\.?\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
+    /\b[Dd]r\.?\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
   ];
 
   for (const pattern of instructorPatterns) {

@@ -3,6 +3,7 @@ node_modules/
 .dev.vars
 .worktrees/
 apps/web/dist/
+artifacts/
 
 # OS files
 .DS_Store

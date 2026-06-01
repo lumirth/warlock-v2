@@ -195,8 +195,9 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 25,
     query: "beginner spanish",
-    expected_filters: { level: 100 },
-    expected_residual: "spanish",
+    expected_filters: {},
+    expected_soft_preferences: { levelBoost: 100 },
+    expected_residual: "beginner spanish",
     category: "structured"
   },
 
@@ -398,5 +399,79 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_residual: "intro to compilers",
     category: "semantic",
     notes: "intro should NOT force level=100 for compilers"
+  },
+
+  // === QUERY LANGUAGE V1 EDGE CASES ===
+  {
+    id: 51,
+    query: "gened:all(HUM,US)",
+    expected_filters: { gened_all: ["HUM", "US"] },
+    expected_residual: "",
+    category: "power_syntax"
+  },
+  {
+    id: 52,
+    query: 'status:open online:true days:MWF time:morning term:spring-2026 "data structures" -friday',
+    expected_filters: {
+      status: "open",
+      online: true,
+      days: "MWF",
+      time: "morning",
+      term: "spring",
+      year: 2026,
+      not: { days: ["friday"] }
+    },
+    expected_residual: "",
+    require_term_metadata: true,
+    category: "power_syntax",
+    notes: "Quoted phrase should become query text while hard filters remain explicit"
+  },
+  {
+    id: 53,
+    query: "campus:urbana algorithms",
+    expected_filters: {},
+    expected_residual: "campus:urbana algorithms",
+    category: "power_syntax",
+    notes: "Unsupported fields stay in residual instead of disappearing silently"
+  },
+  {
+    id: 54,
+    query: "algorithms -calculus",
+    expected_filters: {},
+    expected_residual: "algorithms -calculus",
+    category: "power_syntax",
+    notes: "Unsupported dash negation stays in residual"
+  },
+  {
+    id: 55,
+    query: "not online data structures",
+    expected_filters: { online: false },
+    expected_residual: "data structures",
+    category: "structured"
+  },
+  {
+    id: 56,
+    query: "no exams CS",
+    expected_filters: { subject: "CS" },
+    expected_residual: "no exams",
+    invariants: { subject: "CS" },
+    category: "structured",
+    notes: "Unsupported natural-language negation remains searchable text"
+  },
+  {
+    id: 57,
+    query: "partOfTerm:A CS",
+    expected_filters: { partOfTerm: "A", subject: "CS" },
+    expected_residual: "",
+    invariants: { subject: "CS" },
+    category: "power_syntax"
+  },
+  {
+    id: 58,
+    query: 'subject:CS "machine learning"',
+    expected_filters: { subject: "CS" },
+    expected_residual: "",
+    invariants: { subject: "CS" },
+    category: "power_syntax"
   },
 ];

@@ -1,92 +1,8 @@
-import type { GoldQuery, EvalResult } from './types.js';
+import type { EvalResult } from './types.js';
 import { GOLDEN_QUERIES } from './golden-queries.js';
 import { calculateMetrics } from './metrics.js';
 import { generateReport } from './report.js';
-
-interface ApiSearchResult {
-  id: string;
-  title: string;
-  subject: string;
-  number: string;
-  avg_gpa?: number;
-  gened?: string;
-  _score: number;
-}
-
-interface SearchResponse {
-  results: ApiSearchResult[];
-  meta: {
-    plan: {
-      filters: Record<string, unknown>;
-    };
-    extraction: {
-      hints: unknown[];
-    };
-    query: {
-      residual: string;
-    };
-    fallback?: {
-      tierReached: number;
-    };
-  };
-}
-
-function checkInvariants(query: GoldQuery, results: ApiSearchResult[]): string[] {
-  const violations: string[] = [];
-  if (!query.invariants) return violations;
-
-  for (const result of results) {
-    if (query.invariants.subject && result.subject !== query.invariants.subject) {
-      violations.push(`Result ${result.id} has subject=${result.subject}, expected ${query.invariants.subject}`);
-    }
-
-    if (query.invariants.level_gte) {
-      const level = parseInt(result.number.charAt(0)) * 100;
-      if (level < query.invariants.level_gte) {
-        violations.push(`Result ${result.id} is level ${level}, expected >= ${query.invariants.level_gte}`);
-      }
-    }
-
-    if (query.invariants.level_lte) {
-      const level = parseInt(result.number.charAt(0)) * 100;
-      if (level > query.invariants.level_lte) {
-        violations.push(`Result ${result.id} is level ${level}, expected <= ${query.invariants.level_lte}`);
-      }
-    }
-
-    if (query.invariants.no_subject && result.subject === query.invariants.no_subject) {
-      violations.push(`Result ${result.id} has forbidden subject=${result.subject}`);
-    }
-  }
-
-  return violations;
-}
-
-function calculateReciprocalRank(query: GoldQuery, results: ApiSearchResult[]): number | null {
-  if (!query.expected_top1 && !query.expected_top1_title) {
-    return null;
-  }
-
-  for (let i = 0; i < Math.min(results.length, 10); i++) {
-    const result = results[i];
-
-    if (query.expected_top1) {
-      // Match by ID pattern (e.g., "CS-225-*")
-      const pattern = query.expected_top1.replace('*', '.*');
-      if (new RegExp(`^${pattern}$`).test(result.id)) {
-        return 1 / (i + 1);
-      }
-    }
-
-    if (query.expected_top1_title) {
-      if (result.title.toLowerCase().includes(query.expected_top1_title.toLowerCase())) {
-        return 1 / (i + 1);
-      }
-    }
-  }
-
-  return 0;  // Not found in top 10
-}
+import { evaluateSearchResponse, type SearchResponseForEval } from './checks.js';
 
 export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
   console.log(`Running evaluation against ${baseUrl}...`);
@@ -103,29 +19,20 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
       }
 
-      const data = await response.json() as SearchResponse;
-      const results = data.results;
-
-      const violations = checkInvariants(query, results);
-      const reciprocalRank = calculateReciprocalRank(query, results);
-
-      evalResults.push({
-        query,
-        actualFilters: data.meta.plan.filters,
-        actualResidual: data.meta.query.residual,
-        results,
-        reciprocalRank,
-        violations,
-        tierReached: data.meta.fallback?.tierReached ?? null
-      });
+      const data = await response.json() as SearchResponseForEval;
+      const result = evaluateSearchResponse(query, data);
+      evalResults.push(result);
 
       // Progress indicator
-      const status = violations.length > 0 ? '✗' : '✓';
-      const rankStatus = (query.expected_top1 || query.expected_top1_title) ? ` (RR: ${reciprocalRank?.toFixed(2)})` : '';
-      console.log(`${status} [${query.id}] "${query.query}" - ${results.length} results, ${violations.length} violations${rankStatus}`);
+      const status = result.violations.length > 0 ? 'FAIL' : 'PASS';
+      const rankStatus = (query.expected_top1 || query.expected_top1_title) ? ` (RR: ${result.reciprocalRank?.toFixed(2)})` : '';
+      console.log(`${status} [${query.id}] "${query.query}" - ${result.results.length} results, ${result.violations.length} violations${rankStatus}`);
+      for (const violation of result.violations) {
+        console.log(`  - ${violation}`);
+      }
 
     } catch (error) {
-      console.error(`✗ [${query.id}] "${query.query}" - ERROR: ${error}`);
+      console.error(`FAIL [${query.id}] "${query.query}" - ERROR: ${error}`);
       evalResults.push({
         query,
         actualFilters: {},
@@ -151,14 +58,12 @@ declare const process: {
 const baseUrl = process.argv[2] || 'http://localhost:8787';
 runEvaluation(baseUrl)
   .then((results) => {
-    const violationCount = results.reduce((sum, result) => sum + result.violations.length, 0);
-    const missingExpectedTop = results.filter(result =>
-      (result.query.expected_top1 || result.query.expected_top1_title)
-      && result.reciprocalRank === 0
-    ).length;
+    const metrics = calculateMetrics(results);
 
-    if (violationCount > 0 || missingExpectedTop > 0) {
-      console.error(`Evaluation failed: ${violationCount} invariant violations, ${missingExpectedTop} missing expected top results.`);
+    if (metrics.violationCount > 0 || metrics.missingExpectedTopCount > 0) {
+      console.error(
+        `Evaluation failed: ${metrics.violationCount} violations, ${metrics.missingExpectedTopCount} missing expected top results.`
+      );
       process.exitCode = 1;
     }
   })

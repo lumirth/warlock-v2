@@ -18,7 +18,9 @@
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint .",
     "db:verify": "bash scripts/verify-schema.sh",
-    "eval:smoke": "npm test -w @uiuc-course-search/api -- --run src/services/__tests__/golden.test.ts",
+    "eval:smoke": "tsx scripts/eval-smoke.ts",
+    "eval:staging": "if [ -z \"$EVAL_BASE_URL\" ]; then echo \"EVAL_BASE_URL is required, for example https://api-staging.example.workers.dev\" >&2; exit 1; fi; npm run eval -w @uiuc-course-search/api -- \"$EVAL_BASE_URL\"",
+    "test:staging": "tsx scripts/staging-smoke.ts",
     "deploy:api": "npm run deploy -w @uiuc-course-search/api",
     "deploy:web": "npm run deploy -w @uiuc-course-search/web",
     "deploy": "concurrently \"npm run deploy:api\" \"npm run deploy:web\""

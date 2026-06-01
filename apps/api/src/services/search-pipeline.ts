@@ -4,7 +4,17 @@ import { parseTermValue, resolveQuery } from './query-resolver.js';
 import { hybridSearchWithTermRanking, sanitizeFtsQuery, type SearchResult } from './search.js';
 import { expandTopics } from './topic-registry.js';
 import { parseQuery } from './query-parser.js';
-import type { SearchPlan, ExtractedQuery, QueryHint, QueryHintType, SearchFilters, Hint, FieldFilter } from '@uiuc-course-search/query-types';
+import type {
+  ParsedQuery,
+  SearchPlan,
+  ExtractedQuery,
+  QueryHint,
+  QueryHintType,
+  SearchFilters,
+  Hint,
+  FieldFilter,
+} from '@uiuc-course-search/query-types';
+import type { ExtractionResult } from './extractor.js';
 
 export interface SearchPipelineResult {
   results: SearchResult[];
@@ -39,6 +49,7 @@ function mapHintType(type: string): QueryHintType {
     'days': 'days',
     'time': 'time',
     'level': 'level',
+    'levelBoost': 'levelBoost',
     'credits': 'credits',
     'online': 'online',
     'status': 'status',
@@ -159,6 +170,71 @@ function applyNegationToken(token: string, plan: SearchPlan): void {
   }
 }
 
+export interface SearchPlanningInput {
+  parsed: ParsedQuery;
+  extraction: ExtractionResult;
+  extracted: ExtractedQuery;
+}
+
+export interface SearchPlanningResult {
+  extraction: ExtractionResult;
+  plan: SearchPlan;
+}
+
+export function extractSearchPlanningInput(query: string): SearchPlanningInput {
+  const parsed = parseQuery(query);
+  const extraction = extractQuery(parsed.clauses[0].residual);
+
+  return {
+    parsed,
+    extraction,
+    extracted: {
+      rawQuery: query,
+      hints: extraction.hints.map(toQueryHint),
+      residual: extraction.residual,
+    },
+  };
+}
+
+export async function createSearchPlan(
+  db: D1Database,
+  query: string,
+  input: SearchPlanningInput = extractSearchPlanningInput(query),
+  overrides?: Partial<SearchFilters>
+): Promise<SearchPlanningResult> {
+  const plan = await resolveQuery(db, input.extracted);
+
+  const clause = input.parsed.clauses[0];
+  for (const filter of clause.filters) {
+    applyFieldFilter(filter, plan);
+  }
+
+  if (clause.genedMode) {
+    if (clause.genedMode.any) plan.filters.gened_any = clause.genedMode.any;
+    if (clause.genedMode.all) plan.filters.gened_all = clause.genedMode.all;
+  }
+
+  for (const negation of clause.negations) {
+    applyNegationToken(negation, plan);
+  }
+
+  if (clause.phrases.length > 0) {
+    const keywordPhrases = clause.phrases.map(phrase => `"${phrase.replace(/"/g, '""')}"`).join(' ');
+    const semanticPhrases = clause.phrases.join(' ');
+    plan.keywordQuery = appendQueryText(plan.keywordQuery, keywordPhrases);
+    plan.semanticQuery = appendQueryText(plan.semanticQuery, semanticPhrases);
+  }
+
+  if (overrides) {
+    Object.assign(plan.filters, overrides);
+  }
+
+  plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);
+  plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
+
+  return { extraction: input.extraction, plan };
+}
+
 export class SearchPipeline {
   constructor(
     private db: D1Database,
@@ -177,54 +253,10 @@ export class SearchPipeline {
   ): Promise<SearchPipelineResult> {
     const startTime = performance.now();
 
-    // 1. Parse power-user syntax (field:value, gened:any/all, negations, phrases)
-    const parsed = parseQuery(query);
-
-    // 2. Extract hints from residual using multi-pass extraction
-    const extraction = extractQuery(parsed.clauses[0].residual);
+    const planningInput = extractSearchPlanningInput(query);
     const extractionEndTime = performance.now();
 
-    // 3. Bridge to old ExtractedQuery format for resolver
-    const extracted: ExtractedQuery = {
-      rawQuery: query,
-      hints: extraction.hints.map(toQueryHint),
-      residual: extraction.residual,
-    };
-
-    // 4. Resolve hints against database (validates subjects, instructors, geneds)
-    const plan = await resolveQuery(this.db, extracted);
-
-    // 5. Apply parsed filters from power-user syntax (takes precedence)
-    const clause = parsed.clauses[0];
-    for (const filter of clause.filters) {
-      applyFieldFilter(filter, plan);
-    }
-
-    // 6. Apply gened:any/all from parsed query
-    if (clause.genedMode) {
-      if (clause.genedMode.any) plan.filters.gened_any = clause.genedMode.any;
-      if (clause.genedMode.all) plan.filters.gened_all = clause.genedMode.all;
-    }
-
-    for (const negation of clause.negations) {
-      applyNegationToken(negation, plan);
-    }
-
-    if (clause.phrases.length > 0) {
-      const keywordPhrases = clause.phrases.map(phrase => `"${phrase.replace(/"/g, '""')}"`).join(' ');
-      const semanticPhrases = clause.phrases.join(' ');
-      plan.keywordQuery = appendQueryText(plan.keywordQuery, keywordPhrases);
-      plan.semanticQuery = appendQueryText(plan.semanticQuery, semanticPhrases);
-    }
-
-    // 7. Apply manual overrides from API call
-    if (overrides) {
-      Object.assign(plan.filters, overrides);
-    }
-
-    // 8. Sanitize search queries to prevent FTS crashes
-    plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);
-    plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
+    const { extraction, plan } = await createSearchPlan(this.db, query, planningInput, overrides);
 
     const searchStartTime = performance.now();
     let results: SearchResult[];
@@ -247,7 +279,7 @@ export class SearchPipeline {
       // If we have few results, try expansion
       if (results.length < 3) {
         // Tier 3: Topic Hybrid (Topic expansion)
-        const expandedKeywords = expandTopics(extracted.residual);
+        const expandedKeywords = expandTopics(extraction.residual);
         if (expandedKeywords.length > 0) {
           tierReached = 3;
           const expandedPlan: SearchPlan = {

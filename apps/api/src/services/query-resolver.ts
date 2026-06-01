@@ -120,6 +120,15 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         break;
       }
 
+      case 'levelBoost': {
+        const levelValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
+        plan.softPreferences = {
+          ...plan.softPreferences,
+          levelBoost: levelValue,
+        };
+        break;
+      }
+
       case 'credits': {
         const creditsValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
         plan.filters.credits = creditsValue;
