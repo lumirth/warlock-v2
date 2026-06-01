@@ -40,9 +40,8 @@ npx wrangler secret put RMP_AUTH_TOKEN --env staging
 ## Deploy And Smoke
 
 ```bash
-npm run deploy:api -- --env staging
-VITE_API_BASE_URL=https://<staging-worker-host> npm run build -w @uiuc-course-search/web
-npx wrangler pages deploy apps/web/dist --project-name uiuc-course-search-web --branch staging
+npm run deploy:api:staging
+VITE_API_BASE_URL=https://<staging-worker-host> npm run deploy:web:staging
 
 STAGING_API_BASE_URL=https://<staging-worker-host> \
 STAGING_ADMIN_TOKEN=<redacted> \

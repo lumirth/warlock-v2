@@ -70,6 +70,8 @@ Additional gate evidence:
 - Cloudflare preflight now requires separate API and web staging URL evidence plus `Pages Project: uiuc-course-search-web` and `Pages Branch: staging`, so the Pages deployment cannot be skipped while the API worker is green.
 - Cloudflare preflight now requires `D1 Restore Verified: yes` as a concrete report label; prose or checklist text mentioning that label does not count.
 - Completion audit refresh on 2026-06-01T18:36:26Z reran `npm run typecheck`, `npm test`, `npm run build`, `npm run lint`, `npm run db:verify`, `npm run eval:smoke`, `npm run bundle:budget`, and `npm run security:secrets`; all passed. GitHub CI passed on `e0560e0`. `npm run test:staging`, `npm run eval:staging`, and `npm run cloudflare:preflight` remain auth/evidence-gated because Cloudflare staging/auth evidence is absent.
+- Staging deployment commands are now explicit: `npm run deploy:api:staging`, `npm run deploy:web:staging`, and `npm run deploy:staging`. Ambiguous default deploy scripts were removed so a pre-alpha deploy does not accidentally target the wrong Worker or Pages branch.
+- Legacy admin sync aliases `/admin/sync/rmp` and `/admin/sync/enrich` and the raw `/admin/debug/link-instructor` diagnostic were removed. Active stale `apps/web/docs/plans` files that pointed at those paths were deleted, and `docs/security-route-matrix.md` now lists the remaining admin/debug surface explicitly.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
 
@@ -204,9 +206,8 @@ After valid Cloudflare auth is present:
 
 ```bash
 npx wrangler whoami
-npm run deploy:api -- --env staging
-VITE_API_BASE_URL=https://<staging-worker-host> npm run build -w @uiuc-course-search/web
-npx wrangler pages deploy apps/web/dist --project-name uiuc-course-search-web --branch staging
+npm run deploy:api:staging
+VITE_API_BASE_URL=https://<staging-worker-host> npm run deploy:web:staging
 STAGING_API_BASE_URL=https://<staging-worker-host> STAGING_ADMIN_TOKEN=<redacted> STAGING_INTERNAL_TOKEN=<redacted> npm run test:staging
 EVAL_BASE_URL=https://<staging-worker-host> npm run eval:staging
 ```

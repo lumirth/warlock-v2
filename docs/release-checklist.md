@@ -45,9 +45,8 @@ These require valid Cloudflare auth through Wrangler or `CLOUDFLARE_API_TOKEN`/a
 
 ```bash
 npx wrangler whoami
-npm run deploy:api -- --env staging
-VITE_API_BASE_URL=https://<staging-worker-host> npm run build -w @uiuc-course-search/web
-npx wrangler pages deploy apps/web/dist --project-name uiuc-course-search-web --branch staging
+npm run deploy:api:staging
+VITE_API_BASE_URL=https://<staging-worker-host> npm run deploy:web:staging
 STAGING_API_BASE_URL=https://<staging-worker-host> STAGING_ADMIN_TOKEN=<redacted> STAGING_INTERNAL_TOKEN=<redacted> npm run test:staging
 EVAL_BASE_URL=https://<staging-worker-host> npm run eval:staging
 npm run cloudflare:preflight

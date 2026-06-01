@@ -19,7 +19,7 @@ npx wrangler deployments list --name uiuc-course-search --json
 git log --oneline -10
 git revert <bad-commit>
 npm run typecheck && npm test && npm run build && npm run lint
-npm run deploy:api -- --env staging
+npm run deploy:api:staging
 ```
 
 3. For production rollback, use Cloudflare deployment rollback only after confirming the target deployment ID and recording it in the incident notes.
@@ -31,8 +31,7 @@ npm run deploy:api -- --env staging
 3. Promote only after Browser smoke passes.
 
 ```bash
-VITE_API_BASE_URL=https://<api-host> npm run build -w @uiuc-course-search/web
-npx wrangler pages deploy apps/web/dist --project-name uiuc-course-search-web --branch staging
+VITE_API_BASE_URL=https://<staging-worker-host> npm run deploy:web:staging
 ```
 
 ## D1

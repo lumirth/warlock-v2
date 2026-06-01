@@ -19,10 +19,13 @@ The project is pre-alpha and has no compatibility obligations. Routes should sta
 | `POST /admin/discover-terms` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Discovers active/historical terms. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `GET /admin/terms` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | No | Operational term state. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `POST /admin/sync/:year/:term` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Bounded params; manual term sync. | `apps/api/src/routes/__tests__/sync-validation.test.ts` |
+| `POST /admin/sync-active` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Bounded active-term sync fan-out. | `apps/api/src/middleware/__tests__/auth.test.ts` |
+| `GET /admin/upstream-backoff-status` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | No | Fixed upstream backoff state only. | `apps/api/src/routes/__tests__/debug.test.ts` |
+| `POST /admin/reset-upstream-backoff` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Resets in-memory upstream backoff state only. | `apps/api/src/routes/__tests__/debug.test.ts` |
 | `POST /internal/sync-rmp-batch` | Internal | `Authorization: Bearer $INTERNAL_TOKEN` | Yes | Service-binding batch worker. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `POST /internal/enrich-batch` | Internal | `Authorization: Bearer $INTERNAL_TOKEN` | Yes | Service-binding enrichment worker. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `POST /internal/sync-batch` | Internal | `Authorization: Bearer $INTERNAL_TOKEN` | Yes | Service-binding course sync worker. | `apps/api/src/middleware/__tests__/auth.test.ts` |
-| `/admin/debug/*` | Admin diagnostics | `Authorization: Bearer $ADMIN_TOKEN` | No | Fixed diagnostics only; no arbitrary fetch tool. | `apps/api/src/routes/__tests__/debug.test.ts` |
+| `GET /admin/debug/subjects/:year/:term` | Admin diagnostics | `Authorization: Bearer $ADMIN_TOKEN` | No | Fixed CISAPI subject-list diagnostic only; no arbitrary fetch or raw course/GPA dump tools. | `apps/api/src/routes/__tests__/debug.test.ts` |
 
 ## Required Checks
 
