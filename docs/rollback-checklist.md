@@ -40,10 +40,10 @@ npx wrangler pages deploy apps/web/dist --project-name uiuc-course-search-web --
 Never run destructive D1 commands without a verified backup reference:
 
 ```bash
-npm run d1:preflight -- --database <db-name> --backup-ref <backup-ref> --evidence-file <report-path> --restore-verified
+npm run d1:preflight -- --database <db-name> --backup-ref <YYYYMMDDTHHMMSSZ> --evidence-file <report-path> --restore-verified
 ```
 
-For schema/data rollback, prefer restoring a verified export into a new non-production D1 database first, then swap bindings only after the restored DB passes schema and smoke checks.
+For schema/data rollback, prefer restoring a verified export into a new non-production D1 database first, then swap bindings only after the restored DB passes schema and smoke checks. The evidence file must name `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified: yes`.
 
 ## Generated Artifacts
 

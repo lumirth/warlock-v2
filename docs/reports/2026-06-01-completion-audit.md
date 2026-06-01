@@ -51,7 +51,7 @@ The goal is complete only when all of these deliverables are true at the same ti
 | Staging Worker/Pages/bindings/secrets | `apps/api/wrangler.toml` has production bindings only; no real `[env.staging]` resource IDs are present. | Incomplete |
 | Staging deploy/auth/search/course smoke | No staging URL or token env exists; `npm run test:staging` cannot run live. | Incomplete |
 | Public WAF/rate-limit verification | Runbook/checklists define required controls and the final preflight requires rule ID plus route/action/threshold evidence, but no Cloudflare rule ID or dashboard/API evidence exists. | Incomplete |
-| Remote D1 backup/restore proof | `d1:preflight` tooling exists, but no real `D1 Backup Ref`, `D1 Backup Location`, restore database, or `D1 Restore Verified: yes` evidence exists. | Incomplete |
+| Remote D1 backup/restore proof | `d1:preflight` tooling requires timestamped backup refs, backup location/path, restore database, and `D1 Restore Verified: yes`; no real `D1 Backup Ref`, `D1 Backup Location`, restore database, or `D1 Restore Verified: yes` evidence exists yet. | Incomplete |
 | Final report with staging URL/backup/residual risk | Stabilization report is accurate about local completion and Cloudflare blockers, but cannot include real staging URL, WAF rule ID, or D1 restore proof yet. | Incomplete |
 
 ## Completion Decision

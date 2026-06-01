@@ -31,11 +31,14 @@ afterEach(() => {
 });
 
 describe('D1 backup preflight', () => {
-  it('passes when restore evidence names the database and backup ref', () => {
+  it('passes when restore evidence includes concrete backup and restore markers', () => {
     const evidenceFile = makeEvidenceFile([
       '# Restore Evidence',
       'Database: course-search-db-staging',
-      'Backup: 20260601T170000Z',
+      'D1 Backup Ref: 20260601T170000Z',
+      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
+      'D1 Restore Database: course-search-db-staging-restore-20260601T170000Z',
+      'D1 Restore Verified: yes',
     ].join('\n'));
 
     const result = runPreflight([
@@ -55,7 +58,12 @@ describe('D1 backup preflight', () => {
   });
 
   it('rejects evidence that does not name the backup ref', () => {
-    const evidenceFile = makeEvidenceFile('Database: course-search-db-staging');
+    const evidenceFile = makeEvidenceFile([
+      'Database: course-search-db-staging',
+      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
+      'D1 Restore Database: course-search-db-staging-restore-20260601T170000Z',
+      'D1 Restore Verified: yes',
+    ].join('\n'));
 
     const result = runPreflight([
       '--database',
@@ -69,13 +77,16 @@ describe('D1 backup preflight', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Evidence file does not mention required backup markers');
-    expect(result.stderr).toContain('20260601T170000Z');
+    expect(result.stderr).toContain('D1 Backup Ref: 20260601T170000Z');
   });
 
   it('rejects destructive-operation preflight without restore verification', () => {
     const evidenceFile = makeEvidenceFile([
       'Database: course-search-db-staging',
-      'Backup: 20260601T170000Z',
+      'D1 Backup Ref: 20260601T170000Z',
+      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
+      'D1 Restore Database: course-search-db-staging-restore-20260601T170000Z',
+      'D1 Restore Verified: yes',
     ].join('\n'));
 
     const result = runPreflight([
@@ -89,5 +100,50 @@ describe('D1 backup preflight', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Missing D1 backup preflight requirements: --restore-verified');
+  });
+
+  it('rejects non-timestamp backup refs', () => {
+    const evidenceFile = makeEvidenceFile([
+      'Database: course-search-db-staging',
+      'D1 Backup Ref: latest',
+      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-latest.sql',
+      'D1 Restore Database: course-search-db-staging-restore-latest',
+      'D1 Restore Verified: yes',
+    ].join('\n'));
+
+    const result = runPreflight([
+      '--database',
+      'course-search-db-staging',
+      '--backup-ref',
+      'latest',
+      '--evidence-file',
+      evidenceFile,
+      '--restore-verified',
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Backup ref must use YYYYMMDDTHHMMSSZ format');
+  });
+
+  it('rejects evidence without restore database and restore verified markers', () => {
+    const evidenceFile = makeEvidenceFile([
+      'Database: course-search-db-staging',
+      'D1 Backup Ref: 20260601T170000Z',
+      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
+    ].join('\n'));
+
+    const result = runPreflight([
+      '--database',
+      'course-search-db-staging',
+      '--backup-ref',
+      '20260601T170000Z',
+      '--evidence-file',
+      evidenceFile,
+      '--restore-verified',
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('D1 Restore Database: course-search-db-staging-restore-20260601T170000Z');
+    expect(result.stderr).toContain('D1 Restore Verified: yes');
   });
 });

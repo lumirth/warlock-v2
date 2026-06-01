@@ -12,9 +12,9 @@ function usage(): string {
     'D1 destructive-operation preflight',
     '',
     'Required:',
-    '  --database <name-or-id>',
-    '  --backup-ref <timestamp-or-backup-id>',
-    '  --evidence-file <path-containing-database-and-backup-ref>',
+    '  --database <database-name>',
+    '  --backup-ref <YYYYMMDDTHHMMSSZ>',
+    '  --evidence-file <path-containing-concrete-backup-and-restore-evidence>',
     '  --restore-verified',
     '',
     'Example:',
@@ -48,6 +48,15 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
+function labelValue(text: string, label: string): string | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^\\s*${escaped}\\s*:\\s*(.+)$`, 'im').exec(text)?.[1]?.trim() ?? null;
+}
+
+function hasTimestampBackupRef(value: string | undefined): boolean {
+  return Boolean(value) && /^[0-9]{8}T[0-9]{6}Z$/i.test(value!);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const missing = [
@@ -62,10 +71,22 @@ async function main(): Promise<void> {
     throw new Error(`Missing D1 backup preflight requirements: ${missing.join(', ')}`);
   }
 
+  if (!hasTimestampBackupRef(args.backupRef)) {
+    throw new Error(`Backup ref must use YYYYMMDDTHHMMSSZ format: ${args.backupRef}`);
+  }
+
   const evidence = await readFile(args.evidenceFile!, 'utf8');
+  const backupRef = labelValue(evidence, 'D1 Backup Ref');
+  const backupLocation = labelValue(evidence, 'D1 Backup Location') ?? labelValue(evidence, 'D1 Backup Path');
+  const restoreDatabase = labelValue(evidence, 'D1 Restore Database');
+  const restoreVerified = labelValue(evidence, 'D1 Restore Verified');
+  const expectedRestoreDatabase = `${args.database}-restore-${args.backupRef}`;
   const missingEvidence = [
     !evidence.includes(args.database!) && args.database,
-    !evidence.includes(args.backupRef!) && args.backupRef,
+    backupRef !== args.backupRef && `D1 Backup Ref: ${args.backupRef}`,
+    (!backupLocation || !backupLocation.includes(args.backupRef!)) && `D1 Backup Location containing ${args.backupRef}`,
+    restoreDatabase !== expectedRestoreDatabase && `D1 Restore Database: ${expectedRestoreDatabase}`,
+    restoreVerified?.toLowerCase() !== 'yes' && 'D1 Restore Verified: yes',
   ].filter(Boolean);
 
   if (missingEvidence.length > 0) {

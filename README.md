@@ -41,8 +41,10 @@ Remote destructive D1 work should first create and verify a restorable backup/ex
 Run the preflight before destructive D1 operations:
 
 ```bash
-npm run d1:preflight -- --database <db-name> --backup-ref <backup-ref> --evidence-file <report-path> --restore-verified
+npm run d1:preflight -- --database <db-name> --backup-ref <YYYYMMDDTHHMMSSZ> --evidence-file <report-path> --restore-verified
 ```
+
+The evidence file must include `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified: yes` markers.
 
 Cloudflare staging readiness is intentionally executable. After staging resources, smoke output, real-looking WAF/rate-limit rule evidence with route/action/threshold proof, and D1 backup/restore evidence exist, run:
 
