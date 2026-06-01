@@ -65,7 +65,11 @@ searchRoutes.get('/api/search', async (c) => {
     const result = await pipeline.search(query, limit, overrides, c.executionCtx.waitUntil.bind(c.executionCtx));
 
     const response: SearchResponseDto = {
-      results: result.results.map(searchResultToCourseDto),
+      results: result.results.map(searchResult => searchResultToCourseDto(searchResult, {
+        plan: result.meta.plan,
+        rawQuery: result.meta.query.raw,
+        hints: result.meta.extraction.hints,
+      })),
       meta: {
         ...result.meta,
         ambiguities: result.meta.plan.ambiguities,

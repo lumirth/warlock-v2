@@ -167,6 +167,48 @@ export type CourseSectionDto = {
   instructorStats: InstructorLinkDto[];
 };
 
+export type MatchEvidenceKind =
+  | 'course_code'
+  | 'subject'
+  | 'number'
+  | 'crn'
+  | 'title'
+  | 'gened'
+  | 'schedule'
+  | 'delivery'
+  | 'instructor'
+  | 'topic'
+  | 'semantic'
+  | 'keyword'
+  | 'difficulty'
+  | 'quality'
+  | 'term';
+
+export type MatchEvidenceSource = 'filter' | 'query' | 'keyword' | 'semantic' | 'metadata' | 'term';
+
+export type MatchEvidenceWeight = 'hard' | 'soft' | 'rank';
+
+export type MatchEvidence = {
+  kind: MatchEvidenceKind;
+  label: string;
+  value?: string;
+  source: MatchEvidenceSource;
+  weight: MatchEvidenceWeight;
+};
+
+export type ResultWarningKind = 'historical' | 'cached' | 'stale' | 'partial';
+
+export type ResultWarning = {
+  kind: ResultWarningKind;
+  message: string;
+};
+
+export type SectionMatchDto = {
+  crn: string;
+  sectionNumber: string;
+  evidence: MatchEvidence[];
+};
+
 export type CourseDto = {
   id: string;
   subject: string;
@@ -192,6 +234,9 @@ export type CourseDto = {
   _age_seconds?: number;
   _fetched_at?: number;
   _term_status?: string;
+  match_evidence?: MatchEvidence[];
+  warnings?: ResultWarning[];
+  section_matches?: SectionMatchDto[];
 };
 
 export type SearchMetaDto = {

@@ -62,6 +62,12 @@ const course: CourseDto = {
   _historical: false,
   _cached: true,
   _term_status: 'active',
+  match_evidence: [
+    { kind: 'course_code', label: 'Course CS 225', source: 'filter', weight: 'hard', value: 'CS 225' },
+    { kind: 'gened', label: 'GenEd QR', source: 'filter', weight: 'hard', value: 'QR' },
+    { kind: 'keyword', label: 'Keyword rank #1', source: 'keyword', weight: 'rank', value: '1' },
+  ],
+  warnings: [],
 };
 
 function searchResponse(query: string): SearchResponseDto {

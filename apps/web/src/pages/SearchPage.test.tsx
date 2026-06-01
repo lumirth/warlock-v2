@@ -147,4 +147,27 @@ describe('SearchPage request state', () => {
     expect(consoleError).not.toHaveBeenCalled()
     consoleError.mockRestore()
   })
+
+  it('renders compact match evidence chips for search results', async () => {
+    vi.mocked(api.search).mockResolvedValueOnce(searchResponse([
+      course({
+        id: 'CS-225-2026-spring',
+        number: '225',
+        title: 'Data Structures',
+        match_evidence: [
+          { kind: 'course_code', label: 'Course CS 225', source: 'filter', weight: 'hard', value: 'CS 225' },
+          { kind: 'keyword', label: 'Keyword rank #1', source: 'keyword', weight: 'rank', value: '1' },
+        ],
+      }),
+    ]))
+
+    renderSearchPage()
+
+    setQuery('cs 225')
+    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+
+    await screen.findByText(/CS 225: Data Structures/i)
+    expect(screen.getByText('Course CS 225')).toBeInTheDocument()
+    expect(screen.getByText('Keyword rank #1')).toBeInTheDocument()
+  })
 })

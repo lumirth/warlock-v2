@@ -3,7 +3,7 @@ import { Alert, Container, Title, TextInput, Button, Group, Badge, Paper, Text, 
 import { IconAlertCircle, IconSearch } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
-import type { CourseDto, Hint, SearchMetaDto } from '@uiuc-course-search/query-types'
+import type { CourseDto, Hint, MatchEvidence, SearchMetaDto } from '@uiuc-course-search/query-types'
 
 function formatHintValue(value: Hint['value']): string {
   if (typeof value === 'object' && value !== null) {
@@ -31,6 +31,12 @@ function getHintColor(type: string): string {
     crn: 'grape',
   }
   return colors[type] || 'gray'
+}
+
+function getEvidenceColor(evidence: MatchEvidence): string {
+  if (evidence.weight === 'hard') return 'blue'
+  if (evidence.weight === 'rank') return evidence.kind === 'semantic' ? 'violet' : 'gray'
+  return 'teal'
 }
 
 export function SearchPage() {
@@ -190,6 +196,22 @@ export function SearchPage() {
                         {r._historical && <Badge color="yellow" size="xs">historical</Badge>}
                         {r.gened && <Badge variant="outline" size="xs">{r.gened}</Badge>}
                       </Group>
+                      {r.match_evidence && r.match_evidence.length > 0 && (
+                        <Group gap={4} mt={6}>
+                          {r.match_evidence.slice(0, 5).map((evidence) => (
+                            <Badge
+                              key={`${evidence.kind}-${evidence.label}`}
+                              size="xs"
+                              variant={evidence.weight === 'hard' ? 'filled' : 'light'}
+                              color={getEvidenceColor(evidence)}
+                              tt="none"
+                              title={evidence.label}
+                            >
+                              {evidence.label}
+                            </Badge>
+                          ))}
+                        </Group>
+                      )}
                     </Box>
                     {typeof r._score === 'number' && (
                       <Badge variant="light" style={{ flexShrink: 0 }}>Match {r._score.toFixed(2)}</Badge>

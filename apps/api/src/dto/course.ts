@@ -1,5 +1,17 @@
 import type { Course, Section } from '../db/index.js';
-import type { CourseDto, CourseSectionDto, InstructorLinkDto } from '@uiuc-course-search/query-types';
+import type {
+  CourseDto,
+  CourseSectionDto,
+  Hint,
+  InstructorLinkDto,
+  MatchEvidence,
+  MatchEvidenceKind,
+  MatchEvidenceSource,
+  MatchEvidenceWeight,
+  ResultWarning,
+  SearchPlan,
+  SectionMatchDto,
+} from '@uiuc-course-search/query-types';
 import type { SearchResult } from '../services/search.js';
 
 type CourseSource = Pick<
@@ -45,6 +57,15 @@ export type CourseDtoOptions = {
   ageSeconds?: number;
   fetchedAt?: number;
   termStatus?: string;
+  matchEvidence?: MatchEvidence[];
+  warnings?: ResultWarning[];
+  sectionMatches?: SectionMatchDto[];
+};
+
+export type SearchResultEvidenceContext = {
+  plan: SearchPlan;
+  rawQuery: string;
+  hints?: Hint[];
 };
 
 export function toInstructorLinkDto(row: InstructorLinkRow | null | undefined): InstructorLinkDto {
@@ -111,14 +132,172 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     _age_seconds: options.ageSeconds,
     _fetched_at: options.fetchedAt,
     _term_status: options.termStatus,
+    match_evidence: options.matchEvidence,
+    warnings: options.warnings,
+    section_matches: options.sectionMatches,
   };
 }
 
-export function searchResultToCourseDto(result: SearchResult): CourseDto {
+function normalizeText(value: string | null | undefined): string {
+  return (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function normalizeCompact(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function addEvidence(
+  evidence: MatchEvidence[],
+  seen: Set<string>,
+  kind: MatchEvidenceKind,
+  label: string,
+  source: MatchEvidenceSource,
+  weight: MatchEvidenceWeight,
+  value?: string
+): void {
+  const key = `${kind}:${label}:${value ?? ''}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  evidence.push({ kind, label, source, weight, value });
+}
+
+function hasHint(hints: Hint[] | undefined, type: Hint['type']): boolean {
+  return hints?.some(hint => hint.type === type) ?? false;
+}
+
+export function buildMatchEvidence(
+  result: SearchResult,
+  context: SearchResultEvidenceContext
+): MatchEvidence[] {
+  const { course } = result;
+  const { filters, softPreferences } = context.plan;
+  const evidence: MatchEvidence[] = [];
+  const seen = new Set<string>();
+  const courseCode = `${course.subject} ${course.number}`;
+  const normalizedRaw = normalizeText(context.rawQuery);
+  const compactRaw = normalizeCompact(context.rawQuery);
+  const normalizedTitle = normalizeText(course.title);
+
+  const exactCourseCode =
+    (filters.subject === course.subject && filters.number === course.number)
+    || normalizedRaw.includes(normalizeText(courseCode))
+    || compactRaw.includes(normalizeCompact(courseCode));
+
+  if (exactCourseCode) {
+    addEvidence(evidence, seen, 'course_code', `Course ${courseCode}`, 'filter', 'hard', courseCode);
+  } else {
+    if (filters.subject === course.subject) {
+      addEvidence(evidence, seen, 'subject', `Subject ${course.subject}`, 'filter', 'hard', course.subject);
+    }
+    if (filters.number === course.number) {
+      addEvidence(evidence, seen, 'number', `Number ${course.number}`, 'filter', 'hard', course.number);
+    }
+  }
+
+  if (filters.crn) {
+    addEvidence(evidence, seen, 'crn', `CRN ${filters.crn}`, 'filter', 'hard', filters.crn);
+  }
+
+  if (normalizedTitle && (normalizedRaw.includes(normalizedTitle) || normalizedTitle.includes(normalizedRaw))) {
+    addEvidence(evidence, seen, 'title', `Title match: ${course.title}`, 'keyword', 'rank', course.title);
+  }
+
+  const genedFilters = [
+    filters.gened_code,
+    ...(filters.gened_any ?? []),
+    ...(filters.gened_all ?? []),
+  ].filter((value): value is string => Boolean(value));
+  if (genedFilters.length > 0) {
+    addEvidence(
+      evidence,
+      seen,
+      'gened',
+      `GenEd ${genedFilters.join(', ')}`,
+      'filter',
+      'hard',
+      course.gened ?? genedFilters.join(',')
+    );
+  } else if (hasHint(context.hints, 'gened') && course.gened) {
+    addEvidence(evidence, seen, 'gened', `GenEd ${course.gened}`, 'query', 'soft', course.gened);
+  }
+
+  if (filters.days) {
+    addEvidence(evidence, seen, 'schedule', `${filters.days} schedule`, 'filter', 'hard', filters.days);
+  }
+  if (filters.time) {
+    addEvidence(evidence, seen, 'schedule', `${filters.time} time`, 'filter', 'hard', filters.time);
+  }
+  if (filters.partOfTerm) {
+    addEvidence(evidence, seen, 'schedule', `Part of term ${filters.partOfTerm}`, 'filter', 'hard', filters.partOfTerm);
+  }
+  if (filters.status) {
+    addEvidence(evidence, seen, 'schedule', `${filters.status} sections`, 'filter', 'hard', filters.status);
+  }
+
+  if (filters.online !== undefined) {
+    addEvidence(
+      evidence,
+      seen,
+      'delivery',
+      filters.online ? 'Online delivery' : 'In-person delivery',
+      'filter',
+      'hard',
+      String(filters.online)
+    );
+  }
+
+  if (filters.instructor_ids?.length || hasHint(context.hints, 'instructor')) {
+    addEvidence(evidence, seen, 'instructor', 'Instructor match', 'filter', 'hard', course.primary_instructor ?? undefined);
+  }
+
+  if (filters.difficulty) {
+    addEvidence(evidence, seen, 'difficulty', `${filters.difficulty} workload fit`, 'filter', 'soft', filters.difficulty);
+    if (typeof course.quality_score === 'number') {
+      addEvidence(evidence, seen, 'quality', `Quality ${course.quality_score.toFixed(0)}`, 'metadata', 'soft', course.quality_score.toFixed(0));
+    }
+  }
+
+  if (softPreferences?.levelBoost) {
+    addEvidence(evidence, seen, 'topic', `${softPreferences.levelBoost} level preference`, 'query', 'soft', String(softPreferences.levelBoost));
+  }
+
+  if (filters.term || filters.year) {
+    addEvidence(
+      evidence,
+      seen,
+      'term',
+      [filters.term, filters.year].filter(Boolean).join(' '),
+      'term',
+      'hard',
+      `${course.term} ${course.year}`
+    );
+  }
+
+  if (result.keywordRank !== undefined) {
+    addEvidence(evidence, seen, 'keyword', `Keyword rank #${result.keywordRank}`, 'keyword', 'rank', String(result.keywordRank));
+  }
+  if (result.semanticRank !== undefined) {
+    addEvidence(evidence, seen, 'semantic', `Semantic rank #${result.semanticRank}`, 'semantic', 'rank', String(result.semanticRank));
+  }
+
+  return evidence;
+}
+
+export function buildResultWarnings(result: SearchResult): ResultWarning[] {
+  const warnings: ResultWarning[] = [];
+  if (result.historical) {
+    warnings.push({ kind: 'historical', message: 'Historical term result' });
+  }
+  return warnings;
+}
+
+export function searchResultToCourseDto(result: SearchResult, context?: SearchResultEvidenceContext): CourseDto {
   return toCourseDto(result.course, {
     score: result.score,
     semanticRank: result.semanticRank,
     keywordRank: result.keywordRank,
     historical: result.historical,
+    matchEvidence: context ? buildMatchEvidence(result, context) : undefined,
+    warnings: buildResultWarnings(result),
   });
 }
