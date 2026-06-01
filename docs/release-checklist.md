@@ -62,7 +62,7 @@ Before a public demo, configure Cloudflare rate limiting or WAF rules for:
 - `GET /api/search*`: start at 60 requests/minute/IP.
 - `GET /api/course/*`: start at 120 requests/minute/IP.
 
-Record the rule IDs, expressions, thresholds, action, and observed dashboard state in the final report.
+Record the rule IDs, expressions, thresholds, action, and observed dashboard state in the final report. Use `WAF Rule ID: <uuid>` or `Rate-Limit Rule ID: <uuid-or-32-hex-id>` so `npm run cloudflare:preflight` can verify it.
 
 ## Data Safety
 
@@ -77,4 +77,13 @@ npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --
 npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
 npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
 npm run cloudflare:preflight
+```
+
+Record the D1 evidence with these labels before running the final Cloudflare preflight:
+
+```text
+D1 Backup Ref: <YYYYMMDDTHHMMSSZ>
+D1 Backup Location: artifacts/d1-backups/course-search-db-staging-<YYYYMMDDTHHMMSSZ>.sql
+D1 Restore Database: course-search-db-staging-restore-<YYYYMMDDTHHMMSSZ>
+D1 Restore Verified: yes
 ```

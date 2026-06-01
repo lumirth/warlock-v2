@@ -90,6 +90,46 @@ function isRealHexId(value: string | null): boolean {
     && /^[0-9a-f]{32}$/i.test(value!);
 }
 
+function labelValue(text: string, label: string): string | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^\\s*${escaped}\\s*:\\s*(\\S+)`, 'im').exec(text)?.[1] ?? null;
+}
+
+function isRealHttpsUrl(value: string | null): boolean {
+  if (!value || isPlaceholder(value)) return false;
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === 'https:'
+      && hostname.length > 0
+      && hostname !== 'example.com'
+      && !hostname.endsWith('.example')
+      && !hostname.includes('.example.')
+      && !hostname.includes('localhost');
+  } catch {
+    return false;
+  }
+}
+
+function isRealCloudflareRuleId(value: string | null): boolean {
+  if (!value || isPlaceholder(value)) return false;
+
+  return isRealHexId(value)
+    || /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isTimestampBackupRef(value: string | null): boolean {
+  return Boolean(value) && /^[0-9]{8}T[0-9]{6}Z$/i.test(value!);
+}
+
+function isRealBackupLocation(value: string | null, backupRef: string | null): boolean {
+  return Boolean(value)
+    && !isPlaceholder(value)
+    && Boolean(backupRef)
+    && value!.includes(backupRef!);
+}
+
 function stripAnsi(text: string): string {
   return text
     .split(String.fromCharCode(27))
@@ -198,25 +238,37 @@ export function checkSmokeResults(path: string = DEFAULT_SMOKE_RESULTS): CheckRe
 }
 
 export function checkEvidenceReportText(text: string): CheckResult[] {
+  const stagingUrl = labelValue(text, 'Staging API URL');
+  const wafRuleId = labelValue(text, 'WAF Rule ID');
+  const rateLimitRuleId = labelValue(text, 'Rate-Limit Rule ID');
+  const backupRef = labelValue(text, 'D1 Backup Ref');
+  const backupLocation = labelValue(text, 'D1 Backup Location') ?? labelValue(text, 'D1 Backup Path');
+  const restoreDatabase = labelValue(text, 'D1 Restore Database');
+
   return [
     result(
       'staging URL evidence',
-      has(text, /Staging API URL:\s*https:\/\/[^\s<]+/i),
-      'requires non-placeholder Staging API URL'
+      isRealHttpsUrl(stagingUrl),
+      'requires real non-placeholder HTTPS Staging API URL'
     ),
     result(
       'WAF or rate-limit rule evidence',
-      has(text, /(WAF|Rate[- ]Limit) Rule ID:\s*[A-Za-z0-9_-]+/i),
-      'requires WAF Rule ID or Rate-Limit Rule ID'
+      isRealCloudflareRuleId(wafRuleId) || isRealCloudflareRuleId(rateLimitRuleId),
+      'requires real-looking WAF Rule ID or Rate-Limit Rule ID'
     ),
     result(
       'D1 backup ref evidence',
-      has(text, /D1 Backup Ref:\s*[0-9]{8}T[0-9]{6}Z/i),
+      isTimestampBackupRef(backupRef),
       'requires timestamped D1 Backup Ref'
     ),
     result(
+      'D1 backup location evidence',
+      isRealBackupLocation(backupLocation, backupRef),
+      'requires D1 Backup Location or D1 Backup Path containing the backup ref'
+    ),
+    result(
       'D1 restore target evidence',
-      has(text, /D1 Restore Database:\s*course-search-db-staging-restore-[0-9]{8}T[0-9]{6}Z/i),
+      /^course-search-db-staging-restore-[0-9]{8}T[0-9]{6}Z$/i.test(restoreDatabase ?? ''),
       'requires restore-test D1 database name'
     ),
     result(

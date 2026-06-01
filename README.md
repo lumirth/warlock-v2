@@ -44,13 +44,13 @@ Run the preflight before destructive D1 operations:
 npm run d1:preflight -- --database <db-name> --backup-ref <backup-ref> --evidence-file <report-path> --restore-verified
 ```
 
-Cloudflare staging readiness is intentionally executable. After staging resources, smoke output, WAF/rate-limit rule evidence, and D1 restore evidence exist, run:
+Cloudflare staging readiness is intentionally executable. After staging resources, smoke output, real-looking WAF/rate-limit rule evidence, and D1 backup/restore evidence exist, run:
 
 ```bash
 npm run cloudflare:preflight
 ```
 
-This command is expected to fail until real Cloudflare auth and staging evidence are present.
+This command is expected to fail until real Cloudflare auth and staging evidence are present. The final report must use concrete evidence labels such as `Staging API URL`, `WAF Rule ID` or `Rate-Limit Rule ID`, `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified`.
 
 ## Data Artifacts
 

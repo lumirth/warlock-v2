@@ -70,9 +70,10 @@ describe('Cloudflare staging preflight', () => {
 
   it('requires concrete staging, WAF, and D1 restore evidence', () => {
     const validEvidence = [
-      'Staging API URL: https://uiuc-course-search-staging.example.workers.dev',
-      'WAF Rule ID: rule_123',
+      'Staging API URL: https://uiuc-course-search-staging.lu-uiuc.workers.dev',
+      'WAF Rule ID: 3f1e2d4c-5b6a-4789-9abc-def012345678',
       'D1 Backup Ref: 20260601T170000Z',
+      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
       'D1 Restore Database: course-search-db-staging-restore-20260601T170000Z',
       'D1 Restore Verified: yes',
     ].join('\n');
@@ -81,6 +82,18 @@ describe('Cloudflare staging preflight', () => {
 
     const placeholderEvidence = 'Staging API URL: https://<staging-worker-host>';
     expect(checkEvidenceReportText(placeholderEvidence).some(result => !result.ok)).toBe(true);
+
+    const weakRuleEvidence = validEvidence.replace(
+      'WAF Rule ID: 3f1e2d4c-5b6a-4789-9abc-def012345678',
+      'WAF Rule ID: rule_123'
+    );
+    expect(checkEvidenceReportText(weakRuleEvidence).find(result => result.name === 'WAF or rate-limit rule evidence')?.ok).toBe(false);
+
+    const missingBackupLocation = validEvidence.replace(
+      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
+      ''
+    );
+    expect(checkEvidenceReportText(missingBackupLocation).find(result => result.name === 'D1 backup location evidence')?.ok).toBe(false);
   });
 
   it('requires every staging environment variable by name', () => {

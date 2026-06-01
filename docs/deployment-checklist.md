@@ -75,6 +75,15 @@ npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --
 npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
 ```
 
+Record the report markers exactly:
+
+```text
+D1 Backup Ref: <YYYYMMDDTHHMMSSZ>
+D1 Backup Location: artifacts/d1-backups/course-search-db-staging-<YYYYMMDDTHHMMSSZ>.sql
+D1 Restore Database: course-search-db-staging-restore-<YYYYMMDDTHHMMSSZ>
+D1 Restore Verified: yes
+```
+
 ## Staging Smoke
 
 Required environment variables:
