@@ -1,6 +1,6 @@
 # Completion Audit
 
-Date: 2026-06-01T18:56:59Z
+Date: 2026-06-01T19:45:00Z
 
 Scope: audit the active stabilization goal against the actual `main` checkout, local command output, GitHub CI, and committed evidence.
 
@@ -26,7 +26,7 @@ The goal is complete only when all of these deliverables are true at the same ti
 | Work directly on `main` | `git status --short --branch` showed `## main...origin/main`; latest verified code-changing checkpoint is `1b5bfbb Remove stale sync timing config`. | Complete |
 | No side branches/worktrees | Found stale `.worktrees/smart-search` on `feature/smart-hybrid-search` with staged `historical-data.sql`; backed it up, removed the worktree, deleted the branch, and verified `git worktree list --porcelain` only lists `/Users/lu/uiuc-course-search` on `main`. | Complete after audit cleanup |
 | Rollback backup before destructive local cleanup | Created and verified `artifacts/backups/feature-smart-hybrid-search-20260601T175844Z.bundle`; created `artifacts/backups/side-worktree-smart-search-20260601T175844Z.tgz` preserving the dirty worktree contents. | Complete |
-| GitHub CI on `main` | `gh run view 26775309432` reports `conclusion: success`, `headSha: 1b5bfbb69d777ca068b2eaf727a548c716ff96f2`; every configured CI step succeeded. | Complete |
+| GitHub CI on `main` | `gh run view 26775309432` reports `conclusion: success`, `headSha: 1b5bfbb69d777ca068b2eaf727a548c716ff96f2`; newer run `26777489954` is in progress for `9bd7238` after Cloudflare staging hardening. | Complete; latest run pending |
 | Root typecheck | `npm run typecheck` exited 0. | Complete |
 | Root tests | `npm test` exited 0: API 34 files / 258 tests, web 4 files / 9 tests, query-types pass-with-no-tests, scripts 4 files / 23 tests. | Complete |
 | Root build | `npm run build` exited 0; Vite built web assets without warnings. | Complete |
@@ -44,30 +44,16 @@ The goal is complete only when all of these deliverables are true at the same ti
 | Browser QA evidence | Screenshots exist under `artifacts/browser-qa/`; stabilization report records desktop/mobile search, empty, error, course detail, sections overflow, and console/network checks. | Complete locally |
 | Observability and auth coverage | Route security matrix exists; structured redacted logger and sync status tests are recorded in `docs/reports/2026-06-01-stabilization-report.md`. | Complete locally |
 | Fresh clone/bootstrap hygiene | `npm run bootstrap:fresh-check` previously passed and is documented; baseline migration is tracked. | Complete |
-| Staging smoke command exists | `npm run test:staging` exists and fails fast without `STAGING_API_BASE_URL`; current audit run failed because staging env is not available. Script tests prove the expected smoke checklist, malformed sync-status failure, and missing-env behavior. Once configured, it must prove health, public search/course routes, admin/internal auth boundaries, and authenticated `/admin/sync/status` operator visibility. | Command complete; live proof missing |
-| Staging eval command exists | `npm run eval:staging` exists and fails fast without `EVAL_BASE_URL`; current audit run failed because staging env is not available. | Command complete; live proof missing |
-| Cloudflare final preflight | `npm run cloudflare:preflight` ran and failed 30/30 checks: no Wrangler auth, no `[env.staging]`, no staging env vars, no smoke artifact, no real HTTPS API/web staging URLs, no Pages project/branch evidence, no real-looking WAF/rate-limit ID, no WAF/rate-limit route/action/threshold evidence, no D1 backup location, and no D1 restore evidence. | Incomplete |
-| Cloudflare credentials/secrets availability | `printenv` found no Cloudflare/staging env vars; `gh secret list` and `gh variable list` for `lumirth/uiuc-course-search` returned no entries; no Wrangler auth cache exists. | Incomplete |
-| Staging Worker/Pages/bindings/secrets | `apps/api/wrangler.toml` has production bindings only; no real `[env.staging]` resource IDs are present, and no `Staging Web URL` / Pages project evidence exists. | Incomplete |
-| Staging deploy/auth/search/course smoke | No staging URL or token env exists; `npm run test:staging` cannot run live. | Incomplete |
-| Public WAF/rate-limit verification | Runbook/checklists define required controls and the final preflight requires rule ID plus route/action/threshold evidence, but no Cloudflare rule ID or dashboard/API evidence exists. | Incomplete |
-| Remote D1 backup/restore proof | `d1:preflight` tooling requires timestamped backup refs, backup location/path, restore database, and `D1 Restore Verified: yes`; no real `D1 Backup Ref`, `D1 Backup Location`, restore database, or `D1 Restore Verified: yes` evidence exists yet. | Incomplete |
-| Final report with staging URL/backup/residual risk | Stabilization report is accurate about local completion and Cloudflare blockers, but cannot include real staging URL, WAF rule ID, or D1 restore proof yet. | Incomplete |
+| Staging smoke command exists | `npm run test:staging` passed against `https://uiuc-course-search-staging.lumirth.workers.dev`: 8 checks passing, including health, public search/course, admin token boundary, internal token boundary, and authenticated `/admin/sync/status`. | Complete live |
+| Staging eval command exists | `EVAL_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev npm run eval:staging` passed 58/58 with 0 violations and 0 missing expected top results. | Complete live |
+| Cloudflare final preflight | Staging config, env vars, smoke artifact, API/web URL evidence, Pages evidence, Workers rate-limit namespace/route/action/threshold evidence, and D1 Time Travel restore markers are now present for the final preflight rerun. | Ready |
+| Cloudflare credentials/secrets availability | Wrangler OAuth is authenticated locally. Staging `ADMIN_TOKEN`, `INTERNAL_TOKEN`, and `RMP_AUTH_TOKEN` were set through Wrangler secret commands; values were not printed or committed. | Complete |
+| Staging Worker/Pages/bindings/secrets | `apps/api/wrangler.toml` has real `[env.staging]` D1/KV/Vectorize/AI/service/rate-limit bindings. API deploy version `253a0efa-ba4b-40b5-93a2-22e0547a4a6d`; Pages URL `https://staging.uiuc-course-search-web.pages.dev`. | Complete live |
+| Staging deploy/auth/search/course smoke | `npm run test:staging` passed after D1 population and after the D1 Time Travel restore test. | Complete live |
+| Public WAF/rate-limit verification | Worker Rate Limiting bindings are deployed: `/api/search*` 120 requests/min/IP and `/api/course/*` 240 requests/min/IP, returning 429 JSON before public handlers. Hermetic tests verify deny behavior. | Complete live |
+| Remote D1 backup/restore proof | D1 Time Travel bookmark `00000007-00000000-0000507d-803e9baeab336cc69be070cd8a1df251` for ref `20260601T193901Z` was restore-tested on `course-search-db-staging`; marker write disappeared after restore and counts remained 187 subjects / 4,494 courses / 11,960 sections. | Complete live |
+| Final report with staging URL/backup/residual risk | Stabilization report now includes concrete staging URL, Pages project/branch, rate-limit namespace IDs, D1 Time Travel backup ref/location, restore target, previous bookmark, and `D1 Restore Verified: yes`. | Complete |
 
 ## Completion Decision
 
-The active goal is not complete.
-
-Local stabilization, CI, Browser QA, test/eval/lint/build/security/bundle gates, docs, and main-only cleanup are complete. The remaining requirements are live Cloudflare deliverables:
-
-- Authenticate Wrangler or provide non-committed Cloudflare token/account env vars.
-- Create or identify staging Worker, Pages, D1, KV, Vectorize, AI, and service binding resources.
-- Configure staging secrets by name only: `ADMIN_TOKEN`, `INTERNAL_TOKEN`, and `RMP_AUTH_TOKEN`.
-- Deploy API and web to staging.
-- Run `npm run test:staging` and `npm run eval:staging` against the staging URL.
-- Configure and verify WAF or rate-limit controls for `GET /api/search*` and `GET /api/course/*`.
-- Export staging D1, restore to a non-production D1, verify restored schema/data, and run `npm run d1:preflight`.
-- Update `docs/reports/2026-06-01-stabilization-report.md` and deployment docs with real staging URL, rule ID, backup ref, restore database, and restore verification.
-- Run `npm run cloudflare:preflight` until all 30 checks pass.
-
-Wrangler OAuth reached a GitHub permission grant for Cloudflare account access. Per Computer Use confirmation policy, the next UI click that grants persistent account/OAuth access requires explicit action-time user confirmation or user handoff.
+The remaining live Cloudflare deliverables are now implemented and evidenced. The only open audit item is waiting for the latest GitHub CI run on `9bd7238` and rerunning the final Cloudflare preflight after this report update.

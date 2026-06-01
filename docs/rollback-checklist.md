@@ -42,7 +42,7 @@ Never run destructive D1 commands without a verified backup reference:
 npm run d1:preflight -- --database <db-name> --backup-ref <YYYYMMDDTHHMMSSZ> --evidence-file <report-path> --restore-verified
 ```
 
-For schema/data rollback, prefer restoring a verified export into a new non-production D1 database first, then swap bindings only after the restored DB passes schema and smoke checks. The evidence file must name `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified: yes`.
+For schema/data rollback, use the current Cloudflare-supported D1 backup mechanism. This FTS-backed schema uses D1 Time Travel because SQL export refuses databases with virtual tables. The evidence file must name `D1 Backup Ref`, `D1 Backup Mechanism`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified: yes`.
 
 ## Generated Artifacts
 

@@ -57,6 +57,30 @@ describe('D1 backup preflight', () => {
     );
   });
 
+  it('passes with Cloudflare D1 Time Travel restore evidence', () => {
+    const evidenceFile = makeEvidenceFile([
+      '# Restore Evidence',
+      'Database: course-search-db-staging',
+      'D1 Backup Ref: 20260601T193901Z',
+      'D1 Backup Mechanism: Cloudflare D1 Time Travel',
+      'D1 Backup Location: Cloudflare D1 Time Travel bookmark 00000007-00000000-0000507d-803e9baeab336cc69be070cd8a1df251 for ref 20260601T193901Z',
+      'D1 Restore Database: course-search-db-staging',
+      'D1 Restore Verified: yes',
+    ].join('\n'));
+
+    const result = runPreflight([
+      '--database',
+      'course-search-db-staging',
+      '--backup-ref',
+      '20260601T193901Z',
+      '--evidence-file',
+      evidenceFile,
+      '--restore-verified',
+    ]);
+
+    expect(result.status).toBe(0);
+  });
+
   it('rejects evidence that does not name the backup ref', () => {
     const evidenceFile = makeEvidenceFile([
       'Database: course-search-db-staging',

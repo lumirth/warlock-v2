@@ -65,31 +65,30 @@ Pages Branch: staging
 
 ## Public Abuse Controls
 
-Before a public demo, configure Cloudflare rate limiting or WAF rules for:
+Before a public demo, configure Cloudflare Workers Rate Limiting bindings or equivalent WAF rules for:
 
-- `GET /api/search*`: start at 60 requests/minute/IP.
-- `GET /api/course/*`: start at 120 requests/minute/IP.
+- `GET /api/search*`: start at 120 requests/minute/IP.
+- `GET /api/course/*`: start at 240 requests/minute/IP.
 
 Record the rule IDs, expressions, thresholds, action, and observed dashboard state in the final report. Use these labels so `npm run cloudflare:preflight` can verify the control shape:
 
 ```text
-WAF Rule ID: <uuid>
+Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=<integer>, COURSE_RATE_LIMITER=<integer>
 Abuse Control Routes: /api/search*, /api/course/*
-Abuse Control Action: block-or-managed_challenge
-Abuse Control Thresholds: /api/search*=60/min/IP, /api/course/*=120/min/IP
+Abuse Control Action: Worker Rate Limiting returns 429 JSON block response before public route handlers
+Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP
 ```
 
 ## Data Safety
 
-Create and restore-test a staging D1 export before destructive D1 work:
+Create and restore-test a staging D1 Time Travel backup before destructive D1 work:
 
 ```bash
-mkdir -p artifacts/d1-backups
 BACKUP_REF=$(date -u +%Y%m%dT%H%M%SZ)
-npx wrangler d1 export course-search-db-staging --remote --output artifacts/d1-backups/course-search-db-staging-$BACKUP_REF.sql -y
-npx wrangler d1 create course-search-db-staging-restore-$BACKUP_REF
-npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --file artifacts/d1-backups/course-search-db-staging-$BACKUP_REF.sql
-npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+npx wrangler d1 time-travel info course-search-db-staging --json
+npx wrangler d1 execute course-search-db-staging --remote --command "INSERT OR REPLACE INTO app_meta (key, value, updated_at) VALUES ('restore-test-$BACKUP_REF', 'marker', unixepoch())"
+npx wrangler d1 time-travel restore course-search-db-staging --bookmark <bookmark-from-info>
+npx wrangler d1 execute course-search-db-staging --remote --command "SELECT COUNT(*) AS marker_count FROM app_meta WHERE key = 'restore-test-$BACKUP_REF'"
 npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
 npm run cloudflare:preflight
 ```
@@ -98,7 +97,8 @@ Record the D1 evidence with these labels before running the final Cloudflare pre
 
 ```text
 D1 Backup Ref: <YYYYMMDDTHHMMSSZ>
-D1 Backup Location: artifacts/d1-backups/course-search-db-staging-<YYYYMMDDTHHMMSSZ>.sql
-D1 Restore Database: course-search-db-staging-restore-<YYYYMMDDTHHMMSSZ>
+D1 Backup Mechanism: Cloudflare D1 Time Travel
+D1 Backup Location: Cloudflare D1 Time Travel bookmark <bookmark> for ref <YYYYMMDDTHHMMSSZ>
+D1 Restore Database: course-search-db-staging
 D1 Restore Verified: yes
 ```

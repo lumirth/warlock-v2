@@ -120,6 +120,12 @@ function isRealCloudflareRuleId(value: string | null): boolean {
     || /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function hasRealRateLimitNamespaceIds(value: string | null): boolean {
+  if (!value || isPlaceholder(value)) return false;
+  const ids = value.match(/\b[1-9][0-9]{3,}\b/g) ?? [];
+  return ids.length >= 2 && new Set(ids).size >= 2;
+}
+
 function isTimestampBackupRef(value: string | null): boolean {
   return Boolean(value) && /^[0-9]{8}T[0-9]{6}Z$/i.test(value!);
 }
@@ -141,6 +147,8 @@ function hasEnforcingAction(value: string | null): boolean {
   if (!value || isPlaceholder(value)) return false;
   const normalized = value.toLowerCase();
   return normalized.includes('block')
+    || normalized.includes('429')
+    || normalized.includes('rate limit')
     || normalized.includes('managed_challenge')
     || normalized.includes('js_challenge')
     || normalized.includes('challenge');
@@ -198,6 +206,8 @@ export function checkStagingConfigText(text: string): CheckResult[] {
   const kvBlock = blockFor(text, '[[env.staging.kv_namespaces]]');
   const vectorizeBlock = blockFor(text, '[[env.staging.vectorize]]');
   const serviceBlock = blockFor(text, '[[env.staging.services]]');
+  const hasSearchRateLimit = has(text, /\[\[env\.staging\.ratelimits\]\][\s\S]*?name\s*=\s*"SEARCH_RATE_LIMITER"[\s\S]*?namespace_id\s*=\s*"[1-9][0-9]{3,}"[\s\S]*?\[env\.staging\.ratelimits\.simple\][\s\S]*?limit\s*=\s*120[\s\S]*?period\s*=\s*60/m);
+  const hasCourseRateLimit = has(text, /\[\[env\.staging\.ratelimits\]\][\s\S]*?name\s*=\s*"COURSE_RATE_LIMITER"[\s\S]*?namespace_id\s*=\s*"[1-9][0-9]{3,}"[\s\S]*?\[env\.staging\.ratelimits\.simple\][\s\S]*?limit\s*=\s*240[\s\S]*?period\s*=\s*60/m);
 
   return [
     result('wrangler env.staging block', stagingBlock.length > 0, 'requires [env.staging]'),
@@ -212,6 +222,8 @@ export function checkStagingConfigText(text: string): CheckResult[] {
     result('staging AI binding', has(text, /^\[env\.staging\.ai\]/m), 'requires env.staging.ai'),
     result('staging SELF service binding', serviceBlock.length > 0, 'requires env.staging.services'),
     result('staging SELF service name', stringValue(serviceBlock, 'service') === 'uiuc-course-search-staging', 'requires staging SELF service target'),
+    result('staging search rate-limit binding', hasSearchRateLimit, 'requires SEARCH_RATE_LIMITER 120/60s staging binding'),
+    result('staging course rate-limit binding', hasCourseRateLimit, 'requires COURSE_RATE_LIMITER 240/60s staging binding'),
   ];
 }
 
@@ -267,6 +279,8 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
   const pagesBranch = labelValue(text, 'Pages Branch');
   const wafRuleId = labelValue(text, 'WAF Rule ID');
   const rateLimitRuleId = labelValue(text, 'Rate-Limit Rule ID');
+  const rateLimitNamespaceIds = labelValue(text, 'Rate-Limit Namespace IDs')
+    ?? labelValue(text, 'Worker Rate-Limit Binding IDs');
   const abuseRoutes = labelValue(text, 'Abuse Control Routes')
     ?? labelValue(text, 'WAF Protected Routes')
     ?? labelValue(text, 'Rate-Limit Protected Routes');
@@ -276,9 +290,11 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
   const abuseThresholds = labelValue(text, 'Abuse Control Thresholds')
     ?? labelValue(text, 'Rate-Limit Thresholds');
   const backupRef = labelValue(text, 'D1 Backup Ref');
+  const backupMechanism = labelValue(text, 'D1 Backup Mechanism');
   const backupLocation = labelValue(text, 'D1 Backup Location') ?? labelValue(text, 'D1 Backup Path');
   const restoreDatabase = labelValue(text, 'D1 Restore Database');
   const restoreVerified = labelValue(text, 'D1 Restore Verified');
+  const usesTimeTravel = backupMechanism?.toLowerCase().includes('time travel') ?? false;
 
   return [
     result(
@@ -303,8 +319,8 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
     ),
     result(
       'WAF or rate-limit rule evidence',
-      isRealCloudflareRuleId(wafRuleId) || isRealCloudflareRuleId(rateLimitRuleId),
-      'requires real-looking WAF Rule ID or Rate-Limit Rule ID'
+      isRealCloudflareRuleId(wafRuleId) || isRealCloudflareRuleId(rateLimitRuleId) || hasRealRateLimitNamespaceIds(rateLimitNamespaceIds),
+      'requires real-looking WAF Rule ID, Rate-Limit Rule ID, or Workers rate-limit namespace IDs'
     ),
     result(
       'WAF or rate-limit route coverage evidence',
@@ -333,8 +349,12 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
     ),
     result(
       'D1 restore target evidence',
-      /^course-search-db-staging-restore-[0-9]{8}T[0-9]{6}Z$/i.test(restoreDatabase ?? ''),
-      'requires restore-test D1 database name'
+      usesTimeTravel
+        ? restoreDatabase === 'course-search-db-staging'
+        : /^course-search-db-staging-restore-[0-9]{8}T[0-9]{6}Z$/i.test(restoreDatabase ?? ''),
+      usesTimeTravel
+        ? 'requires Time Travel restore target database name'
+        : 'requires restore-test D1 database name'
     ),
     result(
       'D1 restore verification evidence',

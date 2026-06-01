@@ -19,6 +19,22 @@ database_id = "3f1e2d4c-5b6a-4789-9abc-def012345678"
 binding = "GPA_CACHE"
 id = "abcdefabcdefabcdefabcdefabcdefab"
 
+[[env.staging.ratelimits]]
+name = "SEARCH_RATE_LIMITER"
+namespace_id = "26060111"
+
+  [env.staging.ratelimits.simple]
+  limit = 120
+  period = 60
+
+[[env.staging.ratelimits]]
+name = "COURSE_RATE_LIMITER"
+namespace_id = "26060112"
+
+  [env.staging.ratelimits.simple]
+  limit = 240
+  period = 60
+
 [[env.staging.vectorize]]
 binding = "VECTORIZE"
 index_name = "course-embeddings-staging"
@@ -75,13 +91,14 @@ describe('Cloudflare staging preflight', () => {
       'Staging Web URL: https://staging.uiuc-course-search.pages.dev',
       'Pages Project: uiuc-course-search-web',
       'Pages Branch: staging',
-      'WAF Rule ID: 3f1e2d4c-5b6a-4789-9abc-def012345678',
+      'Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=26060111, COURSE_RATE_LIMITER=26060112',
       'Abuse Control Routes: /api/search*, /api/course/*',
-      'Abuse Control Action: managed_challenge',
-      'Abuse Control Thresholds: /api/search*=60/min/IP, /api/course/*=120/min/IP',
+      'Abuse Control Action: Worker Rate Limiting returns 429 JSON block response',
+      'Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP',
       'D1 Backup Ref: 20260601T170000Z',
-      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
-      'D1 Restore Database: course-search-db-staging-restore-20260601T170000Z',
+      'D1 Backup Mechanism: Cloudflare D1 Time Travel',
+      'D1 Backup Location: Cloudflare D1 Time Travel bookmark 00000007-00000000-0000507d-803e9baeab336cc69be070cd8a1df251 for ref 20260601T170000Z',
+      'D1 Restore Database: course-search-db-staging',
       'D1 Restore Verified: yes',
     ].join('\n');
 
@@ -103,13 +120,13 @@ describe('Cloudflare staging preflight', () => {
     expect(checkEvidenceReportText(missingWebUrl).find(result => result.name === 'staging web URL evidence')?.ok).toBe(false);
 
     const weakRuleEvidence = validEvidence.replace(
-      'WAF Rule ID: 3f1e2d4c-5b6a-4789-9abc-def012345678',
-      'WAF Rule ID: rule_123'
+      'Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=26060111, COURSE_RATE_LIMITER=26060112',
+      'Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=1'
     );
     expect(checkEvidenceReportText(weakRuleEvidence).find(result => result.name === 'WAF or rate-limit rule evidence')?.ok).toBe(false);
 
     const missingBackupLocation = validEvidence.replace(
-      'D1 Backup Location: artifacts/d1-backups/course-search-db-staging-20260601T170000Z.sql',
+      'D1 Backup Location: Cloudflare D1 Time Travel bookmark 00000007-00000000-0000507d-803e9baeab336cc69be070cd8a1df251 for ref 20260601T170000Z',
       ''
     );
     expect(checkEvidenceReportText(missingBackupLocation).find(result => result.name === 'D1 backup location evidence')?.ok).toBe(false);
@@ -124,14 +141,14 @@ describe('Cloudflare staging preflight', () => {
     expect(checkEvidenceReportText(missingRouteCoverage).find(result => result.name === 'WAF or rate-limit route coverage evidence')?.ok).toBe(false);
 
     const weakAction = validEvidence.replace(
-      'Abuse Control Action: managed_challenge',
+      'Abuse Control Action: Worker Rate Limiting returns 429 JSON block response',
       'Abuse Control Action: log'
     );
     expect(checkEvidenceReportText(weakAction).find(result => result.name === 'WAF or rate-limit action evidence')?.ok).toBe(false);
 
     const weakThresholds = validEvidence.replace(
-      'Abuse Control Thresholds: /api/search*=60/min/IP, /api/course/*=120/min/IP',
-      'Abuse Control Thresholds: /api/search*=60/min/IP'
+      'Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP',
+      'Abuse Control Thresholds: /api/search*=120 requests/min/IP'
     );
     expect(checkEvidenceReportText(weakThresholds).find(result => result.name === 'WAF or rate-limit threshold evidence')?.ok).toBe(false);
   });

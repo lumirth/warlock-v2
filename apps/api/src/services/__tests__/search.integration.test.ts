@@ -5,6 +5,7 @@ import type {
   D1PreparedStatement,
   Fetcher,
   KVNamespace,
+  RateLimit,
   VectorizeIndex,
 } from '@cloudflare/workers-types';
 import worker from '../../index.js';
@@ -24,6 +25,8 @@ type TestBindings = {
   AI: Ai;
   SELF: Fetcher;
   GPA_CACHE: KVNamespace;
+  SEARCH_RATE_LIMITER: RateLimit;
+  COURSE_RATE_LIMITER: RateLimit;
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
   CISAPI_BASE: string;
@@ -151,13 +154,21 @@ function createDb(): D1Database {
   } as unknown as D1Database;
 }
 
-function createEnv(): TestBindings {
+function createRateLimit(success = true): RateLimit {
+  return {
+    limit: vi.fn(async () => ({ success })),
+  } as unknown as RateLimit;
+}
+
+function createEnv(overrides: Partial<TestBindings> = {}): TestBindings {
   return {
     DB: createDb(),
     VECTORIZE: {} as unknown as VectorizeIndex,
     AI: {} as unknown as Ai,
     SELF: {} as unknown as Fetcher,
     GPA_CACHE: {} as unknown as KVNamespace,
+    SEARCH_RATE_LIMITER: createRateLimit(),
+    COURSE_RATE_LIMITER: createRateLimit(),
     CURRENT_YEAR: '2026',
     CURRENT_TERM: 'spring',
     CISAPI_BASE: 'https://courses.illinois.edu/cisapp/explorer/catalog',
@@ -169,6 +180,7 @@ function createEnv(): TestBindings {
     CLIENT_CACHE_TTL_MS: '300000',
     ADMIN_TOKEN: 'admin-token',
     INTERNAL_TOKEN: 'internal-token',
+    ...overrides,
   };
 }
 
@@ -233,6 +245,33 @@ describe('Worker API integration', () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: 'limit must be between 1 and 50' });
+  });
+
+  it('rate limits public search before running the pipeline', async () => {
+    const response = await worker.fetch(
+      new Request('http://local.test/api/search?q=CS%20225', {
+        headers: { 'cf-connecting-ip': '198.51.100.10' },
+      }),
+      createEnv({ SEARCH_RATE_LIMITER: createRateLimit(false) }),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual({ error: 'rate limit exceeded' });
+    expect(SearchPipeline).not.toHaveBeenCalled();
+  });
+
+  it('rate limits public course detail requests', async () => {
+    const response = await worker.fetch(
+      new Request('http://local.test/api/course/CS/225', {
+        headers: { 'cf-connecting-ip': '198.51.100.11' },
+      }),
+      createEnv({ COURSE_RATE_LIMITER: createRateLimit(false) }),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual({ error: 'rate limit exceeded' });
   });
 
   it('serves cached course detail through the Worker fetch handler', async () => {

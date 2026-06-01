@@ -77,10 +77,12 @@ async function main(): Promise<void> {
 
   const evidence = await readFile(args.evidenceFile!, 'utf8');
   const backupRef = labelValue(evidence, 'D1 Backup Ref');
+  const backupMechanism = labelValue(evidence, 'D1 Backup Mechanism');
   const backupLocation = labelValue(evidence, 'D1 Backup Location') ?? labelValue(evidence, 'D1 Backup Path');
   const restoreDatabase = labelValue(evidence, 'D1 Restore Database');
   const restoreVerified = labelValue(evidence, 'D1 Restore Verified');
-  const expectedRestoreDatabase = `${args.database}-restore-${args.backupRef}`;
+  const usesTimeTravel = backupMechanism?.toLowerCase().includes('time travel') ?? false;
+  const expectedRestoreDatabase = usesTimeTravel ? args.database! : `${args.database}-restore-${args.backupRef}`;
   const missingEvidence = [
     !evidence.includes(args.database!) && args.database,
     backupRef !== args.backupRef && `D1 Backup Ref: ${args.backupRef}`,

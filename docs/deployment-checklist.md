@@ -21,15 +21,15 @@ Document secret names only. Never commit or paste values into docs, reports, CI 
 
 The in-app `UpstreamBackoff` only protects upstream sources such as CISAPI after 429/503 responses. It is not a public caller rate limit.
 
-Before a public demo deployment, configure Cloudflare WAF or route-level rate limiting for public read endpoints:
+Before a public demo deployment, configure Cloudflare Workers Rate Limiting bindings or equivalent zone WAF/rate limiting for public read endpoints:
 
 - Match `/api/search*` and `/api/course/*`.
-- Start with a conservative threshold such as 60 requests per minute per IP for `/api/search*`.
-- Start with 120 requests per minute per IP for `/api/course/*`.
+- Start with 120 requests per minute per IP for `/api/search*`.
+- Start with 240 requests per minute per IP for `/api/course/*`.
 - Use a lower threshold for repeated 4xx/5xx responses if Cloudflare rules allow it.
 - Leave `/admin/*` and `/internal/*` protected by token auth regardless of WAF settings.
 
-Record rule IDs, expressions, thresholds, action, and dashboard evidence in the stabilization report. `npm run cloudflare:preflight` requires `WAF Rule ID` or `Rate-Limit Rule ID`, plus `Abuse Control Routes`, `Abuse Control Action`, and `Abuse Control Thresholds`. See `docs/cloudflare-hardening-runbook.md`.
+Record namespace IDs or rule IDs, expressions, thresholds, action, and deploy/dashboard evidence in the stabilization report. `npm run cloudflare:preflight` requires `Rate-Limit Namespace IDs`, `WAF Rule ID`, or `Rate-Limit Rule ID`, plus `Abuse Control Routes`, `Abuse Control Action`, and `Abuse Control Thresholds`. See `docs/cloudflare-hardening-runbook.md`.
 
 ## Database Bootstrap
 
@@ -62,16 +62,16 @@ Normal production search must not print raw SQL, SQL params, or raw query analyt
 
 ## D1 Backups
 
-Before destructive remote D1 operations, create an export/backup using the current Cloudflare-supported mechanism, verify that it is restorable, and record the target database, timestamp, and backup location before proceeding.
+Before destructive remote D1 operations, create a backup using the current Cloudflare-supported mechanism, verify that it is restorable, and record the target database, timestamp, and backup location before proceeding. For this FTS-backed schema, use Cloudflare D1 Time Travel because SQL export refuses databases with virtual tables.
 
 Minimum command shape:
 
 ```bash
-mkdir -p artifacts/d1-backups
 BACKUP_REF=$(date -u +%Y%m%dT%H%M%SZ)
-npx wrangler d1 export course-search-db-staging --remote --output artifacts/d1-backups/course-search-db-staging-$BACKUP_REF.sql -y
-npx wrangler d1 create course-search-db-staging-restore-$BACKUP_REF
-npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --file artifacts/d1-backups/course-search-db-staging-$BACKUP_REF.sql
+npx wrangler d1 time-travel info course-search-db-staging --json
+npx wrangler d1 execute course-search-db-staging --remote --command "INSERT OR REPLACE INTO app_meta (key, value, updated_at) VALUES ('restore-test-$BACKUP_REF', 'marker', unixepoch())"
+npx wrangler d1 time-travel restore course-search-db-staging --bookmark <bookmark-from-info>
+npx wrangler d1 execute course-search-db-staging --remote --command "SELECT COUNT(*) AS marker_count FROM app_meta WHERE key = 'restore-test-$BACKUP_REF'"
 npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
 ```
 
@@ -79,8 +79,9 @@ Record the report markers exactly:
 
 ```text
 D1 Backup Ref: <YYYYMMDDTHHMMSSZ>
-D1 Backup Location: artifacts/d1-backups/course-search-db-staging-<YYYYMMDDTHHMMSSZ>.sql
-D1 Restore Database: course-search-db-staging-restore-<YYYYMMDDTHHMMSSZ>
+D1 Backup Mechanism: Cloudflare D1 Time Travel
+D1 Backup Location: Cloudflare D1 Time Travel bookmark <bookmark> for ref <YYYYMMDDTHHMMSSZ>
+D1 Restore Database: course-search-db-staging
 D1 Restore Verified: yes
 ```
 
@@ -103,4 +104,4 @@ npm run cloudflare:preflight
 
 The stabilization report must include `Staging API URL`, `Staging Web URL`, `Pages Project: uiuc-course-search-web`, and `Pages Branch: staging` before `npm run cloudflare:preflight` can pass.
 
-Cloudflare auth status on 2026-06-01: local `npx wrangler whoami` failed with `Not logged in`, and no Cloudflare token/account env vars were present. Staging deployment, WAF verification, and remote D1 restore testing require valid Cloudflare auth before they can be completed.
+Cloudflare auth status on 2026-06-01: Wrangler OAuth is authenticated locally; do not commit token cache files or secret values.

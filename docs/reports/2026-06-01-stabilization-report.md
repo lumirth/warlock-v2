@@ -37,6 +37,7 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `9d4d9f0` - Cut over staging deploy and debug routes
 - `e1d290f` - Reduce public health and stale doc surface
 - `1b5bfbb` - Remove stale sync timing config
+- `9bd7238` - Harden Cloudflare staging sync and search
 
 The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
@@ -79,6 +80,11 @@ Additional gate evidence:
 - Undocumented public DB-count diagnostics `/stats` and `/health/data` were removed; `/` and `/health` are the only public health endpoints. Stale active app-local prompt/plan files were deleted so current guidance lives in README, `docs/plans`, and the release/runbook docs.
 - Dead sync timing env vars `SYNC_INTERVAL_MS` and `TERM_CHECK_INTERVAL_MS` were removed from `wrangler.toml` and Worker bindings; active docs now describe the actual `*/5 * * * *` fan-out cron instead of a stale 3-minute rotation.
 - The old upstream CISAPI WAF research note was moved from active docs to `docs/archive/analysis/2026-01-cisapi-waf-rules.md`; current public abuse-control guidance now lives only in the Cloudflare hardening runbook, deployment checklist, release checklist, and security matrix.
+- Wrangler OAuth is now authenticated, real staging Worker/Pages/D1/KV/Vectorize/AI/service/rate-limit bindings are configured, and the staging Worker is deployed at version `253a0efa-ba4b-40b5-93a2-22e0547a4a6d`.
+- `npm run test:staging` passed 8/8 against `https://uiuc-course-search-staging.lumirth.workers.dev`.
+- `npm run eval:staging` passed 58/58 against the populated staging D1, with 0 violations and 0 missing expected top results.
+- Staging D1 contains 187 subjects, 4,494 current spring 2026 courses, 11,960 sections, 187 complete course sync states, and 0 running course sync locks after a restore-tested Time Travel rollback.
+- Public Worker rate limiting is configured for `/api/search*` and `/api/course/*` with route-specific bindings, verified by deploy binding output and hermetic 429 tests.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
 
@@ -119,10 +125,10 @@ Browser-found fixes completed:
 | Search explainability/result shape | Complete locally | Shared `MatchEvidence`, `ResultWarning`, `SectionMatchDto`; API attaches evidence; web renders chips; tests cover categories. |
 | Browser QA | Complete locally | Browser desktop/mobile screenshots and console checks listed above. |
 | Accessibility | Complete locally | `axe-core` web tests for search and course detail pass. |
-| Staging deployment | Blocked by auth | `npx wrangler whoami` failed: not logged in; `CLOUDFLARE_API_TOKEN`, `CF_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCOUNT_ID` unset. Final preflight requires both API and Pages evidence. |
-| Public WAF/rate limits | Blocked by auth | Runbook and deployment checklist specify rules/thresholds; dashboard/API verification requires Cloudflare auth. |
-| D1 backup/restore | Blocked by auth for remote proof | `d1:preflight` added and covered by script tests; exact export/restore commands documented. Remote export/restore requires Cloudflare auth. |
-| Scheduler reliability | Complete locally; live staging smoke blocked by auth | Structured run IDs/logs added for scheduled paths; tests cover subject stale pruning, enrichment max-batch partial runs, RMP failed/expired-running resume, fresh running-lock rejection, and `/admin/sync/status` health visibility. Live staging scheduler smoke requires Cloudflare auth. |
+| Staging deployment | Complete live | Staging API URL: https://uiuc-course-search-staging.lumirth.workers.dev; Staging Web URL: https://staging.uiuc-course-search-web.pages.dev; Pages Project: uiuc-course-search-web; Pages Branch: staging; latest Worker version `253a0efa-ba4b-40b5-93a2-22e0547a4a6d`. |
+| Public WAF/rate limits | Complete live | Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=26060111, COURSE_RATE_LIMITER=26060112; Abuse Control Routes: /api/search*, /api/course/*; Abuse Control Action: Worker Rate Limiting returns 429 JSON block response before public route handlers; Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP. |
+| D1 backup/restore | Complete live | D1 Backup Ref: 20260601T193901Z; D1 Backup Mechanism: Cloudflare D1 Time Travel; D1 Backup Location: Cloudflare D1 Time Travel bookmark 00000007-00000000-0000507d-803e9baeab336cc69be070cd8a1df251 for ref 20260601T193901Z; D1 Restore Database: course-search-db-staging; D1 Restore Previous Bookmark: 00000007-ffffffff-0000507d-9bc04e5f6e943679bad865737812b752; D1 Restore Verified: yes. |
+| Scheduler reliability | Complete locally and live | Structured run IDs/logs added for scheduled paths; tests cover subject stale pruning, enrichment max-batch partial runs, RMP failed/expired-running resume, fresh running-lock rejection, and `/admin/sync/status` health visibility. Live staging smoke verifies authenticated `/admin/sync/status`. |
 | Logging/observability | Complete locally | Runtime API logs replaced by structured redacted logger; logger redaction test passes. |
 | Frontend rough edges | Complete locally | Empty/error/loading states improved; dead chart already removed; Browser confirms desktop/mobile. |
 | Performance/bundle budgets | Complete locally | Vite 8 build has no chunk warning; `bundle:budget` enforced in CI. |
@@ -131,47 +137,68 @@ Browser-found fixes completed:
 | Data artifact/bootstrap hygiene | Complete locally | `.gitignore` protects generated artifacts while explicitly tracking the canonical baseline migration; `npm run bootstrap:fresh-check` verifies fresh clone bootstrap without `history_chunks/` or `full_history.sql`; remediation report records whole-project backup. |
 | Computer Use QA | Not needed | No native Mac UI task was required; Browser/terminal were stronger signals. |
 | Completion audit | Complete, not achieved | `docs/reports/2026-06-01-completion-audit.md` maps the active goal requirement-by-requirement and records the remaining auth-dependent gaps. |
-| Cloudflare final preflight | Added, currently red by design | `npm run cloudflare:preflight` verifies Wrangler auth, explicit staging bindings, real-looking non-placeholder D1/KV IDs, required staging env vars, staging smoke artifact, real HTTPS API/web staging URL evidence, Pages project/branch evidence, real-looking WAF/rate-limit ID plus route/action/threshold evidence, backup ref/location evidence, and D1 restore evidence. |
+| Cloudflare final preflight | Ready for final rerun | `npm run cloudflare:preflight` verifies Wrangler auth, explicit staging bindings, real-looking non-placeholder D1/KV IDs, required staging env vars, staging smoke artifact, real HTTPS API/web staging URL evidence, Pages project/branch evidence, Workers rate-limit namespace/route/action/threshold evidence, backup ref/location evidence, and D1 restore evidence. |
 
-## Cloudflare Auth Blocker
+## Cloudflare Live Evidence
 
-Remote staging, WAF/rate-limit verification, and remote D1 restore testing are not complete because the local Cloudflare auth path is unavailable:
+Wrangler OAuth is authenticated locally for Cloudflare operations. No Cloudflare API tokens, staging admin tokens, internal tokens, or RMP tokens are committed or printed in this report.
+
+Staging API URL: https://uiuc-course-search-staging.lumirth.workers.dev
+Staging Web URL: https://staging.uiuc-course-search-web.pages.dev
+Pages Project: uiuc-course-search-web
+Pages Branch: staging
+
+Cloudflare staging resources:
+
+- Worker: `uiuc-course-search-staging`
+- Worker Version ID: `253a0efa-ba4b-40b5-93a2-22e0547a4a6d`
+- D1: `course-search-db-staging` / `76913703-61a0-4b9e-b703-a697135beaf1`
+- KV: `GPA_CACHE` / `ad02afba85fb40aa9c7d2abceb15d896`
+- Vectorize: `course-embeddings-staging`
+- AI binding: `AI`
+- SELF service binding: `uiuc-course-search-staging`
+
+Live staging verification:
 
 ```bash
-cd apps/api
-npx wrangler whoami
-# Failed to fetch auth token: 400 Bad Request
-# Not logged in.
+npm run deploy:api:staging
+# API tests: 34 files / 261 tests
+# Deployed uiuc-course-search-staging
+# Current Version ID: 253a0efa-ba4b-40b5-93a2-22e0547a4a6d
+
+npm run test:staging
+# 8 checks, 8 passing, 0 failed
+
+EVAL_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev npm run eval:staging
+# 58 queries, 58 passing, 0 violations, 0 missing expected top results
 ```
 
-Non-printing env check:
+Public abuse controls:
 
-```bash
-CLOUDFLARE_API_TOKEN=unset
-CF_API_TOKEN=unset
-CLOUDFLARE_ACCOUNT_ID=unset
-CF_ACCOUNT_ID=unset
-```
+Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=26060111, COURSE_RATE_LIMITER=26060112
+Abuse Control Routes: /api/search*, /api/course/*
+Abuse Control Action: Worker Rate Limiting returns 429 JSON block response before public route handlers
+Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP
 
-GitHub repository secret and variable name checks also returned no configured entries:
+The rate-limit bindings are visible in the staging deploy output as `SEARCH_RATE_LIMITER (120 requests/60s)` and `COURSE_RATE_LIMITER (240 requests/60s)`. Hermetic Worker tests verify that public search and course requests return 429 before expensive route handlers when Cloudflare's limiter denies the request.
 
-```bash
-gh secret list --repo lumirth/uiuc-course-search
-gh variable list --repo lumirth/uiuc-course-search
-# no output
-```
+D1 backup and restore evidence:
 
-No secret values were exposed or committed.
+D1 Backup Ref: 20260601T193901Z
+D1 Backup Mechanism: Cloudflare D1 Time Travel
+D1 Backup Location: Cloudflare D1 Time Travel bookmark 00000007-00000000-0000507d-803e9baeab336cc69be070cd8a1df251 for ref 20260601T193901Z
+D1 Restore Database: course-search-db-staging
+D1 Restore Previous Bookmark: 00000007-ffffffff-0000507d-9bc04e5f6e943679bad865737812b752
+D1 Restore Verified: yes
 
-Wrangler OAuth was attempted with `npx wrangler login --browser=false`. The flow reached a GitHub permission grant asking to authorize Cloudflare to read the `lumirth` account's email address and redirect to `https://oidc.iam.cfapi.net`. That account-permission grant requires user action, so the local OAuth listener was stopped and no Cloudflare token was created or committed.
+The restore test inserted `restore-test-20260601T193901Z` into `app_meta`, restored `course-search-db-staging` to the pre-marker Time Travel bookmark, and verified the marker was gone while the staging dataset remained intact:
 
-Current Cloudflare evidence gate:
-
-```bash
-npm run cloudflare:preflight
-# 30 checks, 0 passing, 30 failing
-# Missing: Wrangler auth, env.staging bindings, staging env vars, staging smoke artifact,
-# API/web staging URL evidence, Pages project/branch evidence, WAF/rate-limit rule ID/route/action/threshold evidence, D1 backup location, and D1 restore evidence.
+```text
+subjects=187
+courses=4494
+sections=11960
+complete_syncs=187
+marker_count=0
 ```
 
 ## GitHub CI Evidence
@@ -207,19 +234,18 @@ gh run view 26775309432 --json conclusion,status,url,headSha,workflowName,jobs
 
 This latest run completed the same configured CI gate successfully, including typecheck, schema verification, tests, build, bundle budget, lint, secret scan, dependency audit, search smoke eval, and eval report artifact upload.
 
-## Next Auth-Dependent Commands
+## Final Cloudflare Commands
 
-After valid Cloudflare auth is present:
+With valid Cloudflare auth present:
 
 ```bash
-npx wrangler whoami
 npm run deploy:api:staging
-VITE_API_BASE_URL=https://<staging-worker-host> npm run deploy:web:staging
-STAGING_API_BASE_URL=https://<staging-worker-host> STAGING_ADMIN_TOKEN=<redacted> STAGING_INTERNAL_TOKEN=<redacted> npm run test:staging
-EVAL_BASE_URL=https://<staging-worker-host> npm run eval:staging
+VITE_API_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev npm run deploy:web:staging
+STAGING_API_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev STAGING_ADMIN_TOKEN=<redacted> STAGING_INTERNAL_TOKEN=<redacted> npm run test:staging
+EVAL_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev npm run eval:staging
+npm run d1:preflight -- --database course-search-db-staging --backup-ref 20260601T193901Z --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
+npm run cloudflare:preflight
 ```
-
-Then create and restore-test the staging D1 backup using `docs/cloudflare-hardening-runbook.md`, configure public WAF/rate-limit rules, and append the rule IDs/backup path/restore output to this report.
 
 ## Scheduler Reliability Evidence
 

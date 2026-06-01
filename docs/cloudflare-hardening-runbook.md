@@ -20,9 +20,9 @@ Recommended names:
 - Worker: `uiuc-course-search-staging`
 - Pages project/branch: `uiuc-course-search-web` / `staging`
 - D1: `course-search-db-staging`
-- Restore-test D1: `course-search-db-staging-restore-<backup-ref>`
 - KV: `GPA_CACHE` staging namespace
 - Vectorize: `course-embeddings-staging`
+- Worker rate limits: `SEARCH_RATE_LIMITER`, `COURSE_RATE_LIMITER`
 
 After creating staging resources, add real non-secret IDs to `apps/api/wrangler.toml` under an explicit `env.staging` block. D1/KV/Vectorize bindings must point at staging resources, not production resources.
 
@@ -62,22 +62,22 @@ Pages Branch: staging
 
 ## WAF / Rate-Limit Policy
 
-Configure Cloudflare WAF or Rate Limiting Rules outside the app for public read endpoints:
+Use Cloudflare Workers Rate Limiting bindings for the current `workers.dev` staging API. If a custom zone route is added later, equivalent WAF rate limiting rules are also acceptable.
 
 | Endpoint | Expression Shape | Starting Threshold | Action |
 | --- | --- | --- | --- |
-| `/api/search*` | `http.request.uri.path eq "/api/search"` or route-equivalent | 60 requests/minute/IP | Block or managed challenge for 60 seconds |
-| `/api/course/*` | `starts_with(http.request.uri.path, "/api/course/")` | 120 requests/minute/IP | Block or managed challenge for 60 seconds |
+| `/api/search*` | `SEARCH_RATE_LIMITER` key `search:<cf-connecting-ip>` | 120 requests/minute/IP | 429 JSON before handler |
+| `/api/course/*` | `COURSE_RATE_LIMITER` key `course:<cf-connecting-ip>` | 240 requests/minute/IP | 429 JSON before handler |
 
 Admin/internal token checks remain mandatory regardless of WAF rules.
 
 Record the verified rule shape in the stabilization report using these labels:
 
 ```text
-WAF Rule ID: <uuid>
+Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=<integer>, COURSE_RATE_LIMITER=<integer>
 Abuse Control Routes: /api/search*, /api/course/*
-Abuse Control Action: block-or-managed_challenge
-Abuse Control Thresholds: /api/search*=60/min/IP, /api/course/*=120/min/IP
+Abuse Control Action: Worker Rate Limiting returns 429 JSON block response before public route handlers
+Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP
 ```
 
 Non-destructive smoke:
@@ -94,13 +94,14 @@ Expected: public read routes return `200`, unauthenticated admin/internal routes
 
 ## D1 Backup And Restore Test
 
+Cloudflare D1 SQL export cannot handle this schema while FTS virtual tables are present. Use D1 Time Travel for the live restore proof:
+
 ```bash
-mkdir -p artifacts/d1-backups
 BACKUP_REF=$(date -u +%Y%m%dT%H%M%SZ)
-npx wrangler d1 export course-search-db-staging --remote --output artifacts/d1-backups/course-search-db-staging-$BACKUP_REF.sql -y
-npx wrangler d1 create course-search-db-staging-restore-$BACKUP_REF
-npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --file artifacts/d1-backups/course-search-db-staging-$BACKUP_REF.sql
-npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+BOOKMARK=$(npx wrangler d1 time-travel info course-search-db-staging --json)
+npx wrangler d1 execute course-search-db-staging --remote --command "INSERT OR REPLACE INTO app_meta (key, value, updated_at) VALUES ('restore-test-$BACKUP_REF', 'marker', unixepoch())"
+npx wrangler d1 time-travel restore course-search-db-staging --bookmark <bookmark-from-json>
+npx wrangler d1 execute course-search-db-staging --remote --command "SELECT COUNT(*) AS marker_count FROM app_meta WHERE key = 'restore-test-$BACKUP_REF'"
 npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
 ```
 
@@ -108,8 +109,9 @@ Record export path, restore DB name, schema verification output, and preflight c
 
 ```text
 D1 Backup Ref: <YYYYMMDDTHHMMSSZ>
-D1 Backup Location: artifacts/d1-backups/course-search-db-staging-<YYYYMMDDTHHMMSSZ>.sql
-D1 Restore Database: course-search-db-staging-restore-<YYYYMMDDTHHMMSSZ>
+D1 Backup Mechanism: Cloudflare D1 Time Travel
+D1 Backup Location: Cloudflare D1 Time Travel bookmark <bookmark> for ref <YYYYMMDDTHHMMSSZ>
+D1 Restore Database: course-search-db-staging
 D1 Restore Verified: yes
 ```
 
@@ -121,4 +123,4 @@ After staging smoke, staging eval, WAF/rate-limit configuration, and D1 restore 
 npm run cloudflare:preflight
 ```
 
-This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, `artifacts/staging-smoke-results.json`, real HTTPS API and web staging URL evidence, Pages project/branch evidence, real-looking WAF/rate-limit rule IDs with route/action/threshold evidence, D1 backup ref/location markers, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.
+This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, `artifacts/staging-smoke-results.json`, real HTTPS API and web staging URL evidence, Pages project/branch evidence, Workers rate-limit namespace IDs with route/action/threshold evidence, D1 backup ref/location markers, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.

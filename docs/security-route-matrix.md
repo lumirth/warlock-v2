@@ -8,8 +8,8 @@ The project is pre-alpha and has no compatibility obligations. Routes should sta
 | --- | --- | --- | --- | --- | --- |
 | `GET /` | Public | None | No | Health/root route only. | `apps/api/src/routes/__tests__/debug.test.ts` indirectly loads Worker. |
 | `GET /health` | Public | None | No | Staging smoke target. | `scripts/staging-smoke.ts` |
-| `GET /api/search` | Public | None | No | Bounded params; returns shared `SearchResponseDto` with result evidence. | `apps/api/src/routes/__tests__/search.test.ts`, `apps/api/src/services/__tests__/search.integration.test.ts` |
-| `GET /api/course/:subject/:number` | Public | None | No | Bounded subject/course/term/year params; cached detail path is read-only. | `apps/api/src/routes/__tests__/course.test.ts`, `apps/api/src/services/__tests__/search.integration.test.ts` |
+| `GET /api/search` | Public | None | No | Bounded params; returns shared `SearchResponseDto` with result evidence; Cloudflare `SEARCH_RATE_LIMITER` enforces 120 requests/min/IP before handler. | `apps/api/src/routes/__tests__/search.test.ts`, `apps/api/src/services/__tests__/search.integration.test.ts` |
+| `GET /api/course/:subject/:number` | Public | None | No | Bounded subject/course/term/year params; cached detail path is read-only; Cloudflare `COURSE_RATE_LIMITER` enforces 240 requests/min/IP before handler. | `apps/api/src/routes/__tests__/course.test.ts`, `apps/api/src/services/__tests__/search.integration.test.ts` |
 | `POST /admin/sync-rmp` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Dispatches RMP sync work. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `POST /admin/enrich-scoring` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Dispatches score enrichment. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `POST /admin/enrich-gpa` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Aggregates GPA data into course/instructor stats. | `apps/api/src/middleware/__tests__/auth.test.ts` |
