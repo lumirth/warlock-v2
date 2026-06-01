@@ -101,4 +101,6 @@ npm run eval:staging
 npm run cloudflare:preflight
 ```
 
+The stabilization report must include `Staging API URL`, `Staging Web URL`, `Pages Project: uiuc-course-search-web`, and `Pages Branch: staging` before `npm run cloudflare:preflight` can pass.
+
 Cloudflare auth status on 2026-06-01: local `npx wrangler whoami` failed with `Not logged in`, and no Cloudflare token/account env vars were present. Staging deployment, WAF verification, and remote D1 restore testing require valid Cloudflare auth before they can be completed.

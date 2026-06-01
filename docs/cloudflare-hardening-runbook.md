@@ -52,6 +52,15 @@ npm run test:staging
 EVAL_BASE_URL=https://<staging-worker-host> npm run eval:staging
 ```
 
+Record the deployment targets in the stabilization report using these labels:
+
+```text
+Staging API URL: https://<staging-worker-host>
+Staging Web URL: https://<staging-pages-host>
+Pages Project: uiuc-course-search-web
+Pages Branch: staging
+```
+
 ## WAF / Rate-Limit Policy
 
 Configure Cloudflare WAF or Rate Limiting Rules outside the app for public read endpoints:
@@ -113,4 +122,4 @@ After staging smoke, staging eval, WAF/rate-limit configuration, and D1 restore 
 npm run cloudflare:preflight
 ```
 
-This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, `artifacts/staging-smoke-results.json`, real HTTPS staging URL evidence, real-looking WAF/rate-limit rule IDs with route/action/threshold evidence, D1 backup ref/location markers, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.
+This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, `artifacts/staging-smoke-results.json`, real HTTPS API and web staging URL evidence, Pages project/branch evidence, real-looking WAF/rate-limit rule IDs with route/action/threshold evidence, D1 backup ref/location markers, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.

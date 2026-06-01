@@ -55,6 +55,15 @@ npm run cloudflare:preflight
 
 Do not paste or commit token values. Record only token names and command exit status in the final report.
 
+Record deployment target evidence with these labels before the final preflight:
+
+```text
+Staging API URL: https://<staging-worker-host>
+Staging Web URL: https://<staging-pages-host>
+Pages Project: uiuc-course-search-web
+Pages Branch: staging
+```
+
 ## Public Abuse Controls
 
 Before a public demo, configure Cloudflare rate limiting or WAF rules for:

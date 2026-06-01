@@ -52,7 +52,7 @@ Cloudflare staging readiness is intentionally executable. After staging resource
 npm run cloudflare:preflight
 ```
 
-This command is expected to fail until real Cloudflare auth and staging evidence are present. The final report must use concrete evidence labels such as `Staging API URL`, `WAF Rule ID` or `Rate-Limit Rule ID`, `Abuse Control Routes`, `Abuse Control Action`, `Abuse Control Thresholds`, `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified`.
+This command is expected to fail until real Cloudflare auth and staging evidence are present. The final report must use concrete evidence labels such as `Staging API URL`, `Staging Web URL`, `Pages Project`, `Pages Branch`, `WAF Rule ID` or `Rate-Limit Rule ID`, `Abuse Control Routes`, `Abuse Control Action`, `Abuse Control Thresholds`, `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified`.
 
 ## Data Artifacts
 

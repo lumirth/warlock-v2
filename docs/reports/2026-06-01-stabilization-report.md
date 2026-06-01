@@ -30,6 +30,8 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `6fa22e4` - Tighten Cloudflare evidence gate
 - `a15db81` - Expand staging smoke observability proof
 - `30be492` - Cover staging smoke runner
+- `44eefb3` - Require abuse control evidence
+- `2ddae41` - Require concrete D1 restore evidence
 
 The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
@@ -64,6 +66,8 @@ Additional gate evidence:
 - Staging smoke now requires `/admin/sync/status` to accept the staging admin token and return sync/term health arrays, so live staging must prove operator visibility as well as admin/internal auth.
 - Staging smoke runner now has script tests for the full expected check list, malformed sync-status bodies, and missing staging env; direct CLI missing-env failures print a concise error instead of a stack trace.
 - Cloudflare preflight now requires abuse-control route, action, and threshold evidence in addition to a real-looking WAF or rate-limit rule ID, so a standalone opaque rule ID is not enough to satisfy the public abuse-control requirement.
+- Cloudflare preflight now requires separate API and web staging URL evidence plus `Pages Project: uiuc-course-search-web` and `Pages Branch: staging`, so the Pages deployment cannot be skipped while the API worker is green.
+- Cloudflare preflight now requires `D1 Restore Verified: yes` as a concrete report label; prose or checklist text mentioning that label does not count.
 - Completion audit refresh on 2026-06-01T17:59:16Z reran `npm run typecheck`, `npm test`, `npm run build`, `npm run lint`, `npm run db:verify`, `npm run eval:smoke`, `npm run bundle:budget`, `npm run security:secrets`, and `npm run security:audit`; all passed. `npm run test:staging`, `npm run eval:staging`, and `npm run cloudflare:preflight` failed only because Cloudflare staging/auth evidence is absent.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
@@ -105,7 +109,7 @@ Browser-found fixes completed:
 | Search explainability/result shape | Complete locally | Shared `MatchEvidence`, `ResultWarning`, `SectionMatchDto`; API attaches evidence; web renders chips; tests cover categories. |
 | Browser QA | Complete locally | Browser desktop/mobile screenshots and console checks listed above. |
 | Accessibility | Complete locally | `axe-core` web tests for search and course detail pass. |
-| Staging deployment | Blocked by auth | `npx wrangler whoami` failed: not logged in; `CLOUDFLARE_API_TOKEN`, `CF_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCOUNT_ID` unset. |
+| Staging deployment | Blocked by auth | `npx wrangler whoami` failed: not logged in; `CLOUDFLARE_API_TOKEN`, `CF_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCOUNT_ID` unset. Final preflight requires both API and Pages evidence. |
 | Public WAF/rate limits | Blocked by auth | Runbook and deployment checklist specify rules/thresholds; dashboard/API verification requires Cloudflare auth. |
 | D1 backup/restore | Blocked by auth for remote proof | `d1:preflight` added and covered by script tests; exact export/restore commands documented. Remote export/restore requires Cloudflare auth. |
 | Scheduler reliability | Complete locally; live staging smoke blocked by auth | Structured run IDs/logs added for scheduled paths; tests cover subject stale pruning, enrichment max-batch partial runs, RMP failed/expired-running resume, fresh running-lock rejection, and `/admin/sync/status` health visibility. Live staging scheduler smoke requires Cloudflare auth. |
@@ -117,7 +121,7 @@ Browser-found fixes completed:
 | Data artifact/bootstrap hygiene | Complete locally | `.gitignore` protects generated artifacts while explicitly tracking the canonical baseline migration; `npm run bootstrap:fresh-check` verifies fresh clone bootstrap without `history_chunks/` or `full_history.sql`; remediation report records whole-project backup. |
 | Computer Use QA | Not needed | No native Mac UI task was required; Browser/terminal were stronger signals. |
 | Completion audit | Complete, not achieved | `docs/reports/2026-06-01-completion-audit.md` maps the active goal requirement-by-requirement and records the remaining auth-dependent gaps. |
-| Cloudflare final preflight | Added, currently red by design | `npm run cloudflare:preflight` verifies Wrangler auth, explicit staging bindings, real-looking non-placeholder D1/KV IDs, required staging env vars, staging smoke artifact, real HTTPS staging URL evidence, real-looking WAF/rate-limit ID plus route/action/threshold evidence, backup ref/location evidence, and D1 restore evidence. |
+| Cloudflare final preflight | Added, currently red by design | `npm run cloudflare:preflight` verifies Wrangler auth, explicit staging bindings, real-looking non-placeholder D1/KV IDs, required staging env vars, staging smoke artifact, real HTTPS API/web staging URL evidence, Pages project/branch evidence, real-looking WAF/rate-limit ID plus route/action/threshold evidence, backup ref/location evidence, and D1 restore evidence. |
 
 ## Cloudflare Auth Blocker
 
@@ -155,9 +159,9 @@ Current Cloudflare evidence gate:
 
 ```bash
 npm run cloudflare:preflight
-# 27 checks, 0 passing, 27 failing
+# 30 checks, 0 passing, 30 failing
 # Missing: Wrangler auth, env.staging bindings, staging env vars, staging smoke artifact,
-# staging URL evidence, WAF/rate-limit rule ID/route/action/threshold evidence, D1 backup location, and D1 restore evidence.
+# API/web staging URL evidence, Pages project/branch evidence, WAF/rate-limit rule ID/route/action/threshold evidence, D1 backup location, and D1 restore evidence.
 ```
 
 ## GitHub CI Evidence

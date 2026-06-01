@@ -262,6 +262,9 @@ export function checkSmokeResults(path: string = DEFAULT_SMOKE_RESULTS): CheckRe
 
 export function checkEvidenceReportText(text: string): CheckResult[] {
   const stagingUrl = labelValue(text, 'Staging API URL');
+  const stagingWebUrl = labelValue(text, 'Staging Web URL');
+  const pagesProject = labelValue(text, 'Pages Project');
+  const pagesBranch = labelValue(text, 'Pages Branch');
   const wafRuleId = labelValue(text, 'WAF Rule ID');
   const rateLimitRuleId = labelValue(text, 'Rate-Limit Rule ID');
   const abuseRoutes = labelValue(text, 'Abuse Control Routes')
@@ -275,12 +278,28 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
   const backupRef = labelValue(text, 'D1 Backup Ref');
   const backupLocation = labelValue(text, 'D1 Backup Location') ?? labelValue(text, 'D1 Backup Path');
   const restoreDatabase = labelValue(text, 'D1 Restore Database');
+  const restoreVerified = labelValue(text, 'D1 Restore Verified');
 
   return [
     result(
       'staging URL evidence',
       isRealHttpsUrl(stagingUrl),
       'requires real non-placeholder HTTPS Staging API URL'
+    ),
+    result(
+      'staging web URL evidence',
+      isRealHttpsUrl(stagingWebUrl),
+      'requires real non-placeholder HTTPS Staging Web URL'
+    ),
+    result(
+      'Pages project evidence',
+      pagesProject === 'uiuc-course-search-web',
+      'requires Pages Project: uiuc-course-search-web'
+    ),
+    result(
+      'Pages branch evidence',
+      pagesBranch === 'staging',
+      'requires Pages Branch: staging'
     ),
     result(
       'WAF or rate-limit rule evidence',
@@ -319,7 +338,7 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
     ),
     result(
       'D1 restore verification evidence',
-      has(text, /D1 Restore Verified:\s*yes/i),
+      restoreVerified?.toLowerCase() === 'yes',
       'requires D1 Restore Verified: yes'
     ),
   ];

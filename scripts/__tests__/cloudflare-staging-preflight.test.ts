@@ -72,6 +72,9 @@ describe('Cloudflare staging preflight', () => {
   it('requires concrete staging, WAF, and D1 restore evidence', () => {
     const validEvidence = [
       'Staging API URL: https://uiuc-course-search-staging.lu-uiuc.workers.dev',
+      'Staging Web URL: https://staging.uiuc-course-search.pages.dev',
+      'Pages Project: uiuc-course-search-web',
+      'Pages Branch: staging',
       'WAF Rule ID: 3f1e2d4c-5b6a-4789-9abc-def012345678',
       'Abuse Control Routes: /api/search*, /api/course/*',
       'Abuse Control Action: managed_challenge',
@@ -87,6 +90,18 @@ describe('Cloudflare staging preflight', () => {
     const placeholderEvidence = 'Staging API URL: https://<staging-worker-host>';
     expect(checkEvidenceReportText(placeholderEvidence).some(result => !result.ok)).toBe(true);
 
+    const missingPagesEvidence = validEvidence.replace(
+      'Pages Project: uiuc-course-search-web',
+      'Pages Project: uiuc-course-search'
+    );
+    expect(checkEvidenceReportText(missingPagesEvidence).find(result => result.name === 'Pages project evidence')?.ok).toBe(false);
+
+    const missingWebUrl = validEvidence.replace(
+      'Staging Web URL: https://staging.uiuc-course-search.pages.dev',
+      'Staging Web URL: https://<staging-pages-host>'
+    );
+    expect(checkEvidenceReportText(missingWebUrl).find(result => result.name === 'staging web URL evidence')?.ok).toBe(false);
+
     const weakRuleEvidence = validEvidence.replace(
       'WAF Rule ID: 3f1e2d4c-5b6a-4789-9abc-def012345678',
       'WAF Rule ID: rule_123'
@@ -98,6 +113,9 @@ describe('Cloudflare staging preflight', () => {
       ''
     );
     expect(checkEvidenceReportText(missingBackupLocation).find(result => result.name === 'D1 backup location evidence')?.ok).toBe(false);
+
+    const proseOnlyRestoreVerified = 'The report still needs `D1 Restore Verified: yes` evidence.';
+    expect(checkEvidenceReportText(proseOnlyRestoreVerified).find(result => result.name === 'D1 restore verification evidence')?.ok).toBe(false);
 
     const missingRouteCoverage = validEvidence.replace(
       'Abuse Control Routes: /api/search*, /api/course/*',
