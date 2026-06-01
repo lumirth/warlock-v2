@@ -87,3 +87,13 @@ npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKU
 ```
 
 Record export path, restore DB name, schema verification output, and preflight command output in the stabilization report.
+
+## Final Evidence Gate
+
+After staging smoke, staging eval, WAF/rate-limit configuration, and D1 restore testing are recorded, run:
+
+```bash
+npm run cloudflare:preflight
+```
+
+This gate verifies Wrangler auth, explicit `env.staging` bindings, required staging environment variable names, `artifacts/staging-smoke-results.json`, non-placeholder staging URL evidence, WAF/rate-limit rule IDs, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.

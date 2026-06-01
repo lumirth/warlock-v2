@@ -49,6 +49,7 @@ Additional gate evidence:
 - `npm run security:secrets`: no committed secret-looking values found.
 - `npm run security:audit`: 0 vulnerabilities after upgrading Vite/Vitest/Wrangler transitive lockfile.
 - `npm run d1:preflight` has script-level tests for passing restore evidence, missing backup markers, and missing `--restore-verified`; a direct run against this report with a fake backup ref correctly refused to pass because no real remote restore evidence exists yet.
+- `npm run cloudflare:preflight` is now the executable final gate for Cloudflare staging evidence. It currently fails as expected because Wrangler auth, explicit staging bindings, staging smoke artifacts, WAF/rate-limit rule IDs, and D1 restore markers are not present yet.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
 
@@ -124,6 +125,15 @@ CF_ACCOUNT_ID=unset
 No secret values were exposed or committed.
 
 Wrangler OAuth was attempted with `npx wrangler login --browser=false`. The flow reached a GitHub permission grant asking to authorize Cloudflare to read the `lumirth` account's email address and redirect to `https://oidc.iam.cfapi.net`. That account-permission grant requires user action, so the local OAuth listener was stopped and no Cloudflare token was created or committed.
+
+Current Cloudflare evidence gate:
+
+```bash
+npm run cloudflare:preflight
+# 21 checks, 0 passing, 21 failing
+# Missing: Wrangler auth, env.staging bindings, staging env vars, staging smoke artifact,
+# staging URL evidence, WAF/rate-limit rule ID evidence, and D1 restore evidence.
+```
 
 ## GitHub CI Evidence
 

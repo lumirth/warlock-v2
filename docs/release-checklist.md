@@ -50,6 +50,7 @@ VITE_API_BASE_URL=https://<staging-worker-host> npm run build -w @uiuc-course-se
 npx wrangler pages deploy apps/web/dist --project-name uiuc-course-search-web --branch staging
 STAGING_API_BASE_URL=https://<staging-worker-host> STAGING_ADMIN_TOKEN=<redacted> STAGING_INTERNAL_TOKEN=<redacted> npm run test:staging
 EVAL_BASE_URL=https://<staging-worker-host> npm run eval:staging
+npm run cloudflare:preflight
 ```
 
 Do not paste or commit token values. Record only token names and command exit status in the final report.
@@ -75,4 +76,5 @@ npx wrangler d1 create course-search-db-staging-restore-$BACKUP_REF
 npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --file artifacts/d1-backups/course-search-db-staging-$BACKUP_REF.sql
 npx wrangler d1 execute course-search-db-staging-restore-$BACKUP_REF --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
 npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
+npm run cloudflare:preflight
 ```

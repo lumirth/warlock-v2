@@ -89,6 +89,7 @@ Commands:
 ```bash
 npm run test:staging
 npm run eval:staging
+npm run cloudflare:preflight
 ```
 
 Cloudflare auth status on 2026-06-01: local `npx wrangler whoami` failed with `Not logged in`, and no Cloudflare token/account env vars were present. Staging deployment, WAF verification, and remote D1 restore testing require valid Cloudflare auth before they can be completed.

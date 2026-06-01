@@ -44,6 +44,14 @@ Run the preflight before destructive D1 operations:
 npm run d1:preflight -- --database <db-name> --backup-ref <backup-ref> --evidence-file <report-path> --restore-verified
 ```
 
+Cloudflare staging readiness is intentionally executable. After staging resources, smoke output, WAF/rate-limit rule evidence, and D1 restore evidence exist, run:
+
+```bash
+npm run cloudflare:preflight
+```
+
+This command is expected to fail until real Cloudflare auth and staging evidence are present.
+
 ## Data Artifacts
 
 Normal clone/build/test should not depend on large generated historical SQL artifacts. Generated historical chunks are ignored and local-only; a verified whole-project backup was created before removing them from git tracking.
