@@ -59,6 +59,49 @@ function mockRmpResponse(endCursor: string | null, hasNextPage = false) {
 describe('coordinateRmpSync', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('rejects a fresh running lock', async () => {
+    vi.setSystemTime(new Date('2026-06-01T12:00:00Z'));
+    const previous: SyncStateRow = {
+      last_sync: Math.floor(Date.now() / 1000) - 60,
+      last_status: 'running',
+      items_synced: 10,
+      cursor: 1,
+      etag: 'cursor-running',
+    };
+    const { db } = createDb(previous);
+    const selfBinding = { fetch: vi.fn() };
+    mockRmpResponse('new-cursor');
+
+    await expect(coordinateRmpSync(db as unknown as D1Database, selfBinding as unknown as Fetcher, {
+      rmpAuthToken: 'Basic public-token',
+    })).rejects.toThrow('RMP sync is already running.');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('resumes an expired running lock from the stored cursor', async () => {
+    vi.setSystemTime(new Date('2026-06-01T12:00:00Z'));
+    const previous: SyncStateRow = {
+      last_sync: Math.floor(Date.now() / 1000) - (2 * 60 * 60),
+      last_status: 'running',
+      items_synced: 25,
+      cursor: 2,
+      etag: 'expired-cursor',
+    };
+    const { db, stateWrites } = createDb(previous);
+    const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 202 })) };
+    mockRmpResponse('new-cursor');
+
+    const result = await coordinateRmpSync(db as unknown as D1Database, selfBinding as unknown as Fetcher, {
+      rmpAuthToken: 'Basic public-token',
+    });
+
+    expect(result).toEqual({ count: 26, pages: 3 });
+    const fetchBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(fetchBody.variables.cursor).toBe('expired-cursor');
+    expect(stateWrites.at(-1)).toEqual(['rmp', 'complete', 26, 3, 'new-cursor']);
   });
 
   it('requires the RMP auth binding instead of relying on a hardcoded token', async () => {

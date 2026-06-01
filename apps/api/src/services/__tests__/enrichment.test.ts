@@ -2,11 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { coordinateEnrichment } from '../enrichment.js';
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 
-function createDb() {
+function createDb(overrides: {
+  courses?: Array<{ subject: string; number: string; primary_instructor: string }>;
+  existingLinks?: Array<{ term_id: string; subject: string; number: string; instructor_name: string }>;
+} = {}) {
   const stateWrites: unknown[][] = [];
-  const courses = [
+  const courses = overrides.courses ?? [
     { subject: 'CS', number: '225', primary_instructor: 'Zed, Z; Ada, A' },
     { subject: 'CS', number: '101', primary_instructor: 'Grace, G' },
+  ];
+  const existingLinks = overrides.existingLinks ?? [
+    { term_id: '2026-spring', subject: 'CS', number: '101', instructor_name: 'Grace, G' },
   ];
 
   const db = {
@@ -31,7 +37,7 @@ function createDb() {
           if (sql.includes('FROM instructor_course_links')) {
             return {
               success: true,
-              results: [{ term_id: '2026-spring', subject: 'CS', number: '101', instructor_name: 'Grace, G' }],
+              results: existingLinks,
             };
           }
           return { success: true, results: [] };
@@ -71,5 +77,28 @@ describe('coordinateEnrichment', () => {
     expect(request.headers).toMatchObject({ Authorization: 'Bearer internal-token' });
     expect(stateWrites[0]).toEqual(['enrichment:2026-spring', 'running', 0, 1, '2026-spring']);
     expect(stateWrites.at(-1)).toEqual(['enrichment:2026-spring', 'complete', 2, 1, '2026-spring']);
+  });
+
+  it('limits each coordinator run to forty enrichment batches and records partial progress', async () => {
+    const courses = Array.from({ length: 405 }, (_, index) => ({
+      subject: 'CS',
+      number: String(1000 + index),
+      primary_instructor: `Instructor, ${index}`,
+    }));
+    const { db, stateWrites } = createDb({ courses, existingLinks: [] });
+    const selfBinding: { fetch: ReturnType<typeof vi.fn> } = {
+      fetch: vi.fn(async () => new Response(null, { status: 202 })),
+    };
+
+    const result = await coordinateEnrichment(
+      db as unknown as D1Database,
+      selfBinding as unknown as Fetcher,
+      'internal-token'
+    );
+
+    expect(result).toEqual({ taskCount: 400, batchCount: 40 });
+    expect(selfBinding.fetch).toHaveBeenCalledTimes(40);
+    expect(stateWrites[0]).toEqual(['enrichment:2026-spring', 'running', 0, 40, '2026-spring']);
+    expect(stateWrites.at(-1)).toEqual(['enrichment:2026-spring', 'partial', 400, 40, '2026-spring']);
   });
 });

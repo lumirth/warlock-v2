@@ -243,7 +243,7 @@ async function saveSubjectData(
   return { coursesCount, sectionsCount };
 }
 
-async function pruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): Promise<void> {
+export async function pruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): Promise<void> {
   if (cleanup.currentKeys.length === 0) {
     await db.prepare('DELETE FROM course_gened WHERE course_id = ?')
       .bind(cleanup.courseId)
@@ -263,7 +263,7 @@ async function pruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): Pr
   `).bind(cleanup.courseId, ...params).run();
 }
 
-async function pruneStaleSubjectRows(
+export async function pruneStaleSubjectRows(
   db: D1Database,
   subjectId: string,
   year: number,

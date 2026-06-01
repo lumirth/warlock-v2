@@ -3,7 +3,7 @@ import type { D1Database, VectorizeIndex, Ai, Fetcher, KVNamespace } from '@clou
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
-import { getTermsByStatus, upsertTermState, makeTermId } from '../db/index.js';
+import { getTermsByStatus, upsertTermState, makeTermId, type SyncState, type TermState } from '../db/index.js';
 import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa, coordinateEnrichment, processEnrichmentBatch, EnrichmentTask } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
@@ -32,6 +32,31 @@ type Bindings = {
 };
 
 export const syncRoutes = new Hono<{ Bindings: Bindings }>();
+
+syncRoutes.get('/admin/sync/status', async (c) => {
+  const [syncStates, termStates] = await Promise.all([
+    c.env.DB.prepare(`
+      SELECT id, last_sync, last_status, items_synced, cursor, etag
+      FROM sync_state
+      ORDER BY id
+    `).all<SyncState>(),
+    c.env.DB.prepare(`
+      SELECT term_id, year, term, status, last_checked, last_synced,
+             subjects_count, courses_count, sections_count, sync_errors,
+             created_at, updated_at
+      FROM term_state
+      ORDER BY year DESC, term DESC, term_id
+    `).all<TermState>(),
+  ]);
+
+  return c.json({
+    generatedAt: new Date().toISOString(),
+    syncStates: syncStates.results,
+    termStates: termStates.results,
+    unhealthySyncStates: syncStates.results.filter(state => state.last_status === 'failed'),
+    runningSyncStates: syncStates.results.filter(state => state.last_status === 'running'),
+  });
+});
 
 // Admin trigger for RMP Sync
 syncRoutes.post('/admin/sync-rmp', async (c) => {

@@ -78,7 +78,7 @@ Browser-found fixes completed:
 | Staging deployment | Blocked by auth | `npx wrangler whoami` failed: not logged in; `CLOUDFLARE_API_TOKEN`, `CF_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCOUNT_ID` unset. |
 | Public WAF/rate limits | Blocked by auth | Runbook and deployment checklist specify rules/thresholds; dashboard/API verification requires Cloudflare auth. |
 | D1 backup/restore | Blocked by auth for remote proof | `d1:preflight` added and tested locally; exact export/restore commands documented. Remote export/restore requires Cloudflare auth. |
-| Scheduler reliability | Partially complete locally | Structured run IDs/logs added for scheduled paths; existing sync tests pass. Live staging scheduler smoke requires Cloudflare auth. |
+| Scheduler reliability | Complete locally; live staging smoke blocked by auth | Structured run IDs/logs added for scheduled paths; tests cover subject stale pruning, enrichment max-batch partial runs, RMP failed/expired-running resume, fresh running-lock rejection, and `/admin/sync/status` health visibility. Live staging scheduler smoke requires Cloudflare auth. |
 | Logging/observability | Complete locally | Runtime API logs replaced by structured redacted logger; logger redaction test passes. |
 | Frontend rough edges | Complete locally | Empty/error/loading states improved; dead chart already removed; Browser confirms desktop/mobile. |
 | Performance/bundle budgets | Complete locally | Vite 8 build has no chunk warning; `bundle:budget` enforced in CI. |
@@ -137,3 +137,19 @@ EVAL_BASE_URL=https://<staging-worker-host> npm run eval:staging
 ```
 
 Then create and restore-test the staging D1 backup using `docs/cloudflare-hardening-runbook.md`, configure public WAF/rate-limit rules, and append the rule IDs/backup path/restore output to this report.
+
+## Scheduler Reliability Evidence
+
+Added local coverage after the initial report:
+
+```bash
+npm test -w @uiuc-course-search/api -- src/services/__tests__/parallel-sync.test.ts src/services/__tests__/enrichment.test.ts src/services/__tests__/rmp-sync.test.ts src/routes/__tests__/sync-status.test.ts
+```
+
+Covered behavior:
+
+- Subject sync stale pruning deletes stale meeting instructors, meetings, sections, GenEd rows, and courses after a successful subject refresh.
+- Course GenEd pruning preserves current category/attribute keys and deletes stale keys.
+- Enrichment dispatch is capped at 40 batches / 400 tasks per coordinator run and records `partial` progress when more work remains.
+- RMP sync rejects a fresh running lock, resumes an expired running lock from its cursor, and resumes failed runs.
+- `/admin/sync/status` reports all `sync_state`/`term_state` rows, failed sync states, and currently running sync states for operators.
