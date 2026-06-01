@@ -19,6 +19,9 @@ Scope: harden `main` according to `docs/plans/2026-06-01-stabilization-hardening
 - `789c413` - Verify fresh clone bootstrap
 - `fbd1ff2` - Update stabilization checklist evidence
 - `88b1fe8` - Cover D1 backup preflight
+- `574543e` - Record GitHub CI remote setup
+- `f6e95da` - Opt CI actions into Node 24
+- `1558d72` - Update CI actions for Node 24
 
 The history was rewritten on 2026-06-01 after a private GitHub push was rejected for old generated data artifacts over GitHub's file-size limit. A verified local recovery bundle exists at `artifacts/backups/uiuc-course-search-main-20260601T171900Z.bundle`, and the rewritten history has no reachable `history_chunks/`, `historical-data.sql`, or `full_history.sql` objects.
 
@@ -79,7 +82,7 @@ Browser-found fixes completed:
 | Plan Area | Status | Evidence |
 | --- | --- | --- |
 | Git checkpoint and hygiene | Complete locally | Multiple coherent commits on `main`; clean status required before final. |
-| CI/lint/warning debt | Complete locally; GitHub run pending | `npm run lint` zero output; CI runs lint, bundle budget, secret scan, audit, eval. Private remote created at `https://github.com/lumirth/uiuc-course-search`; a follow-up push is required to record the live Actions result. |
+| CI/lint/warning debt | Complete | `npm run lint` zero output; private GitHub CI passes on `main` for `1558d72`; CI runs typecheck, schema verification, tests, build, bundle budget, lint, secret scan, audit, eval, and eval artifact upload. |
 | Skipped/manual tests | Complete locally | Hermetic Worker search/course integration tests; no active `.skip`. |
 | Search contract/evals | Complete locally | `npm run eval:smoke` passes 58/58; staging eval command requires explicit URL. |
 | Search explainability/result shape | Complete locally | Shared `MatchEvidence`, `ResultWarning`, `SectionMatchDto`; API attaches evidence; web renders chips; tests cover categories. |
@@ -128,7 +131,18 @@ gh repo view --json nameWithOwner,url,visibility,defaultBranchRef
 # lumirth/uiuc-course-search, PRIVATE, default branch main
 ```
 
-The first push to the new remote was rejected because old generated artifacts were still reachable in history. After verifying the local backup bundle, history was rewritten to purge those generated payloads and `main` was pushed successfully. A live Actions result must be appended after the next CI run completes.
+The first push to the new remote was rejected because old generated artifacts were still reachable in history. After verifying the local backup bundle, history was rewritten to purge those generated payloads and `main` was pushed successfully.
+
+Latest observed passing run:
+
+```bash
+gh run view 26770789698 --json conclusion,status,url,headSha,createdAt,updatedAt,name,event,jobs
+# conclusion: success
+# headSha: 1558d728771c2db9d0916c13dc84a81d9a3d840a
+# url: https://github.com/lumirth/uiuc-course-search/actions/runs/26770789698
+```
+
+The run completed every configured step successfully: install, typecheck, schema verification, tests, build, bundle budget, lint, secret scan, dependency audit, search smoke eval, and eval report artifact upload.
 
 ## Next Auth-Dependent Commands
 
