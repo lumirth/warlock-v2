@@ -11,5 +11,6 @@ artifacts/
 # Sync artifacts (large SQL dumps, logs, checkpoints)
 history_chunks/
 *.sql
+!apps/api/migrations/0001_initial_schema.sql
 *.log
 historical-sync-checkpoint.json

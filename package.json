@@ -21,6 +21,7 @@
     "security:audit": "npm audit --audit-level=moderate",
     "security:secrets": "tsx scripts/check-secrets.ts",
     "d1:preflight": "tsx scripts/d1-backup-preflight.ts",
+    "bootstrap:fresh-check": "tsx scripts/verify-fresh-clone.ts",
     "db:verify": "bash scripts/verify-schema.sh",
     "eval:smoke": "tsx scripts/eval-smoke.ts",
     "eval:staging": "if [ -z \"$EVAL_BASE_URL\" ]; then echo \"EVAL_BASE_URL is required, for example https://api-staging.example.workers.dev\" >&2; exit 1; fi; npm run eval -w @uiuc-course-search/api -- \"$EVAL_BASE_URL\"",

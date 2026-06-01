@@ -17,6 +17,7 @@ npm run db:verify
 npm run eval:smoke
 npm run security:secrets
 npm run security:audit
+npm run bootstrap:fresh-check
 ```
 
 ## Browser QA

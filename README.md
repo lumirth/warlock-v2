@@ -14,6 +14,7 @@ npm run db:verify
 npm run eval:smoke
 npm run security:secrets
 npm run security:audit
+npm run bootstrap:fresh-check
 ```
 
 Default `npm run build` is deterministic and does not regenerate subject data or fetch network data. Use `npm run generate:subjects` only when intentionally refreshing the committed subject list.
