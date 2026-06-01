@@ -3,6 +3,7 @@ import { hybridSearch, postFilterSemanticResults } from '../search.js';
 import * as embeddings from '../embeddings.js';
 import { validateSubject } from '../query-resolver.js';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
+import type { Course } from '../../db/index.js';
 import type { SearchFilters, SearchPlan } from '@uiuc-course-search/query-types';
 
 // Mock dependencies
@@ -123,6 +124,92 @@ describe('hybridSearch', () => {
         expect.objectContaining({ subject: 'CS' }),
         50
     );
+  });
+
+  it('chunks quality score lookups for broad hybrid result sets', async () => {
+    vi.mocked(validateSubject).mockResolvedValue(null);
+    vi.mocked(embeddings.searchCourses).mockResolvedValue(
+      Array.from({ length: 50 }, (_, index) => ({ id: `semantic-${index}`, score: 1 - index / 100 }))
+    );
+
+    const qualityBindSizes: number[] = [];
+    const makeCourse = (id: string): Course => ({
+      id,
+      subject: 'CS',
+      number: '499',
+      title: id,
+      description: null,
+      credit_hours: 3,
+      gened: null,
+      subject_id: 'CS',
+      course_info: null,
+      degree_attributes: null,
+      class_schedule_info: null,
+      date_range_text: null,
+      registration_notes: null,
+      approval_code: null,
+      year: 2026,
+      term: 'spring',
+      avg_gpa: null,
+      gpa_sample_size: null,
+      primary_instructor: null,
+      primary_instructor_rmp: null,
+      difficulty_score: null,
+      quality_score: null,
+      last_synced: 0,
+      created_at: 0,
+      updated_at: 0,
+    });
+
+    mockDb.prepare.mockImplementation((sql: string) => {
+      const statement = {
+        params: [] as unknown[],
+        bind(...params: unknown[]) {
+          this.params = params;
+          return this;
+        },
+        async all() {
+          if (sql.includes('FROM courses_fts')) {
+            return {
+              results: Array.from({ length: 50 }, (_, index) => ({ id: `course-${index}`, fts_score: index })),
+            };
+          }
+          if (sql.includes('FROM sections_fts')) {
+            return {
+              results: Array.from({ length: 50 }, (_, index) => ({ id: `section-${index}`, fts_score: index })),
+            };
+          }
+          if (sql.includes('quality_score')) {
+            qualityBindSizes.push(this.params.length);
+            return { results: [] };
+          }
+          if (sql.includes('SELECT * FROM courses WHERE id IN')) {
+            return {
+              results: this.params.map(param => makeCourse(String(param))),
+            };
+          }
+          return { results: [] };
+        },
+      };
+      return statement;
+    });
+
+    const plan: SearchPlan = {
+      keywordQuery: 'machine learning',
+      semanticQuery: 'machine learning',
+      filters: {},
+    };
+
+    const results = await hybridSearch(
+      mockDb as unknown as D1Database,
+      mockVectorize as unknown as VectorizeIndex,
+      mockAi as unknown as Ai,
+      plan
+    );
+
+    expect(results).toHaveLength(20);
+    expect(qualityBindSizes.length).toBeGreaterThan(1);
+    expect(qualityBindSizes.every(size => size <= 50)).toBe(true);
   });
 });
 

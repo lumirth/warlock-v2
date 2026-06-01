@@ -11,6 +11,7 @@ import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
+const MAX_SYNC_SUBJECTS_PER_REQUEST = 5;
 
 type Bindings = {
   DB: D1Database;
@@ -27,11 +28,16 @@ type Bindings = {
 
   // Sync settings
   SYNC_CONCURRENCY: string;
+  SYNC_EMBEDDINGS?: string;
   INTERNAL_TOKEN?: string;
   RMP_AUTH_TOKEN?: string;
 };
 
 export const syncRoutes = new Hono<{ Bindings: Bindings }>();
+
+function syncEmbeddingsEnabled(value: string | undefined): boolean {
+  return value?.toLowerCase() === 'true';
+}
 
 syncRoutes.get('/admin/sync/status', async (c) => {
   const [syncStates, termStates] = await Promise.all([
@@ -186,8 +192,8 @@ syncRoutes.post('/internal/sync-batch', async (c) => {
       year,
       term,
       subjects,
-      c.env.VECTORIZE,
-      c.env.AI
+      syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.VECTORIZE : undefined,
+      syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.AI : undefined
     );
 
     return c.json(result);
@@ -257,8 +263,8 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
 
   const parsedLimit = parseBoundedIntParam(c.req.query('limit'), 'limit', {
     min: 1,
-    max: 40,
-    defaultValue: 40,
+    max: MAX_SYNC_SUBJECTS_PER_REQUEST,
+    defaultValue: MAX_SYNC_SUBJECTS_PER_REQUEST,
   });
   if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
 
@@ -275,8 +281,8 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
       config,
       parsedYear.value,
       parsedTerm.value,
-      c.env.VECTORIZE,
-      c.env.AI
+      syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.VECTORIZE : undefined,
+      syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.AI : undefined
     );
 
     await upsertTermState(c.env.DB, {
@@ -319,8 +325,8 @@ syncRoutes.post('/admin/sync-active', async (c) => {
 
   const parsedLimit = parseBoundedIntParam(c.req.query('limit'), 'limit', {
     min: 1,
-    max: 40,
-    defaultValue: 40,
+    max: MAX_SYNC_SUBJECTS_PER_REQUEST,
+    defaultValue: MAX_SYNC_SUBJECTS_PER_REQUEST,
   });
   if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
 
@@ -338,8 +344,8 @@ syncRoutes.post('/admin/sync-active', async (c) => {
       config,
       termState.year,
       termState.term,
-      c.env.VECTORIZE,
-      c.env.AI
+      syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.VECTORIZE : undefined,
+      syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.AI : undefined
     );
 
     const warnings = validateSyncResult(result);

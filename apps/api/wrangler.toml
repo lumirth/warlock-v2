@@ -13,6 +13,7 @@ FRONTEND_BASE = "https://courses.illinois.edu"
 
 # Sync settings
 SYNC_CONCURRENCY = "25"
+SYNC_EMBEDDINGS = "false"
 
 # Rate limiting
 BACKOFF_BASE_MS = "5000"
@@ -49,3 +50,43 @@ binding = "AI"
 [[services]]
 binding = "SELF"
 service = "uiuc-course-search"
+
+[env.staging]
+name = "uiuc-course-search-staging"
+workers_dev = true
+preview_urls = false
+
+[env.staging.triggers]
+crons = []
+
+[env.staging.vars]
+CURRENT_YEAR = "2026"
+CURRENT_TERM = "spring"
+CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
+FRONTEND_BASE = "https://courses.illinois.edu"
+SYNC_CONCURRENCY = "25"
+SYNC_EMBEDDINGS = "false"
+BACKOFF_BASE_MS = "5000"
+BACKOFF_MAX_MS = "60000"
+MAX_RETRIES = "3"
+CLIENT_CACHE_TTL_MS = "30000"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "course-search-db-staging"
+database_id = "76913703-61a0-4b9e-b703-a697135beaf1"
+
+[[env.staging.kv_namespaces]]
+binding = "GPA_CACHE"
+id = "ad02afba85fb40aa9c7d2abceb15d896"
+
+[[env.staging.vectorize]]
+binding = "VECTORIZE"
+index_name = "course-embeddings-staging"
+
+[env.staging.ai]
+binding = "AI"
+
+[[env.staging.services]]
+binding = "SELF"
+service = "uiuc-course-search-staging"

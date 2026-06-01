@@ -735,14 +735,18 @@ async function fetchQualityScores(db: D1Database, courseIds: string[]): Promise<
     return qualityScores;
   }
 
-  const placeholders = courseIds.map(() => '?').join(',');
-  const result = await db.prepare(`
-    SELECT id, quality_score FROM courses WHERE id IN (${placeholders})
-  `).bind(...courseIds).all<{ id: string; quality_score: number | null }>();
+  const BIND_BATCH_SIZE = 50;
+  for (let i = 0; i < courseIds.length; i += BIND_BATCH_SIZE) {
+    const batch = courseIds.slice(i, i + BIND_BATCH_SIZE);
+    const placeholders = batch.map(() => '?').join(',');
+    const result = await db.prepare(`
+      SELECT id, quality_score FROM courses WHERE id IN (${placeholders})
+    `).bind(...batch).all<{ id: string; quality_score: number | null }>();
 
-  for (const row of result.results) {
-    if (row.quality_score !== null && row.quality_score !== undefined) {
-      qualityScores.set(row.id, row.quality_score);
+    for (const row of result.results) {
+      if (row.quality_score !== null && row.quality_score !== undefined) {
+        qualityScores.set(row.id, row.quality_score);
+      }
     }
   }
 

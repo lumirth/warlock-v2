@@ -514,9 +514,9 @@ export async function syncTerm(
   const allSubjects = await getSubjectsForTerm(config, year, term);
   const totalSubjects = allSubjects.length;
 
-  // Apply pagination - default to 20 subjects per request to stay well under Workers subrequest limit
+  // Apply pagination - default to a small operator-safe page for Worker limits.
   const offset = config.offset ?? 0;
-  const limit = config.limit ?? 20;
+  const limit = config.limit ?? 5;
   const subjects = allSubjects.slice(offset, offset + limit);
   const hasMore = offset + limit < totalSubjects;
 

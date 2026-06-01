@@ -20,6 +20,6 @@ describe('sync route validation', () => {
     const res = await app.request('/admin/sync/2026/spring?limit=999999', { method: 'POST' });
 
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'limit must be between 1 and 40' });
+    await expect(res.json()).resolves.toEqual({ error: 'limit must be between 1 and 5' });
   });
 });
