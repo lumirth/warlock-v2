@@ -40,7 +40,7 @@ Additional gate evidence:
 - `npm run bundle:budget`: largest JS gzip 112.8 KiB / 140.0 KiB, largest CSS gzip 28.7 KiB / 40.0 KiB, total JS/CSS gzip 141.5 KiB / 190.0 KiB.
 - `npm run security:secrets`: no committed secret-looking values found.
 - `npm run security:audit`: 0 vulnerabilities after upgrading Vite/Vitest/Wrangler transitive lockfile.
-- `npm run d1:preflight` tested successfully against a temporary evidence file.
+- `npm run d1:preflight` has script-level tests for passing restore evidence, missing backup markers, and missing `--restore-verified`; a direct run against this report with a fake backup ref correctly refused to pass because no real remote restore evidence exists yet.
 - `npm run bootstrap:fresh-check`: clones committed `main` into a temp directory, verifies `history_chunks/` and `full_history.sql` are absent/untracked, runs `npm ci`, `npm run db:verify`, and `npm run typecheck`. This caught the ignored baseline migration gap; `apps/api/migrations/0001_initial_schema.sql` is now tracked and byte-identical to `apps/api/src/db/schema.sql`.
 - `rg "\.(skip|only)\(|describe\.skip|it\.skip|test\.skip|describe\.only|it\.only|test\.only" ...` found no active skips/only markers outside plan prose.
 
@@ -83,7 +83,7 @@ Browser-found fixes completed:
 | Accessibility | Complete locally | `axe-core` web tests for search and course detail pass. |
 | Staging deployment | Blocked by auth | `npx wrangler whoami` failed: not logged in; `CLOUDFLARE_API_TOKEN`, `CF_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCOUNT_ID` unset. |
 | Public WAF/rate limits | Blocked by auth | Runbook and deployment checklist specify rules/thresholds; dashboard/API verification requires Cloudflare auth. |
-| D1 backup/restore | Blocked by auth for remote proof | `d1:preflight` added and tested locally; exact export/restore commands documented. Remote export/restore requires Cloudflare auth. |
+| D1 backup/restore | Blocked by auth for remote proof | `d1:preflight` added and covered by script tests; exact export/restore commands documented. Remote export/restore requires Cloudflare auth. |
 | Scheduler reliability | Complete locally; live staging smoke blocked by auth | Structured run IDs/logs added for scheduled paths; tests cover subject stale pruning, enrichment max-batch partial runs, RMP failed/expired-running resume, fresh running-lock rejection, and `/admin/sync/status` health visibility. Live staging scheduler smoke requires Cloudflare auth. |
 | Logging/observability | Complete locally | Runtime API logs replaced by structured redacted logger; logger redaction test passes. |
 | Frontend rough edges | Complete locally | Empty/error/loading states improved; dead chart already removed; Browser confirms desktop/mobile. |
