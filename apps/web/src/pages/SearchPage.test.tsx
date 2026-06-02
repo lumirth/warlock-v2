@@ -245,6 +245,7 @@ describe('SearchPage request state', () => {
         offset: 0,
       }))
     })
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('professor fagen algorithms')
   })
 
   it('renders ambiguity alternatives as actionable searches', async () => {
@@ -284,6 +285,7 @@ describe('SearchPage request state', () => {
         offset: 0,
       }))
     })
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('CS gened')
   })
 
   it('builds a query from advanced controls', async () => {
@@ -322,6 +324,63 @@ describe('SearchPage request state', () => {
         offset: 0,
       }))
     })
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('algorithms')
+  })
+
+  it('loads more from the refined query without changing the visible search text', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'professor fagen algorithms', residual: 'algorithms' },
+          ui: {
+            chips: [{
+              id: 'instructor-0',
+              type: 'instructor',
+              label: 'Instructor fagen',
+              value: 'fagen',
+              source: 'natural_language',
+              removable: true,
+              editable: true,
+              queryPatch: { removeText: 'professor fagen' },
+            }],
+            advanced: { instructor: 'fagen' },
+            ambiguityActions: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({ id: 'CS-374-2026-spring', number: '374', title: 'Introduction to Algorithms' }),
+        ]),
+        pagination: { total: 21, limit: 20, offset: 0, hasMore: true, nextOffset: 20 },
+      })
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({ id: 'CS-473-2026-spring', number: '473', title: 'Algorithms' }),
+        ]),
+        pagination: { total: 21, limit: 20, offset: 20, hasMore: false, nextOffset: null },
+      })
+
+    renderSearchPage()
+
+    setQuery('professor fagen algorithms')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+
+    await screen.findByText('Instructor fagen')
+    fireEvent.click(screen.getByRole('button', { name: /remove instructor fagen/i }))
+
+    await screen.findByText(/CS 374: Introduction to Algorithms/i)
+    fireEvent.click(screen.getByRole('button', { name: /show more results/i }))
+
+    await screen.findByText(/CS 473: Algorithms/i)
+    expect(api.search).toHaveBeenLastCalledWith('algorithms', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+      limit: 20,
+      offset: 20,
+    }))
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('professor fagen algorithms')
   })
 
   it('loads the next page of results without replacing the current page', async () => {

@@ -10,6 +10,11 @@ import { DIFFICULTY } from '../config/constants'
 
 const SEARCH_PAGE_SIZE = 20
 type SearchPagination = SearchResponseDto['pagination']
+type SearchOptions = {
+  offset?: number
+  append?: boolean
+  syncInput?: boolean
+}
 
 function getEvidenceColor(evidence: MatchEvidence): string {
   if (evidence.weight === 'hard') return 'blue'
@@ -128,6 +133,7 @@ function getChipColor(chip: SearchChipDto): string {
 
 export function SearchPage() {
   const [query, setQuery] = useState('')
+  const [activeSearchText, setActiveSearchText] = useState('')
   const [results, setResults] = useState<CourseDto[]>([])
   const [meta, setMeta] = useState<SearchMetaDto | null>(null)
   const [pagination, setPagination] = useState<SearchPagination | null>(null)
@@ -140,7 +146,7 @@ export function SearchPage() {
   // Ref to hold the current AbortController
   const searchController = useRef<AbortController | null>(null)
 
-  const runSearch = async (searchText: string, options: { offset?: number; append?: boolean } = {}) => {
+  const runSearch = async (searchText: string, options: SearchOptions = {}) => {
     const normalizedQuery = searchText.trim()
     if (!normalizedQuery) return
     const offset = options.offset ?? 0
@@ -154,7 +160,12 @@ export function SearchPage() {
     const controller = new AbortController()
     searchController.current = controller
 
-    setQuery(normalizedQuery)
+    if (options.syncInput !== false) {
+      setQuery(normalizedQuery)
+    }
+    if (!append) {
+      setActiveSearchText(normalizedQuery)
+    }
     setLoading(!append)
     setLoadingMore(append)
     if (!append) {
@@ -193,20 +204,19 @@ export function SearchPage() {
 
   const removeChip = (chip: SearchChipDto) => {
     const removeText = chip.queryPatch?.removeText || chip.value
-    const nextQuery = removeTextFromQuery(query, removeText)
-    setQuery(nextQuery)
+    const nextQuery = removeTextFromQuery(activeSearchText || meta?.query.raw || query, removeText)
     if (nextQuery) {
-      void runSearch(nextQuery)
+      void runSearch(nextQuery, { syncInput: false })
     }
   }
 
   const applyAmbiguityAction = (action: SearchAmbiguityActionDto) => {
     const nextQuery = action.queryPatch?.replaceQuery || action.queryPatch?.appendText || action.label
-    void runSearch(nextQuery)
+    void runSearch(nextQuery, { syncInput: false })
   }
 
   const applyAdvancedSearch = () => {
-    void runSearch(buildAdvancedQuery(advancedDraft, meta?.query.residual || query))
+    void runSearch(buildAdvancedQuery(advancedDraft, meta?.query.residual || query), { syncInput: false })
   }
 
   const loadMoreResults = () => {
@@ -214,7 +224,7 @@ export function SearchPage() {
       return
     }
 
-    void runSearch(query, { offset: pagination.nextOffset, append: true })
+    void runSearch(activeSearchText || query, { offset: pagination.nextOffset, append: true, syncInput: false })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -431,6 +441,8 @@ export function SearchPage() {
               metadata: {
                 resultCount: results.length,
                 hasMore: pagination?.hasMore === true,
+                typedQuery: query.trim() || null,
+                effectiveQuery: activeSearchText || meta.query.raw,
               },
             }}
           />
