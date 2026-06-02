@@ -60,6 +60,20 @@ npm run data:term-coverage -- \
 
 The coverage plan exits non-zero while discovered terms are missing, stale, missing counts, or while an upstream term-list year fails. That is intentional: the plan is an operator gate, not a best-effort report.
 
+Run the plan through the backup-gated multi-term orchestrator when multiple terms need work:
+
+```bash
+npm run data:backfill:coverage -- \
+  --coverage-plan artifacts/term-coverage-plan.json \
+  --page-size 5 \
+  --backup-ref "$BACKUP_REF" \
+  --evidence-file artifacts/d1-backups/$BACKUP_REF-term-coverage/evidence.md \
+  --restore-verified \
+  --output artifacts/backfill/coverage-$BACKUP_REF.json
+```
+
+Use `--max-terms 1 --max-pages-per-term 1` for a bounded staging smoke after backup verification. Remove those limits for a full coverage backfill; the command exits non-zero if an unbounded run leaves incomplete terms or failed subjects.
+
 Default thresholds:
 
 - Active term data is stale after 36 hours without a sync.

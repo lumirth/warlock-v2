@@ -12,6 +12,8 @@ type Term = typeof TERMS[number];
 type TermStatus = typeof STATUSES[number];
 type Fetcher = (request: Request) => Promise<Response>;
 
+export type { Term, TermStatus };
+
 export type BackfillArgs = {
   year?: number;
   term?: Term;
