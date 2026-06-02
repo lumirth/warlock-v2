@@ -8,8 +8,8 @@ const STATUSES = ['registrable', 'active', 'historical'] as const;
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 20;
 const DEFAULT_DATABASE = 'course-search-db-staging';
-const DEFAULT_MAX_PAGE_ATTEMPTS = 4;
-const DEFAULT_RETRY_DELAY_MS = 1_000;
+const DEFAULT_MAX_PAGE_ATTEMPTS = 8;
+const DEFAULT_RETRY_DELAY_MS = 2_000;
 const TRANSIENT_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
 type Term = typeof TERMS[number];
