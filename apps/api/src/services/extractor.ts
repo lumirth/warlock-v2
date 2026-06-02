@@ -435,7 +435,7 @@ function extractStandaloneEntities(text: string, hints: Hint[]): string {
 function extractInstructors(text: string, hints: Hint[]): string {
   let residual = text;
   const nameToken = String.raw`[A-Za-z][A-Za-z.'-]*`;
-  const nameSequence = String.raw`(${nameToken}(?:\s+${nameToken}){0,3})`;
+  const nameSequence = String.raw`(${nameToken}(?:\s+${nameToken}){0,1})`;
   const instructorPatterns = [
     new RegExp(String.raw`\b(?:with|by|taught\s+by|instructor|professor|prof\.?|dr\.?)\s+${nameSequence}\b`, 'gi'),
   ];
@@ -445,23 +445,36 @@ function extractInstructors(text: string, hints: Hint[]): string {
     const matches: { index: number; length: number }[] = [];
     const patternCopy = new RegExp(pattern.source, pattern.flags);
     while ((match = patternCopy.exec(residual)) !== null) {
-      const instructorName = match[1].trim();
+      const rawInstructorName = match[1].trim();
+      const instructorName = trimTrailingSubjectCode(rawInstructorName);
       if (!looksLikeInstructorName(instructorName)) {
         continue;
       }
 
+      const matchedText = match[0].slice(0, match[0].lastIndexOf(instructorName) + instructorName.length);
+
       hints.push({
         type: 'instructor',
         value: instructorName,
-        metadata: createMetadata('nlp', match[0], 0.8),
+        metadata: createMetadata('nlp', matchedText, 0.8),
       });
-      matches.push({ index: match.index, length: match[0].length });
+      matches.push({ index: match.index, length: matchedText.length });
     }
     for (let i = matches.length - 1; i >= 0; i--) {
       residual = maskRange(residual, matches[i].index, matches[i].length);
     }
   }
   return residual;
+}
+
+function trimTrailingSubjectCode(value: string): string {
+  const tokens = value.trim().split(/\s+/);
+  const lastToken = tokens[tokens.length - 1];
+  if (tokens.length > 1 && VALID_SUBJECTS.has(lastToken.toUpperCase()) && lastToken === lastToken.toUpperCase()) {
+    return tokens.slice(0, -1).join(' ');
+  }
+
+  return value;
 }
 
 const INSTRUCTOR_STOP_WORDS = new Set([

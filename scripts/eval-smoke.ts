@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import { GOLDEN_QUERIES } from '../apps/api/src/eval/golden-queries.js';
-import { checkExpectedObject, checkExpectedResidual } from '../apps/api/src/eval/checks.js';
+import { checkExpectedKeys, checkExpectedObject, checkExpectedResidual } from '../apps/api/src/eval/checks.js';
 import { createSearchPlan } from '../apps/api/src/services/search-pipeline.js';
 import { VALID_SUBJECTS } from '../apps/api/src/services/data/valid-subjects.js';
 import type { EvalResult } from '../apps/api/src/eval/types.js';
@@ -129,6 +129,7 @@ async function main(): Promise<void> {
     const actualFilters = { ...plan.filters };
     const violations = [
       ...checkExpectedObject('filters', query.expected_filters, actualFilters),
+      ...checkExpectedKeys('filters', query.expected_filter_keys, actualFilters),
       ...checkExpectedObject('softPreferences', query.expected_soft_preferences, plan.softPreferences),
       ...checkExpectedResidual(query, extraction.residual),
     ];

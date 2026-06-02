@@ -78,6 +78,19 @@ export function checkExpectedObject(
   return violations;
 }
 
+export function checkExpectedKeys(
+  label: string,
+  expectedKeys: string[] | undefined,
+  actual: Record<string, unknown> | undefined
+): string[] {
+  if (!expectedKeys || expectedKeys.length === 0) return [];
+  const actualRecord = actual ?? {};
+
+  return expectedKeys
+    .filter(key => actualRecord[key] === undefined)
+    .map(key => `${label}.${key} expected to be present`);
+}
+
 export function checkExpectedResidual(query: GoldQuery, actualResidual: string): string[] {
   return actualResidual === query.expected_residual
     ? []
@@ -144,6 +157,7 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
   const results = data.results;
   const violations = [
     ...checkExpectedObject('filters', query.expected_filters, data.meta.plan.filters),
+    ...checkExpectedKeys('filters', query.expected_filter_keys, data.meta.plan.filters),
     ...checkExpectedObject('softPreferences', query.expected_soft_preferences, data.meta.plan.softPreferences),
     ...checkExpectedResidual(query, data.meta.query.residual),
     ...checkInvariants(query, results),

@@ -2,6 +2,7 @@ export interface GoldQuery {
   id: number;
   query: string;
   expected_filters: Record<string, unknown>;
+  expected_filter_keys?: string[];
   expected_soft_preferences?: Record<string, unknown>;
   expected_residual: string;
   expected_top1?: string;
@@ -15,7 +16,17 @@ export interface GoldQuery {
     gened_code?: string;
     no_subject?: string;
   };
-  category: 'navigational' | 'structured' | 'semantic' | 'power_syntax' | 'edge_case_punctuation' | 'edge_case_range' | 'disambiguation';
+  category:
+    | 'navigational'
+    | 'structured'
+    | 'semantic'
+    | 'power_syntax'
+    | 'edge_case_punctuation'
+    | 'edge_case_range'
+    | 'disambiguation'
+    | 'instructor'
+    | 'score'
+    | 'schedule';
   notes?: string;
 }
 

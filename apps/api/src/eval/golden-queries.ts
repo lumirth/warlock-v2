@@ -474,4 +474,104 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     invariants: { subject: "CS" },
     category: "power_syntax"
   },
+  {
+    id: 59,
+    query: "professor fagen",
+    expected_filters: {},
+    expected_filter_keys: ["instructor_ids"],
+    expected_residual: "",
+    category: "instructor",
+    notes: "Lowercase professor-name search should become an instructor hard filter"
+  },
+  {
+    id: 60,
+    query: "prof fagen-ulmschneider",
+    expected_filters: {},
+    expected_filter_keys: ["instructor_ids"],
+    expected_residual: "",
+    category: "instructor",
+    notes: "Hyphenated professor names should resolve as instructor filters"
+  },
+  {
+    id: 61,
+    query: "taught by wade fagen algorithms",
+    expected_filters: {},
+    expected_filter_keys: ["instructor_ids"],
+    expected_residual: "algorithms",
+    category: "instructor",
+    notes: "Instructor phrase should be removed while topical residual remains"
+  },
+  {
+    id: 62,
+    query: "CS 225 professor fagen",
+    expected_filters: { subject: "CS", number: "225" },
+    expected_filter_keys: ["instructor_ids"],
+    expected_residual: "",
+    invariants: { subject: "CS" },
+    category: "instructor"
+  },
+  {
+    id: 63,
+    query: "with O'Brien",
+    expected_filters: {},
+    expected_filter_keys: ["instructor_ids"],
+    expected_residual: "",
+    category: "instructor",
+    notes: "Apostrophes in instructor names should be preserved"
+  },
+  {
+    id: 64,
+    query: "with Liu-Prasad",
+    expected_filters: {},
+    expected_filter_keys: ["instructor_ids"],
+    expected_residual: "",
+    category: "instructor",
+    notes: "Hyphenated instructor names should be preserved"
+  },
+  {
+    id: 65,
+    query: "hard CS class",
+    expected_filters: { subject: "CS", difficulty: "hard" },
+    expected_residual: "",
+    invariants: { subject: "CS" },
+    category: "score",
+    notes: "Difficulty language should be explicit and not remain as residual copy"
+  },
+  {
+    id: 66,
+    query: "easy 3 credit humanities",
+    expected_filters: { difficulty: "easy", credits: 3, gened_code: "HUM" },
+    expected_residual: "",
+    category: "score"
+  },
+  {
+    id: 67,
+    query: "online MWF morning open",
+    expected_filters: { online: true, days: "MWF", time: "morning", status: "open" },
+    expected_residual: "",
+    category: "schedule"
+  },
+  {
+    id: 68,
+    query: "in person no friday afternoon",
+    expected_filters: { online: false, time: "afternoon", not: { days: ["friday"] } },
+    expected_residual: "",
+    category: "schedule"
+  },
+  {
+    id: 69,
+    query: "spring 2026 professor fagen open",
+    expected_filters: { term: "spring", year: 2026, status: "open" },
+    expected_filter_keys: ["instructor_ids"],
+    expected_residual: "",
+    category: "instructor"
+  },
+  {
+    id: 70,
+    query: "sort by difficulty",
+    expected_filters: {},
+    expected_residual: "sort by difficulty",
+    category: "semantic",
+    notes: "Generic by-phrases must not become instructor filters"
+  },
 ];
