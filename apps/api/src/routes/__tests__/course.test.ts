@@ -80,6 +80,7 @@ describe('course routes', () => {
         instructor: string;
         instructorRmp: number | null;
         instructorGpa: number | null;
+        course_explorer_url: string;
       }>;
     } & Record<string, unknown>;
 
@@ -99,6 +100,7 @@ describe('course routes', () => {
       instructor: 'Lovelace, A',
       instructorRmp: 4.8,
       instructorGpa: 3.62,
+      course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
     });
   });
 });

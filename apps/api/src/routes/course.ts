@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import type { CourseSectionDto, InstructorLinkDto } from '@uiuc-course-search/query-types';
+import { buildCourseExplorerSectionUrl } from '@uiuc-course-search/query-types';
 import {
   makeCourseId,
   type Course,
@@ -312,7 +313,14 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
         instructor: instructorName || 'TBA',
         instructorRmp,
         instructorGpa,
-        instructorStats: []
+        instructorStats: [],
+        course_explorer_url: buildCourseExplorerSectionUrl({
+          year: resolvedTerm.year,
+          term,
+          subject,
+          number,
+          crn: section.crn,
+        }),
       });
     }
 
