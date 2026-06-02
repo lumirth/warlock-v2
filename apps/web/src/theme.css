@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: var(--mantine-color-body);
+  color: var(--mantine-color-text);
+  font-family: var(--mantine-font-family);
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
+.mantine-Title-root,
+.mantine-Modal-title,
+.mantine-Drawer-title {
+  letter-spacing: 0;
+}
+
+.mantine-AppShell-header {
+  background: color-mix(in srgb, var(--mantine-color-body) 94%, transparent);
+  border-bottom-color: var(--mantine-color-default-border);
+  backdrop-filter: blur(12px);
+}
+
+.mantine-Paper-root:where([data-with-border]),
+.mantine-Card-root:where([data-with-border]) {
+  border-color: var(--mantine-color-default-border);
+}
+
+.mantine-Input-wrapper[data-variant='default'] {
+  --input-bd: var(--mantine-color-default-border);
+  --input-bg: transparent;
+  --input-bd-focus: var(--mantine-primary-color-filled);
+}
+
+.mantine-Badge-root[data-variant='dot'] {
+  background-color: var(--mantine-color-secondary-light);
+  border-color: var(--mantine-color-secondary-light);
+  color: var(--mantine-color-text);
+}
+
+.mantine-Tooltip-tooltip {
+  font-size: var(--mantine-font-size-xs);
+  padding-block: 2px;
+}

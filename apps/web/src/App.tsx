@@ -1,7 +1,8 @@
 import { Routes, Route } from 'react-router-dom'
-import { ActionIcon, AppShell, Container, Group, Title, Tooltip } from '@mantine/core'
+import { ActionIcon, AppShell, Box, Container, Group, Title, Tooltip } from '@mantine/core'
 import { IconBrandGithub, IconHome } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
+import courseSearchLogo from './assets/course-search-logo.png'
 import { SearchPage } from './pages/SearchPage'
 import { CoursePage } from './pages/CoursePage'
 
@@ -13,12 +14,22 @@ function App() {
     >
       <AppShell.Header>
         <Container size="lg" h="100%">
-          <Group h="100%" px="md" wrap="nowrap">
-            <Title order={3} style={{ color: 'inherit', textDecoration: 'none', minWidth: 0 }}>
-              <Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>
+          <Group h="100%" wrap="nowrap">
+            <Link
+              to="/"
+              style={{ color: 'inherit', textDecoration: 'none', minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}
+            >
+              <Box
+                component="img"
+                src={courseSearchLogo}
+                alt=""
+                aria-hidden
+                style={{ width: 36, height: 36, flex: '0 0 auto' }}
+              />
+              <Title order={3} style={{ color: 'inherit', textDecoration: 'none', minWidth: 0 }}>
                 UIUC Course Search
-              </Link>
-            </Title>
+              </Title>
+            </Link>
             <Group ml="auto" gap="xs" wrap="nowrap">
               <Tooltip label="Home">
                 <ActionIcon variant="subtle" component={Link} to="/" aria-label="Home">
