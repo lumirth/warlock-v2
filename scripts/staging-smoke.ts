@@ -86,12 +86,12 @@ function hasInstructorFilter(body: JsonRecord | null): boolean {
     return false;
   }
 
-  const queryPlan = (meta as JsonRecord).queryPlan;
-  if (!queryPlan || typeof queryPlan !== 'object' || Array.isArray(queryPlan)) {
+  const plan = (meta as JsonRecord).plan;
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
     return false;
   }
 
-  const filters = (queryPlan as JsonRecord).filters;
+  const filters = (plan as JsonRecord).filters;
   if (!filters || typeof filters !== 'object' || Array.isArray(filters)) {
     return false;
   }

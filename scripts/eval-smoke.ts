@@ -72,8 +72,16 @@ class EvalD1Statement {
 
   async all<T = D1Row>(): Promise<D1Result<T>> {
     if (this.sql.includes('FROM instructors')) {
+      const needle = String(this.params[0] ?? '').replace(/%/g, '').toLowerCase();
+      const resolvableNeedles = new Set([
+        'fagen',
+        'fagen-ulmschneider',
+        'ulmschneider',
+        "o'brien",
+      ]);
+
       return {
-        results: [{ id: 1 }] as T[],
+        results: resolvableNeedles.has(needle) ? [{ id: 1 }] as T[] : [],
         success: true,
         meta: {},
       } as unknown as D1Result<T>;
@@ -125,19 +133,19 @@ async function main(): Promise<void> {
   const results: EvalResult[] = [];
 
   for (const query of GOLDEN_QUERIES) {
-    const { extraction, plan } = await createSearchPlan(db, query.query);
+    const { plan, queryResidual } = await createSearchPlan(db, query.query);
     const actualFilters = { ...plan.filters };
     const violations = [
       ...checkExpectedObject('filters', query.expected_filters, actualFilters),
       ...checkExpectedKeys('filters', query.expected_filter_keys, actualFilters),
       ...checkExpectedObject('softPreferences', query.expected_soft_preferences, plan.softPreferences),
-      ...checkExpectedResidual(query, extraction.residual),
+      ...checkExpectedResidual(query, queryResidual),
     ];
 
     results.push({
       query,
       actualFilters,
-      actualResidual: extraction.residual,
+      actualResidual: queryResidual,
       results: [],
       reciprocalRank: null,
       violations,

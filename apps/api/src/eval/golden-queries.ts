@@ -573,4 +573,13 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "semantic",
     notes: "Generic by-phrases must not become instructor filters"
   },
+  {
+    id: 71,
+    query: "professor fagen algorithms",
+    expected_filters: {},
+    expected_filter_keys: ["instructor_ids"],
+    expected_residual: "algorithms",
+    category: "instructor",
+    notes: "Short professor-name searches should not absorb trailing topic terms into the instructor name"
+  },
 ];

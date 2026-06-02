@@ -45,6 +45,11 @@ for (const [code, synonyms] of Object.entries(GENED_SYNONYMS)) {
 // Subject codes that conflict with GenEd codes
 const SUBJECT_GENED_CONFLICTS = new Set(['CS', 'PS']);
 
+type InstructorResolution = {
+  ids: number[];
+  residualText?: string;
+};
+
 export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): Promise<SearchPlan> {
   const plan: SearchPlan = {
     filters: {},
@@ -60,9 +65,13 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         break;
 
       case 'instructor': {
-        const instructorIds = await resolveInstructor(db, String(hint.value));
-        if (instructorIds.length > 0) {
-          plan.filters.instructor_ids = instructorIds;
+        const resolution = await resolveInstructor(db, String(hint.value));
+        if (resolution.ids.length > 0) {
+          plan.filters.instructor_ids = resolution.ids;
+          if (resolution.residualText) {
+            plan.semanticQuery = appendQueryText(plan.semanticQuery, resolution.residualText);
+            plan.keywordQuery = appendQueryText(plan.keywordQuery, resolution.residualText);
+          }
         }
         break;
       }
@@ -315,7 +324,7 @@ function resolveGened(value: string, plan: SearchPlan): void {
   }
 }
 
-async function resolveInstructor(db: D1Database, name: string): Promise<number[]> {
+async function resolveInstructor(db: D1Database, name: string): Promise<InstructorResolution> {
   const query = `
     SELECT id FROM instructors
     WHERE LOWER(last_name) LIKE ? OR LOWER(display_name) LIKE ?
@@ -324,8 +333,8 @@ async function resolveInstructor(db: D1Database, name: string): Promise<number[]
   const seen = new Set<number>();
   const ids: number[] = [];
 
-  for (const needle of instructorSearchNeedles(name)) {
-    const pattern = `%${needle}%`;
+  for (const candidate of instructorSearchCandidates(name)) {
+    const pattern = `%${candidate.needle}%`;
     const { results } = await db.prepare(query)
       .bind(pattern, pattern)
       .all<{ id: number }>();
@@ -338,24 +347,52 @@ async function resolveInstructor(db: D1Database, name: string): Promise<number[]
     }
 
     if (ids.length > 0) {
-      return ids;
+      return { ids, residualText: candidate.residualText };
     }
   }
 
-  return ids;
+  return { ids };
 }
 
-function instructorSearchNeedles(name: string): string[] {
+function instructorSearchCandidates(name: string): InstructorResolutionCandidate[] {
   const normalized = name.trim().toLowerCase().replace(/\s+/g, ' ');
   if (!normalized) return [];
 
-  const needles = [normalized];
+  const candidates: InstructorResolutionCandidate[] = [{ needle: normalized }];
   const tokens = normalized.split(/[^a-z0-9']+/).filter(token => token.length >= 3);
   const likelyLastName = tokens.at(-1);
 
   if (tokens.length > 1 && likelyLastName && likelyLastName !== normalized) {
-    needles.push(likelyLastName);
+    candidates.push({ needle: likelyLastName });
   }
 
-  return [...new Set(needles)];
+  if (!/[-']/.test(normalized)) {
+    for (let end = tokens.length - 1; end >= 1; end--) {
+      const prefix = tokens.slice(0, end).join(' ');
+      const dropped = tokens.slice(end).join(' ');
+      if (prefix && dropped) {
+        candidates.push({ needle: prefix, residualText: dropped });
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  return candidates.filter(candidate => {
+    const key = `${candidate.needle}:${candidate.residualText ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+type InstructorResolutionCandidate = {
+  needle: string;
+  residualText?: string;
+};
+
+function appendQueryText(query: string, addition: string): string {
+  return [query, addition]
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join(' ');
 }

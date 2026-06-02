@@ -115,6 +115,33 @@ describe('resolveQuery', () => {
       expect(mockStmt.bind).toHaveBeenNthCalledWith(2, '%fagen%', '%fagen%');
     });
 
+    it('keeps trailing topic words when professor-name extraction over-captures them', async () => {
+      const mockStmt = {
+        bind: vi.fn().mockReturnThis(),
+        all: vi.fn()
+          .mockResolvedValueOnce({ results: [] })
+          .mockResolvedValueOnce({ results: [] })
+          .mockResolvedValueOnce({ results: [{ id: 3365 }] }),
+        first: vi.fn()
+      };
+      mockDb.prepare.mockReturnValue(mockStmt);
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'professor fagen algorithms',
+        hints: [{ type: 'instructor', value: 'fagen algorithms', confidence: 0.8 }],
+        residual: ''
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.instructor_ids).toEqual([3365]);
+      expect(plan.semanticQuery).toBe('algorithms');
+      expect(plan.keywordQuery).toBe('algorithms');
+      expect(mockStmt.bind).toHaveBeenNthCalledWith(1, '%fagen algorithms%', '%fagen algorithms%');
+      expect(mockStmt.bind).toHaveBeenNthCalledWith(2, '%algorithms%', '%algorithms%');
+      expect(mockStmt.bind).toHaveBeenNthCalledWith(3, '%fagen%', '%fagen%');
+    });
+
     it('does not broaden absent hyphenated names to the first token', async () => {
       const mockStmt = {
         bind: vi.fn().mockReturnThis(),

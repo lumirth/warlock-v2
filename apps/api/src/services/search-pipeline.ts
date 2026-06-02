@@ -178,6 +178,7 @@ export interface SearchPlanningInput {
 
 export interface SearchPlanningResult {
   extraction: ExtractionResult;
+  queryResidual: string;
   plan: SearchPlan;
 }
 
@@ -203,6 +204,7 @@ export async function createSearchPlan(
   overrides?: Partial<SearchFilters>
 ): Promise<SearchPlanningResult> {
   const plan = await resolveQuery(db, input.extracted);
+  const queryResidual = plan.semanticQuery;
 
   const clause = input.parsed.clauses[0];
   for (const filter of clause.filters) {
@@ -232,7 +234,7 @@ export async function createSearchPlan(
   plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);
   plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
 
-  return { extraction: input.extraction, plan };
+  return { extraction: input.extraction, queryResidual, plan };
 }
 
 export class SearchPipeline {
@@ -256,7 +258,7 @@ export class SearchPipeline {
     const planningInput = extractSearchPlanningInput(query);
     const extractionEndTime = performance.now();
 
-    const { extraction, plan } = await createSearchPlan(this.db, query, planningInput, overrides);
+    const { extraction, queryResidual, plan } = await createSearchPlan(this.db, query, planningInput, overrides);
 
     const searchStartTime = performance.now();
     let results: SearchResult[];
@@ -279,7 +281,7 @@ export class SearchPipeline {
       // If we have few results, try expansion
       if (results.length < 3) {
         // Tier 3: Topic Hybrid (Topic expansion)
-        const expandedKeywords = expandTopics(extraction.residual);
+        const expandedKeywords = expandTopics(queryResidual);
         if (expandedKeywords.length > 0) {
           tierReached = 3;
           const expandedPlan: SearchPlan = {
@@ -301,7 +303,7 @@ export class SearchPipeline {
       meta: {
         query: {
           raw: query,
-          residual: extraction.residual,
+          residual: queryResidual,
         },
         extraction: {
           hints: extraction.hints, // Return the rich Hint objects
