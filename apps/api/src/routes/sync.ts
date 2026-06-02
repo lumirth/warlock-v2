@@ -3,7 +3,7 @@ import type { D1Database, VectorizeIndex, Ai, Fetcher, KVNamespace } from '@clou
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
-import { getTermsByStatus, upsertTermState, makeTermId, type SyncState, type TermState } from '../db/index.js';
+import { getTermsByStatus, getTermState, upsertTermState, makeTermId, type SyncState, type TermState } from '../db/index.js';
 import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
@@ -12,6 +12,7 @@ import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
+const TERM_STATUSES = ['active', 'historical'] as const;
 const MAX_SYNC_SUBJECTS_PER_REQUEST = 5;
 
 type Bindings = {
@@ -35,6 +36,15 @@ type Bindings = {
 };
 
 export const syncRoutes = new Hono<{ Bindings: Bindings }>();
+
+export function resolveManualSyncTermStatus(
+  existingTerm: Pick<TermState, 'status'> | null,
+  requestedStatus?: 'active' | 'historical'
+): 'active' | 'historical' {
+  if (requestedStatus) return requestedStatus;
+  if (existingTerm?.status === 'historical') return 'historical';
+  return 'active';
+}
 
 function syncEmbeddingsEnabled(value: string | undefined): boolean {
   return value?.toLowerCase() === 'true';
@@ -252,6 +262,14 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
   });
   if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
 
+  const requestedStatusRaw = c.req.query('status');
+  let requestedStatus: 'active' | 'historical' | undefined;
+  if (requestedStatusRaw !== undefined && requestedStatusRaw !== '') {
+    const parsedStatus = parseEnumParam(requestedStatusRaw, 'status', TERM_STATUSES);
+    if (!parsedStatus.ok) return c.json({ error: parsedStatus.error }, 400);
+    requestedStatus = parsedStatus.value;
+  }
+
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
     concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
@@ -269,11 +287,13 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
       syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.AI : undefined
     );
 
+    const termId = makeTermId(parsedYear.value, parsedTerm.value);
+    const existingTerm = await getTermState(c.env.DB, termId);
     await upsertTermState(c.env.DB, {
-      term_id: makeTermId(parsedYear.value, parsedTerm.value),
+      term_id: termId,
       year: parsedYear.value,
       term: parsedTerm.value,
-      status: 'active',
+      status: resolveManualSyncTermStatus(existingTerm, requestedStatus),
       last_checked: Math.floor(Date.now() / 1000),
       last_synced: Math.floor(Date.now() / 1000),
       subjects_count: result.successfulSubjects + result.failedSubjects,
