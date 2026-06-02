@@ -195,9 +195,10 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 25,
     query: "beginner spanish",
-    expected_filters: {},
-    expected_soft_preferences: { levelBoost: 100 },
-    expected_residual: "beginner spanish",
+    expected_filters: { subject: "SPAN" },
+    expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
+    expected_residual: "",
+    invariants: { subject: "SPAN" },
     category: "structured"
   },
 
@@ -581,5 +582,43 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_residual: "algorithms",
     category: "instructor",
     notes: "Short professor-name searches should not absorb trailing topic terms into the instructor name"
+  },
+  {
+    id: 72,
+    query: "intro to CS",
+    expected_filters: { subject: "CS" },
+    expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
+    expected_residual: "",
+    invariants: { subject: "CS" },
+    category: "structured",
+    notes: "Generic intro-subject queries should become gateway-course intent instead of matching upper-level Introduction-to-X titles"
+  },
+  {
+    id: 73,
+    query: "intro to comp sci",
+    expected_filters: { subject: "CS" },
+    expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
+    expected_residual: "",
+    invariants: { subject: "CS" },
+    category: "structured",
+    notes: "Common department nickname should normalize to CS before introductory intent is applied"
+  },
+  {
+    id: 74,
+    query: "intro computer science",
+    expected_filters: { subject: "CS" },
+    expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
+    expected_residual: "",
+    invariants: { subject: "CS" },
+    category: "structured"
+  },
+  {
+    id: 75,
+    query: "intro to compilers",
+    expected_filters: {},
+    expected_soft_preferences: { levelBoost: 100 },
+    expected_residual: "intro to compilers",
+    category: "semantic",
+    notes: "Introductory gateway intent requires a subject or explicit subject override; topic searches stay topical"
   },
 ];

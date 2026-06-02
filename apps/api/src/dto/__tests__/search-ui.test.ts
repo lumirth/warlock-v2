@@ -88,4 +88,19 @@ describe('buildSearchUiPlan', () => {
     expect(plan.chips[0].queryPatch?.removeText).toBe('professor fagen');
     expect(plan.advanced.instructor).toBe('fagen');
   });
+
+  it('labels introductory level boosts in student-facing language', () => {
+    const plan = buildSearchUiPlan([{
+      type: 'levelBoost',
+      value: 100,
+      metadata: { source: 'regex', confidence: 0.5, raw: 'intro' },
+    }], {
+      filters: { subject: 'CS' },
+      keywordQuery: '',
+      semanticQuery: '',
+      intents: ['introductory_gateway'],
+    }, '');
+
+    expect(plan.chips.map(chip => chip.label)).toEqual(['Introductory courses']);
+  });
 });

@@ -99,8 +99,8 @@ describe('SearchPage request state', () => {
 
     vi.mocked(api.search)
       .mockImplementationOnce(() => first.promise)
-      .mockImplementationOnce((_query, signal) => {
-        secondSignal = signal
+      .mockImplementationOnce((_query, options) => {
+        secondSignal = options instanceof AbortSignal ? options : options?.signal
         return second.promise
       })
       .mockImplementationOnce(() => third.promise)
@@ -239,7 +239,11 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /remove instructor fagen/i }))
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith('algorithms', expect.any(AbortSignal))
+      expect(api.search).toHaveBeenLastCalledWith('algorithms', expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        limit: 20,
+        offset: 0,
+      }))
     })
   })
 
@@ -274,7 +278,11 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /use cultural studies/i }))
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith('gened:CS', expect.any(AbortSignal))
+      expect(api.search).toHaveBeenLastCalledWith('gened:CS', expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        limit: 20,
+        offset: 0,
+      }))
     })
   })
 
@@ -308,7 +316,43 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith('CS 225 professor Fagen 4 credits', expect.any(AbortSignal))
+      expect(api.search).toHaveBeenLastCalledWith('CS 225 professor Fagen 4 credits', expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        limit: 20,
+        offset: 0,
+      }))
     })
+  })
+
+  it('loads the next page of results without replacing the current page', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({ id: 'CS-100-2026-spring', number: '100', title: 'Freshman Orientation' }),
+        ]),
+        pagination: { total: 21, limit: 20, offset: 0, hasMore: true, nextOffset: 20 },
+      })
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({ id: 'CS-124-2026-spring', number: '124', title: 'Introduction to Computer Science I' }),
+        ]),
+        pagination: { total: 21, limit: 20, offset: 20, hasMore: false, nextOffset: null },
+      })
+
+    renderSearchPage()
+
+    setQuery('intro to CS')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+
+    await screen.findByText(/CS 100: Freshman Orientation/i)
+    fireEvent.click(screen.getByRole('button', { name: /show more results/i }))
+
+    await screen.findByText(/CS 124: Introduction to Computer Science I/i)
+    expect(screen.getByText(/CS 100: Freshman Orientation/i)).toBeInTheDocument()
+    expect(api.search).toHaveBeenLastCalledWith('intro to CS', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+      limit: 20,
+      offset: 20,
+    }))
   })
 })

@@ -133,6 +133,9 @@ function formatHintLabel(hint: Hint, residual = ''): string {
     case 'level':
       return `${formatHintValue(hint.value)} level`;
     case 'levelBoost':
+      if (hint.value === 100) {
+        return 'Introductory courses';
+      }
       return `${formatHintValue(hint.value)} level preference`;
     case 'credits':
       return `${formatHintValue(hint.value)} credits`;

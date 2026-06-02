@@ -57,10 +57,13 @@ export interface Ambiguity {
 export interface SearchPlan {
   filters: SearchFilters;
   softPreferences?: Record<string, unknown>;
+  intents?: SearchIntent[];
   semanticQuery: string;
   keywordQuery: string;
   ambiguities?: Ambiguity[];
 }
+
+export type SearchIntent = 'introductory_gateway';
 
 // === NEW TYPES FOR UNIFIED QUERY SYSTEM ===
 
@@ -280,6 +283,8 @@ export type SearchResponseDto = {
     total: number;
     limit: number;
     offset: number;
+    hasMore?: boolean;
+    nextOffset?: number | null;
   };
 };
 

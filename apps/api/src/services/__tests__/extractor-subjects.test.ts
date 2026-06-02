@@ -70,6 +70,23 @@ describe('Subject Extraction Rules', () => {
     expect(subject?.value).toBe('CS');
   });
 
+  it('extracts multiword department aliases before standalone topic search', () => {
+    const result = extract('intro to comp sci');
+    const subject = result.hints.find(h => h.type === 'subject');
+    expect(subject).toBeDefined();
+    expect(subject?.value).toBe('CS');
+    expect(subject?.metadata.raw).toBe('comp sci');
+    expect(result.residual).toBe('intro to');
+  });
+
+  it('extracts full department names as subject aliases', () => {
+    const result = extract('intro computer science');
+    const subject = result.hints.find(h => h.type === 'subject');
+    expect(subject).toBeDefined();
+    expect(subject?.value).toBe('CS');
+    expect(result.residual).toBe('intro');
+  });
+
   it('extracts "phil 101" as course code', () => {
     const result = extract("phil 101");
     const course = result.hints.find(h => h.type === 'courseCode');

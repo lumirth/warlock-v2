@@ -354,6 +354,7 @@ function extractAliases(text: string, hints: Hint[]): string {
       case 'status': hintType = 'status'; value = match.canonical; break;
       case 'delivery': hintType = 'online'; value = match.canonical === 'true'; break;
       case 'days': hintType = 'days'; value = match.canonical; break;
+      case 'subject': hintType = 'subject'; value = match.canonical; break;
       case 'gened': hintType = 'gened'; value = match.canonical; break;
       default: continue;
     }

@@ -128,6 +128,18 @@ export function createDefaultRegistry(): AliasRegistry {
     { kind: 'delivery', canonical: 'false', aliases: ['in person', 'in-person', 'on campus', 'face to face'] },
   ]);
 
+  // High-confidence department aliases. Keep these specific; broad words like
+  // "science" belong to topical search or GenEd handling, not subject filters.
+  registry.addAll([
+    { kind: 'subject', canonical: 'CS', aliases: ['computer science', 'comp sci', 'comp-sci'] },
+    { kind: 'subject', canonical: 'ECE', aliases: ['electrical computer engineering', 'electrical and computer engineering', 'elec comp eng'] },
+    { kind: 'subject', canonical: 'MATH', aliases: ['mathematics'] },
+    { kind: 'subject', canonical: 'STAT', aliases: ['statistics'] },
+    { kind: 'subject', canonical: 'ECON', aliases: ['economics'] },
+    { kind: 'subject', canonical: 'PSYC', aliases: ['psychology', 'psych'] },
+    { kind: 'subject', canonical: 'SPAN', aliases: ['spanish'] },
+  ]);
+
   // Days aliases
   registry.addAll([
     { kind: 'days', canonical: 'MWF', aliases: ['mwf', 'monday wednesday friday', 'mon wed fri', 'm w f'] },

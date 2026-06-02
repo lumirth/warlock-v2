@@ -100,7 +100,7 @@ describe('Search Routes', () => {
       advanced: {},
       ambiguityActions: [],
     });
-    expect(searchSpy).toHaveBeenCalledWith('CS 225', 20, {}, expect.any(Function));
+    expect(searchSpy).toHaveBeenCalledWith('CS 225', 21, {}, expect.any(Function));
   });
 
   it('rejects malformed public search params before running search', async () => {
@@ -150,9 +150,73 @@ describe('Search Routes', () => {
     expect(res.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(
       'systems',
-      20,
+      21,
       { subject: 'CS', credits: 4, difficulty: 'easy' },
       expect.any(Function)
     );
+  });
+
+  it('returns a sliced page with hasMore and nextOffset', async () => {
+    const mockResults = Array.from({ length: 16 }, (_, index) => ({
+      course: {
+        id: `CS-${index}-2026-spring`,
+        subject: 'CS',
+        number: String(100 + index),
+        title: `Course ${index}`,
+        description: null,
+        credit_hours: 3,
+        gened: null,
+        year: 2026,
+        term: 'spring',
+        avg_gpa: null,
+        gpa_sample_size: null,
+        primary_instructor: null,
+        primary_instructor_rmp: null,
+        quality_score: null,
+        difficulty_score: null,
+      },
+      score: 1 - index / 100,
+    }));
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: mockResults,
+      meta: {
+        query: { raw: 'intro to CS', residual: '' },
+        extraction: { hints: [] },
+        plan: { filters: { subject: 'CS' }, semanticQuery: '', keywordQuery: '' },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 }
+      }
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+      search: searchSpy
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request('/api/search?q=intro+to+CS&limit=5&offset=10', {}, {
+      DB: mockDB,
+      VECTORIZE: mockVectorize,
+      AI: mockAI
+    }, {
+      waitUntil: vi.fn(),
+      passThroughOnException: vi.fn()
+    } as unknown as ExecutionContext);
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as SearchResponseDto;
+    expect(searchSpy).toHaveBeenCalledWith('intro to CS', 16, {}, expect.any(Function));
+    expect(data.results.map(result => result.id)).toEqual([
+      'CS-10-2026-spring',
+      'CS-11-2026-spring',
+      'CS-12-2026-spring',
+      'CS-13-2026-spring',
+      'CS-14-2026-spring',
+    ]);
+    expect(data.pagination).toEqual({
+      total: 16,
+      limit: 5,
+      offset: 10,
+      hasMore: true,
+      nextOffset: 15,
+    });
   });
 });

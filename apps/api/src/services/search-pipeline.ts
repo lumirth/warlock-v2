@@ -170,6 +170,37 @@ function applyNegationToken(token: string, plan: SearchPlan): void {
   }
 }
 
+function removeIntroductoryScaffolding(query: string): string {
+  return query
+    .replace(/\b(intro|introductory|beginner)\b/gi, ' ')
+    .replace(/\b(to|for|in|into|courses?|classes?)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function applyIntroductoryGatewayIntent(plan: SearchPlan): boolean {
+  const levelBoost = plan.softPreferences?.levelBoost;
+  if (levelBoost !== 100 || plan.filters.level !== undefined || !plan.filters.subject) {
+    return false;
+  }
+
+  const remainingTopic = removeIntroductoryScaffolding(plan.semanticQuery);
+  if (remainingTopic.length > 0) {
+    return false;
+  }
+
+  const intents = new Set(plan.intents ?? []);
+  intents.add('introductory_gateway');
+  plan.intents = Array.from(intents);
+  plan.softPreferences = {
+    ...plan.softPreferences,
+    introductoryIntent: 'gateway',
+  };
+  plan.semanticQuery = '';
+  plan.keywordQuery = '';
+  return true;
+}
+
 export interface SearchPlanningInput {
   parsed: ParsedQuery;
   extraction: ExtractionResult;
@@ -204,7 +235,7 @@ export async function createSearchPlan(
   overrides?: Partial<SearchFilters>
 ): Promise<SearchPlanningResult> {
   const plan = await resolveQuery(db, input.extracted);
-  const queryResidual = plan.semanticQuery;
+  let queryResidual = plan.semanticQuery;
 
   const clause = input.parsed.clauses[0];
   for (const filter of clause.filters) {
@@ -229,6 +260,10 @@ export async function createSearchPlan(
 
   if (overrides) {
     Object.assign(plan.filters, overrides);
+  }
+
+  if (applyIntroductoryGatewayIntent(plan)) {
+    queryResidual = plan.semanticQuery;
   }
 
   plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);

@@ -66,6 +66,31 @@ describe('ApiClient', () => {
     await expect(client.search('cs')).rejects.toThrow('Invalid limit')
   })
 
+  it('sends search pagination parameters when provided', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: [],
+        meta: {
+          query: { raw: 'intro to CS', residual: '' },
+          extraction: { hints: [] },
+          plan: { filters: { subject: 'CS' }, semanticQuery: '', keywordQuery: '' },
+          timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+        },
+        pagination: { total: 21, limit: 20, offset: 20, hasMore: true, nextOffset: 40 },
+      }),
+    } as Response)
+
+    const controller = new AbortController()
+    const client = new ApiClient('https://api.example.test')
+    await client.search('intro to CS', { limit: 20, offset: 20, signal: controller.signal })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.test/api/search?q=intro+to+CS&limit=20&offset=20',
+      { signal: controller.signal }
+    )
+  })
+
   it('submits typed feedback to the public feedback endpoint', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

@@ -35,6 +35,16 @@ searchRoutes.get('/api/search', async (c) => {
   }
   const limit = parsedLimit.value;
 
+  const parsedOffset = parseBoundedIntParam(c.req.query('offset'), 'offset', {
+    min: 0,
+    max: 200,
+    defaultValue: 0,
+  });
+  if (!parsedOffset.ok) {
+    return c.json({ error: parsedOffset.error }, 400);
+  }
+  const offset = parsedOffset.value;
+
   // Manual overrides from query params
   const overrides: Partial<SearchFilters> = {};
   const subject = c.req.query('subject');
@@ -64,10 +74,13 @@ searchRoutes.get('/api/search', async (c) => {
 
   try {
     const pipeline = new SearchPipeline(c.env.DB, c.env.VECTORIZE, c.env.AI);
-    const result = await pipeline.search(query, limit, overrides, c.executionCtx.waitUntil.bind(c.executionCtx));
+    const fetchLimit = offset + limit + 1;
+    const result = await pipeline.search(query, fetchLimit, overrides, c.executionCtx.waitUntil.bind(c.executionCtx));
+    const pageResults = result.results.slice(offset, offset + limit);
+    const hasMore = result.results.length > offset + limit;
 
     const response: SearchResponseDto = {
-      results: result.results.map(searchResult => searchResultToCourseDto(searchResult, {
+      results: pageResults.map(searchResult => searchResultToCourseDto(searchResult, {
         plan: result.meta.plan,
         rawQuery: result.meta.query.raw,
         hints: result.meta.extraction.hints,
@@ -83,9 +96,11 @@ searchRoutes.get('/api/search', async (c) => {
         ),
       },
       pagination: {
-        total: result.results.length,
+        total: offset + pageResults.length + (hasMore ? 1 : 0),
         limit,
-        offset: 0,
+        offset,
+        hasMore,
+        nextOffset: hasMore ? offset + limit : null,
       },
     };
 

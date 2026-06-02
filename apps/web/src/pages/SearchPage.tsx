@@ -4,9 +4,12 @@ import { IconAdjustments, IconAlertCircle, IconSearch, IconX } from '@tabler/ico
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
 import { FeedbackButton } from '../components/FeedbackButton'
-import type { AdvancedSearchStateDto, CourseDto, MatchEvidence, SearchAmbiguityActionDto, SearchChipDto, SearchMetaDto } from '@uiuc-course-search/query-types'
+import type { AdvancedSearchStateDto, CourseDto, MatchEvidence, SearchAmbiguityActionDto, SearchChipDto, SearchMetaDto, SearchResponseDto } from '@uiuc-course-search/query-types'
 import { getLetterGrade } from '../utils/grading'
 import { DIFFICULTY } from '../config/constants'
+
+const SEARCH_PAGE_SIZE = 20
+type SearchPagination = SearchResponseDto['pagination']
 
 function getEvidenceColor(evidence: MatchEvidence): string {
   if (evidence.weight === 'hard') return 'blue'
@@ -127,7 +130,9 @@ export function SearchPage() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<CourseDto[]>([])
   const [meta, setMeta] = useState<SearchMetaDto | null>(null)
+  const [pagination, setPagination] = useState<SearchPagination | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedSearchStateDto>({})
@@ -135,9 +140,11 @@ export function SearchPage() {
   // Ref to hold the current AbortController
   const searchController = useRef<AbortController | null>(null)
 
-  const runSearch = async (searchText: string) => {
+  const runSearch = async (searchText: string, options: { offset?: number; append?: boolean } = {}) => {
     const normalizedQuery = searchText.trim()
     if (!normalizedQuery) return
+    const offset = options.offset ?? 0
+    const append = options.append === true && offset > 0
 
     // Cancel previous request if it exists
     if (searchController.current) {
@@ -148,15 +155,24 @@ export function SearchPage() {
     searchController.current = controller
 
     setQuery(normalizedQuery)
-    setLoading(true)
-    setMeta(null)
-    setResults([])
+    setLoading(!append)
+    setLoadingMore(append)
+    if (!append) {
+      setMeta(null)
+      setResults([])
+      setPagination(null)
+    }
     setError(null)
 
     try {
-      const data = await api.search(normalizedQuery, controller.signal)
-      setResults(data.results || [])
+      const data = await api.search(normalizedQuery, {
+        signal: controller.signal,
+        limit: SEARCH_PAGE_SIZE,
+        offset,
+      })
+      setResults((currentResults) => append ? [...currentResults, ...(data.results || [])] : data.results || [])
       setMeta(data.meta || null)
+      setPagination(data.pagination || null)
       setAdvancedDraft(data.meta?.ui?.advanced || {})
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
@@ -165,6 +181,7 @@ export function SearchPage() {
       // Only turn off loading if this is still the active request
       if (searchController.current === controller) {
         setLoading(false)
+        setLoadingMore(false)
         searchController.current = null
       }
     }
@@ -190,6 +207,14 @@ export function SearchPage() {
 
   const applyAdvancedSearch = () => {
     void runSearch(buildAdvancedQuery(advancedDraft, meta?.query.residual || query))
+  }
+
+  const loadMoreResults = () => {
+    if (!pagination?.hasMore || pagination.nextOffset === null || pagination.nextOffset === undefined) {
+      return
+    }
+
+    void runSearch(query, { offset: pagination.nextOffset, append: true })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -405,6 +430,7 @@ export function SearchPage() {
               query: meta.query.raw,
               metadata: {
                 resultCount: results.length,
+                hasMore: pagination?.hasMore === true,
               },
             }}
           />
@@ -473,6 +499,18 @@ export function SearchPage() {
                   </Text>
                 </Card>
               ))}
+              {pagination?.hasMore && (
+                <Group justify="center" mt="sm">
+                  <Button
+                    variant="light"
+                    onClick={loadMoreResults}
+                    loading={loadingMore}
+                    disabled={loadingMore}
+                  >
+                    Show more results
+                  </Button>
+                </Group>
+              )}
             </Stack>
           )
         )}

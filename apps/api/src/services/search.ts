@@ -115,6 +115,40 @@ export function applyTitleBoost<T extends { id: string; score: number; title?: s
   }).sort((a, b) => b.score - a.score);
 }
 
+function catalogLevel(number: string | null | undefined): number | null {
+  const match = /^([1-5])/.exec(number ?? '');
+  return match ? Number.parseInt(match[1], 10) * 100 : null;
+}
+
+function hasIntroductoryGatewayIntent(plan: SearchPlan): boolean {
+  return plan.intents?.includes('introductory_gateway')
+    || plan.softPreferences?.introductoryIntent === 'gateway';
+}
+
+export function applySearchIntentBoosts(results: SearchResult[], plan: SearchPlan): SearchResult[] {
+  if (!hasIntroductoryGatewayIntent(plan)) {
+    return results;
+  }
+
+  return results.map((result) => {
+    const level = catalogLevel(result.course.number);
+    let scoreAdjustment = 0;
+
+    if (level === 100) {
+      scoreAdjustment += 1.0;
+    } else if (level === 200) {
+      scoreAdjustment += 0.15;
+    } else if (level !== null && level >= 300) {
+      scoreAdjustment -= 0.25;
+    }
+
+    return {
+      ...result,
+      score: result.score + scoreAdjustment,
+    };
+  });
+}
+
 export interface FilterClauseResult {
   joins: string[];
   where: string[];
@@ -608,6 +642,8 @@ export async function hybridSearch(
   plan: SearchPlan,
   limit: number = 20
 ): Promise<SearchResult[]> {
+  const candidateLimit = Math.max(50, limit);
+
   // Pre-processing: Attempt to resolve ambiguous Subject queries (e.g. "Computer Science") to a strict filter
   if (!plan.filters.subject && !plan.filters.number && plan.keywordQuery?.trim()) {
     const cleanQuery = sanitizeFtsQuery(plan.keywordQuery);
@@ -627,13 +663,13 @@ export async function hybridSearch(
   // Run all searches in parallel, skipping empty queries
   const [rawSemanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
     runSemantic
-      ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, 50).catch(err => {
+      ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, candidateLimit).catch(err => {
           logger.warn('search.semantic.failed', { ...errorFields(err) });
           return [];
         })
       : Promise.resolve([]),
-    keywordSearch(db, plan, 50),
-    hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, 50) : Promise.resolve([])
+    keywordSearch(db, plan, candidateLimit),
+    hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, candidateLimit) : Promise.resolve([])
   ]);
 
   // Post-filter semantic results for hard constraints
@@ -774,7 +810,7 @@ export async function hybridSearchWithTermRanking(
   const results = await hybridSearch(db, vectorize, ai, plan, limit * 2);
 
   // Add term info and sort by term priority, then by score
-  const enrichedResults = results.map((r) => {
+  const enrichedResults = applySearchIntentBoosts(results.map((r) => {
     const termInfo: TermInfo = {
       term_id: `${r.course.year}-${r.course.term}`,
       year: r.course.year,
@@ -787,7 +823,7 @@ export async function hybridSearchWithTermRanking(
       termPriority,
       historical: termInfo.term_id !== activeTerm && termInfo.term_id !== registrableTerm
     };
-  });
+  }), plan);
 
   // Sort by term priority first, then by score
   enrichedResults.sort((a, b) => {

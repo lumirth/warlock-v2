@@ -4,6 +4,12 @@ import type { CourseDto, FeedbackResponseDto, FeedbackSubmitDto, SearchResponseD
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.PROD ? 'https://uiuc-course-search.lumirth.workers.dev' : '');
 
+export type SearchRequestOptions = {
+  signal?: AbortSignal
+  limit?: number
+  offset?: number
+}
+
 export class ApiClient {
   private baseUrl: string;
 
@@ -39,8 +45,15 @@ export class ApiClient {
     return res.json()
   }
 
-  async search(query: string, signal?: AbortSignal): Promise<SearchResponseDto> {
-    return this.fetch<SearchResponseDto>(`api/search?q=${encodeURIComponent(query)}`, { signal })
+  async search(query: string, options?: SearchRequestOptions | AbortSignal): Promise<SearchResponseDto> {
+    const requestOptions: SearchRequestOptions = options instanceof AbortSignal
+      ? { signal: options }
+      : options ?? {}
+    const params = new URLSearchParams({ q: query })
+    if (requestOptions.limit !== undefined) params.set('limit', requestOptions.limit.toString())
+    if (requestOptions.offset !== undefined) params.set('offset', requestOptions.offset.toString())
+
+    return this.fetch<SearchResponseDto>(`api/search?${params.toString()}`, { signal: requestOptions.signal })
   }
 
   async getCourse(subject: string, number: string, term?: string, year?: number, signal?: AbortSignal): Promise<CourseDto> {
