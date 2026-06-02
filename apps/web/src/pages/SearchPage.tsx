@@ -26,6 +26,12 @@ function getDifficultyColor(score: number): string {
   return 'teal'
 }
 
+function getRelevanceLabel(score: number): string {
+  if (score >= 0.9) return 'Strong match'
+  if (score >= 0.75) return 'Good match'
+  return 'Possible match'
+}
+
 function renderScoreBadges(course: CourseDto) {
   const qualityScore = course.quality_score
   const difficultyScore = course.difficulty_score
@@ -283,7 +289,7 @@ export function SearchPage() {
             </Stack>
           ) : null}
 
-          <Collapse in={advancedOpen}>
+          <Collapse in={advancedOpen} transitionDuration={0}>
             <Paper mt="sm" p="sm" withBorder bg="white">
               <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xs">
                 <TextInput
@@ -459,7 +465,7 @@ export function SearchPage() {
                       {renderScoreBadges(r)}
                     </Box>
                     {typeof r._score === 'number' && (
-                      <Badge variant="light" style={{ flexShrink: 0 }}>Match {r._score.toFixed(2)}</Badge>
+                      <Badge variant="light" style={{ flexShrink: 0 }}>{getRelevanceLabel(r._score)}</Badge>
                     )}
                   </Flex>
                   <Text size="sm" mt="xs" lineClamp={3} c="dimmed">

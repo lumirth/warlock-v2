@@ -151,15 +151,16 @@ describe('SearchPage request state', () => {
     consoleError.mockRestore()
   })
 
-  it('renders compact match evidence chips for search results', async () => {
+  it('renders public match evidence chips for search results', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(searchResponse([
       course({
         id: 'CS-225-2026-spring',
         number: '225',
         title: 'Data Structures',
+        _score: 0.91,
         match_evidence: [
           { kind: 'course_code', label: 'Course CS 225', source: 'filter', weight: 'hard', value: 'CS 225' },
-          { kind: 'keyword', label: 'Keyword rank #1', source: 'keyword', weight: 'rank', value: '1' },
+          { kind: 'keyword', label: 'Strong keyword match', source: 'keyword', weight: 'rank', value: '1' },
         ],
       }),
     ]))
@@ -171,7 +172,10 @@ describe('SearchPage request state', () => {
 
     await screen.findByText(/CS 225: Data Structures/i)
     expect(screen.getByText('Course CS 225')).toBeInTheDocument()
-    expect(screen.getByText('Keyword rank #1')).toBeInTheDocument()
+    expect(screen.getByText('Strong keyword match')).toBeInTheDocument()
+    expect(screen.getByText('Strong match')).toBeInTheDocument()
+    expect(screen.queryByText(/rank #/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Match 0\./i)).not.toBeInTheDocument()
   })
 
   it('surfaces quality, difficulty, instructor rating, and GPA on result cards', async () => {
@@ -271,6 +275,40 @@ describe('SearchPage request state', () => {
 
     await waitFor(() => {
       expect(api.search).toHaveBeenLastCalledWith('gened:CS', expect.any(AbortSignal))
+    })
+  })
+
+  it('builds a query from advanced controls', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'algorithms', residual: 'algorithms' },
+          ui: {
+            chips: [],
+            advanced: {},
+            ambiguityActions: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce(searchResponse([]))
+
+    renderSearchPage()
+
+    setQuery('algorithms')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    await screen.findByText('Search filters')
+
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'cs' } })
+    fireEvent.change(screen.getByLabelText('Course number'), { target: { value: '225' } })
+    fireEvent.change(screen.getByLabelText('Instructor'), { target: { value: 'Fagen' } })
+    fireEvent.change(screen.getByLabelText('Credits'), { target: { value: '4' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith('CS 225 professor Fagen 4 credits', expect.any(AbortSignal))
     })
   })
 })

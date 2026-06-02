@@ -325,10 +325,12 @@ export function buildMatchEvidence(
   }
 
   if (result.keywordRank !== undefined) {
-    addEvidence(evidence, seen, 'keyword', `Keyword rank #${result.keywordRank}`, 'keyword', 'rank', String(result.keywordRank));
+    const label = result.keywordRank === 1 ? 'Strong keyword match' : 'Keyword match';
+    addEvidence(evidence, seen, 'keyword', label, 'keyword', 'rank', String(result.keywordRank));
   }
   if (result.semanticRank !== undefined) {
-    addEvidence(evidence, seen, 'semantic', `Semantic rank #${result.semanticRank}`, 'semantic', 'rank', String(result.semanticRank));
+    const label = result.semanticRank === 1 ? 'Strong topic match' : 'Related topic match';
+    addEvidence(evidence, seen, 'semantic', label, 'semantic', 'rank', String(result.semanticRank));
   }
 
   return evidence;

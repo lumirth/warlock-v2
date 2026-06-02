@@ -68,7 +68,7 @@ const course: CourseDto = {
   match_evidence: [
     { kind: 'course_code', label: 'Course CS 225', source: 'filter', weight: 'hard', value: 'CS 225' },
     { kind: 'gened', label: 'GenEd QR', source: 'filter', weight: 'hard', value: 'QR' },
-    { kind: 'keyword', label: 'Keyword rank #1', source: 'keyword', weight: 'rank', value: '1' },
+    { kind: 'keyword', label: 'Strong keyword match', source: 'keyword', weight: 'rank', value: '1' },
   ],
   warnings: [],
 };
@@ -89,7 +89,7 @@ function searchResponse(query: string): SearchResponseDto {
         _score: 0.82,
         match_evidence: [
           { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
-          { kind: 'keyword', label: 'Keyword rank #2', source: 'keyword', weight: 'rank', value: '2' },
+          { kind: 'keyword', label: 'Keyword match', source: 'keyword', weight: 'rank', value: '2' },
         ],
       },
     ],
