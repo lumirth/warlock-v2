@@ -6,10 +6,9 @@ Scope: stabilize the pre-alpha/no-users/greenfield course search on `main`, pref
 
 ## Git And CI
 
-Current head: `c3a7a42de37c81467751260f66e6bc1387738a83`
-
 Recent hardening checkpoints:
 
+- `1bcaf34` - Update stabilization evidence report
 - `c3a7a42` - Detect inconsistent term coverage counts
 - `30931de` - Harden term backfill running lock evidence
 - `a3d3a4a` - Retry transient term backfill pages
@@ -23,8 +22,8 @@ Recent hardening checkpoints:
 
 Latest passing GitHub CI on `main`:
 
-- Run: https://github.com/lumirth/uiuc-course-search/actions/runs/26846369285
-- Head: `c3a7a42de37c81467751260f66e6bc1387738a83`
+- Run: https://github.com/lumirth/uiuc-course-search/actions/runs/26846950528
+- Verified commit scope: report commit `1bcaf34` plus all code changes through `c3a7a42`
 - Result: success
 
 ## Local Verification
@@ -196,7 +195,7 @@ Computer/Browser visual smoke covered live staging search and course pages on de
 | WAF/rate-limit controls | Complete | Workers rate-limit bindings and thresholds evidenced above. |
 | D1 backup/restore | Complete | Time Travel restore evidence and preflight passed for `20260602T194836Z`. |
 | Performance/bundle budget | Complete | Bundle budget passes locally and in CI. |
-| CI | Complete | GitHub Actions run `26846369285` passed on current `main`. |
+| CI | Complete | GitHub Actions run `26846950528` passed for report commit `1bcaf34` and all code changes through `c3a7a42`. |
 | Documentation/reporting | Complete | This report maps each active plan item to concrete evidence without secret values. |
 
 ## Final Status
