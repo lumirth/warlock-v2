@@ -1,12 +1,37 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { errorFields, logger } from '../observability/logger.js';
-import { upsertTermState, makeTermId } from '../db/index.js';
+import { upsertTermState, makeTermId, type TermStateStatus } from '../db/index.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
+
+const DEFAULT_FROM_YEAR = 2004;
+const TERM_ORDER: Record<string, number> = {
+  winter: 1,
+  spring: 2,
+  summer: 3,
+  fall: 4,
+};
+const DEFAULT_CLASSIFICATION_SUBJECTS = [
+  'CS',
+  'MATH',
+  'PHIL',
+  'ENGL',
+  'ECON',
+  'CHEM',
+  'PHYS',
+  'BADM',
+  'PSYC',
+  'STAT',
+] as const;
+const REGISTRABLE_STATUS_PATTERN = /\b(open|crosslistopen|wait\s*list)\b/i;
 
 export interface TermDiscoveryConfig {
   frontendBase: string;
   cisapiBase: string;
+  fromYear?: number;
+  toYear?: number;
+  now?: Date;
+  maxClassificationSubjects?: number;
 }
 
 export interface DiscoveredTerm {
@@ -17,8 +42,9 @@ export interface DiscoveredTerm {
 
 export interface TermClassification {
   term: DiscoveredTerm;
-  status: 'active' | 'historical';
+  status: TermStateStatus;
   sampleEnrollmentStatuses: string[];
+  sampledSubjects: string[];
 }
 
 /**
@@ -54,17 +80,18 @@ export async function discoverTermsForYear(
 }
 
 /**
- * Discovers terms for current and next year
+ * Discovers every Course Explorer term in the supported corpus window.
  */
 export async function discoverAllTerms(
   config: TermDiscoveryConfig
 ): Promise<DiscoveredTerm[]> {
-  const currentYear = new Date().getFullYear();
-  const years = [currentYear, currentYear + 1];
+  const currentYear = (config.now ?? new Date()).getFullYear();
+  const fromYear = config.fromYear ?? DEFAULT_FROM_YEAR;
+  const toYear = config.toYear ?? currentYear + 1;
 
   const allTerms: DiscoveredTerm[] = [];
 
-  for (const year of years) {
+  for (let year = fromYear; year <= toYear; year += 1) {
     try {
       const terms = await discoverTermsForYear(config, year);
       allTerms.push(...terms);
@@ -73,18 +100,78 @@ export async function discoverAllTerms(
     }
   }
 
-  return allTerms;
+  return allTerms.sort((left, right) => {
+    if (left.year !== right.year) return left.year - right.year;
+    return (TERM_ORDER[left.term] ?? 0) - (TERM_ORDER[right.term] ?? 0);
+  });
 }
 
 /**
- * Classifies a term as active or historical by sampling enrollmentStatus
- * from a subject cascade
+ * Classifies a term by sampling section enrollmentStatus values from several
+ * subjects. Any open-like section makes the whole term registrable.
  */
 export async function classifyTerm(
   config: TermDiscoveryConfig,
-  term: DiscoveredTerm,
-  sampleSubject: string = 'CS'
+  term: DiscoveredTerm
 ): Promise<TermClassification> {
+  const subjects = await getClassificationSubjects(config, term);
+  const maxSubjects = config.maxClassificationSubjects ?? DEFAULT_CLASSIFICATION_SUBJECTS.length;
+  const sampledSubjects = subjects.slice(0, maxSubjects);
+  const statuses: string[] = [];
+
+  for (const subject of sampledSubjects) {
+    statuses.push(...await readEnrollmentStatuses(config, term, subject));
+    const status = classifyEnrollmentStatuses(statuses);
+    if (status === 'registrable') {
+      return {
+        term,
+        status,
+        sampleEnrollmentStatuses: [...new Set(statuses)].slice(0, 10),
+        sampledSubjects,
+      };
+    }
+  }
+
+  return {
+    term,
+    status: classifyEnrollmentStatuses(statuses),
+    sampleEnrollmentStatuses: [...new Set(statuses)].slice(0, 10),
+    sampledSubjects,
+  };
+}
+
+async function getClassificationSubjects(
+  config: TermDiscoveryConfig,
+  term: DiscoveredTerm
+): Promise<string[]> {
+  const upstreamBackoff = getUpstreamBackoff();
+  await upstreamBackoff.waitIfNeeded();
+
+  const url = `${config.cisapiBase}/schedule/${term.year}/${term.term}.xml`;
+  const response = await browserFetch(url);
+  if (!response.ok) {
+    if (upstreamBackoff.isRateLimited(response.status)) {
+      upstreamBackoff.recordFailure(`subjects ${term.termId}: ${response.status}`, response.status);
+    }
+    throw new Error(`Failed to fetch subjects for ${term.termId}: ${response.status}`);
+  }
+
+  upstreamBackoff.recordSuccess();
+
+  const xml = await response.text();
+  const subjects = [...xml.matchAll(/<subject id="([^"]+)"/g)].map(match => match[1]);
+  const subjectSet = new Set(subjects);
+  return [
+    ...DEFAULT_CLASSIFICATION_SUBJECTS.filter(subject => subjectSet.has(subject)),
+    ...subjects.filter(subject => !(DEFAULT_CLASSIFICATION_SUBJECTS as readonly string[]).includes(subject)),
+  ];
+}
+
+async function readEnrollmentStatuses(
+  config: TermDiscoveryConfig,
+  term: DiscoveredTerm,
+  sampleSubject: string
+): Promise<string[]> {
   const upstreamBackoff = getUpstreamBackoff();
   await upstreamBackoff.waitIfNeeded();
 
@@ -102,22 +189,40 @@ export async function classifyTerm(
 
   const xml = await response.text();
 
-  // Extract all enrollmentStatus values
-  const statusRegex = /<enrollmentStatus>([^<]*)<\/enrollmentStatus>/g;
   const statuses: string[] = [];
+  const statusRegex = /<enrollmentStatus>([^<]*)<\/enrollmentStatus>/g;
   let match;
   while ((match = statusRegex.exec(xml)) !== null) {
     statuses.push(match[1]);
   }
 
-  // If ANY status is not "UNKNOWN", term is active
-  const hasRealStatus = statuses.some(s => s.toUpperCase() !== 'UNKNOWN');
+  return statuses;
+}
 
-  return {
-    term,
-    status: hasRealStatus ? 'active' : 'historical',
-    sampleEnrollmentStatuses: [...new Set(statuses)].slice(0, 5) // Unique, max 5
-  };
+function classifyEnrollmentStatuses(statuses: string[]): TermStateStatus {
+  if (statuses.some(status => REGISTRABLE_STATUS_PATTERN.test(status))) {
+    return 'registrable';
+  }
+  if (statuses.some(status => status.trim().toUpperCase() !== 'UNKNOWN')) {
+    return 'active';
+  }
+  return 'historical';
+}
+
+function isDefinitelyPast(term: DiscoveredTerm, now: Date): boolean {
+  const currentYear = now.getFullYear();
+  if (term.year < currentYear) return true;
+  if (term.year > currentYear) return false;
+
+  const month = now.getMonth() + 1;
+  const currentTerm = month <= 1
+    ? 'winter'
+    : month <= 5
+      ? 'spring'
+      : month <= 8
+        ? 'summer'
+        : 'fall';
+  return (TERM_ORDER[term.term] ?? 0) < (TERM_ORDER[currentTerm] ?? 0);
 }
 
 /**
@@ -129,10 +234,18 @@ export async function discoverAndClassifyTerms(
 ): Promise<TermClassification[]> {
   const terms = await discoverAllTerms(config);
   const classifications: TermClassification[] = [];
+  const now = config.now ?? new Date();
 
   for (const term of terms) {
     try {
-      const classification = await classifyTerm(config, term);
+      const classification = isDefinitelyPast(term, now)
+        ? {
+            term,
+            status: 'historical' as const,
+            sampleEnrollmentStatuses: ['assumed historical by term chronology'],
+            sampledSubjects: [],
+          }
+        : await classifyTerm(config, term);
       classifications.push(classification);
 
       // Update term_state in database

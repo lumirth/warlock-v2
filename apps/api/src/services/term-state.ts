@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { makeTermId } from '../db/index.js';
+import { makeTermId, type TermStateStatus } from '../db/index.js';
 
-export type TermStatus = 'active' | 'registrable' | 'historical' | 'requested' | 'fallback';
+export type TermStatus = TermStateStatus | 'requested' | 'fallback';
 
 export interface ResolvedTerm {
   termId: string;
@@ -15,7 +15,7 @@ type TermStateRow = {
   term_id: string;
   year: number;
   term: string;
-  status: TermStatus;
+  status: TermStateStatus;
 };
 
 export async function resolveTermContext(
@@ -47,6 +47,7 @@ export async function resolveTermContext(
     WHERE status IN ('registrable', 'active')
     ORDER BY
       CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+      CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
       year DESC,
       CASE term WHEN 'fall' THEN 4 WHEN 'summer' THEN 3 WHEN 'spring' THEN 2 WHEN 'winter' THEN 1 ELSE 0 END DESC
     LIMIT 1
@@ -76,16 +77,31 @@ export async function resolveTermContext(
 export async function getSearchTermSummary(db: D1Database): Promise<{
   activeTermId: string | null;
   registrableTermId: string | null;
+  activeTermIds: string[];
+  registrableTermIds: string[];
 }> {
   const result = await db.prepare(`
     SELECT term_id, status
     FROM term_state
     WHERE status IN ('active', 'registrable')
+    ORDER BY
+      CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+      CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
+      year DESC,
+      CASE term WHEN 'fall' THEN 4 WHEN 'summer' THEN 3 WHEN 'spring' THEN 2 WHEN 'winter' THEN 1 ELSE 0 END DESC
   `).all<{ term_id: string; status: string }>();
+  const activeTermIds = result.results
+    .filter(row => row.status === 'active')
+    .map(row => row.term_id);
+  const registrableTermIds = result.results
+    .filter(row => row.status === 'registrable')
+    .map(row => row.term_id);
 
   return {
-    activeTermId: result.results.find(row => row.status === 'active')?.term_id ?? null,
-    registrableTermId: result.results.find(row => row.status === 'registrable')?.term_id ?? null,
+    activeTermId: activeTermIds[0] ?? null,
+    registrableTermId: registrableTermIds[0] ?? null,
+    activeTermIds,
+    registrableTermIds,
   };
 }
 

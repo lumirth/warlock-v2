@@ -8,6 +8,9 @@ import { parseBoundedIntParam, parseSubjectParam } from '../http/params.js';
 import { getSearchTermSummary } from '../services/term-state.js';
 import { errorFields, logger } from '../observability/logger.js';
 
+const MAX_SEARCH_OFFSET = 1000;
+const MAX_SEARCH_FETCH_WINDOW = 1200;
+
 type Bindings = {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
@@ -37,7 +40,7 @@ searchRoutes.get('/api/search', async (c) => {
 
   const parsedOffset = parseBoundedIntParam(c.req.query('offset'), 'offset', {
     min: 0,
-    max: 200,
+    max: MAX_SEARCH_OFFSET,
     defaultValue: 0,
   });
   if (!parsedOffset.ok) {
@@ -74,7 +77,11 @@ searchRoutes.get('/api/search', async (c) => {
 
   try {
     const pipeline = new SearchPipeline(c.env.DB, c.env.VECTORIZE, c.env.AI);
-    const fetchLimit = offset + limit + 1;
+    const requestedWindow = offset + limit + 1;
+    const fetchLimit = Math.min(
+      MAX_SEARCH_FETCH_WINDOW,
+      Math.max(requestedWindow, (offset + limit) * 2)
+    );
     const result = await pipeline.search(query, fetchLimit, overrides, c.executionCtx.waitUntil.bind(c.executionCtx));
     const pageResults = result.results.slice(offset, offset + limit);
     const hasMore = result.results.length > offset + limit;

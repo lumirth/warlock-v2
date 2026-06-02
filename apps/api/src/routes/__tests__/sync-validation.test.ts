@@ -21,7 +21,7 @@ describe('sync route validation', () => {
     const res = await app.request('/admin/sync/2026/spring?limit=999999', { method: 'POST' });
 
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'limit must be between 1 and 5' });
+    await expect(res.json()).resolves.toEqual({ error: 'limit must be between 1 and 20' });
   });
 
   it('rejects invalid manual sync status overrides', async () => {
@@ -31,7 +31,7 @@ describe('sync route validation', () => {
     const res = await app.request('/admin/sync/2026/spring?status=archived', { method: 'POST' });
 
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'status must be one of: active, historical' });
+    await expect(res.json()).resolves.toEqual({ error: 'status must be one of: registrable, active, historical' });
   });
 
   it('rejects invalid manual sync force flags', async () => {
@@ -47,9 +47,10 @@ describe('sync route validation', () => {
   it('resolves manual sync status without turning historical backfills into active terms', () => {
     expect(resolveManualSyncTermStatus(null)).toBe('active');
     expect(resolveManualSyncTermStatus({ status: 'active' })).toBe('active');
+    expect(resolveManualSyncTermStatus({ status: 'registrable' })).toBe('registrable');
     expect(resolveManualSyncTermStatus({ status: 'historical' })).toBe('historical');
     expect(resolveManualSyncTermStatus({ status: 'active' }, 'historical')).toBe('historical');
-    expect(resolveManualSyncTermStatus({ status: 'historical' }, 'active')).toBe('active');
+    expect(resolveManualSyncTermStatus({ status: 'historical' }, 'registrable')).toBe('registrable');
   });
 
   it('reads cumulative term counts instead of trusting the current sync page', async () => {

@@ -117,6 +117,7 @@ export function auditFreshnessStatus(
   const requireRmp = options.requireRmp ?? true;
   const freshness = asRecord(status.freshness);
   const currentTermId = typeof freshness?.currentTermId === 'string' ? freshness.currentTermId : null;
+  const registrableTermIds = asStringArray(freshness?.registrableTermIds);
   const activeTermIds = asStringArray(freshness?.activeTermIds);
   const upcomingTermIds = asStringArray(freshness?.upcomingTermIds);
   const staleTermIds = asStringArray(freshness?.staleTermIds);
@@ -129,7 +130,8 @@ export function auditFreshnessStatus(
   const checks = [
     check('freshness object present', freshness !== null, freshness ? 'ok' : 'missing freshness summary'),
     check('current term present', freshness?.currentTermPresent === true, String(freshness?.currentTermId ?? 'missing currentTermId')),
-    check('active term coverage', activeTermIds.length > 0, `${activeTermIds.length} active term(s)`),
+    check('registrable term coverage', registrableTermIds.length > 0, `${registrableTermIds.length} registrable term(s)`),
+    check('active term field present', Array.isArray(freshness?.activeTermIds), `${activeTermIds.length} active term(s)`),
     check('upcoming term field present', Array.isArray(freshness?.upcomingTermIds), `${upcomingTermIds.length} upcoming term(s)`),
     check(
       'historical term coverage',

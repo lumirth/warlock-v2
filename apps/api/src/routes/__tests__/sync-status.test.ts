@@ -21,10 +21,10 @@ function createDb(): D1Database {
             success: true,
             results: [
               {
-                term_id: '2026-spring',
+                term_id: '2026-winter',
                 year: 2026,
-                term: 'spring',
-                status: 'active',
+                term: 'winter',
+                status: 'registrable',
                 last_checked: 1,
                 last_synced: 2,
                 subjects_count: 1,
@@ -38,7 +38,7 @@ function createDb(): D1Database {
                 term_id: '2026-fall',
                 year: 2026,
                 term: 'fall',
-                status: 'active',
+                status: 'registrable',
                 last_checked: 1,
                 last_synced: null,
                 subjects_count: null,
@@ -96,7 +96,9 @@ describe('sync status route', () => {
       runningSyncStates: Array<{ id: string }>;
       freshness: {
         currentTermId: string;
+        configuredCurrentTermId: string;
         currentTermPresent: boolean;
+        registrableTermIds: string[];
         activeTermIds: string[];
         upcomingTermIds: string[];
         staleTermIds: string[];
@@ -106,16 +108,18 @@ describe('sync status route', () => {
 
     expect(data.syncStates).toHaveLength(2);
     expect(data.termStates).toEqual(expect.arrayContaining([
-      expect.objectContaining({ term_id: '2026-spring', status: 'active' }),
-      expect.objectContaining({ term_id: '2026-fall', status: 'active' }),
+      expect.objectContaining({ term_id: '2026-winter', status: 'registrable' }),
+      expect.objectContaining({ term_id: '2026-fall', status: 'registrable' }),
     ]));
     expect(data.unhealthySyncStates).toEqual([expect.objectContaining({ id: 'gpa' })]);
     expect(data.runningSyncStates).toEqual([expect.objectContaining({ id: 'course-sync:2026-spring:CS' })]);
     expect(data.freshness).toMatchObject({
-      currentTermId: '2026-spring',
+      currentTermId: '2026-fall',
+      configuredCurrentTermId: '2026-spring',
       currentTermPresent: true,
-      activeTermIds: ['2026-spring', '2026-fall'],
-      upcomingTermIds: ['2026-fall'],
+      registrableTermIds: ['2026-fall', '2026-winter'],
+      activeTermIds: [],
+      upcomingTermIds: [],
       staleSyncStateIds: ['gpa'],
     });
     expect(data.freshness.staleTermIds).toEqual(expect.arrayContaining(['2026-fall']));

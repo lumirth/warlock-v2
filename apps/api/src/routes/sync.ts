@@ -3,7 +3,7 @@ import type { D1Database, VectorizeIndex, Ai, Fetcher, KVNamespace } from '@clou
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
-import { getTermsByStatus, getTermState, upsertTermState, makeTermId, type SyncState, type TermState } from '../db/index.js';
+import { getTermsByStatus, getTermState, upsertTermState, makeTermId, TERM_STATUSES, type SyncState, type TermState, type TermStateStatus } from '../db/index.js';
 import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
@@ -12,8 +12,7 @@ import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-const TERM_STATUSES = ['active', 'historical'] as const;
-const MAX_SYNC_SUBJECTS_PER_REQUEST = 5;
+const MAX_SYNC_SUBJECTS_PER_REQUEST = 20;
 
 type Bindings = {
   DB: D1Database;
@@ -39,10 +38,10 @@ export const syncRoutes = new Hono<{ Bindings: Bindings }>();
 
 export function resolveManualSyncTermStatus(
   existingTerm: Pick<TermState, 'status'> | null,
-  requestedStatus?: 'active' | 'historical'
-): 'active' | 'historical' {
+  requestedStatus?: TermStateStatus
+): TermStateStatus {
   if (requestedStatus) return requestedStatus;
-  if (existingTerm?.status === 'historical') return 'historical';
+  if (existingTerm?.status) return existingTerm.status;
   return 'active';
 }
 
@@ -267,17 +266,20 @@ syncRoutes.post('/admin/discover-terms', async (c) => {
 
 // Get term states
 syncRoutes.get('/admin/terms', async (c) => {
-  const status = c.req.query('status') as 'active' | 'historical' | undefined;
+  const statusRaw = c.req.query('status');
 
   try {
-    if (status) {
-      const terms = await getTermsByStatus(c.env.DB, status);
+    if (statusRaw) {
+      const status = parseEnumParam(statusRaw, 'status', TERM_STATUSES);
+      if (!status.ok) return c.json({ error: status.error }, 400);
+      const terms = await getTermsByStatus(c.env.DB, status.value);
       return c.json({ terms });
     }
 
+    const registrable = await getTermsByStatus(c.env.DB, 'registrable');
     const active = await getTermsByStatus(c.env.DB, 'active');
     const historical = await getTermsByStatus(c.env.DB, 'historical');
-    return c.json({ active, historical });
+    return c.json({ registrable, active, historical });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }
@@ -307,7 +309,7 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
   if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
 
   const requestedStatusRaw = c.req.query('status');
-  let requestedStatus: 'active' | 'historical' | undefined;
+  let requestedStatus: TermStateStatus | undefined;
   if (requestedStatusRaw !== undefined && requestedStatusRaw !== '') {
     const parsedStatus = parseEnumParam(requestedStatusRaw, 'status', TERM_STATUSES);
     if (!parsedStatus.ok) return c.json({ error: parsedStatus.error }, 400);
@@ -371,7 +373,10 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
 
 // Sync all active terms
 syncRoutes.post('/admin/sync-active', async (c) => {
-  const activeTerms = await getTermsByStatus(c.env.DB, 'active');
+  const activeTerms = [
+    ...await getTermsByStatus(c.env.DB, 'registrable'),
+    ...await getTermsByStatus(c.env.DB, 'active'),
+  ];
 
   if (activeTerms.length === 0) {
     return c.json({ message: 'No active terms found. Run /admin/discover-terms first.' });

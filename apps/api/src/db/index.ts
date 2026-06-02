@@ -1,5 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
 
+export const TERM_STATUSES = ['registrable', 'active', 'historical'] as const;
+export type TermStateStatus = typeof TERM_STATUSES[number];
+
 export interface Subject {
   id: string;
   name: string;
@@ -111,7 +114,7 @@ export interface TermState {
   term_id: string;
   year: number;
   term: string;
-  status: 'active' | 'historical';
+  status: TermStateStatus;
   last_checked: number | null;
   last_synced: number | null;
   subjects_count: number | null;
@@ -284,10 +287,26 @@ export async function upsertTermState(
 
 export async function getTermsByStatus(
   db: D1Database,
-  status: 'active' | 'historical'
+  status: TermStateStatus
 ): Promise<TermState[]> {
   const result = await db.prepare(
-    'SELECT * FROM term_state WHERE status = ? ORDER BY year DESC, term'
+    `SELECT * FROM term_state
+     WHERE status = ?
+     ORDER BY year DESC,
+       CASE term
+         WHEN 'fall' THEN 0
+         WHEN 'spring' THEN 0
+         WHEN 'summer' THEN 1
+         WHEN 'winter' THEN 1
+         ELSE 2
+       END,
+       CASE term
+         WHEN 'fall' THEN 4
+         WHEN 'summer' THEN 3
+         WHEN 'spring' THEN 2
+         WHEN 'winter' THEN 1
+         ELSE 0
+       END DESC`
   ).bind(status).all<TermState>();
   return result.results;
 }

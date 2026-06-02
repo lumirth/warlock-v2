@@ -98,9 +98,12 @@ export default {
           };
           const classifications = await discoverAndClassifyTerms(env.DB, config);
           const active = classifications.filter(c => c.status === 'active');
+          const registrable = classifications.filter(c => c.status === 'registrable');
           logger.info('cron.termDiscovery.complete', {
             runId,
             termCount: classifications.length,
+            registrableTermCount: registrable.length,
+            registrableTerms: registrable.map(c => c.term.termId).join(','),
             activeTermCount: active.length,
             activeTerms: active.map(c => c.term.termId).join(','),
           });
@@ -173,7 +176,10 @@ export default {
     // Runs on every cron trigger that reaches here (including */5 * * * *)
     logger.info('cron.courseSync.start', { runId, cron });
 
-    const activeTerms = await getTermsByStatus(env.DB, 'active');
+    const activeTerms = [
+      ...await getTermsByStatus(env.DB, 'registrable'),
+      ...await getTermsByStatus(env.DB, 'active'),
+    ];
 
     if (activeTerms.length === 0) {
       logger.info('cron.courseSync.noActiveTerms', { runId });

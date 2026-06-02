@@ -50,7 +50,7 @@ function status(overrides: Record<string, unknown> = {}): Record<string, unknown
         term_id: '2026-fall',
         year: 2026,
         term: 'fall',
-        status: 'active',
+        status: 'registrable',
         last_synced: 1780370000,
         subjects_count: 187,
         courses_count: 4400,
@@ -59,7 +59,9 @@ function status(overrides: Record<string, unknown> = {}): Record<string, unknown
     ],
     freshness: {
       currentTermId: '2026-spring',
+      configuredCurrentTermId: '2026-spring',
       currentTermPresent: true,
+      registrableTermIds: ['2026-fall'],
       activeTermIds: ['2026-spring', '2026-fall'],
       upcomingTermIds: ['2026-fall'],
       historicalTermCount: 12,
@@ -84,6 +86,7 @@ describe('data freshness audit', () => {
       freshness: {
         currentTermId: '2026-spring',
         currentTermPresent: false,
+        registrableTermIds: [],
         activeTermIds: [],
         upcomingTermIds: [],
         historicalTermCount: 0,
@@ -94,7 +97,7 @@ describe('data freshness audit', () => {
 
     expect(checks.filter(check => !check.ok).map(check => check.name)).toEqual([
       'current term present',
-      'active term coverage',
+      'registrable term coverage',
       'historical term coverage',
       'no stale terms',
       'no stale sync states',

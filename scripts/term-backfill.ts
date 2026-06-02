@@ -4,8 +4,9 @@ import { pathToFileURL } from 'node:url';
 import { validateD1BackupEvidence, type D1BackupEvidenceArgs } from './lib/d1-backup-evidence.ts';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-const STATUSES = ['active', 'historical'] as const;
-const DEFAULT_PAGE_SIZE = 5;
+const STATUSES = ['registrable', 'active', 'historical'] as const;
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 20;
 const DEFAULT_DATABASE = 'course-search-db-staging';
 const DEFAULT_MAX_PAGE_ATTEMPTS = 4;
 const DEFAULT_RETRY_DELAY_MS = 1_000;
@@ -102,7 +103,7 @@ function usage(): string {
     'Required:',
     '  --year <YYYY>',
     '  --term <winter|spring|summer|fall>',
-    '  --status <active|historical>',
+    '  --status <registrable|active|historical>',
     '',
     'Required for non-dry-run remote writes:',
     '  STAGING_API_BASE_URL=...',
@@ -112,7 +113,7 @@ function usage(): string {
     '  --restore-verified',
     '',
     'Options:',
-    `  --page-size <1-5>       Subject page size. Default: ${DEFAULT_PAGE_SIZE}`,
+    `  --page-size <1-${MAX_PAGE_SIZE}>       Subject page size. Default: ${DEFAULT_PAGE_SIZE}`,
     '  --start-offset <n>      Resume at a subject offset. Default: 0',
     '  --max-pages <n>         Stop after n pages.',
     '  --force-running-locks   Override fresh running subject locks for a deliberate operator rerun.',
@@ -215,8 +216,8 @@ function validateBackfillArgs(args: BackfillArgs): asserts args is BackfillArgs 
   if (!args.status) {
     throw new Error('--status is required');
   }
-  if (args.pageSize < 1 || args.pageSize > 5) {
-    throw new Error('--page-size must be between 1 and 5');
+  if (args.pageSize < 1 || args.pageSize > MAX_PAGE_SIZE) {
+    throw new Error(`--page-size must be between 1 and ${MAX_PAGE_SIZE}`);
   }
   if (args.maxPages !== undefined && args.maxPages < 1) {
     throw new Error('--max-pages must be at least 1');

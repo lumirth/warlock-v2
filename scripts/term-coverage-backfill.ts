@@ -12,8 +12,9 @@ import {
 } from './term-backfill.ts';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-const STATUSES = ['active', 'historical'] as const;
-const DEFAULT_PAGE_SIZE = 5;
+const STATUSES = ['registrable', 'active', 'historical'] as const;
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 20;
 const DEFAULT_DATABASE = 'course-search-db-staging';
 
 type Fetcher = (request: Request) => Promise<Response>;
@@ -91,7 +92,7 @@ function usage(): string {
     '  --restore-verified',
     '',
     'Options:',
-    `  --page-size <1-5>          Subject page size. Default: ${DEFAULT_PAGE_SIZE}`,
+    `  --page-size <1-${MAX_PAGE_SIZE}>          Subject page size. Default: ${DEFAULT_PAGE_SIZE}`,
     '  --max-terms <n>           Stop after n planned terms.',
     '  --max-pages-per-term <n>  Stop each term after n pages.',
     '  --force-running-locks     Override fresh running subject locks for deliberate operator reruns.',
@@ -200,8 +201,8 @@ export function parseCoverageBackfillArgs(argv: string[]): CoverageBackfillArgs 
     }
   }
 
-  if (args.pageSize < 1 || args.pageSize > 5) {
-    throw new Error('--page-size must be between 1 and 5');
+  if (args.pageSize < 1 || args.pageSize > MAX_PAGE_SIZE) {
+    throw new Error(`--page-size must be between 1 and ${MAX_PAGE_SIZE}`);
   }
   if (args.maxTerms !== undefined && args.maxTerms < 1) {
     throw new Error('--max-terms must be at least 1');

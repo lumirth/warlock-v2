@@ -31,6 +31,8 @@ export interface SearchResponseForEval {
     term?: {
       activeTermId: string | null;
       registrableTermId: string | null;
+      activeTermIds?: string[];
+      registrableTermIds?: string[];
     };
   };
 }

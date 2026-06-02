@@ -18,6 +18,8 @@ export type FreshnessSummary = {
   generatedAt: number;
   currentTermId: string;
   currentTermPresent: boolean;
+  configuredCurrentTermId: string;
+  registrableTermIds: string[];
   activeTermIds: string[];
   upcomingTermIds: string[];
   historicalTermCount: number;
@@ -33,9 +35,15 @@ export function buildFreshnessSummary(input: {
   currentYear: number;
   currentTerm: string;
 }): FreshnessSummary {
-  const currentTermId = `${input.currentYear}-${input.currentTerm.toLowerCase()}`;
+  const configuredCurrentTermId = `${input.currentYear}-${input.currentTerm.toLowerCase()}`;
+  const registrableTerms = sortTermsByRecency(input.termStates.filter(term => term.status === 'registrable'));
   const activeTerms = input.termStates.filter(term => term.status === 'active');
+  const activeTermsByRecency = sortTermsByRecency(activeTerms);
   const historicalTerms = input.termStates.filter(term => term.status === 'historical');
+  const selectedCurrentTerm = registrableTerms[0] ?? activeTermsByRecency[0] ?? null;
+  const currentTermId = selectedCurrentTerm?.term_id ?? configuredCurrentTermId;
+  const currentYear = selectedCurrentTerm?.year ?? input.currentYear;
+  const currentTerm = selectedCurrentTerm?.term ?? input.currentTerm;
   const staleTermIds = input.termStates
     .filter(term => isStaleTerm(term, input.nowSeconds))
     .map(term => term.term_id);
@@ -43,10 +51,12 @@ export function buildFreshnessSummary(input: {
   return {
     generatedAt: input.nowSeconds,
     currentTermId,
+    configuredCurrentTermId,
     currentTermPresent: input.termStates.some(term => term.term_id === currentTermId),
-    activeTermIds: activeTerms.map(term => term.term_id),
-    upcomingTermIds: activeTerms
-      .filter(term => compareTerm(term.year, term.term, input.currentYear, input.currentTerm) > 0)
+    registrableTermIds: registrableTerms.map(term => term.term_id),
+    activeTermIds: activeTermsByRecency.map(term => term.term_id),
+    upcomingTermIds: [...registrableTerms, ...activeTermsByRecency]
+      .filter(term => compareTerm(term.year, term.term, currentYear, currentTerm) > 0)
       .map(term => term.term_id),
     historicalTermCount: historicalTerms.length,
     staleTermIds,
@@ -63,9 +73,9 @@ function isStaleTerm(term: TermState, nowSeconds: number): boolean {
   }
 
   const ageSeconds = nowSeconds - term.last_synced;
-  const maxAgeSeconds = term.status === 'active'
-    ? FRESHNESS_THRESHOLDS.activeTermMaxAgeSeconds
-    : FRESHNESS_THRESHOLDS.historicalTermMaxAgeSeconds;
+  const maxAgeSeconds = term.status === 'historical'
+    ? FRESHNESS_THRESHOLDS.historicalTermMaxAgeSeconds
+    : FRESHNESS_THRESHOLDS.activeTermMaxAgeSeconds;
 
   return ageSeconds > maxAgeSeconds;
 }
@@ -92,4 +102,23 @@ function compareTerm(year: number, term: string, currentYear: number, currentTer
   }
 
   return (TERM_ORDER[term.toLowerCase()] ?? 0) - (TERM_ORDER[currentTerm.toLowerCase()] ?? 0);
+}
+
+function sortTermsByRecency<T extends { year: number; term: string }>(terms: T[]): T[] {
+  return [...terms].sort((left, right) => {
+    const regularTermDelta = regularTermRank(left.term) - regularTermRank(right.term);
+    if (regularTermDelta !== 0) {
+      return regularTermDelta;
+    }
+
+    if (left.year !== right.year) {
+      return right.year - left.year;
+    }
+
+    return (TERM_ORDER[right.term.toLowerCase()] ?? 0) - (TERM_ORDER[left.term.toLowerCase()] ?? 0);
+  });
+}
+
+function regularTermRank(term: string): number {
+  return term === 'fall' || term === 'spring' ? 0 : 1;
 }

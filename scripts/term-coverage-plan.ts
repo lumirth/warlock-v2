@@ -14,6 +14,7 @@ const DEFAULT_FRONTEND_BASE = 'https://courses.illinois.edu';
 const DEFAULT_FROM_YEAR = 2004;
 
 type Term = typeof TERMS[number];
+type TermStatus = 'registrable' | 'active' | 'historical';
 type Fetcher = (request: Request) => Promise<Response>;
 type JsonRecord = Record<string, unknown>;
 
@@ -34,7 +35,7 @@ export type AvailableTerm = {
 };
 
 export type TermCoverageRow = AvailableTerm & {
-  expected_status: 'active' | 'historical';
+  expected_status: TermStatus;
   present: boolean;
   stored_status: string | null;
   stale: boolean;
@@ -99,7 +100,10 @@ function compareTerms(year: number, term: Term, currentYear: number, currentTerm
   return TERM_ORDER[term] - TERM_ORDER[currentTerm];
 }
 
-function expectedStatus(row: AvailableTerm, currentYear: number, currentTerm: Term): 'active' | 'historical' {
+function expectedStatus(row: AvailableTerm, stored: JsonRecord | undefined, currentYear: number, currentTerm: Term): TermStatus {
+  if (stored?.status === 'registrable' || stored?.status === 'active' || stored?.status === 'historical') {
+    return stored.status;
+  }
   return compareTerms(row.year, row.term, currentYear, currentTerm) < 0 ? 'historical' : 'active';
 }
 
@@ -161,7 +165,7 @@ function backfillCommand(row: TermCoverageRow): string {
     `--year ${row.year}`,
     `--term ${row.term}`,
     `--status ${row.expected_status}`,
-    '--page-size 5',
+    '--page-size 20',
     '--backup-ref "$BACKUP_REF"',
     '--evidence-file "artifacts/d1-backups/$BACKUP_REF-term-coverage/evidence.md"',
     '--restore-verified',
@@ -206,7 +210,7 @@ function buildRow(
 
   return {
     ...term,
-    expected_status: expectedStatus(term, currentYear, currentTerm),
+    expected_status: expectedStatus(term, stored, currentYear, currentTerm),
     present,
     stored_status: typeof stored?.status === 'string' ? stored.status : null,
     stale,

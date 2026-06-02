@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveTermContext } from '../term-state.js';
+import { getSearchTermSummary, resolveTermContext } from '../term-state.js';
 import type { D1Database } from '@cloudflare/workers-types';
 
 function createDb(defaultRow: unknown, requestedRow: unknown = null) {
@@ -9,6 +9,14 @@ function createDb(defaultRow: unknown, requestedRow: unknown = null) {
         first: vi.fn(async () => requestedRow),
       })),
       first: vi.fn(async () => sql.includes('WHERE status IN') ? defaultRow : null),
+    })),
+  };
+}
+
+function createSummaryDb(rows: Array<{ term_id: string; status: string }>) {
+  return {
+    prepare: vi.fn(() => ({
+      all: vi.fn(async () => ({ results: rows })),
     })),
   };
 }
@@ -45,6 +53,22 @@ describe('resolveTermContext', () => {
       term: 'spring',
       status: 'fallback',
       source: 'env',
+    });
+  });
+
+  it('reports every open term while keeping spring/fall as the primary terms', async () => {
+    const db = createSummaryDb([
+      { term_id: '2026-fall', status: 'registrable' },
+      { term_id: '2026-summer', status: 'registrable' },
+      { term_id: '2026-spring', status: 'active' },
+      { term_id: '2026-winter', status: 'active' },
+    ]);
+
+    await expect(getSearchTermSummary(db as unknown as D1Database)).resolves.toEqual({
+      registrableTermId: '2026-fall',
+      registrableTermIds: ['2026-fall', '2026-summer'],
+      activeTermId: '2026-spring',
+      activeTermIds: ['2026-spring', '2026-winter'],
     });
   });
 });

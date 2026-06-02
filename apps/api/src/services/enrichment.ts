@@ -97,8 +97,10 @@ export async function coordinateEnrichment(
 ): Promise<{ taskCount: number; batchCount: number; linkCount: number; scoreUpdateCount: number }> {
   const termResult = await db.prepare(`
     SELECT term_id, year, term FROM term_state
-    WHERE status = 'active'
-    ORDER BY year DESC, CASE term
+    WHERE status IN ('registrable', 'active')
+    ORDER BY
+      CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+      year DESC, CASE term
       WHEN 'fall' THEN 4
       WHEN 'summer' THEN 3
       WHEN 'spring' THEN 2

@@ -46,15 +46,20 @@ describe('buildFreshnessSummary', () => {
         sync({ id: 'course-sync:2026-spring:CS', last_status: 'failed' }),
       ],
       termStates: [
-        term({ term_id: '2026-spring', year: 2026, term: 'spring', status: 'active' }),
+        term({ term_id: '2026-winter', year: 2026, term: 'winter', status: 'registrable' }),
+        term({ term_id: '2026-spring', year: 2026, term: 'spring', status: 'registrable' }),
+        term({ term_id: '2026-summer', year: 2026, term: 'summer', status: 'registrable' }),
         term({ term_id: '2026-fall', year: 2026, term: 'fall', status: 'active' }),
         term({ term_id: '2024-fall', year: 2024, term: 'fall', status: 'historical', last_synced: null }),
       ],
     });
 
     expect(summary.currentTermPresent).toBe(true);
-    expect(summary.activeTermIds).toEqual(['2026-spring', '2026-fall']);
-    expect(summary.upcomingTermIds).toEqual(['2026-fall']);
+    expect(summary.currentTermId).toBe('2026-spring');
+    expect(summary.configuredCurrentTermId).toBe('2026-spring');
+    expect(summary.registrableTermIds).toEqual(['2026-spring', '2026-summer', '2026-winter']);
+    expect(summary.activeTermIds).toEqual(['2026-fall']);
+    expect(summary.upcomingTermIds).toEqual(['2026-summer', '2026-fall']);
     expect(summary.historicalTermCount).toBe(1);
     expect(summary.staleTermIds).toEqual(['2024-fall']);
     expect(summary.staleSyncStateIds).toEqual(['gpa', 'course-sync:2026-spring:CS']);

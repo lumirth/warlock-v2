@@ -414,4 +414,35 @@ describe('SearchPage request state', () => {
       offset: 20,
     }))
   })
+
+  it('falls back to offset plus limit when a hasMore page omits nextOffset', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({ id: 'CS-100-2026-spring', number: '100', title: 'Freshman Orientation' }),
+        ]),
+        pagination: { total: 21, limit: 20, offset: 0, hasMore: true },
+      })
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({ id: 'CS-101-2026-spring', number: '101', title: 'Intro Computing' }),
+        ]),
+        pagination: { total: 22, limit: 20, offset: 20, hasMore: true },
+      })
+
+    renderSearchPage()
+
+    setQuery('intro to CS')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+
+    await screen.findByText(/CS 100: Freshman Orientation/i)
+    fireEvent.click(screen.getByRole('button', { name: /show more results/i }))
+
+    await screen.findByText(/CS 101: Intro Computing/i)
+    expect(api.search).toHaveBeenLastCalledWith('intro to CS', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+      limit: 20,
+      offset: 20,
+    }))
+  })
 })

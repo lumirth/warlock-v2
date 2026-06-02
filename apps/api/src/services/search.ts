@@ -73,22 +73,34 @@ interface TermInfo {
 
 function getTermPriority(
   termInfo: TermInfo,
-  activeTerm: string | null,
-  registrableTerm: string | null
+  priorityByTermId: Map<string, number>
 ): number {
-  const seasonRank: Record<string, number> = { fall: 1, spring: 1, summer: 2, winter: 2 };
+  const knownPriority = priorityByTermId.get(termInfo.term_id);
+  if (knownPriority !== undefined) return knownPriority;
 
-  // Registrable term is highest priority
-  if (termInfo.term_id === registrableTerm) return 0;
+  return 10_000 - termChronology(termInfo.year, termInfo.term);
+}
 
-  // Active term is second priority
-  if (termInfo.term_id === activeTerm) return 1;
+function termChronology(year: number, term: string): number {
+  const termRank: Record<string, number> = { winter: 1, spring: 2, summer: 3, fall: 4 };
+  return year * 4 + (termRank[term.toLowerCase()] ?? 0);
+}
 
-  // Historical: Fall/Spring before Winter/Summer, then by recency
-  const base = 100 - termInfo.year;
-  const seasonPenalty = (seasonRank[termInfo.term] === 2) ? 50 : 0;
+function regularTermRank(term: string): number {
+  return term === 'fall' || term === 'spring' ? 0 : 1;
+}
 
-  return 2 + base + seasonPenalty;
+export function buildTermPriorityMap(termStates: TermInfo[]): Map<string, number> {
+  const sorted = [...termStates].sort((left, right) => {
+    const statusRank = (status: string): number => status === 'registrable' ? 0 : status === 'active' ? 1 : 2;
+    const statusDelta = statusRank(left.status) - statusRank(right.status);
+    if (statusDelta !== 0) return statusDelta;
+    const regularTermDelta = regularTermRank(left.term) - regularTermRank(right.term);
+    if (regularTermDelta !== 0) return regularTermDelta;
+    return termChronology(right.year, right.term) - termChronology(left.year, left.term);
+  });
+
+  return new Map(sorted.map((term, index) => [term.term_id, index]));
 }
 
 // Reciprocal Rank Fusion constant
@@ -850,11 +862,10 @@ export async function hybridSearchWithTermRanking(
   const termStates = await db.prepare(`
     SELECT term_id, year, term, status FROM term_state
     WHERE status IN ('active', 'registrable')
-    ORDER BY year DESC
   `).all<TermInfo>();
 
-  const activeTerm = termStates.results.find(t => t.status === 'active')?.term_id || null;
-  const registrableTerm = termStates.results.find(t => t.status === 'registrable')?.term_id || null;
+  const priorityByTermId = buildTermPriorityMap(termStates.results);
+  const currentTermIds = new Set(termStates.results.map(term => term.term_id));
 
   // Run standard hybrid search
   const results = await hybridSearch(db, vectorize, ai, plan, limit * 2);
@@ -867,11 +878,11 @@ export async function hybridSearchWithTermRanking(
       term: r.course.term,
       status: 'historical'
     };
-    const termPriority = getTermPriority(termInfo, activeTerm, registrableTerm);
+    const termPriority = getTermPriority(termInfo, priorityByTermId);
     return {
       ...r,
       termPriority,
-      historical: termInfo.term_id !== activeTerm && termInfo.term_id !== registrableTerm
+      historical: !currentTermIds.has(termInfo.term_id)
     };
   }), plan);
 

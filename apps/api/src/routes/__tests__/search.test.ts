@@ -100,7 +100,7 @@ describe('Search Routes', () => {
       advanced: {},
       ambiguityActions: [],
     });
-    expect(searchSpy).toHaveBeenCalledWith('CS 225', 21, {}, expect.any(Function));
+    expect(searchSpy).toHaveBeenCalledWith('CS 225', 40, {}, expect.any(Function));
   });
 
   it('rejects malformed public search params before running search', async () => {
@@ -150,7 +150,7 @@ describe('Search Routes', () => {
     expect(res.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(
       'systems',
-      21,
+      40,
       { subject: 'CS', credits: 4, difficulty: 'easy' },
       expect.any(Function)
     );
@@ -203,7 +203,7 @@ describe('Search Routes', () => {
 
     expect(res.status).toBe(200);
     const data = await res.json() as SearchResponseDto;
-    expect(searchSpy).toHaveBeenCalledWith('intro to CS', 16, {}, expect.any(Function));
+    expect(searchSpy).toHaveBeenCalledWith('intro to CS', 30, {}, expect.any(Function));
     expect(data.results.map(result => result.id)).toEqual([
       'CS-10-2026-spring',
       'CS-11-2026-spring',
@@ -218,5 +218,41 @@ describe('Search Routes', () => {
       hasMore: true,
       nextOffset: 15,
     });
+  });
+
+  it('allows deep historical result pages while keeping an offset cap', async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: 'history', residual: 'history' },
+        extraction: { hints: [] },
+        plan: { filters: {}, semanticQuery: 'history', keywordQuery: 'history' },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 }
+      }
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+      search: searchSpy
+      } as unknown as SearchPipeline;
+    });
+
+    const ok = await app.request('/api/search?q=history&offset=1000', {}, {
+      DB: mockDB,
+      VECTORIZE: mockVectorize,
+      AI: mockAI
+    }, {
+      waitUntil: vi.fn(),
+      passThroughOnException: vi.fn()
+    } as unknown as ExecutionContext);
+    expect(ok.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith('history', 1200, {}, expect.any(Function));
+
+    const tooDeep = await app.request('/api/search?q=history&offset=1001', {}, {
+      DB: mockDB,
+      VECTORIZE: mockVectorize,
+      AI: mockAI
+    });
+    expect(tooDeep.status).toBe(400);
+    await expect(tooDeep.json()).resolves.toEqual({ error: 'offset must be between 0 and 1000' });
   });
 });

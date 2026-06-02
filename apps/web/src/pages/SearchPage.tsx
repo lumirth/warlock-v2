@@ -220,11 +220,12 @@ export function SearchPage() {
   }
 
   const loadMoreResults = () => {
-    if (!pagination?.hasMore || pagination.nextOffset === null || pagination.nextOffset === undefined) {
+    if (!pagination?.hasMore) {
       return
     }
+    const nextOffset = pagination.nextOffset ?? pagination.offset + pagination.limit
 
-    void runSearch(activeSearchText || query, { offset: pagination.nextOffset, append: true, syncInput: false })
+    void runSearch(activeSearchText || query, { offset: nextOffset, append: true, syncInput: false })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applySearchIntentBoosts, applyTitleBoost } from '../search.js';
+import { applySearchIntentBoosts, applyTitleBoost, buildTermPriorityMap } from '../search.js';
 import type { SearchResult } from '../search.js';
 import type { Course } from '../../db/index.js';
 
@@ -178,5 +178,21 @@ describe('introductory gateway intent boost', () => {
       keywordQuery: 'intro to compilers',
       softPreferences: { levelBoost: 100 },
     })).toEqual(results);
+  });
+});
+
+describe('term priority', () => {
+  it('prioritizes registrable regular semesters over simultaneous winter and summer terms', () => {
+    const priorities = buildTermPriorityMap([
+      { term_id: '2026-winter', year: 2026, term: 'winter', status: 'registrable' },
+      { term_id: '2026-spring', year: 2026, term: 'spring', status: 'registrable' },
+      { term_id: '2026-summer', year: 2026, term: 'summer', status: 'registrable' },
+      { term_id: '2026-fall', year: 2026, term: 'fall', status: 'registrable' },
+      { term_id: '2027-spring', year: 2027, term: 'spring', status: 'active' },
+    ]);
+
+    expect(priorities.get('2026-fall')).toBeLessThan(priorities.get('2026-summer')!);
+    expect(priorities.get('2026-spring')).toBeLessThan(priorities.get('2026-winter')!);
+    expect(priorities.get('2026-summer')).toBeLessThan(priorities.get('2027-spring')!);
   });
 });
