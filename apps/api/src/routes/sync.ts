@@ -46,6 +46,43 @@ export function resolveManualSyncTermStatus(
   return 'active';
 }
 
+export type TermAggregateCounts = {
+  subjectsCount: number;
+  coursesCount: number;
+  sectionsCount: number;
+};
+
+function numericCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+export async function readTermAggregateCounts(
+  db: D1Database,
+  termId: string,
+  year: number,
+  term: string,
+  totalSubjects: number
+): Promise<TermAggregateCounts> {
+  const [courses, sections] = await Promise.all([
+    db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM courses
+      WHERE year = ? AND term = ?
+    `).bind(year, term).first<{ count: number }>(),
+    db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM sections
+      WHERE term_id = ?
+    `).bind(termId).first<{ count: number }>(),
+  ]);
+
+  return {
+    subjectsCount: totalSubjects,
+    coursesCount: numericCount(courses?.count),
+    sectionsCount: numericCount(sections?.count),
+  };
+}
+
 function syncEmbeddingsEnabled(value: string | undefined): boolean {
   return value?.toLowerCase() === 'true';
 }
@@ -289,6 +326,13 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
 
     const termId = makeTermId(parsedYear.value, parsedTerm.value);
     const existingTerm = await getTermState(c.env.DB, termId);
+    const aggregateCounts = await readTermAggregateCounts(
+      c.env.DB,
+      termId,
+      parsedYear.value,
+      parsedTerm.value,
+      result.pagination?.total ?? result.successfulSubjects + result.failedSubjects
+    );
     await upsertTermState(c.env.DB, {
       term_id: termId,
       year: parsedYear.value,
@@ -296,9 +340,9 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
       status: resolveManualSyncTermStatus(existingTerm, requestedStatus),
       last_checked: Math.floor(Date.now() / 1000),
       last_synced: Math.floor(Date.now() / 1000),
-      subjects_count: result.successfulSubjects + result.failedSubjects,
-      courses_count: result.totalCourses,
-      sections_count: result.totalSections,
+      subjects_count: aggregateCounts.subjectsCount,
+      courses_count: aggregateCounts.coursesCount,
+      sections_count: aggregateCounts.sectionsCount,
       sync_errors: result.failedSubjects > 0
         ? JSON.stringify(result.subjectResults.filter(r => !r.success).map(r => r.error))
         : null,

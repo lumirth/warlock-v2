@@ -127,6 +127,12 @@ function statusTermStates(status: JsonRecord | null): JsonRecord[] {
     : [];
 }
 
+function statusSyncStates(status: JsonRecord | null): JsonRecord[] {
+  return Array.isArray(status?.syncStates)
+    ? status.syncStates.map(asRecord).filter((item): item is JsonRecord => item !== null)
+    : [];
+}
+
 function staleTermIds(status: JsonRecord | null): Set<string> {
   const freshness = asRecord(status?.freshness);
   const values = Array.isArray(freshness?.staleTermIds) ? freshness.staleTermIds : [];
@@ -138,6 +144,15 @@ function parseTermStateId(row: JsonRecord): string | null {
   const year = numericOrNull(row.year);
   const term = normalizeTerm(row.term);
   return year && term ? termId(year, term) : null;
+}
+
+function completedSubjectSyncCount(syncStates: JsonRecord[], termIdValue: string): number {
+  const prefix = `course-sync:${termIdValue}:`;
+  return syncStates.filter(state =>
+    typeof state.id === 'string'
+    && state.id.startsWith(prefix)
+    && state.last_status === 'complete'
+  ).length;
 }
 
 function backfillCommand(row: TermCoverageRow): string {
@@ -157,23 +172,31 @@ function backfillCommand(row: TermCoverageRow): string {
 function buildRow(
   term: AvailableTerm,
   stored: JsonRecord | undefined,
+  completedSubjects: number,
   staleTerms: Set<string>,
   currentYear: number,
   currentTerm: Term
 ): TermCoverageRow {
   const coursesCount = numericOrNull(stored?.courses_count);
   const sectionsCount = numericOrNull(stored?.sections_count);
+  const subjectsCount = numericOrNull(stored?.subjects_count);
   const present = stored !== undefined;
   const stale = staleTerms.has(term.term_id);
   const missingCounts = present && (!positive(coursesCount) || !positive(sectionsCount));
-  const needsBackfill = !present || stale || missingCounts;
+  const incompleteSubjects = present
+    && subjectsCount !== null
+    && subjectsCount > 0
+    && completedSubjects < subjectsCount;
+  const needsBackfill = !present || stale || missingCounts || incompleteSubjects;
   const reason = !present
     ? 'missing from term_state'
     : stale
       ? 'stale in freshness summary'
       : missingCounts
         ? 'missing course or section counts'
-        : 'covered';
+        : incompleteSubjects
+          ? `only ${completedSubjects}/${subjectsCount} subjects synced`
+          : 'covered';
 
   return {
     ...term,
@@ -294,6 +317,7 @@ export async function buildTermCoverageReport(
     : { status: options.status, source: options.statusSource ?? args.statusInput ?? null };
   const discovered = await discoverAvailableTerms(args, options.fetcher);
   const storedByTermId = new Map<string, JsonRecord>();
+  const syncStates = statusSyncStates(statusResult.status);
 
   for (const state of statusTermStates(statusResult.status)) {
     const id = parseTermStateId(state);
@@ -304,6 +328,7 @@ export async function buildTermCoverageReport(
   const terms = discovered.terms.map(term => buildRow(
     term,
     storedByTermId.get(term.term_id),
+    completedSubjectSyncCount(syncStates, term.term_id),
     stale,
     currentYear,
     currentTerm
