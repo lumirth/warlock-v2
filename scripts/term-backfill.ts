@@ -10,6 +10,7 @@ const MAX_PAGE_SIZE = 20;
 const DEFAULT_DATABASE = 'course-search-db-staging';
 const DEFAULT_MAX_PAGE_ATTEMPTS = 8;
 const DEFAULT_RETRY_DELAY_MS = 2_000;
+const DEFAULT_PAGE_TIMEOUT_MS = 120_000;
 const TRANSIENT_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
 type Term = typeof TERMS[number];
@@ -34,6 +35,7 @@ export type BackfillArgs = {
   backupRef?: string;
   evidenceFile?: string;
   restoreVerified: boolean;
+  pageTimeoutMs?: number;
 };
 
 type SyncPagination = {
@@ -118,6 +120,7 @@ function usage(): string {
     `  --page-size <1-${MAX_PAGE_SIZE}>       Subject page size. Default: ${DEFAULT_PAGE_SIZE}`,
     '  --start-offset <n>      Resume at a subject offset. Default: 0',
     '  --max-pages <n>         Stop after n pages.',
+    `  --page-timeout-ms <n>   Abort a stalled admin page request. Default: ${DEFAULT_PAGE_TIMEOUT_MS}`,
     '  --force-running-locks   Override fresh running subject locks for a deliberate operator rerun.',
     '  --output <path>         Write JSON plus sibling .md report.',
     `  --database <name>       D1 database name for backup evidence. Default: ${DEFAULT_DATABASE}`,
@@ -185,6 +188,9 @@ export function parseBackfillArgs(argv: string[]): BackfillArgs {
     } else if (arg === '--max-pages') {
       args.maxPages = parseIntArg(next, '--max-pages');
       i += 1;
+    } else if (arg === '--page-timeout-ms') {
+      args.pageTimeoutMs = parseIntArg(next, '--page-timeout-ms');
+      i += 1;
     } else if (arg === '--output') {
       args.output = next;
       i += 1;
@@ -223,6 +229,9 @@ function validateBackfillArgs(args: BackfillArgs): asserts args is BackfillArgs 
   }
   if (args.maxPages !== undefined && args.maxPages < 1) {
     throw new Error('--max-pages must be at least 1');
+  }
+  if (args.pageTimeoutMs !== undefined && args.pageTimeoutMs < 1_000) {
+    throw new Error('--page-timeout-ms must be at least 1000');
   }
 }
 
@@ -290,6 +299,7 @@ async function postSyncPage(
     maxAttempts: number;
     retryDelayMs: number;
     sleep: Sleeper;
+    pageTimeoutMs: number;
   }
 ): Promise<TermSyncResponse> {
   const url = endpoint(
@@ -298,10 +308,25 @@ async function postSyncPage(
   );
 
   for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
-    const response = await fetcher(new Request(url.toString(), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    }));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort(`Backfill page ${offset} timed out after ${options.pageTimeoutMs}ms`);
+    }, options.pageTimeoutMs);
+    let response: Response;
+    try {
+      response = await fetcher(new Request(url.toString(), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      }));
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Backfill page ${offset} timed out after ${options.pageTimeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     const body = await response.json().catch(() => null) as TermSyncResponse | null;
 
     if (response.ok) {
@@ -356,6 +381,7 @@ export async function runTermBackfill(
   const sleeper = options.sleep ?? sleep;
   const maxPageAttempts = options.maxPageAttempts ?? DEFAULT_MAX_PAGE_ATTEMPTS;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+  const pageTimeoutMs = args.pageTimeoutMs ?? DEFAULT_PAGE_TIMEOUT_MS;
   const baseUrl = args.dryRun ? (env.STAGING_API_BASE_URL ?? 'https://staging.example.invalid') : requiredEnv(env, 'STAGING_API_BASE_URL');
   const adminToken = args.dryRun ? '' : requiredEnv(env, 'STAGING_ADMIN_TOKEN');
 
@@ -413,6 +439,7 @@ export async function runTermBackfill(
       maxAttempts: maxPageAttempts,
       retryDelayMs,
       sleep: sleeper,
+      pageTimeoutMs,
     });
     const page = pageFromResponse(offset, args.pageSize, body);
     report.pages.push(page);
