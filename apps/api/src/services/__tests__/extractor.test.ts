@@ -172,6 +172,35 @@ describe('extract', () => {
       );
     });
 
+    it('extracts lowercase professor-name searches', () => {
+      const result = extract('professor fagen');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'instructor',
+          value: 'fagen',
+        })
+      );
+      expect(result.residual).toBe('');
+    });
+
+    it('extracts shorthand and taught-by instructor phrases', () => {
+      const prof = extract('prof fagen-ulmschneider');
+      const taughtBy = extract('taught by wade fagen');
+
+      expect(prof.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'instructor',
+          value: 'fagen-ulmschneider',
+        })
+      );
+      expect(taughtBy.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'instructor',
+          value: 'wade fagen',
+        })
+      );
+    });
+
     it('extracts instructor with special characters "Prof O\'Brien"', () => {
       const result = extract('Prof O\'Brien');
       expect(result.hints).toContainEqual(
@@ -180,6 +209,11 @@ describe('extract', () => {
           value: 'O\'Brien',
         })
       );
+    });
+
+    it('does not treat generic by/with phrases as instructor filters', () => {
+      expect(extract('sort by difficulty').hints.find(h => h.type === 'instructor')).toBeUndefined();
+      expect(extract('with no friday').hints.find(h => h.type === 'instructor')).toBeUndefined();
     });
 
     it('extracts instructor with hyphen "with Liu-Prasad"', () => {

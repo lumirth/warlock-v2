@@ -127,13 +127,13 @@ describe('CoursePage request state', () => {
     await screen.findByText('B+')
     expect(screen.getByText('Easy')).toBeInTheDocument()
     expect(screen.getByText('Rating 4.8')).toBeInTheDocument()
-    expect(screen.getByText('Avg GPA 3.62 n=820')).toBeInTheDocument()
+    expect(screen.getByText('Avg GPA 3.62 from 820 records')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Lovelace, A' })).toHaveAttribute(
       'href',
-      'https://www.ratemyprofessors.com/professor/ada'
+      'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A'
     )
     expect(screen.getByText('4.8 ★')).toBeInTheDocument()
     expect(screen.getByText('3.62')).toBeInTheDocument()
-    expect(screen.getByText('n=820')).toBeInTheDocument()
+    expect(screen.getByText('820 records')).toBeInTheDocument()
   })
 })

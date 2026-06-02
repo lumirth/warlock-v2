@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { Container, Title, Text, Button, Loader, Flex, Grid, Stack, Badge, Group, Paper, Alert, ScrollArea } from '@mantine/core'
-import { IconAlertCircle } from '@tabler/icons-react'
+import { IconAlertCircle, IconExternalLink } from '@tabler/icons-react'
 import { Scorecard } from '../components/Scorecard'
 import { SectionsTable } from '../components/SectionsTable'
+import { FeedbackButton } from '../components/FeedbackButton'
 import { api } from '../lib/api-client'
 import type { CourseDto } from '@uiuc-course-search/query-types'
 
@@ -77,6 +78,19 @@ export function CoursePage() {
         <Group align="center">
             <Title order={1} fz={36}>{course.subject} {course.number}: {course.title}</Title>
             {course.gened && <Badge size="lg" variant="gradient" gradient={{ from: 'indigo', to: 'cyan' }}>{course.gened}</Badge>}
+            {course.course_explorer_url && (
+              <Button
+                component="a"
+                href={course.course_explorer_url}
+                target="_blank"
+                rel="noreferrer"
+                variant="light"
+                size="xs"
+                leftSection={<IconExternalLink size={14} />}
+              >
+                Course Explorer
+              </Button>
+            )}
         </Group>
         <Text size="lg" c="dimmed">
           {course.credit_hours} Credit Hours • {course.term} {course.year}
@@ -94,6 +108,25 @@ export function CoursePage() {
               avgGpa={course.avg_gpa}
               gpaSampleSize={course.gpa_sample_size}
               primaryInstructorRmp={course.primary_instructor_rmp}
+            />
+            <FeedbackButton
+              buttonLabel="Score feedback"
+              page="course"
+              kind="score"
+              issue="wrong_score"
+              context={{
+                courseId: course.id,
+                subject: course.subject,
+                number: course.number,
+                term: course.term,
+                year: course.year,
+                metadata: {
+                  qualityScore: course.quality_score,
+                  difficultyScore: course.difficulty_score,
+                  avgGpa: course.avg_gpa,
+                  primaryInstructorRmp: course.primary_instructor_rmp,
+                },
+              }}
             />
           </Stack>
         </Grid.Col>
@@ -115,6 +148,7 @@ export function CoursePage() {
                   <SectionsTable
                     sections={course.sections || []}
                     instructorLinks={course.instructor_links}
+                    courseExplorerUrl={course.course_explorer_url}
                   />
                 </ScrollArea>
               </Paper>

@@ -3,6 +3,7 @@ import { Alert, Container, Title, TextInput, Button, Group, Badge, Paper, Text, 
 import { IconAlertCircle, IconSearch } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
+import { FeedbackButton } from '../components/FeedbackButton'
 import type { CourseDto, Hint, MatchEvidence, SearchMetaDto } from '@uiuc-course-search/query-types'
 import { getLetterGrade } from '../utils/grading'
 import { DIFFICULTY } from '../config/constants'
@@ -220,6 +221,23 @@ export function SearchPage() {
             Extraction: {meta.timing.extraction_ms}ms | Search: {meta.timing.search_ms}ms | Total: {meta.timing.total_ms}ms
           </Text>
         </Paper>
+      )}
+
+      {meta && (
+        <Box mb="md">
+          <FeedbackButton
+            buttonLabel="Results not right?"
+            page="search"
+            kind="search_results"
+            issue="expected_different_results"
+            context={{
+              query: meta.query.raw,
+              metadata: {
+                resultCount: results.length,
+              },
+            }}
+          />
+        </Box>
       )}
 
       <Box aria-busy={loading}>

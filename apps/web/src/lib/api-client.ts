@@ -1,4 +1,4 @@
-import type { CourseDto, SearchResponseDto } from '@uiuc-course-search/query-types'
+import type { CourseDto, FeedbackResponseDto, FeedbackSubmitDto, SearchResponseDto } from '@uiuc-course-search/query-types'
 
 // Allow base URL configuration via env var
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL ||
@@ -50,6 +50,15 @@ export class ApiClient {
     const queryString = params.toString() ? `?${params.toString()}` : ''
 
     return this.fetch<CourseDto>(`api/course/${subject}/${number}${queryString}`, { signal })
+  }
+
+  async submitFeedback(feedback: FeedbackSubmitDto, signal?: AbortSignal): Promise<FeedbackResponseDto> {
+    return this.fetch<FeedbackResponseDto>('api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(feedback),
+      signal,
+    })
   }
 }
 

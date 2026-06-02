@@ -81,7 +81,7 @@ export function Scorecard({
           {hasAvgGpa && (
             <Badge variant="light" color="blue" tt="none">
               Avg GPA {avgGpa.toFixed(2)}
-              {typeof gpaSampleSize === 'number' ? ` n=${gpaSampleSize}` : ''}
+              {typeof gpaSampleSize === 'number' ? ` from ${gpaSampleSize.toLocaleString()} records` : ''}
             </Badge>
           )}
         </Group>

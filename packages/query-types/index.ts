@@ -147,6 +147,8 @@ export type InstructorLinkDto = {
   rmp_rating: number | null;
   rmp_difficulty: number | null;
   rmp_id: string | null;
+  rmp_url?: string | null;
+  rmp_search_url?: string | null;
   avg_gpa: number | null;
   gpa_sample_size: number | null;
   num_ratings: number | null;
@@ -165,6 +167,7 @@ export type CourseSectionDto = {
   instructorRmp: number | null;
   instructorGpa: number | null;
   instructorStats: InstructorLinkDto[];
+  course_explorer_url?: string;
 };
 
 export type MatchEvidenceKind =
@@ -226,6 +229,7 @@ export type CourseDto = {
   quality_score: number | null;
   difficulty_score: number | null;
   instructor_links: Record<string, InstructorLinkDto>;
+  course_explorer_url?: string;
   sections?: CourseSectionDto[];
   _score?: number;
   _semanticRank?: number;
@@ -277,3 +281,128 @@ export type SearchResponseDto = {
     offset: number;
   };
 };
+
+export type SearchChipSource = 'natural_language' | 'advanced_control' | 'ambiguity' | 'manual_override';
+
+export type SearchChipDto = {
+  id: string;
+  type: HintType | 'semantic' | 'score' | 'unknown';
+  label: string;
+  value: string;
+  source: SearchChipSource;
+  removable: boolean;
+  editable: boolean;
+  filter?: Partial<SearchFilters>;
+};
+
+export type SearchAmbiguityActionDto = {
+  id: string;
+  term: string;
+  label: string;
+  filter: Partial<SearchFilters>;
+};
+
+export type AdvancedSearchStateDto = {
+  subject?: string;
+  number?: string;
+  instructor?: string;
+  term?: string;
+  year?: number;
+  gened?: string;
+  credits?: number;
+  days?: string;
+  time?: string;
+  online?: boolean;
+  status?: string;
+  difficulty?: 'easy' | 'hard';
+};
+
+export type SearchUiPlanDto = {
+  chips: SearchChipDto[];
+  advanced: AdvancedSearchStateDto;
+  ambiguityActions: SearchAmbiguityActionDto[];
+};
+
+export type FeedbackKind =
+  | 'search_results'
+  | 'course_result'
+  | 'score'
+  | 'external_link'
+  | 'data_freshness'
+  | 'copy_confusion'
+  | 'other';
+
+export type FeedbackIssue =
+  | 'expected_different_results'
+  | 'missing_course'
+  | 'wrong_score'
+  | 'broken_link'
+  | 'stale_data'
+  | 'confusing_copy'
+  | 'other';
+
+export type FeedbackSubmitDto = {
+  kind: FeedbackKind;
+  issue: FeedbackIssue;
+  page: 'search' | 'course';
+  query?: string;
+  courseId?: string;
+  subject?: string;
+  number?: string;
+  term?: string;
+  year?: number;
+  crn?: string;
+  instructorName?: string;
+  scoreField?: 'quality' | 'difficulty' | 'gpa' | 'rmp';
+  expected?: string;
+  message?: string;
+  anonymousSessionId?: string;
+  metadata?: Record<string, string | number | boolean | null>;
+};
+
+export type FeedbackResponseDto = {
+  id: string;
+  status: 'accepted';
+  received_at: number;
+};
+
+export const COURSE_EXPLORER_BASE_URL = 'https://courses.illinois.edu';
+export const RATE_MY_PROFESSORS_BASE_URL = 'https://www.ratemyprofessors.com';
+export const UIUC_RMP_SCHOOL_ID = '1112';
+
+export type CourseExplorerUrlInput = {
+  year: number;
+  term: string;
+  subject: string;
+  number: string;
+};
+
+export function buildCourseExplorerCourseUrl(input: CourseExplorerUrlInput): string {
+  const year = String(input.year);
+  const term = input.term.toLowerCase();
+  const subject = input.subject.toUpperCase();
+  const number = input.number;
+
+  return `${COURSE_EXPLORER_BASE_URL}/schedule/${encodeURIComponent(year)}/${encodeURIComponent(term)}/${encodeURIComponent(subject)}/${encodeURIComponent(number)}`;
+}
+
+export function buildCourseExplorerSectionUrl(input: CourseExplorerUrlInput & { crn: string }): string {
+  return buildCourseExplorerCourseUrl(input);
+}
+
+export function buildRmpProfessorUrl(rmpId: string | null | undefined): string | null {
+  if (!rmpId || !/^[0-9]+$/.test(rmpId)) {
+    return null;
+  }
+
+  return `${RATE_MY_PROFESSORS_BASE_URL}/professor/${encodeURIComponent(rmpId)}`;
+}
+
+export function buildRmpSearchUrl(instructorName: string | null | undefined): string | null {
+  const normalized = instructorName?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return `${RATE_MY_PROFESSORS_BASE_URL}/search/professors/${UIUC_RMP_SCHOOL_ID}?q=${encodeURIComponent(normalized)}`;
+}

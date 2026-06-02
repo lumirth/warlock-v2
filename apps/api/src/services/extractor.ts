@@ -434,13 +434,10 @@ function extractStandaloneEntities(text: string, hints: Hint[]): string {
 
 function extractInstructors(text: string, hints: Hint[]): string {
   let residual = text;
-  // Improved regex to handle apostrophes and hyphens in names
+  const nameToken = String.raw`[A-Za-z][A-Za-z.'-]*`;
+  const nameSequence = String.raw`(${nameToken}(?:\s+${nameToken}){0,3})`;
   const instructorPatterns = [
-    /\bwith\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
-    /\bby\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
-    /\b[Pp]rofessor\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
-    /\b[Pp]rof\.?\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
-    /\b[Dd]r\.?\s+([A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?(?:\s+[A-Z][a-z]*(?:'[A-Z]?[a-z]+)?(?:-[A-Z][a-z]+)?)*)\b/g,
+    new RegExp(String.raw`\b(?:with|by|taught\s+by|instructor|professor|prof\.?|dr\.?)\s+${nameSequence}\b`, 'gi'),
   ];
 
   for (const pattern of instructorPatterns) {
@@ -448,9 +445,14 @@ function extractInstructors(text: string, hints: Hint[]): string {
     const matches: { index: number; length: number }[] = [];
     const patternCopy = new RegExp(pattern.source, pattern.flags);
     while ((match = patternCopy.exec(residual)) !== null) {
+      const instructorName = match[1].trim();
+      if (!looksLikeInstructorName(instructorName)) {
+        continue;
+      }
+
       hints.push({
         type: 'instructor',
-        value: match[1], // Do NOT uppercase name
+        value: instructorName,
         metadata: createMetadata('nlp', match[0], 0.8),
       });
       matches.push({ index: match.index, length: match[0].length });
@@ -460,6 +462,50 @@ function extractInstructors(text: string, hints: Hint[]): string {
     }
   }
   return residual;
+}
+
+const INSTRUCTOR_STOP_WORDS = new Set([
+  'about',
+  'afternoon',
+  'closed',
+  'course',
+  'courses',
+  'credit',
+  'credits',
+  'difficulty',
+  'easy',
+  'evening',
+  'friday',
+  'gen',
+  'gpa',
+  'hard',
+  'monday',
+  'morning',
+  'no',
+  'online',
+  'open',
+  'quality',
+  'rating',
+  'remote',
+  'section',
+  'sections',
+  'thursday',
+  'time',
+  'tuesday',
+  'wednesday',
+]);
+
+function looksLikeInstructorName(value: string): boolean {
+  const tokens = value
+    .split(/\s+/)
+    .map(token => token.toLowerCase().replace(/[^a-z'-]/g, ''))
+    .filter(Boolean);
+
+  if (tokens.length === 0 || tokens.length > 4) {
+    return false;
+  }
+
+  return tokens.every(token => token.length > 1 && !INSTRUCTOR_STOP_WORDS.has(token));
 }
 
 function guessNegationType(word: string): HintType | null {

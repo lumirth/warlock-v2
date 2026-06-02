@@ -248,6 +248,28 @@ CREATE TABLE IF NOT EXISTS term_state (
     updated_at INTEGER DEFAULT (unixepoch())
 );
 
+CREATE TABLE IF NOT EXISTS feedback_events (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    issue TEXT NOT NULL,
+    page TEXT NOT NULL,
+    query TEXT,
+    course_id TEXT,
+    subject TEXT,
+    number TEXT,
+    term TEXT,
+    year INTEGER,
+    crn TEXT,
+    instructor_name TEXT,
+    score_field TEXT,
+    expected TEXT,
+    message TEXT,
+    anonymous_session_id TEXT,
+    metadata TEXT,
+    user_agent TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_courses_subject ON courses(subject);
 CREATE INDEX IF NOT EXISTS idx_courses_term ON courses(year, term);
@@ -263,6 +285,9 @@ CREATE INDEX IF NOT EXISTS idx_links_context ON instructor_course_links(subject,
 CREATE INDEX IF NOT EXISTS idx_links_rmp ON instructor_course_links(rmp_id);
 CREATE INDEX IF NOT EXISTS idx_term_state_status ON term_state(status);
 CREATE INDEX IF NOT EXISTS idx_term_state_year ON term_state(year);
+CREATE INDEX IF NOT EXISTS idx_feedback_events_kind ON feedback_events(kind, issue);
+CREATE INDEX IF NOT EXISTS idx_feedback_events_course ON feedback_events(subject, number, year, term);
+CREATE INDEX IF NOT EXISTS idx_feedback_events_created ON feedback_events(created_at);
 
 CREATE TABLE IF NOT EXISTS gened_aliases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

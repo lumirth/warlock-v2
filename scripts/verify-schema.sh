@@ -46,6 +46,7 @@ for object in \
   instructor_course_links \
   sync_state \
   term_state \
+  feedback_events \
   gened_aliases \
   topic_aliases \
   courses_fts \
@@ -63,6 +64,9 @@ done
 
 expect_column meetings section_id
 expect_column rmp_cache rmp_id
+expect_column feedback_events kind
+expect_column feedback_events issue
+expect_column feedback_events page
 
 schema_version="$(sqlite3 "$DB" "SELECT value FROM app_meta WHERE key = 'schema_version';")"
 if [[ "$schema_version" != "0001_initial_schema" ]]; then

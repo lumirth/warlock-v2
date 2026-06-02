@@ -113,5 +113,32 @@
       "residual": "intro"
     },
     "note": "'sections' is removed; 'intro' remains as a levelBoost in residual"
+  },
+  {
+    "input": "professor fagen",
+    "expected": {
+      "hints": [{ "type": "instructor", "value": "fagen" }],
+      "filters": {},
+      "residual": ""
+    },
+    "note": "Lowercase professor searches should produce an instructor hint"
+  },
+  {
+    "input": "prof fagen-ulmschneider",
+    "expected": {
+      "hints": [{ "type": "instructor", "value": "fagen-ulmschneider" }],
+      "filters": {},
+      "residual": ""
+    },
+    "note": "Shorthand professor searches should support hyphenated names"
+  },
+  {
+    "input": "taught by wade fagen",
+    "expected": {
+      "hints": [{ "type": "instructor", "value": "wade fagen" }],
+      "filters": {},
+      "residual": ""
+    },
+    "note": "Taught-by phrases should support first and last names"
   }
 ]

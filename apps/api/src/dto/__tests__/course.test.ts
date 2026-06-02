@@ -101,6 +101,7 @@ describe('search result DTO evidence', () => {
     expect(dto.primary_instructor_rmp).toBe(4.8);
     expect(dto.quality_score).toBe(91);
     expect(dto.difficulty_score).toBe(22);
+    expect(dto.course_explorer_url).toBe('https://courses.illinois.edu/schedule/2026/spring/CS/225');
   });
 
   it('keeps warning construction narrow and non-secret', () => {
@@ -127,7 +128,22 @@ describe('search result DTO evidence', () => {
       rmp_rating: null,
       rmp_difficulty: null,
       rmp_id: 'fox',
+      rmp_url: null,
+      rmp_search_url: 'https://www.ratemyprofessors.com/search/professors/1112?q=Fox%2C%20E',
       num_ratings: 0,
     });
+  });
+
+  it('surfaces public direct RMP links only for numeric professor IDs', () => {
+    const link = toInstructorLinkDto({
+      instructor_name: 'Fagen-Ulmschneider, W',
+      rmp_rating: 4.9,
+      rmp_difficulty: 3.4,
+      rmp_id: '85515',
+      num_ratings: 120,
+    });
+
+    expect(link.rmp_url).toBe('https://www.ratemyprofessors.com/professor/85515');
+    expect(link.rmp_search_url).toBe('https://www.ratemyprofessors.com/search/professors/1112?q=Fagen-Ulmschneider%2C%20W');
   });
 });

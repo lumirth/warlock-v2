@@ -1,5 +1,6 @@
 import type { Course, Section } from '../db/index.js';
 import type {
+  CourseExplorerUrlInput,
   CourseDto,
   CourseSectionDto,
   Hint,
@@ -11,6 +12,12 @@ import type {
   ResultWarning,
   SearchPlan,
   SectionMatchDto,
+} from '@uiuc-course-search/query-types';
+import {
+  buildCourseExplorerCourseUrl,
+  buildCourseExplorerSectionUrl,
+  buildRmpProfessorUrl,
+  buildRmpSearchUrl,
 } from '@uiuc-course-search/query-types';
 import type { SearchResult } from '../services/search.js';
 
@@ -78,11 +85,15 @@ export type SearchResultEvidenceContext = {
 };
 
 export function toInstructorLinkDto(row: InstructorLinkRow | null | undefined): InstructorLinkDto {
+  const instructorName = row?.instructor_name ?? null;
+
   return {
-    instructor_name: row?.instructor_name ?? null,
+    instructor_name: instructorName,
     rmp_rating: validRmpMetric(row?.rmp_rating, row?.num_ratings),
     rmp_difficulty: validRmpMetric(row?.rmp_difficulty, row?.num_ratings),
     rmp_id: row?.rmp_id ?? null,
+    rmp_url: buildRmpProfessorUrl(row?.rmp_id),
+    rmp_search_url: buildRmpSearchUrl(instructorName),
     avg_gpa: row?.avg_gpa ?? null,
     gpa_sample_size: row?.gpa_sample_size ?? null,
     num_ratings: row?.num_ratings ?? null,
@@ -112,6 +123,7 @@ export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto 
     instructorRmp: validRmpMetric(section.instructor_rmp),
     instructorGpa: section.instructor_gpa ?? null,
     instructorStats: section.instructor_stats ?? [],
+    course_explorer_url: buildSectionCourseExplorerUrl(section),
   };
 }
 
@@ -133,6 +145,7 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     quality_score: course.quality_score ?? null,
     difficulty_score: course.difficulty_score ?? null,
     instructor_links: options.instructorLinks ?? {},
+    course_explorer_url: buildCourseExplorerCourseUrl(course),
     sections: options.sections,
     _score: options.score,
     _semanticRank: options.semanticRank,
@@ -148,6 +161,32 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     warnings: options.warnings,
     section_matches: options.sectionMatches,
   };
+}
+
+function parseCourseId(value: string): CourseExplorerUrlInput | null {
+  const match = /^([A-Z]+)-([0-9]{3})-([0-9]{4})-(winter|spring|summer|fall)$/i.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    subject: match[1],
+    number: match[2],
+    year: parseInt(match[3], 10),
+    term: match[4],
+  };
+}
+
+function buildSectionCourseExplorerUrl(section: SectionWithStats): string | undefined {
+  const courseParts = parseCourseId(section.course_id);
+  if (!courseParts) {
+    return undefined;
+  }
+
+  return buildCourseExplorerSectionUrl({
+    ...courseParts,
+    crn: section.crn,
+  });
 }
 
 function normalizeText(value: string | null | undefined): string {

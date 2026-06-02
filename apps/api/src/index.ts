@@ -6,6 +6,7 @@ import { healthRoutes } from './routes/health.js';
 import { searchRoutes } from './routes/search.js';
 import { syncRoutes } from './routes/sync.js';
 import { courseRoutes } from './routes/course.js';
+import { feedbackRoutes } from './routes/feedback.js';
 import { adminRoutes, debugRoutes } from './routes/debug.js';
 import { getTermsByStatus, upsertTermState } from './db/index.js';
 import { getSubjectsForTerm } from './services/parallel-sync.js';
@@ -69,11 +70,13 @@ app.use('/admin/*', requireBearerToken('ADMIN_TOKEN'));
 app.use('/internal/*', requireBearerToken('INTERNAL_TOKEN'));
 app.use('/api/search', publicRateLimit('SEARCH_RATE_LIMITER', 'search'));
 app.use('/api/course/*', publicRateLimit('COURSE_RATE_LIMITER', 'course'));
+app.use('/api/feedback', publicRateLimit('SEARCH_RATE_LIMITER', 'search'));
 
 app.route('/', healthRoutes);
 app.route('/', searchRoutes);
 app.route('/', syncRoutes);
 app.route('/', courseRoutes);
+app.route('/', feedbackRoutes);
 app.route('/', adminRoutes);
 app.route('/admin/debug', debugRoutes);
 

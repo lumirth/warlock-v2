@@ -65,4 +65,36 @@ describe('ApiClient', () => {
     const client = new ApiClient('https://api.example.test')
     await expect(client.search('cs')).rejects.toThrow('Invalid limit')
   })
+
+  it('submits typed feedback to the public feedback endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'feedback-1', status: 'accepted', received_at: 1780358400 }),
+    } as Response)
+
+    const client = new ApiClient('https://api.example.test')
+    await expect(client.submitFeedback({
+      kind: 'search_results',
+      issue: 'expected_different_results',
+      page: 'search',
+      query: 'professor fagen',
+      expected: 'classes with Wade Fagen-Ulmschneider',
+    })).resolves.toEqual({ id: 'feedback-1', status: 'accepted', received_at: 1780358400 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.test/api/feedback',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'search_results',
+          issue: 'expected_different_results',
+          page: 'search',
+          query: 'professor fagen',
+          expected: 'classes with Wade Fagen-Ulmschneider',
+        }),
+        signal: undefined,
+      }
+    )
+  })
 })

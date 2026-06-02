@@ -1,11 +1,17 @@
 import { Table, Badge, Text, Group, Stack, Anchor } from '@mantine/core'
-import type { CourseSectionDto, InstructorLinkDto } from '@uiuc-course-search/query-types'
+import {
+  buildRmpProfessorUrl,
+  buildRmpSearchUrl,
+  type CourseSectionDto,
+  type InstructorLinkDto,
+} from '@uiuc-course-search/query-types'
 import { formatTime } from '../utils/formatters'
 import { RMP_THRESHOLDS } from '../config/constants'
 
 interface SectionsTableProps {
   sections: CourseSectionDto[]
   instructorLinks?: Record<string, InstructorLinkDto>
+  courseExplorerUrl?: string
 }
 
 function splitInstructorNames(section: CourseSectionDto): string[] {
@@ -27,7 +33,14 @@ function getSectionStats(
     .filter((stat): stat is InstructorLinkDto => Boolean(stat))
 }
 
-export function SectionsTable({ sections, instructorLinks }: SectionsTableProps) {
+function getRmpHref(stat: InstructorLinkDto, fallbackName: string): string | null {
+  return stat.rmp_url
+    ?? buildRmpProfessorUrl(stat.rmp_id)
+    ?? stat.rmp_search_url
+    ?? buildRmpSearchUrl(stat.instructor_name ?? fallbackName)
+}
+
+export function SectionsTable({ sections, instructorLinks, courseExplorerUrl }: SectionsTableProps) {
   if (sections.length === 0) {
     return <Text c="dimmed" fs="italic">No sections found for this term.</Text>
   }
@@ -52,13 +65,15 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
           <Stack gap={4}>
             {sectionStats.map((stat, idx) => (
               <Group key={`${stat.instructor_name ?? 'instructor'}-${idx}`} gap="xs" wrap="nowrap">
-                {stat.rmp_id ? (
+                {getRmpHref(stat, section.instructor.split(';')[idx]?.trim() ?? '') ? (
                   <Anchor
-                    href={`https://www.ratemyprofessors.com/professor/${stat.rmp_id}`}
+                    href={getRmpHref(stat, section.instructor.split(';')[idx]?.trim() ?? '') ?? undefined}
                     target="_blank"
+                    rel="noreferrer"
                     size="sm"
                     fw={500}
                     underline="hover"
+                    title="Open Rate My Professors"
                   >
                     {stat.instructor_name || section.instructor.split(';')[idx]?.trim() || 'Instructor'}
                   </Anchor>
@@ -79,15 +94,18 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
           {section.instructor.split(';').map((name, idx) => {
             const trimmedName = name.trim();
             const linkData = instructorLinks?.[trimmedName];
+            const rmpHref = linkData ? getRmpHref(linkData, trimmedName) : buildRmpSearchUrl(trimmedName);
             return (
               <Group key={idx} gap="xs" wrap="nowrap">
-                {linkData?.rmp_id ? (
+                {rmpHref ? (
                   <Anchor
-                    href={`https://www.ratemyprofessors.com/professor/${linkData.rmp_id}`}
+                    href={rmpHref}
                     target="_blank"
+                    rel="noreferrer"
                     size="sm"
                     fw={500}
                     underline="hover"
+                    title="Open Rate My Professors"
                   >
                     {trimmedName}
                   </Anchor>
@@ -120,7 +138,7 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
               <Stack gap={0}>
                 <Text size="sm" fw={500}>{displayedGpa.toFixed(2)}</Text>
                 {typeof displayedGpaSampleSize === 'number' && (
-                  <Text size="xs" c="dimmed">n={displayedGpaSampleSize}</Text>
+                  <Text size="xs" c="dimmed">{displayedGpaSampleSize.toLocaleString()} records</Text>
                 )}
               </Stack>
             ) : (
@@ -147,6 +165,20 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
               {section.status}
           </Badge>
         </Table.Td>
+        <Table.Td>
+          {(section.course_explorer_url ?? courseExplorerUrl) ? (
+            <Anchor
+              href={section.course_explorer_url ?? courseExplorerUrl}
+              target="_blank"
+              rel="noreferrer"
+              size="sm"
+            >
+              CRN {section.crn}
+            </Anchor>
+          ) : (
+            <Text size="sm">CRN {section.crn}</Text>
+          )}
+        </Table.Td>
       </Table.Tr>
     )
   })
@@ -161,6 +193,7 @@ export function SectionsTable({ sections, instructorLinks }: SectionsTableProps)
           <Table.Th>Time</Table.Th>
           <Table.Th>Location</Table.Th>
           <Table.Th>Status</Table.Th>
+          <Table.Th>Official</Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>{rows}</Table.Tbody>
