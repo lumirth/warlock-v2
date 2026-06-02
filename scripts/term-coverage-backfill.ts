@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { validateD1BackupEvidence, type D1BackupEvidenceArgs } from './lib/d1-backup-evidence.ts';
 import {
   runTermBackfill,
+  type BackfillPageResult,
   type BackfillReport,
   type Term,
   type TermStatus,
@@ -45,6 +46,12 @@ type CoveragePlanTerm = {
 
 type CoveragePlan = {
   terms: CoveragePlanTerm[];
+};
+
+type CoverageProgressReporter = {
+  onTermStart?: (term: CoveragePlanTerm, index: number, total: number) => void;
+  onPage?: (term: CoveragePlanTerm, page: BackfillPageResult) => void;
+  onTermComplete?: (term: CoverageBackfillTermReport, index: number, total: number) => void;
 };
 
 export type CoverageBackfillTermReport = {
@@ -259,6 +266,7 @@ export async function runCoverageBackfill(
     fetcher?: Fetcher;
     coveragePlan?: CoveragePlan;
     validateBackupEvidence?: (args: D1BackupEvidenceArgs) => Promise<void>;
+    progress?: CoverageProgressReporter;
   } = {}
 ): Promise<CoverageBackfillReport> {
   if (!args.coveragePlan && !options.coveragePlan) {
@@ -275,7 +283,9 @@ export async function runCoverageBackfill(
   }
 
   const terms: CoverageBackfillTermReport[] = [];
-  for (const row of selected) {
+  for (let index = 0; index < selected.length; index += 1) {
+    const row = selected[index];
+    options.progress?.onTermStart?.(row, index + 1, selected.length);
     const report = await runTermBackfill({
       year: row.year,
       term: row.term,
@@ -293,8 +303,11 @@ export async function runCoverageBackfill(
       env: options.env,
       fetcher: options.fetcher,
       validateBackupEvidence: async () => {},
+      onPage: page => options.progress?.onPage?.(row, page),
     });
-    terms.push(termReport(row, report));
+    const completedTerm = termReport(row, report);
+    terms.push(completedTerm);
+    options.progress?.onTermComplete?.(completedTerm, index + 1, selected.length);
   }
 
   return {
@@ -366,7 +379,33 @@ function writeReport(output: string, report: CoverageBackfillReport): void {
 async function main(): Promise<void> {
   const args = parseCoverageBackfillArgs(process.argv.slice(2));
   try {
-    const report = await runCoverageBackfill(args);
+    const report = await runCoverageBackfill(args, {
+      progress: {
+        onTermStart: (term, index, total) => {
+          process.stderr.write(`term ${index}/${total} start ${term.term_id} status=${term.expected_status}\n`);
+        },
+        onPage: (term, page) => {
+          const nextOffset = page.hasMore ? page.offset + page.limit : null;
+          process.stderr.write([
+            `term ${term.term_id}`,
+            `offset=${page.offset}`,
+            `subjects=${page.successfulSubjects}`,
+            `failed=${page.failedSubjects}`,
+            `skipped=${page.skippedSubjects}`,
+            `next=${nextOffset ?? 'complete'}`,
+          ].join(' ') + '\n');
+        },
+        onTermComplete: (term, index, total) => {
+          process.stderr.write([
+            `term ${index}/${total} done ${term.term_id}`,
+            `complete=${term.complete ? 'yes' : 'no'}`,
+            `failedSubjects=${term.totals.failedSubjects}`,
+            `skippedSubjects=${term.totals.skippedSubjects}`,
+            `next=${term.next_offset ?? 'complete'}`,
+          ].join(' ') + '\n');
+        },
+      },
+    });
     if (args.output) {
       writeReport(args.output, report);
     }
