@@ -12,7 +12,7 @@ function createDb(): D1Database {
             success: true,
             results: [
               { id: 'course-sync:2026-spring:CS', last_sync: 1, last_status: 'running', items_synced: 0, cursor: 0, etag: null },
-              { id: 'rmp', last_sync: 2, last_status: 'failed', items_synced: 20, cursor: 1, etag: 'cursor' },
+              { id: 'gpa', last_sync: 2, last_status: 'failed', items_synced: 20, cursor: 1, etag: 'cursor' },
             ],
           };
         }
@@ -30,6 +30,20 @@ function createDb(): D1Database {
                 subjects_count: 1,
                 courses_count: 2,
                 sections_count: 3,
+                sync_errors: null,
+                created_at: 1,
+                updated_at: 2,
+              },
+              {
+                term_id: '2026-fall',
+                year: 2026,
+                term: 'fall',
+                status: 'active',
+                last_checked: 1,
+                last_synced: null,
+                subjects_count: null,
+                courses_count: null,
+                sections_count: null,
                 sync_errors: null,
                 created_at: 1,
                 updated_at: 2,
@@ -80,11 +94,30 @@ describe('sync status route', () => {
       termStates: Array<{ term_id: string; status: string }>;
       unhealthySyncStates: Array<{ id: string }>;
       runningSyncStates: Array<{ id: string }>;
+      freshness: {
+        currentTermId: string;
+        currentTermPresent: boolean;
+        activeTermIds: string[];
+        upcomingTermIds: string[];
+        staleTermIds: string[];
+        staleSyncStateIds: string[];
+      };
     };
 
     expect(data.syncStates).toHaveLength(2);
-    expect(data.termStates).toEqual([expect.objectContaining({ term_id: '2026-spring', status: 'active' })]);
-    expect(data.unhealthySyncStates).toEqual([expect.objectContaining({ id: 'rmp' })]);
+    expect(data.termStates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ term_id: '2026-spring', status: 'active' }),
+      expect.objectContaining({ term_id: '2026-fall', status: 'active' }),
+    ]));
+    expect(data.unhealthySyncStates).toEqual([expect.objectContaining({ id: 'gpa' })]);
     expect(data.runningSyncStates).toEqual([expect.objectContaining({ id: 'course-sync:2026-spring:CS' })]);
+    expect(data.freshness).toMatchObject({
+      currentTermId: '2026-spring',
+      currentTermPresent: true,
+      activeTermIds: ['2026-spring', '2026-fall'],
+      upcomingTermIds: ['2026-fall'],
+      staleSyncStateIds: ['gpa'],
+    });
+    expect(data.freshness.staleTermIds).toEqual(expect.arrayContaining(['2026-fall']));
   });
 });

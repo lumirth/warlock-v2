@@ -7,6 +7,7 @@ import { getTermsByStatus, upsertTermState, makeTermId, type SyncState, type Ter
 import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
+import { buildFreshnessSummary } from '../services/freshness.js';
 import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 
@@ -61,6 +62,13 @@ syncRoutes.get('/admin/sync/status', async (c) => {
     termStates: termStates.results,
     unhealthySyncStates: syncStates.results.filter(state => state.last_status === 'failed'),
     runningSyncStates: syncStates.results.filter(state => state.last_status === 'running'),
+    freshness: buildFreshnessSummary({
+      syncStates: syncStates.results,
+      termStates: termStates.results,
+      nowSeconds: Math.floor(Date.now() / 1000),
+      currentYear: parseInt(c.env.CURRENT_YEAR, 10),
+      currentTerm: c.env.CURRENT_TERM,
+    }),
   });
 });
 

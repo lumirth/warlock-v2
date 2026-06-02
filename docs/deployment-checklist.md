@@ -4,7 +4,7 @@ This project is pre-alpha, so deployment should stay small and explicit. Do not 
 
 ## Route Classes
 
-- Public: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`.
+- Public: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`, `/api/feedback`.
 - Admin: `/admin/*`. Requires `Authorization: Bearer $ADMIN_TOKEN`.
 - Internal: `/internal/*`. Requires `Authorization: Bearer $INTERNAL_TOKEN`.
 - Admin diagnostics: `/admin/debug/subjects/:year/:term`. Requires admin auth and must not include arbitrary URL fetch tools or raw database dumps.
@@ -26,6 +26,7 @@ Before a public demo deployment, configure Cloudflare Workers Rate Limiting bind
 - Match `/api/search*` and `/api/course/*`.
 - Start with 120 requests per minute per IP for `/api/search*`.
 - Start with 240 requests per minute per IP for `/api/course/*`.
+- Put `/api/feedback` behind the public search limiter class until a separate feedback limiter exists.
 - Use a lower threshold for repeated 4xx/5xx responses if Cloudflare rules allow it.
 - Leave `/admin/*` and `/internal/*` protected by token auth regardless of WAF settings.
 
@@ -103,5 +104,15 @@ npm run cloudflare:preflight
 ```
 
 The stabilization report must include `Staging API URL`, `Staging Web URL`, `Pages Project: uiuc-course-search-web`, and `Pages Branch: staging` before `npm run cloudflare:preflight` can pass.
+
+## Data Freshness
+
+Before a public demo or semester refresh, inspect:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync/status"
+```
+
+The response must include `freshness.currentTermPresent`, `freshness.activeTermIds`, `freshness.upcomingTermIds`, `freshness.historicalTermCount`, `freshness.staleTermIds`, and `freshness.staleSyncStateIds`. Follow `docs/data-refresh-runbook.md` when any required source is stale.
 
 Cloudflare auth status on 2026-06-01: Wrangler OAuth is authenticated locally; do not commit token cache files or secret values.
