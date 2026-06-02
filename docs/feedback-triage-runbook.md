@@ -20,6 +20,8 @@ npm run feedback:triage -- --input artifacts/feedback-events.json --output artif
 
 The input can be a JSON array, Wrangler D1 JSON with `results`, or NDJSON rows.
 
+The report includes `suggestedFailureClasses` for search-related candidates. These are review hints tied to the eval corpus coverage gate, not automatic promotions.
+
 ## Promotion Standard
 
 Every candidate starts as `needs_review`. Do not paste candidates blindly into `GOLDEN_QUERIES`.
@@ -28,6 +30,7 @@ For `search_eval` candidates:
 
 - Reproduce the reported query locally or on staging.
 - Confirm the expected result or expected filter against Course Explorer data.
+- Confirm or correct `suggestedFailureClasses` so the case strengthens the right corpus class.
 - Add the case to `apps/api/src/eval/golden-queries.ts` or the extractor golden fixture.
 - Run `npm run eval:smoke` and the relevant extractor/search tests.
 

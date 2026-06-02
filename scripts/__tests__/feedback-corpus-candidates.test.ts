@@ -61,6 +61,7 @@ describe('feedback corpus candidates', () => {
       query: 'professor fagen algorithms',
       instructorName: 'Fagen-Ulmschneider, W',
       metadata: { resultCount: 3 },
+      suggestedFailureClasses: ['instructor_name'],
       suggestedGoldQuery: {
         query: 'professor fagen algorithms',
         expected_filter_keys: ['instructor_ids'],
@@ -88,6 +89,7 @@ describe('feedback corpus candidates', () => {
       priority: 'high',
       query: 'CS 225',
       scoreField: 'difficulty',
+      suggestedFailureClasses: ['course_code_navigation', 'score_quality', 'subject_alias'],
     });
     expect(report.candidates[0].suggestedGoldQuery).toBeUndefined();
     expect(report.candidates[0].reviewChecklist.join(' ')).toContain('score inputs');
@@ -107,6 +109,7 @@ describe('feedback corpus candidates', () => {
       id: 'link-1',
       target: 'link_audit',
       query: 'MATH 241',
+      suggestedFailureClasses: ['course_code_navigation', 'subject_alias'],
     });
   });
 
@@ -142,5 +145,9 @@ describe('feedback corpus candidates', () => {
       expected_residual: '',
       category: 'navigational',
     });
+    expect(report.candidates[0].suggestedFailureClasses).toEqual([
+      'course_code_navigation',
+      'subject_alias',
+    ]);
   });
 });
