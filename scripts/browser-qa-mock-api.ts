@@ -78,6 +78,17 @@ const course: CourseDto = {
   warnings: [],
 };
 
+function courseVariant(overrides: Partial<CourseDto>): CourseDto {
+  return {
+    ...course,
+    ...overrides,
+    instructor_links: overrides.instructor_links ?? course.instructor_links,
+    sections: overrides.sections ?? course.sections,
+    match_evidence: overrides.match_evidence ?? course.match_evidence,
+    warnings: overrides.warnings ?? course.warnings,
+  };
+}
+
 function searchUi(query: string): SearchUiPlanDto {
   const lower = query.toLowerCase();
   const chips: SearchUiPlanDto['chips'] = [];
@@ -134,33 +145,128 @@ function searchUi(query: string): SearchUiPlanDto {
     });
   }
 
+  if (lower.includes('intro') && (lower.includes('cs') || lower.includes('comp sci') || lower.includes('computer science'))) {
+    chips.push({
+      id: 'levelBoost-intro',
+      type: 'levelBoost',
+      label: 'Introductory courses',
+      value: '100',
+      source: 'natural_language',
+      removable: true,
+      editable: true,
+      queryPatch: { removeText: 'intro' },
+    });
+    chips.push({
+      id: 'subject-CS',
+      type: 'subject',
+      label: 'Subject CS',
+      value: 'CS',
+      source: 'natural_language',
+      removable: true,
+      editable: true,
+      filter: { subject: 'CS' },
+      queryPatch: { removeText: lower.includes('comp sci') ? 'comp sci' : 'CS' },
+    });
+    advanced.subject = 'CS';
+  }
+
   return { chips, advanced, ambiguityActions };
 }
 
-function searchResponse(query: string): SearchResponseDto {
+function introResults(): CourseDto[] {
+  const firstPage = [
+    courseVariant({
+      id: 'CS-124-2026-spring',
+      number: '124',
+      title: 'Introduction to Computer Science I',
+      description: 'A first programming and computer science course for students beginning the CS sequence.',
+      credit_hours: 3,
+      _score: 0.98,
+      match_evidence: [
+        { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
+        { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
+      ],
+    }),
+    courseVariant({
+      id: 'CS-100-2026-spring',
+      number: '100',
+      title: 'Freshman Orientation',
+      description: 'Orientation to computer science study, department resources, and first-year planning.',
+      credit_hours: 1,
+      _score: 0.92,
+      match_evidence: [
+        { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
+        { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
+      ],
+    }),
+    courseVariant({
+      id: 'CS-101-2026-spring',
+      number: '101',
+      title: 'Introduction to Computing',
+      description: 'Computing concepts and programming for students from a broad range of majors.',
+      credit_hours: 3,
+      _score: 0.88,
+      match_evidence: [
+        { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
+        { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
+      ],
+    }),
+  ];
+
+  return [
+    ...firstPage,
+    ...Array.from({ length: 19 }, (_, index) => courseVariant({
+      id: `CS-${199 - index}-2026-spring`,
+      number: String(199 - index),
+      title: `Introductory CS Topic ${index + 1}`,
+      description: 'Additional introductory CS result used to exercise paginated exploration in Browser QA.',
+      credit_hours: 3,
+      _score: 0.75 - index / 100,
+      match_evidence: [
+        { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
+      ],
+    })),
+  ];
+}
+
+function defaultResults(query: string): CourseDto[] {
+  return query.toLowerCase().includes('empty') ? [] : [
+    course,
+    courseVariant({
+      id: 'CS-173-2026-spring',
+      number: '173',
+      title: 'Discrete Structures',
+      description: 'Discrete mathematical structures frequently encountered in computer science.',
+      credit_hours: 3,
+      gened: null,
+      primary_instructor: null,
+      _score: 0.82,
+      match_evidence: [
+        { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
+        { kind: 'keyword', label: 'Keyword match', source: 'keyword', weight: 'rank', value: '2' },
+      ],
+    }),
+  ];
+}
+
+function searchResponse(query: string, limit: number, offset: number): SearchResponseDto {
+  const lower = query.toLowerCase();
+  const isIntroCs = lower.includes('intro') && (lower.includes('cs') || lower.includes('comp sci') || lower.includes('computer science'));
+  const allResults = isIntroCs ? introResults() : defaultResults(query);
+  const pageResults = allResults.slice(offset, offset + limit);
+  const hasMore = allResults.length > offset + limit;
+
   return {
-    results: query.toLowerCase().includes('empty') ? [] : [
-      course,
-      {
-        ...course,
-        id: 'CS-173-2026-spring',
-        number: '173',
-        title: 'Discrete Structures',
-        description: 'Discrete mathematical structures frequently encountered in computer science.',
-        credit_hours: 3,
-        gened: null,
-        primary_instructor: null,
-        _score: 0.82,
-        match_evidence: [
-          { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
-          { kind: 'keyword', label: 'Keyword match', source: 'keyword', weight: 'rank', value: '2' },
-        ],
-      },
-    ],
+    results: pageResults,
     meta: {
-      query: { raw: query, residual: query.toLowerCase().includes('cs 225') ? '' : query },
+      query: { raw: query, residual: query.toLowerCase().includes('cs 225') || isIntroCs ? '' : query },
       extraction: {
-        hints: query.toLowerCase().includes('cs 225')
+        hints: isIntroCs
+          ? [
+              { type: 'levelBoost', value: 100, metadata: { source: 'regex', confidence: 0.5, raw: 'intro' } },
+              { type: 'subject', value: 'CS', metadata: { source: 'alias', confidence: 0.9, raw: lower.includes('comp sci') ? 'comp sci' : 'CS' } },
+            ]
+          : query.toLowerCase().includes('cs 225')
           ? [{
               type: 'courseCode',
               value: { subject: 'CS', number: '225' },
@@ -169,16 +275,24 @@ function searchResponse(query: string): SearchResponseDto {
           : [],
       },
       plan: {
-        filters: query.toLowerCase().includes('cs 225') ? { subject: 'CS', number: '225' } : {},
-        semanticQuery: query,
-        keywordQuery: query,
+        filters: isIntroCs ? { subject: 'CS' } : query.toLowerCase().includes('cs 225') ? { subject: 'CS', number: '225' } : {},
+        semanticQuery: isIntroCs ? '' : query,
+        keywordQuery: isIntroCs ? '' : query,
+        intents: isIntroCs ? ['introductory_gateway'] : undefined,
+        softPreferences: isIntroCs ? { levelBoost: 100, introductoryIntent: 'gateway' } : undefined,
       },
       timing: { extraction_ms: 2, search_ms: 6, total_ms: 8 },
-      fallback: { tierReached: 1, constraintsRelaxed: [], originalResultCount: 2 },
+      fallback: { tierReached: 1, constraintsRelaxed: [], originalResultCount: allResults.length },
       term: { activeTermId: '2026-spring', registrableTermId: '2026-spring' },
       ui: searchUi(query),
     },
-    pagination: { total: query.toLowerCase().includes('empty') ? 0 : 2, limit: 20, offset: 0 },
+    pagination: {
+      total: allResults.length,
+      limit,
+      offset,
+      hasMore,
+      nextOffset: hasMore ? offset + limit : null,
+    },
   };
 }
 
@@ -194,7 +308,7 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
 
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? `localhost:${PORT}`}`);
-  console.log(`[mock-api] ${request.method ?? 'GET'} ${url.pathname} q=${JSON.stringify(url.searchParams.get('q') ?? '').slice(0, 80)}`);
+  console.log(`[mock-api] ${request.method ?? 'GET'} ${url.pathname} q=${JSON.stringify(url.searchParams.get('q') ?? '').slice(0, 80)} limit=${url.searchParams.get('limit') ?? ''} offset=${url.searchParams.get('offset') ?? ''}`);
 
   if (request.method === 'OPTIONS') {
     response.writeHead(204, {
@@ -213,11 +327,13 @@ const server = createServer((request, response) => {
 
   if (url.pathname === '/api/search') {
     const query = url.searchParams.get('q') ?? '';
+    const limit = Number.parseInt(url.searchParams.get('limit') ?? '20', 10);
+    const offset = Number.parseInt(url.searchParams.get('offset') ?? '0', 10);
     if (query.toLowerCase().includes('error')) {
       sendJson(response, 500, { error: 'Mock API error for Browser QA' });
       return;
     }
-    sendJson(response, 200, searchResponse(query));
+    sendJson(response, 200, searchResponse(query, Number.isFinite(limit) ? limit : 20, Number.isFinite(offset) ? offset : 0));
     return;
   }
 
