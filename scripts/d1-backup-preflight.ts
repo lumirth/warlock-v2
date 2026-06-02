@@ -1,4 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+
+import { hasTimestampBackupRef, validateD1BackupEvidence } from './lib/d1-backup-evidence.ts';
 
 type Args = {
   database?: string;
@@ -48,15 +50,6 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-function labelValue(text: string, label: string): string | null {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^\\s*${escaped}\\s*:\\s*(.+)$`, 'im').exec(text)?.[1]?.trim() ?? null;
-}
-
-function hasTimestampBackupRef(value: string | undefined): boolean {
-  return Boolean(value) && /^[0-9]{8}T[0-9]{6}Z$/i.test(value!);
-}
-
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const missing = [
@@ -75,30 +68,13 @@ async function main(): Promise<void> {
     throw new Error(`Backup ref must use YYYYMMDDTHHMMSSZ format: ${args.backupRef}`);
   }
 
-  const evidence = await readFile(args.evidenceFile!, 'utf8');
-  const backupRef = labelValue(evidence, 'D1 Backup Ref');
-  const backupMechanism = labelValue(evidence, 'D1 Backup Mechanism');
-  const backupLocation = labelValue(evidence, 'D1 Backup Location') ?? labelValue(evidence, 'D1 Backup Path');
-  const restoreDatabase = labelValue(evidence, 'D1 Restore Database');
-  const restoreVerified = labelValue(evidence, 'D1 Restore Verified');
-  const usesTimeTravel = backupMechanism?.toLowerCase().includes('time travel') ?? false;
-  const expectedRestoreDatabase = usesTimeTravel ? args.database! : `${args.database}-restore-${args.backupRef}`;
-  const missingEvidence = [
-    !evidence.includes(args.database!) && args.database,
-    backupRef !== args.backupRef && `D1 Backup Ref: ${args.backupRef}`,
-    (!backupLocation || !backupLocation.includes(args.backupRef!)) && `D1 Backup Location containing ${args.backupRef}`,
-    restoreDatabase !== expectedRestoreDatabase && `D1 Restore Database: ${expectedRestoreDatabase}`,
-    restoreVerified?.toLowerCase() !== 'yes' && 'D1 Restore Verified: yes',
-  ].filter(Boolean);
-
-  if (missingEvidence.length > 0) {
-    throw new Error(`Evidence file does not mention required backup markers: ${missingEvidence.join(', ')}`);
-  }
-
+  await validateD1BackupEvidence(args);
   console.log(`D1 backup preflight passed for ${args.database} using backup ${args.backupRef}.`);
 }
 
-main().catch(error => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

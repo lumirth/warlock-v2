@@ -69,19 +69,35 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admi
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-active"
 ```
 
-3. If GPA is stale, reset or resume GPA sync:
+3. If a current, upcoming, or historical term needs a complete subject-by-subject backfill, use the paginated backfill runner after creating and restore-verifying a D1 Time Travel backup:
+
+```bash
+npm run data:backfill:term -- \
+  --year 2025 \
+  --term fall \
+  --status historical \
+  --page-size 5 \
+  --backup-ref "$BACKUP_REF" \
+  --evidence-file artifacts/d1-backups/$BACKUP_REF-pre-backfill/evidence.md \
+  --restore-verified \
+  --output artifacts/backfill/2025-fall-$BACKUP_REF.json
+```
+
+Use `--max-pages 1` for a bounded smoke page or `--start-offset <n>` to resume from the report's `Next offset`. The runner refuses non-dry-run remote writes unless the backup evidence contains `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified: yes`.
+
+4. If GPA is stale, reset or resume GPA sync:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-gpa"
 ```
 
-4. If RMP is stale and `RMP_AUTH_TOKEN` is configured, dispatch RMP sync:
+5. If RMP is stale and `RMP_AUTH_TOKEN` is configured, dispatch RMP sync:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-rmp"
 ```
 
-5. After GPA or rating updates, run enrichment:
+6. After GPA or rating updates, run enrichment:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/enrich-scoring"

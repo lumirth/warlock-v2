@@ -27,6 +27,7 @@
     "eval:smoke": "tsx scripts/eval-smoke.ts",
     "feedback:triage": "tsx scripts/feedback-corpus-candidates.ts",
     "data:freshness:audit": "tsx scripts/data-freshness-audit.ts",
+    "data:backfill:term": "tsx scripts/term-backfill.ts",
     "eval:staging": "if [ -z \"$EVAL_BASE_URL\" ]; then echo \"EVAL_BASE_URL is required, for example https://api-staging.example.workers.dev\" >&2; exit 1; fi; npm run eval -w @uiuc-course-search/api -- \"$EVAL_BASE_URL\"",
     "test:staging": "tsx scripts/staging-smoke.ts",
     "qa:mock-api": "tsx scripts/browser-qa-mock-api.ts",
