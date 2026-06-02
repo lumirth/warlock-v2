@@ -36,7 +36,23 @@ describe('Search Routes', () => {
   it('GET /api/search should use SearchPipeline', async () => {
     const mockResults = [
       {
-        course: { id: 'CS-225', subject: 'CS', number: '225', title: 'Data Structures' },
+        course: {
+          id: 'CS-225-2026-spring',
+          subject: 'CS',
+          number: '225',
+          title: 'Data Structures',
+          description: null,
+          credit_hours: 4,
+          gened: null,
+          year: 2026,
+          term: 'spring',
+          avg_gpa: null,
+          gpa_sample_size: null,
+          primary_instructor: null,
+          primary_instructor_rmp: null,
+          quality_score: null,
+          difficulty_score: null,
+        },
         score: 0.9,
         semanticRank: 1,
         keywordRank: 1,
@@ -78,7 +94,12 @@ describe('Search Routes', () => {
     expect(res.status).toBe(200);
     const data = await res.json() as SearchResponseDto;
     expect(data.results).toBeDefined();
-    expect(data.results[0].id).toBe('CS-225');
+    expect(data.results[0].id).toBe('CS-225-2026-spring');
+    expect(data.meta.ui).toEqual({
+      chips: [],
+      advanced: {},
+      ambiguityActions: [],
+    });
     expect(searchSpy).toHaveBeenCalledWith('CS 225', 20, {}, expect.any(Function));
   });
 

@@ -108,10 +108,10 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('first')
-    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
 
     setQuery('second')
-    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
 
     await act(async () => {
       first.reject(abortError())
@@ -119,7 +119,7 @@ describe('SearchPage request state', () => {
     })
 
     setQuery('third')
-    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
 
     expect(secondSignal?.aborted).toBe(true)
   })
@@ -136,11 +136,11 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('cs 225')
-    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
     await screen.findByText(/CS 225: Data Structures/i)
 
     setQuery('broken')
-    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(/Search failed/i)
@@ -167,7 +167,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('cs 225')
-    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
 
     await screen.findByText(/CS 225: Data Structures/i)
     expect(screen.getByText('Course CS 225')).toBeInTheDocument()
@@ -191,13 +191,86 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('cs 225')
-    fireEvent.click(screen.getByRole('button', { name: /search/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
 
     await screen.findByText(/CS 225: Data Structures/i)
-    expect(screen.getByText('Quality B+ (88)')).toBeInTheDocument()
-    expect(screen.getByText('Difficulty Easy')).toBeInTheDocument()
-    expect(screen.getByText('Rating 4.8')).toBeInTheDocument()
-    expect(screen.getByText('GPA 3.62')).toBeInTheDocument()
-    expect(screen.getByTitle('GPA sample size 820')).toBeInTheDocument()
+    expect(screen.getByText('Quality B+')).toBeInTheDocument()
+    expect(screen.getByText('Easy workload')).toBeInTheDocument()
+    expect(screen.getByText('Instructor rating 4.8')).toBeInTheDocument()
+    expect(screen.getByText('Avg GPA 3.62')).toBeInTheDocument()
+    expect(screen.getByTitle('Based on 820 GPA records')).toBeInTheDocument()
+  })
+
+  it('lets users remove interpreted search chips and reruns the edited query', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'professor fagen algorithms', residual: 'algorithms' },
+          ui: {
+            chips: [{
+              id: 'instructor-0',
+              type: 'instructor',
+              label: 'Instructor fagen',
+              value: 'fagen',
+              source: 'natural_language',
+              removable: true,
+              editable: true,
+              queryPatch: { removeText: 'professor fagen' },
+            }],
+            advanced: { instructor: 'fagen' },
+            ambiguityActions: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce(searchResponse([]))
+
+    renderSearchPage()
+
+    setQuery('professor fagen algorithms')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+
+    await screen.findByText('Instructor fagen')
+    fireEvent.click(screen.getByRole('button', { name: /remove instructor fagen/i }))
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith('algorithms', expect.any(AbortSignal))
+    })
+  })
+
+  it('renders ambiguity alternatives as actionable searches', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'CS gened', residual: '' },
+          ui: {
+            chips: [],
+            advanced: { subject: 'CS' },
+            ambiguityActions: [{
+              id: '0-0-gened-CS',
+              term: 'CS',
+              label: 'Cultural Studies',
+              filter: { gened_code: 'CS' },
+              queryPatch: { replaceQuery: 'gened:CS' },
+            }],
+          },
+        },
+      })
+      .mockResolvedValueOnce(searchResponse([]))
+
+    renderSearchPage()
+
+    setQuery('CS gened')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+
+    await screen.findByRole('button', { name: /use cultural studies/i })
+    fireEvent.click(screen.getByRole('button', { name: /use cultural studies/i }))
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith('gened:CS', expect.any(AbortSignal))
+    })
   })
 })

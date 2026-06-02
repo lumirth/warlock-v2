@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest';
+import type { Hint, SearchPlan } from '@uiuc-course-search/query-types';
+import { buildSearchUiPlan } from '../search-ui.js';
+
+describe('buildSearchUiPlan', () => {
+  it('turns extraction hints and residual text into public chips', () => {
+    const hints: Hint[] = [
+      {
+        type: 'courseCode',
+        value: { subject: 'CS', number: '225' },
+        metadata: { source: 'regex', confidence: 0.95, raw: 'CS 225' },
+      },
+      {
+        type: 'instructor',
+        value: 'fagen',
+        metadata: { source: 'nlp', confidence: 0.8, raw: 'professor fagen' },
+      },
+      {
+        type: 'difficulty',
+        value: 'hard',
+        metadata: { source: 'alias', confidence: 0.9, raw: 'hard' },
+      },
+    ];
+
+    const plan = buildSearchUiPlan(hints, {
+      filters: {
+        subject: 'CS',
+        number: '225',
+        difficulty: 'hard',
+        instructor_ids: [1],
+      },
+      keywordQuery: 'systems',
+      semanticQuery: 'systems',
+    }, 'systems');
+
+    expect(plan.chips.map(chip => chip.label)).toEqual([
+      'Course CS 225',
+      'Instructor fagen',
+      'Hard workload',
+      'Topic: systems',
+    ]);
+    expect(plan.chips[0].queryPatch?.removeText).toBe('CS 225');
+    expect(plan.advanced).toMatchObject({
+      subject: 'CS',
+      number: '225',
+      instructor: 'fagen',
+      difficulty: 'hard',
+    });
+  });
+
+  it('exposes ambiguity alternatives as clickable query actions', () => {
+    const plan: SearchPlan = {
+      filters: { subject: 'CS' },
+      keywordQuery: '',
+      semanticQuery: '',
+      ambiguities: [{
+        term: 'CS',
+        chosen: { type: 'subject', value: 'CS', label: 'Computer Science' },
+        alternatives: [{ type: 'gened', value: 'CS', label: 'Cultural Studies' }],
+      }],
+    };
+
+    expect(buildSearchUiPlan([], plan, '').ambiguityActions).toEqual([{
+      id: '0-0-gened-CS',
+      term: 'CS',
+      label: 'Cultural Studies',
+      filter: { gened_code: 'CS' },
+      queryPatch: { replaceQuery: 'gened:CS' },
+    }]);
+  });
+});

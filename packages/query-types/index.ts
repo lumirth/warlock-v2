@@ -270,6 +270,7 @@ export type SearchMetaDto = {
     activeTermId: string | null;
     registrableTermId: string | null;
   };
+  ui?: SearchUiPlanDto;
 };
 
 export type SearchResponseDto = {
@@ -293,6 +294,11 @@ export type SearchChipDto = {
   removable: boolean;
   editable: boolean;
   filter?: Partial<SearchFilters>;
+  queryPatch?: {
+    removeText?: string;
+    appendText?: string;
+    replaceQuery?: string;
+  };
 };
 
 export type SearchAmbiguityActionDto = {
@@ -300,6 +306,10 @@ export type SearchAmbiguityActionDto = {
   term: string;
   label: string;
   filter: Partial<SearchFilters>;
+  queryPatch?: {
+    appendText?: string;
+    replaceQuery?: string;
+  };
 };
 
 export type AdvancedSearchStateDto = {

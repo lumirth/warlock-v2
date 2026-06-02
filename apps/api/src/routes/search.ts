@@ -3,6 +3,7 @@ import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { SearchPipeline } from '../services/search-pipeline.js';
 import type { SearchFilters, SearchResponseDto } from '@uiuc-course-search/query-types';
 import { searchResultToCourseDto } from '../dto/course.js';
+import { buildSearchUiPlan } from '../dto/search-ui.js';
 import { parseBoundedIntParam, parseSubjectParam } from '../http/params.js';
 import { getSearchTermSummary } from '../services/term-state.js';
 import { errorFields, logger } from '../observability/logger.js';
@@ -75,6 +76,11 @@ searchRoutes.get('/api/search', async (c) => {
         ...result.meta,
         ambiguities: result.meta.plan.ambiguities,
         term: await getSearchTermSummary(c.env.DB),
+        ui: buildSearchUiPlan(
+          result.meta.extraction.hints,
+          result.meta.plan,
+          result.meta.query.residual
+        ),
       },
       pagination: {
         total: result.results.length,

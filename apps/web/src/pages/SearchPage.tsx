@@ -1,40 +1,12 @@
 import { useState, useRef } from 'react'
-import { Alert, Container, Title, TextInput, Button, Group, Badge, Paper, Text, Stack, Card, Flex, Loader, Box } from '@mantine/core'
-import { IconAlertCircle, IconSearch } from '@tabler/icons-react'
+import { ActionIcon, Alert, Box, Button, Card, Collapse, Container, Flex, Group, Loader, Paper, Select, SimpleGrid, Stack, Text, TextInput, Title, Badge } from '@mantine/core'
+import { IconAdjustments, IconAlertCircle, IconSearch, IconX } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
 import { FeedbackButton } from '../components/FeedbackButton'
-import type { CourseDto, Hint, MatchEvidence, SearchMetaDto } from '@uiuc-course-search/query-types'
+import type { AdvancedSearchStateDto, CourseDto, MatchEvidence, SearchAmbiguityActionDto, SearchChipDto, SearchMetaDto } from '@uiuc-course-search/query-types'
 import { getLetterGrade } from '../utils/grading'
 import { DIFFICULTY } from '../config/constants'
-
-function formatHintValue(value: Hint['value']): string {
-  if (typeof value === 'object' && value !== null) {
-    if ('subject' in value && 'number' in value) {
-      return `${value.subject} ${value.number}`
-    }
-    return JSON.stringify(value)
-  }
-  return String(value)
-}
-
-function getHintColor(type: string): string {
-  const colors: Record<string, string> = {
-    courseCode: 'blue',
-    subject: 'violet',
-    instructor: 'teal',
-    gened: 'yellow',
-    days: 'red',
-    time: 'pink',
-    level: 'indigo',
-    credits: 'cyan',
-    difficulty: 'orange',
-    online: 'cyan',
-    status: 'lime',
-    crn: 'grape',
-  }
-  return colors[type] || 'gray'
-}
 
 function getEvidenceColor(evidence: MatchEvidence): string {
   if (evidence.weight === 'hard') return 'blue'
@@ -73,17 +45,17 @@ function renderScoreBadges(course: CourseDto) {
     <Group gap={4} mt={6}>
       {hasQuality && (
         <Badge size="xs" variant="light" color="blue" tt="none">
-          Quality {getLetterGrade(qualityScore)} ({qualityScore.toFixed(0)})
+          Quality {getLetterGrade(qualityScore)}
         </Badge>
       )}
       {hasDifficulty && (
         <Badge size="xs" variant="light" color={getDifficultyColor(difficultyScore)} tt="none">
-          Difficulty {getDifficultyLabel(difficultyScore)}
+          {getDifficultyLabel(difficultyScore)} workload
         </Badge>
       )}
       {hasRating && (
         <Badge size="xs" variant="light" color={primaryInstructorRmp >= 3.5 ? 'teal' : 'orange'} tt="none">
-          Rating {primaryInstructorRmp.toFixed(1)}
+          Instructor rating {primaryInstructorRmp.toFixed(1)}
         </Badge>
       )}
       {hasGpa && (
@@ -92,13 +64,57 @@ function renderScoreBadges(course: CourseDto) {
           variant="light"
           color="cyan"
           tt="none"
-          title={typeof course.gpa_sample_size === 'number' ? `GPA sample size ${course.gpa_sample_size}` : undefined}
+          title={typeof course.gpa_sample_size === 'number' ? `Based on ${course.gpa_sample_size.toLocaleString()} GPA records` : undefined}
         >
-          GPA {avgGpa.toFixed(2)}
+          Avg GPA {avgGpa.toFixed(2)}
         </Badge>
       )}
     </Group>
   )
+}
+
+function removeTextFromQuery(source: string, textToRemove: string): string {
+  const normalizedSource = source.trim()
+  const normalizedRemove = textToRemove.trim()
+  const index = normalizedSource.toLowerCase().indexOf(normalizedRemove.toLowerCase())
+
+  if (index < 0) {
+    return normalizedSource
+  }
+
+  return `${normalizedSource.slice(0, index)} ${normalizedSource.slice(index + normalizedRemove.length)}`
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function buildAdvancedQuery(state: AdvancedSearchStateDto, fallbackQuery: string): string {
+  const tokens: string[] = []
+
+  if (state.subject && state.number) {
+    tokens.push(`${state.subject.toUpperCase()} ${state.number}`)
+  } else if (state.subject) {
+    tokens.push(`subject:${state.subject.toUpperCase()}`)
+  }
+  if (state.instructor) tokens.push(`professor ${state.instructor}`)
+  if (state.gened) tokens.push(`gened:${state.gened.toUpperCase()}`)
+  if (state.term && state.year) tokens.push(`${state.term.toLowerCase()} ${state.year}`)
+  if (state.credits) tokens.push(`${state.credits} credits`)
+  if (state.days) tokens.push(state.days.toUpperCase())
+  if (state.time) tokens.push(state.time.toLowerCase())
+  if (state.online !== undefined) tokens.push(state.online ? 'online' : 'in person')
+  if (state.status) tokens.push(state.status.toLowerCase())
+  if (state.difficulty) tokens.push(state.difficulty)
+
+  return tokens.join(' ').trim() || fallbackQuery.trim()
+}
+
+function getChipColor(chip: SearchChipDto): string {
+  if (chip.type === 'semantic') return 'gray'
+  if (chip.type === 'instructor') return 'teal'
+  if (chip.type === 'gened') return 'yellow'
+  if (chip.type === 'difficulty') return 'orange'
+  if (chip.type === 'courseCode' || chip.type === 'subject') return 'blue'
+  return 'indigo'
 }
 
 export function SearchPage() {
@@ -107,12 +123,15 @@ export function SearchPage() {
   const [meta, setMeta] = useState<SearchMetaDto | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [advancedDraft, setAdvancedDraft] = useState<AdvancedSearchStateDto>({})
 
   // Ref to hold the current AbortController
   const searchController = useRef<AbortController | null>(null)
 
-  const handleSearch = async () => {
-    if (!query.trim()) return
+  const runSearch = async (searchText: string) => {
+    const normalizedQuery = searchText.trim()
+    if (!normalizedQuery) return
 
     // Cancel previous request if it exists
     if (searchController.current) {
@@ -122,15 +141,17 @@ export function SearchPage() {
     const controller = new AbortController()
     searchController.current = controller
 
+    setQuery(normalizedQuery)
     setLoading(true)
     setMeta(null)
     setResults([])
     setError(null)
 
     try {
-      const data = await api.search(query, controller.signal)
+      const data = await api.search(normalizedQuery, controller.signal)
       setResults(data.results || [])
       setMeta(data.meta || null)
+      setAdvancedDraft(data.meta?.ui?.advanced || {})
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
       setError(err instanceof Error ? err.message : 'An unknown error occurred')
@@ -141,6 +162,28 @@ export function SearchPage() {
         searchController.current = null
       }
     }
+  }
+
+  const handleSearch = () => {
+    void runSearch(query)
+  }
+
+  const removeChip = (chip: SearchChipDto) => {
+    const removeText = chip.queryPatch?.removeText || chip.value
+    const nextQuery = removeTextFromQuery(query, removeText)
+    setQuery(nextQuery)
+    if (nextQuery) {
+      void runSearch(nextQuery)
+    }
+  }
+
+  const applyAmbiguityAction = (action: SearchAmbiguityActionDto) => {
+    const nextQuery = action.queryPatch?.replaceQuery || action.queryPatch?.appendText || action.label
+    void runSearch(nextQuery)
+  }
+
+  const applyAdvancedSearch = () => {
+    void runSearch(buildAdvancedQuery(advancedDraft, meta?.query.residual || query))
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -177,49 +220,171 @@ export function SearchPage() {
         </Alert>
       )}
 
-      {/* Show extraction results after search */}
       {meta && (
         <Paper p="sm" withBorder bg="gray.0" mb="md">
-          {/* Hint chips */}
-          {meta.extraction.hints.length > 0 && (
-            <Group gap="xs" mb="xs">
-              {meta.extraction.hints.map((hint, i) => (
+          <Group justify="space-between" align="center" mb="xs">
+            <Text size="sm" fw={600}>Search filters</Text>
+            <Button
+              size="xs"
+              variant="subtle"
+              leftSection={<IconAdjustments size={14} />}
+              onClick={() => setAdvancedOpen((value) => !value)}
+            >
+              Advanced search
+            </Button>
+          </Group>
+
+          {meta.ui?.chips.length ? (
+            <Group gap="xs">
+              {meta.ui.chips.map((chip) => (
                 <Badge
-                  key={`${hint.type}-${i}`}
-                  color={getHintColor(hint.type)}
-                  title={`Source: ${hint.metadata.source}, Confidence: ${typeof hint.metadata.confidence === 'number' ? (hint.metadata.confidence * 100).toFixed(0) : '?' }%`}
+                  key={chip.id}
+                  color={getChipColor(chip)}
+                  variant={chip.type === 'semantic' ? 'outline' : 'light'}
+                  tt="none"
+                  rightSection={chip.removable ? (
+                    <ActionIcon
+                      aria-label={`Remove ${chip.label}`}
+                      size="xs"
+                      variant="transparent"
+                      color="gray"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        removeChip(chip)
+                      }}
+                    >
+                      <IconX size={10} />
+                    </ActionIcon>
+                  ) : undefined}
                 >
-                  {hint.type}: {formatHintValue(hint.value)}
+                  {chip.label}
                 </Badge>
               ))}
             </Group>
+          ) : (
+            <Text size="sm" c="dimmed">Searching by topic.</Text>
           )}
 
-          {/* Residual query */}
-          {meta.query.residual && (
-            <Text size="xs" c="dimmed">
-              Semantic search: "{meta.query.residual}"
-            </Text>
-          )}
-
-          {/* Ambiguities */}
-          {meta.ambiguities && meta.ambiguities.length > 0 && (
-            <Stack gap="xs" mt="xs">
-              {meta.ambiguities.map((amb, i) => (
-                <Text key={i} size="xs" c="dimmed">
-                  "{amb.term}" interpreted as <strong>{amb.chosen.label}</strong>
-                  {amb.alternatives.length > 0 && (
-                    <span> (could also be: {amb.alternatives.map(a => a.label).join(', ')})</span>
-                  )}
-                </Text>
-              ))}
+          {meta.ui?.ambiguityActions.length ? (
+            <Stack gap={4} mt="sm">
+              <Text size="xs" c="dimmed">Another interpretation is available:</Text>
+              <Group gap="xs">
+                {meta.ui.ambiguityActions.map((action) => (
+                  <Button
+                    key={action.id}
+                    size="xs"
+                    variant="light"
+                    onClick={() => applyAmbiguityAction(action)}
+                  >
+                    Use {action.label}
+                  </Button>
+                ))}
+              </Group>
             </Stack>
-          )}
+          ) : null}
 
-          {/* Timing */}
-          <Text size="xs" c="dimmed" mt="xs">
-            Extraction: {meta.timing.extraction_ms}ms | Search: {meta.timing.search_ms}ms | Total: {meta.timing.total_ms}ms
-          </Text>
+          <Collapse in={advancedOpen}>
+            <Paper mt="sm" p="sm" withBorder bg="white">
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xs">
+                <TextInput
+                  label="Subject"
+                  placeholder="CS"
+                  value={advancedDraft.subject ?? ''}
+                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, subject: event.currentTarget.value || undefined }))}
+                />
+                <TextInput
+                  label="Course number"
+                  placeholder="225"
+                  value={advancedDraft.number ?? ''}
+                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, number: event.currentTarget.value || undefined }))}
+                />
+                <TextInput
+                  label="Instructor"
+                  placeholder="Fagen"
+                  value={advancedDraft.instructor ?? ''}
+                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, instructor: event.currentTarget.value || undefined }))}
+                />
+                <TextInput
+                  label="GenEd"
+                  placeholder="HUM"
+                  value={advancedDraft.gened ?? ''}
+                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, gened: event.currentTarget.value || undefined }))}
+                />
+                <TextInput
+                  label="Term"
+                  placeholder="spring"
+                  value={advancedDraft.term ?? ''}
+                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, term: event.currentTarget.value || undefined }))}
+                />
+                <TextInput
+                  label="Year"
+                  placeholder="2026"
+                  value={advancedDraft.year?.toString() ?? ''}
+                  onChange={(event) => {
+                    const year = parseInt(event.currentTarget.value, 10)
+                    setAdvancedDraft((state) => ({ ...state, year: Number.isNaN(year) ? undefined : year }))
+                  }}
+                />
+                <TextInput
+                  label="Credits"
+                  placeholder="3"
+                  value={advancedDraft.credits?.toString() ?? ''}
+                  onChange={(event) => {
+                    const credits = parseInt(event.currentTarget.value, 10)
+                    setAdvancedDraft((state) => ({ ...state, credits: Number.isNaN(credits) ? undefined : credits }))
+                  }}
+                />
+                <TextInput
+                  label="Days"
+                  placeholder="MWF"
+                  value={advancedDraft.days ?? ''}
+                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, days: event.currentTarget.value || undefined }))}
+                />
+                <TextInput
+                  label="Time"
+                  placeholder="morning"
+                  value={advancedDraft.time ?? ''}
+                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, time: event.currentTarget.value || undefined }))}
+                />
+                <Select
+                  label="Delivery"
+                  placeholder="Any"
+                  value={advancedDraft.online === undefined ? null : String(advancedDraft.online)}
+                  data={[
+                    { value: 'true', label: 'Online' },
+                    { value: 'false', label: 'In person' },
+                  ]}
+                  clearable
+                  onChange={(value) => setAdvancedDraft((state) => ({ ...state, online: value === null ? undefined : value === 'true' }))}
+                />
+                <Select
+                  label="Status"
+                  placeholder="Any"
+                  value={advancedDraft.status ?? null}
+                  data={[
+                    { value: 'open', label: 'Open' },
+                    { value: 'closed', label: 'Closed' },
+                  ]}
+                  clearable
+                  onChange={(value) => setAdvancedDraft((state) => ({ ...state, status: value ?? undefined }))}
+                />
+                <Select
+                  label="Workload"
+                  placeholder="Any"
+                  value={advancedDraft.difficulty ?? null}
+                  data={[
+                    { value: 'easy', label: 'Easier' },
+                    { value: 'hard', label: 'Harder' },
+                  ]}
+                  clearable
+                  onChange={(value) => setAdvancedDraft((state) => ({ ...state, difficulty: value === 'easy' || value === 'hard' ? value : undefined }))}
+                />
+              </SimpleGrid>
+              <Group justify="flex-end" mt="sm">
+                <Button size="xs" onClick={applyAdvancedSearch}>Apply filters</Button>
+              </Group>
+            </Paper>
+          </Collapse>
         </Paper>
       )}
 
