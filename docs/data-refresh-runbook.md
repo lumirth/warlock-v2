@@ -39,6 +39,15 @@ The response includes:
 - `freshness.staleSyncStateIds`
 - `freshness.thresholds`
 
+Write that response to an artifact and run the non-destructive audit before deciding whether any data mutation is needed:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync/status" > artifacts/sync-status.json
+npm run data:freshness:audit -- --input artifacts/sync-status.json --output artifacts/data-freshness-audit.json --min-historical-terms 1
+```
+
+For production-grade historical coverage, raise `--min-historical-terms` to the expected term count for the supported backfill window. The audit fails on stale terms, stale GPA/RMP sync state, missing current-term coverage, and missing course/section counts for the current term.
+
 Default thresholds:
 
 - Active term data is stale after 36 hours without a sync.
