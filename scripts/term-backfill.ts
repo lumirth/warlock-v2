@@ -7,10 +7,14 @@ const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
 const STATUSES = ['active', 'historical'] as const;
 const DEFAULT_PAGE_SIZE = 5;
 const DEFAULT_DATABASE = 'course-search-db-staging';
+const DEFAULT_MAX_PAGE_ATTEMPTS = 4;
+const DEFAULT_RETRY_DELAY_MS = 1_000;
+const TRANSIENT_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
 type Term = typeof TERMS[number];
 type TermStatus = typeof STATUSES[number];
 type Fetcher = (request: Request) => Promise<Response>;
+type Sleeper = (ms: number) => Promise<void>;
 
 export type { Term, TermStatus };
 
@@ -221,6 +225,16 @@ function endpoint(baseUrl: string, path: string): URL {
   return new URL(path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isTransientStatus(status: number): boolean {
+  return TRANSIENT_STATUS_CODES.has(status);
+}
+
 function numeric(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -244,23 +258,47 @@ async function postSyncPage(
   baseUrl: string,
   token: string,
   args: BackfillArgs & { year: number; term: Term; status: TermStatus },
-  offset: number
+  offset: number,
+  options: {
+    maxAttempts: number;
+    retryDelayMs: number;
+    sleep: Sleeper;
+  }
 ): Promise<TermSyncResponse> {
   const url = endpoint(
     baseUrl,
     `admin/sync/${args.year}/${args.term}?offset=${offset}&limit=${args.pageSize}&status=${args.status}`
   );
-  const response = await fetcher(new Request(url.toString(), {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  }));
-  const body = await response.json().catch(() => null) as TermSyncResponse | null;
 
-  if (!response.ok) {
-    throw new Error(`Backfill page ${offset} failed with HTTP ${response.status}: ${JSON.stringify(body)}`);
+  for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
+    const response = await fetcher(new Request(url.toString(), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }));
+    const body = await response.json().catch(() => null) as TermSyncResponse | null;
+
+    if (response.ok) {
+      if (attempt > 1) {
+        const warnings = Array.isArray(body?.warnings) ? body.warnings : [];
+        return {
+          ...body,
+          warnings: [
+            ...warnings,
+            `retried transient page failure ${attempt - 1} time(s)`,
+          ],
+        };
+      }
+      return body ?? {};
+    }
+
+    if (!isTransientStatus(response.status) || attempt === options.maxAttempts) {
+      throw new Error(`Backfill page ${offset} failed with HTTP ${response.status}: ${JSON.stringify(body)}`);
+    }
+
+    await options.sleep(options.retryDelayMs * 2 ** (attempt - 1));
   }
 
-  return body ?? {};
+  throw new Error(`Backfill page ${offset} failed after ${options.maxAttempts} attempts`);
 }
 
 function backupArgs(args: BackfillArgs): D1BackupEvidenceArgs {
@@ -278,12 +316,18 @@ export async function runTermBackfill(
     env?: NodeJS.ProcessEnv;
     fetcher?: Fetcher;
     validateBackupEvidence?: (args: D1BackupEvidenceArgs) => Promise<void>;
+    sleep?: Sleeper;
+    maxPageAttempts?: number;
+    retryDelayMs?: number;
   } = {}
 ): Promise<BackfillReport> {
   validateBackfillArgs(args);
   const env = options.env ?? process.env;
   const fetcher = options.fetcher ?? ((request: Request) => fetch(request));
   const validateBackupEvidence = options.validateBackupEvidence ?? validateD1BackupEvidence;
+  const sleeper = options.sleep ?? sleep;
+  const maxPageAttempts = options.maxPageAttempts ?? DEFAULT_MAX_PAGE_ATTEMPTS;
+  const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   const baseUrl = args.dryRun ? (env.STAGING_API_BASE_URL ?? 'https://staging.example.invalid') : requiredEnv(env, 'STAGING_API_BASE_URL');
   const adminToken = args.dryRun ? '' : requiredEnv(env, 'STAGING_ADMIN_TOKEN');
 
@@ -335,7 +379,11 @@ export async function runTermBackfill(
 
   let offset = args.startOffset;
   while (true) {
-    const body = await postSyncPage(fetcher, baseUrl, adminToken, args, offset);
+    const body = await postSyncPage(fetcher, baseUrl, adminToken, args, offset, {
+      maxAttempts: maxPageAttempts,
+      retryDelayMs,
+      sleep: sleeper,
+    });
     const page = pageFromResponse(offset, args.pageSize, body);
     report.pages.push(page);
     report.totals.successfulSubjects += page.successfulSubjects;

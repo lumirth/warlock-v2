@@ -133,6 +133,51 @@ describe('term backfill runner', () => {
     expect(report.stopped_early).toBe(false);
   });
 
+  it('retries transient page failures before continuing', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response(null, 503))
+      .mockResolvedValueOnce(response({
+        successfulSubjects: 5,
+        failedSubjects: 0,
+        totalCourses: 100,
+        totalSections: 250,
+        pagination: { total: 5, offset: 0, limit: 5, hasMore: false },
+      }));
+    const sleep = vi.fn(async () => {});
+
+    const report = await runTermBackfill(args(), {
+      env: {
+        STAGING_API_BASE_URL: 'https://staging.example.test',
+        STAGING_ADMIN_TOKEN: 'admin-token',
+      },
+      fetcher,
+      sleep,
+      retryDelayMs: 25,
+      validateBackupEvidence: vi.fn(async () => {}),
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(25);
+    expect(report.pages[0].warnings).toContain('retried transient page failure 1 time(s)');
+    expect(report.next_offset).toBeNull();
+  });
+
+  it('does not retry non-transient page failures', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({ error: 'forbidden' }, 403));
+
+    await expect(runTermBackfill(args(), {
+      env: {
+        STAGING_API_BASE_URL: 'https://staging.example.test',
+        STAGING_ADMIN_TOKEN: 'admin-token',
+      },
+      fetcher,
+      sleep: vi.fn(async () => {}),
+      validateBackupEvidence: vi.fn(async () => {}),
+    })).rejects.toThrow('Backfill page 0 failed with HTTP 403');
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('honors max-pages and reports the resume offset', async () => {
     const fetcher = vi.fn().mockResolvedValue(response({
       successfulSubjects: 5,
