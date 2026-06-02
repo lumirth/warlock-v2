@@ -27,6 +27,16 @@ export const DIFFICULTY_THRESHOLDS = {
   hard: { max_quality: 40, min_difficulty: 70 }, // Low Quality (<40), High Difficulty (>70)
 };
 
+const INTRODUCTORY_GATEWAY_NUMBERS: Record<string, string[]> = {
+  CS: ['124', '101', '105', '128'],
+  ECE: ['110', '120'],
+  ECON: ['102', '103'],
+  MATH: ['220', '221', '234'],
+  PSYC: ['100'],
+  SPAN: ['101', '102', '122'],
+  STAT: ['100', '107', '200'],
+};
+
 const STATUS_VALUES: Record<string, string[]> = {
   'open': ['Open'],
   'available': ['Open', 'Restricted'],
@@ -125,6 +135,43 @@ function hasIntroductoryGatewayIntent(plan: SearchPlan): boolean {
     || plan.softPreferences?.introductoryIntent === 'gateway';
 }
 
+function normalizedTitle(title: string | null | undefined): string {
+  return title?.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() ?? '';
+}
+
+function introductoryGatewayTitleAdjustment(title: string | null | undefined): number {
+  const titleText = normalizedTitle(title);
+  if (!titleText) return 0;
+
+  if (
+    titleText.startsWith('introduction to ')
+    || titleText.startsWith('intro to ')
+    || titleText.startsWith('introductory ')
+    || titleText.includes(' introduction to ')
+    || titleText.includes(' fundamentals of ')
+  ) {
+    return 0.75;
+  }
+
+  if (
+    titleText.includes('undergraduate open seminar')
+    || titleText.includes('special topics')
+    || titleText.includes('independent study')
+  ) {
+    return -0.75;
+  }
+
+  return 0;
+}
+
+function canonicalGatewayNumberAdjustment(course: Course): number {
+  const numbers = INTRODUCTORY_GATEWAY_NUMBERS[course.subject.toUpperCase()];
+  if (!numbers) return 0;
+
+  const index = numbers.indexOf(course.number);
+  return index === -1 ? 0 : 2.0 - (index * 0.1);
+}
+
 export function applySearchIntentBoosts(results: SearchResult[], plan: SearchPlan): SearchResult[] {
   if (!hasIntroductoryGatewayIntent(plan)) {
     return results;
@@ -141,6 +188,9 @@ export function applySearchIntentBoosts(results: SearchResult[], plan: SearchPla
     } else if (level !== null && level >= 300) {
       scoreAdjustment -= 0.25;
     }
+
+    scoreAdjustment += canonicalGatewayNumberAdjustment(result.course);
+    scoreAdjustment += introductoryGatewayTitleAdjustment(result.course.title);
 
     return {
       ...result,

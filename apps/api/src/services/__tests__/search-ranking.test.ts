@@ -121,6 +121,45 @@ describe('introductory gateway intent boost', () => {
     expect(boosted[0].score).toBeGreaterThan(boosted[1].score);
   });
 
+  it('ranks canonical subject gateway numbers ahead of discovery and seminar courses', () => {
+    const results: SearchResult[] = [
+      {
+        course: course({
+          id: 'CS-107',
+          number: '107',
+          title: 'Data Science Discovery',
+        }),
+        score: 1.5,
+      },
+      {
+        course: course({
+          id: 'CS-199',
+          number: '199',
+          title: 'Undergraduate Open Seminar in Computer Science',
+        }),
+        score: 1.4,
+      },
+      {
+        course: course({
+          id: 'CS-124',
+          number: '124',
+          title: 'Introduction to Computer Science I',
+        }),
+        score: 0.7,
+      },
+    ];
+
+    const boosted = applySearchIntentBoosts(results, {
+      filters: { subject: 'CS' },
+      semanticQuery: '',
+      keywordQuery: '',
+      intents: ['introductory_gateway'],
+      softPreferences: { levelBoost: 100, introductoryIntent: 'gateway' },
+    }).sort((a, b) => b.score - a.score);
+
+    expect(boosted.map(result => result.course.id)).toEqual(['CS-124', 'CS-107', 'CS-199']);
+  });
+
   it('does not change topical intro searches without gateway intent', () => {
     const results: SearchResult[] = [
       {

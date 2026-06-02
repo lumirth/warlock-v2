@@ -589,6 +589,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_filters: { subject: "CS" },
     expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
     expected_residual: "",
+    expected_top1_title: "Introduction to Computer Science I",
     invariants: { subject: "CS" },
     category: "structured",
     notes: "Generic intro-subject queries should become gateway-course intent instead of matching upper-level Introduction-to-X titles"
@@ -599,6 +600,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_filters: { subject: "CS" },
     expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
     expected_residual: "",
+    expected_top1_title: "Introduction to Computer Science I",
     invariants: { subject: "CS" },
     category: "structured",
     notes: "Common department nickname should normalize to CS before introductory intent is applied"
@@ -609,6 +611,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_filters: { subject: "CS" },
     expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
     expected_residual: "",
+    expected_top1_title: "Introduction to Computer Science I",
     invariants: { subject: "CS" },
     category: "structured"
   },
