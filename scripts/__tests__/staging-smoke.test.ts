@@ -31,10 +31,36 @@ function makeFetcher(options: MockOptions = {}) {
       return json(200, { healthy: true });
     }
     if (url.pathname === '/api/search') {
+      if (url.searchParams.get('q') === 'professor fagen algorithms') {
+        return json(200, {
+          results: [],
+          meta: {
+            queryPlan: {
+              filters: {
+                instructor_ids: [3365],
+              },
+            },
+          },
+        });
+      }
+
       return json(200, { results: [] });
     }
     if (url.pathname === '/api/course/CS/225') {
-      return json(200, { subject: 'CS', number: '225' });
+      return json(200, {
+        subject: 'CS',
+        number: '225',
+        course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+        sections: [{
+          crn: '12345',
+          course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+        }],
+      });
+    }
+    if (url.pathname === '/api/feedback') {
+      return request.method === 'POST'
+        ? json(202, { id: 'feedback-1', status: 'accepted', received_at: 1780380000 })
+        : json(405, { error: 'Method not allowed' });
     }
     if (url.pathname === '/admin/upstream-backoff-status') {
       return auth === 'Bearer admin-token'
@@ -75,15 +101,17 @@ describe('staging smoke', () => {
     expect(results.map(result => result.name)).toEqual([
       'health',
       'search public route',
+      'professor search route',
       'course public route',
+      'feedback public route',
       'admin rejects missing token',
       'admin accepts staging token',
       'admin sync status accepts staging token',
       'internal rejects missing token',
       'internal accepts staging token',
     ]);
-    expect(fetcher).toHaveBeenCalledTimes(8);
-    expect(formatReport(results)).toContain('Passing checks: 8');
+    expect(fetcher).toHaveBeenCalledTimes(10);
+    expect(formatReport(results)).toContain('Passing checks: 10');
   });
 
   it('fails when admin sync status does not expose operator health arrays', async () => {

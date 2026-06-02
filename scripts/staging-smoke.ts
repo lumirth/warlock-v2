@@ -71,6 +71,35 @@ function hasArray(body: JsonRecord | null, key: string): boolean {
   return Array.isArray(body?.[key]);
 }
 
+function hasCourseExplorerLinks(body: JsonRecord | null): boolean {
+  if (typeof body?.course_explorer_url !== 'string') {
+    return false;
+  }
+
+  const sections = Array.isArray(body.sections) ? body.sections as JsonRecord[] : [];
+  return sections.some(section => typeof section.course_explorer_url === 'string');
+}
+
+function hasInstructorFilter(body: JsonRecord | null): boolean {
+  const meta = body?.meta;
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    return false;
+  }
+
+  const queryPlan = (meta as JsonRecord).queryPlan;
+  if (!queryPlan || typeof queryPlan !== 'object' || Array.isArray(queryPlan)) {
+    return false;
+  }
+
+  const filters = (queryPlan as JsonRecord).filters;
+  if (!filters || typeof filters !== 'object' || Array.isArray(filters)) {
+    return false;
+  }
+
+  return Array.isArray((filters as JsonRecord).instructor_ids)
+    && ((filters as JsonRecord).instructor_ids as unknown[]).length > 0;
+}
+
 function hasSyncStatusBody(body: JsonRecord | null): boolean {
   return hasArray(body, 'syncStates')
     && hasArray(body, 'termStates')
@@ -111,6 +140,7 @@ export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promis
   const smokeNumber = env.STAGING_SMOKE_NUMBER ?? '225';
   const smokeTerm = env.STAGING_SMOKE_TERM ?? 'spring';
   const smokeYear = env.STAGING_SMOKE_YEAR ?? '2026';
+  const smokeRunId = env.STAGING_SMOKE_RUN_ID ?? `staging-smoke-${Date.now()}`;
 
   const results: SmokeResult[] = [];
 
@@ -133,17 +163,59 @@ export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promis
   ));
 
   results.push(await check(
+    'professor search route',
+    new Request(endpoint(baseUrl, 'api/search?q=professor%20fagen%20algorithms')),
+    fetcher,
+    (response, body) => {
+      if (response.status !== 200) return `expected 200, got ${response.status}`;
+      if (!hasArray(body, 'results')) return 'expected results array';
+      if (!hasInstructorFilter(body)) return 'expected resolved instructor filter';
+      return null;
+    }
+  ));
+
+  results.push(await check(
     'course public route',
     new Request(endpoint(
       baseUrl,
-      `api/course/${encodeURIComponent(smokeSubject)}/${encodeURIComponent(smokeNumber)}?term=${encodeURIComponent(smokeTerm)}&year=${encodeURIComponent(smokeYear)}`
-    )),
+      `api/course/${encodeURIComponent(smokeSubject)}/${encodeURIComponent(smokeNumber)}?term=${encodeURIComponent(smokeTerm)}&year=${encodeURIComponent(smokeYear)}&fresh=true`
+    ), {
+      headers: { 'Cache-Control': 'no-cache' },
+    }),
     fetcher,
     (response, body) => {
       if (response.status !== 200) return `expected 200, got ${response.status}`;
       if (body?.subject !== smokeSubject || body?.number !== smokeNumber) {
         return `expected ${smokeSubject} ${smokeNumber}`;
       }
+      if (!hasCourseExplorerLinks(body)) return 'expected course and section Course Explorer links';
+      return null;
+    }
+  ));
+
+  results.push(await check(
+    'feedback public route',
+    new Request(endpoint(baseUrl, 'api/feedback'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'uiuc-course-search-staging-smoke',
+      },
+      body: JSON.stringify({
+        kind: 'search_results',
+        issue: 'expected_different_results',
+        page: 'search',
+        query: 'professor fagen algorithms',
+        expected: 'CS 225 with Wade Fagen-Ulmschneider',
+        message: `automated staging smoke ${smokeRunId}`,
+        anonymousSessionId: smokeRunId,
+        metadata: { smoke: true },
+      }),
+    }),
+    fetcher,
+    (response, body) => {
+      if (response.status !== 202) return `expected 202, got ${response.status}`;
+      if (body?.status !== 'accepted') return 'expected accepted feedback response';
       return null;
     }
   ));
