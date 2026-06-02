@@ -68,4 +68,24 @@ describe('buildSearchUiPlan', () => {
       queryPatch: { replaceQuery: 'gened:CS' },
     }]);
   });
+
+  it('does not show restored topic words inside instructor chips', () => {
+    const plan = buildSearchUiPlan([{
+      type: 'instructor',
+      value: 'fagen algorithms',
+      metadata: { source: 'nlp', confidence: 0.8, raw: 'professor fagen algorithms' },
+    }], {
+      filters: { instructor_ids: [3365] },
+      keywordQuery: 'algorithms',
+      semanticQuery: 'algorithms',
+    }, 'algorithms');
+
+    expect(plan.chips.map(chip => chip.label)).toEqual([
+      'Instructor fagen',
+      'Topic: algorithms',
+    ]);
+    expect(plan.chips[0].value).toBe('fagen');
+    expect(plan.chips[0].queryPatch?.removeText).toBe('professor fagen');
+    expect(plan.advanced.instructor).toBe('fagen');
+  });
 });

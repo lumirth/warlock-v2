@@ -15,7 +15,7 @@ import type {
 export function buildSearchUiPlan(hints: Hint[], plan: SearchPlan, residual: string): SearchUiPlanDto {
   return {
     chips: buildSearchChips(hints, residual),
-    advanced: buildAdvancedState(hints, plan.filters),
+    advanced: buildAdvancedState(hints, plan.filters, residual),
     ambiguityActions: buildAmbiguityActions(plan.ambiguities ?? []),
   };
 }
@@ -24,14 +24,14 @@ function buildSearchChips(hints: Hint[], residual: string): SearchChipDto[] {
   const chips = hints.map((hint, index): SearchChipDto => ({
     id: `${hint.type}-${index}`,
     type: hint.type,
-    label: formatHintLabel(hint),
-    value: formatHintValue(hint.value),
+    label: formatHintLabel(hint, residual),
+    value: formatDisplayHintValue(hint, residual),
     source: 'natural_language',
     removable: true,
     editable: isEditableHint(hint),
     filter: filterFromHint(hint),
     queryPatch: {
-      removeText: hint.metadata.raw,
+      removeText: removeTextForHint(hint, residual),
     },
   }));
 
@@ -53,13 +53,13 @@ function buildSearchChips(hints: Hint[], residual: string): SearchChipDto[] {
   return chips;
 }
 
-function buildAdvancedState(hints: Hint[], filters: SearchFilters): AdvancedSearchStateDto {
+function buildAdvancedState(hints: Hint[], filters: SearchFilters, residual: string): AdvancedSearchStateDto {
   const instructorHint = hints.find((hint) => hint.type === 'instructor');
 
   return {
     subject: filters.subject,
     number: filters.number,
-    instructor: instructorHint ? formatHintValue(instructorHint.value) : undefined,
+    instructor: instructorHint ? formatDisplayHintValue(instructorHint, residual) : undefined,
     term: filters.term,
     year: filters.year,
     gened: filters.gened_code ?? filters.gened_any?.[0] ?? filters.gened_all?.[0],
@@ -114,7 +114,7 @@ function queryForFilter(filter: Partial<SearchFilters>): string {
   return '';
 }
 
-function formatHintLabel(hint: Hint): string {
+function formatHintLabel(hint: Hint, residual = ''): string {
   switch (hint.type) {
     case 'courseCode': {
       const value = hint.value as CourseCodeValue;
@@ -125,7 +125,7 @@ function formatHintLabel(hint: Hint): string {
     case 'subject':
       return `Subject ${formatHintValue(hint.value)}`;
     case 'instructor':
-      return `Instructor ${formatHintValue(hint.value)}`;
+      return `Instructor ${formatDisplayHintValue(hint, residual)}`;
     case 'days':
       return `Meets ${formatHintValue(hint.value)}`;
     case 'time':
@@ -155,6 +155,41 @@ function formatHintLabel(hint: Hint): string {
       return `No ${negation.value}`;
     }
   }
+}
+
+function formatDisplayHintValue(hint: Hint, residual: string): string {
+  const value = formatHintValue(hint.value);
+  if (hint.type !== 'instructor') {
+    return value;
+  }
+
+  return trimTrailingResidual(value, residual) ?? value;
+}
+
+function removeTextForHint(hint: Hint, residual: string): string {
+  if (hint.type !== 'instructor') {
+    return hint.metadata.raw;
+  }
+
+  return trimTrailingResidual(hint.metadata.raw, residual) ?? hint.metadata.raw;
+}
+
+function trimTrailingResidual(value: string, residual: string): string | null {
+  const valueTokens = value.trim().split(/\s+/);
+  const residualTokens = residual.trim().split(/\s+/).filter(Boolean);
+  if (valueTokens.length <= 1 || residualTokens.length === 0) {
+    return null;
+  }
+
+  for (let tokenCount = Math.min(residualTokens.length, valueTokens.length - 1); tokenCount >= 1; tokenCount--) {
+    const suffix = residualTokens.slice(0, tokenCount).join(' ').toLowerCase();
+    const candidate = valueTokens.slice(-tokenCount).join(' ').toLowerCase();
+    if (candidate === suffix) {
+      return valueTokens.slice(0, -tokenCount).join(' ');
+    }
+  }
+
+  return null;
 }
 
 function formatHintValue(value: Hint['value']): string {
