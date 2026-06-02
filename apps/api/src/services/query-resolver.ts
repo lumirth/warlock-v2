@@ -272,14 +272,26 @@ export async function validateSubject(db: D1Database, subject: string): Promise<
     .first<{ subject_id: string }>();
   if (byAlias) return byAlias.subject_id;
 
-  // 4. Fuzzy match in subjects table
-  if (normalized.length > 3) {
+  // 4. Fuzzy match in subjects table. Keep this narrow: full search text can
+  // include topic expansions, and D1 rejects overly complex LIKE patterns.
+  const fuzzyClauses: string[] = [];
+  const fuzzyParams: string[] = [];
+  if (isFuzzySubjectNameCandidate(normalized)) {
+    fuzzyClauses.push("LOWER(name) LIKE ? ESCAPE '\\'");
+    fuzzyParams.push(`%${escapeLikePattern(normalized)}%`);
+  }
+  if (isFuzzySubjectCodeCandidate(normalized)) {
+    fuzzyClauses.push("id LIKE ? ESCAPE '\\'");
+    fuzzyParams.push(`%${escapeLikePattern(upper)}%`);
+  }
+
+  if (fuzzyClauses.length > 0) {
     const fuzzy = await db.prepare(`
       SELECT id FROM subjects
-      WHERE name LIKE ? OR id LIKE ?
+      WHERE ${fuzzyClauses.join(' OR ')}
       LIMIT 1
     `)
-      .bind(`%${normalized}%`, `%${upper}%`)
+      .bind(...fuzzyParams)
       .first<{ id: string }>();
     if (fuzzy) return fuzzy.id;
   }
@@ -291,6 +303,23 @@ export async function validateSubject(db: D1Database, subject: string): Promise<
   if (byCourse) return byCourse.subject;
 
   return null;
+}
+
+function isFuzzySubjectNameCandidate(normalized: string): boolean {
+  if (normalized.length <= 3 || normalized.length > 32) {
+    return false;
+  }
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  return words.length <= 4;
+}
+
+function isFuzzySubjectCodeCandidate(normalized: string): boolean {
+  return /^[a-z]{2,8}$/.test(normalized);
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, match => `\\${match}`);
 }
 
 async function getSubjectName(db: D1Database, code: string): Promise<string> {
