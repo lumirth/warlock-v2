@@ -78,6 +78,17 @@ function validRmpMetric(value: number | null | undefined, numRatings?: number | 
   return value;
 }
 
+function qualityEvidenceLabel(score: number): string {
+  if (score >= 90) return 'Excellent course quality';
+  if (score >= 80) return 'Strong course quality';
+  if (score >= 70) return 'Good course quality';
+  return 'Course quality signal';
+}
+
+function difficultyEvidenceLabel(difficulty: 'easy' | 'hard'): string {
+  return difficulty === 'easy' ? 'Easier workload fit' : 'Harder workload fit';
+}
+
 export type SearchResultEvidenceContext = {
   plan: SearchPlan;
   rawQuery: string;
@@ -302,14 +313,17 @@ export function buildMatchEvidence(
   }
 
   if (filters.difficulty) {
-    addEvidence(evidence, seen, 'difficulty', `${filters.difficulty} workload fit`, 'filter', 'soft', filters.difficulty);
+    addEvidence(evidence, seen, 'difficulty', difficultyEvidenceLabel(filters.difficulty), 'filter', 'soft', filters.difficulty);
     if (typeof course.quality_score === 'number') {
-      addEvidence(evidence, seen, 'quality', `Quality ${course.quality_score.toFixed(0)}`, 'metadata', 'soft', course.quality_score.toFixed(0));
+      addEvidence(evidence, seen, 'quality', qualityEvidenceLabel(course.quality_score), 'metadata', 'soft', course.quality_score.toFixed(0));
     }
   }
 
   if (softPreferences?.levelBoost) {
-    addEvidence(evidence, seen, 'topic', `${softPreferences.levelBoost} level preference`, 'query', 'soft', String(softPreferences.levelBoost));
+    const levelLabel = softPreferences.levelBoost === 100
+      ? 'Introductory course'
+      : `${softPreferences.levelBoost} level preference`;
+    addEvidence(evidence, seen, 'topic', levelLabel, 'query', 'soft', String(softPreferences.levelBoost));
   }
 
   if (filters.term || filters.year) {

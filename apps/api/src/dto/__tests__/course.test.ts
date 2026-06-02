@@ -80,10 +80,13 @@ describe('search result DTO evidence', () => {
       'semantic',
     ]));
     expect(evidence.find(item => item.kind === 'course_code')).toMatchObject({ weight: 'hard' });
+    expect(evidence.find(item => item.kind === 'difficulty')?.label).toBe('Easier workload fit');
+    expect(evidence.find(item => item.kind === 'quality')?.label).toBe('Excellent course quality');
     expect(evidence.find(item => item.kind === 'semantic')).toMatchObject({ source: 'semantic' });
     expect(evidence.find(item => item.kind === 'keyword')?.label).toBe('Strong keyword match');
     expect(evidence.find(item => item.kind === 'semantic')?.label).toBe('Related topic match');
     expect(evidence.map(item => item.label).join(' ')).not.toContain('rank #');
+    expect(evidence.map(item => item.label).join(' ')).not.toMatch(/Quality \d/);
   });
 
   it('attaches result evidence and historical warnings to search DTOs', () => {
