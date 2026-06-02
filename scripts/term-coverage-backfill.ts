@@ -262,6 +262,30 @@ function termReport(row: CoveragePlanTerm, report: BackfillReport): CoverageBack
   };
 }
 
+function coverageReport(
+  args: CoverageBackfillArgs,
+  generatedAt: string,
+  targetCount: number,
+  terms: CoverageBackfillTermReport[]
+): CoverageBackfillReport {
+  return {
+    generated_at: generatedAt,
+    coverage_plan: args.coveragePlan ?? null,
+    dry_run: args.dryRun,
+    database: args.database,
+    backup_ref: args.backupRef ?? null,
+    page_size: args.pageSize,
+    max_terms: args.maxTerms ?? null,
+    max_pages_per_term: args.maxPagesPerTerm ?? null,
+    target_count: targetCount,
+    executed_count: terms.length,
+    incomplete_count: terms.filter(row => !row.complete).length,
+    failed_subjects: terms.reduce((total, row) => total + row.totals.failedSubjects, 0),
+    skipped_subjects: terms.reduce((total, row) => total + row.totals.skippedSubjects, 0),
+    terms,
+  };
+}
+
 export async function runCoverageBackfill(
   args: CoverageBackfillArgs,
   options: {
@@ -270,6 +294,7 @@ export async function runCoverageBackfill(
     coveragePlan?: CoveragePlan;
     validateBackupEvidence?: (args: D1BackupEvidenceArgs) => Promise<void>;
     progress?: CoverageProgressReporter;
+    writePartialReport?: (report: CoverageBackfillReport) => void;
   } = {}
 ): Promise<CoverageBackfillReport> {
   if (!args.coveragePlan && !options.coveragePlan) {
@@ -286,6 +311,7 @@ export async function runCoverageBackfill(
   }
 
   const terms: CoverageBackfillTermReport[] = [];
+  const generatedAt = new Date().toISOString();
   for (let index = 0; index < selected.length; index += 1) {
     const row = selected[index];
     options.progress?.onTermStart?.(row, index + 1, selected.length);
@@ -311,24 +337,10 @@ export async function runCoverageBackfill(
     const completedTerm = termReport(row, report);
     terms.push(completedTerm);
     options.progress?.onTermComplete?.(completedTerm, index + 1, selected.length);
+    options.writePartialReport?.(coverageReport(args, generatedAt, targets.length, terms));
   }
 
-  return {
-    generated_at: new Date().toISOString(),
-    coverage_plan: args.coveragePlan ?? null,
-    dry_run: args.dryRun,
-    database: args.database,
-    backup_ref: args.backupRef ?? null,
-    page_size: args.pageSize,
-    max_terms: args.maxTerms ?? null,
-    max_pages_per_term: args.maxPagesPerTerm ?? null,
-    target_count: targets.length,
-    executed_count: terms.length,
-    incomplete_count: terms.filter(row => !row.complete).length,
-    failed_subjects: terms.reduce((total, row) => total + row.totals.failedSubjects, 0),
-    skipped_subjects: terms.reduce((total, row) => total + row.totals.skippedSubjects, 0),
-    terms,
-  };
+  return coverageReport(args, generatedAt, targets.length, terms);
 }
 
 export function formatCoverageBackfillReport(report: CoverageBackfillReport): string {
@@ -381,6 +393,7 @@ function writeReport(output: string, report: CoverageBackfillReport): void {
 
 async function main(): Promise<void> {
   const args = parseCoverageBackfillArgs(process.argv.slice(2));
+  const output = args.output;
   try {
     const report = await runCoverageBackfill(args, {
       progress: {
@@ -408,6 +421,7 @@ async function main(): Promise<void> {
           ].join(' ') + '\n');
         },
       },
+      writePartialReport: output ? report => writeReport(output, report) : undefined,
     });
     if (args.output) {
       writeReport(args.output, report);

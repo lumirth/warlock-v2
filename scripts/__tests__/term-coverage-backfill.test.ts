@@ -125,6 +125,7 @@ describe('coverage backfill runner', () => {
         pagination: { total: 9, offset: 0, limit: 5, hasMore: true },
       }));
     const validateBackupEvidence = vi.fn(async () => {});
+    const writePartialReport = vi.fn();
 
     const report = await runCoverageBackfill(args({ maxPagesPerTerm: 1 }), {
       coveragePlan: coveragePlan(),
@@ -134,6 +135,7 @@ describe('coverage backfill runner', () => {
       },
       fetcher,
       validateBackupEvidence,
+      writePartialReport,
     });
 
     expect(validateBackupEvidence).toHaveBeenCalledTimes(1);
@@ -145,6 +147,11 @@ describe('coverage backfill runner', () => {
     expect(report.incomplete_count).toBe(1);
     expect(report.failed_subjects).toBe(0);
     expect(report.skipped_subjects).toBe(0);
+    expect(writePartialReport).toHaveBeenCalledTimes(2);
+    expect(writePartialReport).toHaveBeenLastCalledWith(expect.objectContaining({
+      executed_count: 2,
+      incomplete_count: 1,
+    }));
   });
 
   it('treats skipped subject locks as incomplete coverage', async () => {
