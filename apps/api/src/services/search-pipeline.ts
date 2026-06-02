@@ -201,6 +201,19 @@ function applyIntroductoryGatewayIntent(plan: SearchPlan): boolean {
   return true;
 }
 
+const MIN_INTRODUCTORY_GATEWAY_CANDIDATES = 40;
+
+export function searchCandidateLimit(plan: SearchPlan, requestedLimit: number): number {
+  const hasIntroductoryGatewayIntent = plan.intents?.includes('introductory_gateway')
+    || plan.softPreferences?.introductoryIntent === 'gateway';
+
+  if (!hasIntroductoryGatewayIntent) {
+    return requestedLimit;
+  }
+
+  return Math.max(requestedLimit, MIN_INTRODUCTORY_GATEWAY_CANDIDATES);
+}
+
 export interface SearchPlanningInput {
   parsed: ParsedQuery;
   extraction: ExtractionResult;
@@ -300,17 +313,18 @@ export class SearchPipeline {
     let tierReached: number;
     const constraintsRelaxed: string[] = [];
     let originalResultCount: number;
+    const candidateLimit = searchCandidateLimit(plan, limit);
 
     // Tier 1: Navigational (Exact course code or CRN)
     const isNavigational = !!((plan.filters.subject && plan.filters.number) || plan.filters.crn);
     if (isNavigational) {
       tierReached = 1;
-      results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
+      results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, candidateLimit);
       originalResultCount = results.length;
     } else {
       // Tier 2: Structured (Search with extracted filters)
       tierReached = 2;
-      results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, limit);
+      results = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, plan, candidateLimit);
       originalResultCount = results.length;
 
       // If we have few results, try expansion
@@ -325,11 +339,12 @@ export class SearchPipeline {
             semanticQuery: sanitizeFtsQuery(`${plan.semanticQuery} ${expandedKeywords.join(' ')}`),
           };
 
-          const expandedResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, expandedPlan, limit);
-          results = this.mergeResults(results, expandedResults, limit);
+          const expandedResults = await hybridSearchWithTermRanking(this.db, this.vectorize, this.ai, expandedPlan, candidateLimit);
+          results = this.mergeResults(results, expandedResults, candidateLimit);
         }
       }
     }
+    results = results.slice(0, limit);
     const searchEndTime = performance.now();
     const totalEndTime = performance.now();
 

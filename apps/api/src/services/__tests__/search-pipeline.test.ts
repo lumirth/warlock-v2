@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SearchPipeline } from '../search-pipeline.js';
+import { SearchPipeline, searchCandidateLimit } from '../search-pipeline.js';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import * as extractor from '../extractor.js';
 import * as queryResolver from '../query-resolver.js';
@@ -101,6 +101,50 @@ describe('SearchPipeline', () => {
 
     expect(result.results).toEqual(mockResults);
     expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+  });
+
+  it('widens internal candidates for introductory gateway intent without changing requested result count', async () => {
+    const query = 'intro to CS';
+    const mockExtracted: ExtractionResult = {
+      hints: [
+        { type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } },
+        { type: 'levelBoost', value: 100, metadata: { source: 'regex', confidence: 0.85, raw: 'intro' } },
+      ],
+      residual: 'intro to CS',
+    };
+    const mockPlan: SearchPlan = {
+      filters: { subject: 'CS' },
+      semanticQuery: '',
+      keywordQuery: '',
+      softPreferences: { levelBoost: 100 },
+    };
+    const mockResults: SearchResult[] = Array.from({ length: 40 }, (_, index) => ({
+      course: mockCourse({ id: `CS-${index}`, subject: 'CS', number: String(100 + index) }),
+      score: 1 - index / 100,
+    }));
+
+    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
+    vi.mocked(search.sanitizeFtsQuery).mockImplementation(queryText => queryText);
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue(mockResults);
+
+    const result = await pipeline.search(query, 5);
+
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        intents: ['introductory_gateway'],
+        softPreferences: { levelBoost: 100, introductoryIntent: 'gateway' },
+      }),
+      40
+    );
+    expect(result.results).toHaveLength(5);
+  });
+
+  it('keeps ordinary searches at the requested candidate limit', () => {
+    expect(searchCandidateLimit({ filters: {}, semanticQuery: 'systems', keywordQuery: 'systems' }, 5)).toBe(5);
   });
 
   it('Tier 3: should expand topics if Tier 2 returns few results', async () => {
