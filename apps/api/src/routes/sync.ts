@@ -87,6 +87,13 @@ function syncEmbeddingsEnabled(value: string | undefined): boolean {
   return value?.toLowerCase() === 'true';
 }
 
+function parseForceRunningLocks(value: string | undefined): boolean | null {
+  if (value === undefined || value === '') return false;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
+}
+
 syncRoutes.get('/admin/sync/status', async (c) => {
   const [syncStates, termStates] = await Promise.all([
     c.env.DB.prepare(`
@@ -307,6 +314,11 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
     requestedStatus = parsedStatus.value;
   }
 
+  const forceRunningLocks = parseForceRunningLocks(c.req.query('force'));
+  if (forceRunningLocks === null) {
+    return c.json({ error: 'force must be true or false' }, 400);
+  }
+
   const config = {
     cisapiBase: c.env.CISAPI_BASE,
     concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
@@ -321,7 +333,8 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
       parsedYear.value,
       parsedTerm.value,
       syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.VECTORIZE : undefined,
-      syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.AI : undefined
+      syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.AI : undefined,
+      { lockMode: forceRunningLocks ? 'force' : 'respect-running' }
     );
 
     const termId = makeTermId(parsedYear.value, parsedTerm.value);
@@ -350,7 +363,7 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
 
     const warnings = validateSyncResult(result);
 
-    return c.json({ ...result, warnings });
+    return c.json({ ...result, forceRunningLocks, warnings });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }

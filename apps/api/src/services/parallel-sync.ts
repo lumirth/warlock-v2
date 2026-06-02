@@ -31,6 +31,12 @@ export interface ParallelSyncConfig {
   limit?: number;
 }
 
+export type SubjectLockMode = 'respect-running' | 'force';
+
+export interface SyncSubjectsOptions {
+  lockMode?: SubjectLockMode;
+}
+
 export interface SubjectSyncResult {
   subject: string;
   success: boolean;
@@ -353,10 +359,12 @@ export async function syncSubjects(
   term: string,
   subjects: string[],
   vectorize?: VectorizeIndex,
-  ai?: Ai
+  ai?: Ai,
+  options: SyncSubjectsOptions = {}
 ): Promise<TermSyncResult> {
   const startTime = Date.now();
   const termId = `${year}-${term}`;
+  const lockMode = options.lockMode ?? 'respect-running';
 
   const results: SubjectSyncResult[] = [];
   let rateLimitHits = 0;
@@ -366,7 +374,7 @@ export async function syncSubjects(
 
     const batchPromises = batch.map(async (subject): Promise<SubjectSyncResult> => {
       const subjectStart = Date.now();
-      const lockAcquired = await acquireSubjectSyncLock(db, termId, subject);
+      const lockAcquired = await acquireSubjectSyncLock(db, termId, subject, lockMode);
       if (!lockAcquired) {
         return {
           subject,
@@ -451,7 +459,12 @@ export async function syncSubjects(
   };
 }
 
-async function acquireSubjectSyncLock(db: D1Database, termId: string, subject: string): Promise<boolean> {
+async function acquireSubjectSyncLock(
+  db: D1Database,
+  termId: string,
+  subject: string,
+  lockMode: SubjectLockMode = 'respect-running'
+): Promise<boolean> {
   const id = subjectSyncStateId(termId, subject);
   const existing = await db.prepare(`
     SELECT last_sync, last_status
@@ -460,7 +473,12 @@ async function acquireSubjectSyncLock(db: D1Database, termId: string, subject: s
   `).bind(id).first<{ last_sync: number | null; last_status: string | null }>();
 
   const now = Math.floor(Date.now() / 1000);
-  if (existing?.last_status === 'running' && existing.last_sync && now - existing.last_sync < SUBJECT_SYNC_LOCK_TTL_SECONDS) {
+  if (
+    lockMode !== 'force'
+    && existing?.last_status === 'running'
+    && existing.last_sync
+    && now - existing.last_sync < SUBJECT_SYNC_LOCK_TTL_SECONDS
+  ) {
     return false;
   }
 
@@ -509,7 +527,8 @@ export async function syncTerm(
   year: number,
   term: string,
   vectorize?: VectorizeIndex,
-  ai?: Ai
+  ai?: Ai,
+  options: SyncSubjectsOptions = {}
 ): Promise<TermSyncResult> {
   const allSubjects = await getSubjectsForTerm(config, year, term);
   const totalSubjects = allSubjects.length;
@@ -520,7 +539,7 @@ export async function syncTerm(
   const subjects = allSubjects.slice(offset, offset + limit);
   const hasMore = offset + limit < totalSubjects;
 
-  const result = await syncSubjects(db, config, year, term, subjects, vectorize, ai);
+  const result = await syncSubjects(db, config, year, term, subjects, vectorize, ai, options);
 
   // Update pagination info since syncSubjects doesn't know about the global list
   if (result.pagination) {

@@ -11,6 +11,7 @@ function args(overrides: Partial<CoverageBackfillArgs> = {}): CoverageBackfillAr
     coveragePlan: 'artifacts/term-coverage-plan.json',
     pageSize: 5,
     dryRun: false,
+    forceRunningLocks: false,
     database: 'course-search-db-staging',
     backupRef: '20260602T120000Z',
     evidenceFile: 'evidence.md',
@@ -70,6 +71,7 @@ describe('coverage backfill runner', () => {
       '--evidence-file', 'evidence.md',
       '--restore-verified',
       '--dry-run',
+      '--force-running-locks',
     ])).toMatchObject({
       coveragePlan: 'artifacts/term-coverage-plan.json',
       pageSize: 3,
@@ -80,6 +82,7 @@ describe('coverage backfill runner', () => {
       evidenceFile: 'evidence.md',
       restoreVerified: true,
       dryRun: true,
+      forceRunningLocks: true,
     });
   });
 
@@ -141,6 +144,34 @@ describe('coverage backfill runner', () => {
     expect(report.executed_count).toBe(2);
     expect(report.incomplete_count).toBe(1);
     expect(report.failed_subjects).toBe(0);
+    expect(report.skipped_subjects).toBe(0);
+  });
+
+  it('treats skipped subject locks as incomplete coverage', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({
+      subjectResults: [
+        { subject: 'CS', success: true, skipped: true },
+      ],
+      successfulSubjects: 1,
+      failedSubjects: 0,
+      totalCourses: 0,
+      totalSections: 0,
+      pagination: { total: 1, offset: 0, limit: 5, hasMore: false },
+    }));
+
+    const report = await runCoverageBackfill(args({ maxTerms: 1 }), {
+      coveragePlan: coveragePlan(),
+      env: {
+        STAGING_API_BASE_URL: 'https://staging.example.test',
+        STAGING_ADMIN_TOKEN: 'admin-token',
+      },
+      fetcher,
+      validateBackupEvidence: vi.fn(async () => {}),
+    });
+
+    expect(report.incomplete_count).toBe(1);
+    expect(report.skipped_subjects).toBe(1);
+    expect(report.terms[0].complete).toBe(false);
   });
 
   it('formats aggregate markdown evidence', async () => {

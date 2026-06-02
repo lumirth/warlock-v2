@@ -14,6 +14,7 @@ function args(overrides: Partial<BackfillArgs> = {}): BackfillArgs {
     pageSize: 5,
     startOffset: 0,
     dryRun: false,
+    forceRunningLocks: false,
     database: 'course-search-db-staging',
     backupRef: '20260602T120000Z',
     evidenceFile: 'evidence.md',
@@ -43,6 +44,7 @@ describe('term backfill runner', () => {
       '--evidence-file', 'evidence.md',
       '--restore-verified',
       '--dry-run',
+      '--force-running-locks',
     ])).toMatchObject({
       year: 2025,
       term: 'fall',
@@ -55,6 +57,7 @@ describe('term backfill runner', () => {
       evidenceFile: 'evidence.md',
       restoreVerified: true,
       dryRun: true,
+      forceRunningLocks: true,
     });
   });
 
@@ -125,6 +128,7 @@ describe('term backfill runner', () => {
     expect(report.totals).toEqual({
       successfulSubjects: 8,
       failedSubjects: 0,
+      skippedSubjects: 0,
       courses: 150,
       sections: 375,
       rateLimitHits: 1,
@@ -160,6 +164,33 @@ describe('term backfill runner', () => {
     expect(sleep).toHaveBeenCalledWith(25);
     expect(report.pages[0].warnings).toContain('retried transient page failure 1 time(s)');
     expect(report.next_offset).toBeNull();
+  });
+
+  it('reports skipped subjects from active running locks', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({
+      subjectResults: [
+        { subject: 'CS', success: true, skipped: true },
+        { subject: 'MATH', success: true },
+      ],
+      successfulSubjects: 2,
+      failedSubjects: 0,
+      totalCourses: 1,
+      totalSections: 1,
+      pagination: { total: 2, offset: 0, limit: 2, hasMore: false },
+    }));
+
+    const report = await runTermBackfill(args({ forceRunningLocks: true }), {
+      env: {
+        STAGING_API_BASE_URL: 'https://staging.example.test',
+        STAGING_ADMIN_TOKEN: 'admin-token',
+      },
+      fetcher,
+      validateBackupEvidence: vi.fn(async () => {}),
+    });
+
+    expect((fetcher.mock.calls[0][0] as Request).url).toBe('https://staging.example.test/admin/sync/2025/fall?offset=0&limit=5&status=historical&force=true');
+    expect(report.totals.skippedSubjects).toBe(1);
+    expect(report.pages[0].warnings).toContain('1 subject(s) skipped because a running sync lock was active');
   });
 
   it('does not retry non-transient page failures', async () => {

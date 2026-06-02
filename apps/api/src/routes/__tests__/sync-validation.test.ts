@@ -34,6 +34,16 @@ describe('sync route validation', () => {
     await expect(res.json()).resolves.toEqual({ error: 'status must be one of: active, historical' });
   });
 
+  it('rejects invalid manual sync force flags', async () => {
+    const app = new Hono();
+    app.route('/', syncRoutes);
+
+    const res = await app.request('/admin/sync/2026/spring?force=yes', { method: 'POST' });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'force must be true or false' });
+  });
+
   it('resolves manual sync status without turning historical backfills into active terms', () => {
     expect(resolveManualSyncTermStatus(null)).toBe('active');
     expect(resolveManualSyncTermStatus({ status: 'active' })).toBe('active');

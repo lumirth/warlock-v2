@@ -25,6 +25,7 @@ export type CoverageBackfillArgs = {
   maxTerms?: number;
   maxPagesPerTerm?: number;
   dryRun: boolean;
+  forceRunningLocks: boolean;
   output?: string;
   database: string;
   backupRef?: string;
@@ -71,6 +72,7 @@ export type CoverageBackfillReport = {
   executed_count: number;
   incomplete_count: number;
   failed_subjects: number;
+  skipped_subjects: number;
   terms: CoverageBackfillTermReport[];
 };
 
@@ -92,6 +94,7 @@ function usage(): string {
     `  --page-size <1-5>          Subject page size. Default: ${DEFAULT_PAGE_SIZE}`,
     '  --max-terms <n>           Stop after n planned terms.',
     '  --max-pages-per-term <n>  Stop each term after n pages.',
+    '  --force-running-locks     Override fresh running subject locks for deliberate operator reruns.',
     '  --output <path>           Write JSON plus sibling .md report.',
     `  --database <name>         D1 database name for backup evidence. Default: ${DEFAULT_DATABASE}`,
     '  --dry-run                 Plan term execution without mutating staging.',
@@ -147,6 +150,7 @@ export function parseCoverageBackfillArgs(argv: string[]): CoverageBackfillArgs 
   const args: CoverageBackfillArgs = {
     pageSize: DEFAULT_PAGE_SIZE,
     dryRun: false,
+    forceRunningLocks: false,
     database: DEFAULT_DATABASE,
     restoreVerified: false,
   };
@@ -155,6 +159,10 @@ export function parseCoverageBackfillArgs(argv: string[]): CoverageBackfillArgs 
     const arg = argv[index];
     if (arg === '--dry-run') {
       args.dryRun = true;
+      continue;
+    }
+    if (arg === '--force-running-locks') {
+      args.forceRunningLocks = true;
       continue;
     }
     if (arg === '--restore-verified') {
@@ -235,7 +243,7 @@ function termReport(row: CoveragePlanTerm, report: BackfillReport): CoverageBack
     term: row.term,
     status: row.expected_status,
     reason: row.reason,
-    complete: report.next_offset === null && !report.stopped_early,
+    complete: report.next_offset === null && !report.stopped_early && report.totals.skippedSubjects === 0,
     stopped_early: report.stopped_early,
     next_offset: report.next_offset,
     totals: report.totals,
@@ -275,6 +283,7 @@ export async function runCoverageBackfill(
       startOffset: 0,
       maxPages: args.maxPagesPerTerm,
       dryRun: args.dryRun,
+      forceRunningLocks: args.forceRunningLocks,
       database: args.database,
       backupRef: args.backupRef,
       evidenceFile: args.evidenceFile,
@@ -300,6 +309,7 @@ export async function runCoverageBackfill(
     executed_count: terms.length,
     incomplete_count: terms.filter(row => !row.complete).length,
     failed_subjects: terms.reduce((total, row) => total + row.totals.failedSubjects, 0),
+    skipped_subjects: terms.reduce((total, row) => total + row.totals.skippedSubjects, 0),
     terms,
   };
 }
@@ -320,6 +330,7 @@ export function formatCoverageBackfillReport(report: CoverageBackfillReport): st
     `Executed terms: ${report.executed_count}`,
     `Incomplete terms: ${report.incomplete_count}`,
     `Failed subjects: ${report.failed_subjects}`,
+    `Skipped subjects: ${report.skipped_subjects}`,
     '',
     '## Terms',
     '',
@@ -330,7 +341,7 @@ export function formatCoverageBackfillReport(report: CoverageBackfillReport): st
   }
 
   for (const term of report.terms) {
-    lines.push(`- ${term.term_id} (${term.status}): ${term.reason}; pages=${term.pages.length}; next=${term.next_offset ?? 'complete'}; failedSubjects=${term.totals.failedSubjects}`);
+    lines.push(`- ${term.term_id} (${term.status}): ${term.reason}; pages=${term.pages.length}; next=${term.next_offset ?? 'complete'}; failedSubjects=${term.totals.failedSubjects}; skippedSubjects=${term.totals.skippedSubjects}`);
     for (const page of term.pages) {
       for (const warning of page.warnings) {
         lines.push(`  - warning: ${warning}`);
@@ -361,7 +372,7 @@ async function main(): Promise<void> {
     process.stdout.write(formatCoverageBackfillReport(report));
 
     const intentionallyBounded = args.dryRun || args.maxTerms !== undefined || args.maxPagesPerTerm !== undefined;
-    if (!intentionallyBounded && (report.incomplete_count > 0 || report.failed_subjects > 0)) {
+    if (!intentionallyBounded && (report.incomplete_count > 0 || report.failed_subjects > 0 || report.skipped_subjects > 0)) {
       process.exitCode = 1;
     }
   } catch (error) {

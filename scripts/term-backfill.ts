@@ -26,6 +26,7 @@ export type BackfillArgs = {
   startOffset: number;
   maxPages?: number;
   dryRun: boolean;
+  forceRunningLocks: boolean;
   output?: string;
   database: string;
   backupRef?: string;
@@ -44,6 +45,7 @@ type TermSyncResponse = {
   termId?: string;
   year?: number;
   term?: string;
+  subjectResults?: Array<{ skipped?: boolean }>;
   successfulSubjects?: number;
   failedSubjects?: number;
   totalCourses?: number;
@@ -58,6 +60,7 @@ export type BackfillPageResult = {
   limit: number;
   successfulSubjects: number;
   failedSubjects: number;
+  skippedSubjects: number;
   totalCourses: number;
   totalSections: number;
   rateLimitHits: number;
@@ -83,6 +86,7 @@ export type BackfillReport = {
   totals: {
     successfulSubjects: number;
     failedSubjects: number;
+    skippedSubjects: number;
     courses: number;
     sections: number;
     rateLimitHits: number;
@@ -111,6 +115,7 @@ function usage(): string {
     `  --page-size <1-5>       Subject page size. Default: ${DEFAULT_PAGE_SIZE}`,
     '  --start-offset <n>      Resume at a subject offset. Default: 0',
     '  --max-pages <n>         Stop after n pages.',
+    '  --force-running-locks   Override fresh running subject locks for a deliberate operator rerun.',
     '  --output <path>         Write JSON plus sibling .md report.',
     `  --database <name>       D1 database name for backup evidence. Default: ${DEFAULT_DATABASE}`,
     '  --dry-run               Print the first planned request without mutating staging.',
@@ -136,6 +141,7 @@ export function parseBackfillArgs(argv: string[]): BackfillArgs {
     pageSize: DEFAULT_PAGE_SIZE,
     startOffset: 0,
     dryRun: false,
+    forceRunningLocks: false,
     database: DEFAULT_DATABASE,
     restoreVerified: false,
   };
@@ -144,6 +150,10 @@ export function parseBackfillArgs(argv: string[]): BackfillArgs {
     const arg = argv[i];
     if (arg === '--dry-run') {
       args.dryRun = true;
+      continue;
+    }
+    if (arg === '--force-running-locks') {
+      args.forceRunningLocks = true;
       continue;
     }
     if (arg === '--restore-verified') {
@@ -240,16 +250,25 @@ function numeric(value: unknown): number {
 }
 
 function pageFromResponse(offset: number, limit: number, body: TermSyncResponse): BackfillPageResult {
+  const skippedSubjects = Array.isArray(body.subjectResults)
+    ? body.subjectResults.filter(result => result.skipped === true).length
+    : 0;
+  const warnings = Array.isArray(body.warnings) ? body.warnings.map(String) : [];
+  if (skippedSubjects > 0) {
+    warnings.push(`${skippedSubjects} subject(s) skipped because a running sync lock was active`);
+  }
+
   return {
     offset,
     limit,
     successfulSubjects: numeric(body.successfulSubjects),
     failedSubjects: numeric(body.failedSubjects),
+    skippedSubjects,
     totalCourses: numeric(body.totalCourses),
     totalSections: numeric(body.totalSections),
     rateLimitHits: numeric(body.rateLimitHits),
     hasMore: body.pagination?.hasMore === true,
-    warnings: Array.isArray(body.warnings) ? body.warnings.map(String) : [],
+    warnings,
   };
 }
 
@@ -267,7 +286,7 @@ async function postSyncPage(
 ): Promise<TermSyncResponse> {
   const url = endpoint(
     baseUrl,
-    `admin/sync/${args.year}/${args.term}?offset=${offset}&limit=${args.pageSize}&status=${args.status}`
+    `admin/sync/${args.year}/${args.term}?offset=${offset}&limit=${args.pageSize}&status=${args.status}${args.forceRunningLocks ? '&force=true' : ''}`
   );
 
   for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
@@ -353,6 +372,7 @@ export async function runTermBackfill(
     totals: {
       successfulSubjects: 0,
       failedSubjects: 0,
+      skippedSubjects: 0,
       courses: 0,
       sections: 0,
       rateLimitHits: 0,
@@ -368,6 +388,7 @@ export async function runTermBackfill(
       limit: args.pageSize,
       successfulSubjects: 0,
       failedSubjects: 0,
+      skippedSubjects: 0,
       totalCourses: 0,
       totalSections: 0,
       rateLimitHits: 0,
@@ -388,6 +409,7 @@ export async function runTermBackfill(
     report.pages.push(page);
     report.totals.successfulSubjects += page.successfulSubjects;
     report.totals.failedSubjects += page.failedSubjects;
+    report.totals.skippedSubjects += page.skippedSubjects;
     report.totals.courses += page.totalCourses;
     report.totals.sections += page.totalSections;
     report.totals.rateLimitHits += page.rateLimitHits;
@@ -430,6 +452,7 @@ export function formatTermBackfillReport(report: BackfillReport): string {
     '',
     `- Successful subjects: ${report.totals.successfulSubjects}`,
     `- Failed subjects: ${report.totals.failedSubjects}`,
+    `- Skipped subjects: ${report.totals.skippedSubjects}`,
     `- Courses: ${report.totals.courses}`,
     `- Sections: ${report.totals.sections}`,
     `- Rate-limit hits: ${report.totals.rateLimitHits}`,
@@ -439,7 +462,7 @@ export function formatTermBackfillReport(report: BackfillReport): string {
   ];
 
   for (const page of report.pages) {
-    lines.push(`- offset ${page.offset}: ${page.successfulSubjects} subject(s), ${page.totalCourses} course(s), ${page.totalSections} section(s), hasMore=${page.hasMore}`);
+    lines.push(`- offset ${page.offset}: ${page.successfulSubjects} subject(s), skipped=${page.skippedSubjects}, ${page.totalCourses} course(s), ${page.totalSections} section(s), hasMore=${page.hasMore}`);
     for (const warning of page.warnings) {
       lines.push(`  - warning: ${warning}`);
     }
