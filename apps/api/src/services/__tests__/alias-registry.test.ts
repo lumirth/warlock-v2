@@ -79,6 +79,33 @@ describe('AliasRegistry', () => {
     });
   });
 
+  describe('subject aliases', () => {
+    it.each([
+      ['philosophy', 'PHIL'],
+      ['political science', 'PS'],
+      ['information sciences', 'IS'],
+      ['art history', 'ARTH'],
+      ['electrical computer engineering', 'ECE'],
+      ['psych', 'PSYC'],
+      ['stats', 'STAT'],
+    ])('matches "%s" as %s', (query, subject) => {
+      const matches = registry.match(query);
+      expect(matches).toContainEqual(
+        expect.objectContaining({ kind: 'subject', canonical: subject })
+      );
+    });
+
+    it('does not match unsafe lowercase subject codes as aliases', () => {
+      const matches = registry.match('this is a test for me');
+      expect(matches).not.toContainEqual(
+        expect.objectContaining({ kind: 'subject', canonical: 'IS' })
+      );
+      expect(matches).not.toContainEqual(
+        expect.objectContaining({ kind: 'subject', canonical: 'ME' })
+      );
+    });
+  });
+
   describe('days aliases', () => {
     it('matches "tuesday thursday" as TR', () => {
       const matches = registry.match('tuesday thursday');

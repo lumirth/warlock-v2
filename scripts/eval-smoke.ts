@@ -4,20 +4,10 @@ import { GOLDEN_QUERIES } from '../apps/api/src/eval/golden-queries.js';
 import { checkExpectedKeys, checkExpectedObject, checkExpectedResidual } from '../apps/api/src/eval/checks.js';
 import { evaluateCorpusCoverage, findDuplicateQueryIds, formatCorpusCoverageReport } from '../apps/api/src/eval/corpus-coverage.js';
 import { createSearchPlan } from '../apps/api/src/services/search-pipeline.js';
-import { VALID_SUBJECTS } from '../apps/api/src/services/data/valid-subjects.js';
+import { SUBJECT_NAMES, VALID_SUBJECTS } from '../apps/api/src/services/data/valid-subjects.js';
 import type { EvalResult } from '../apps/api/src/eval/types.js';
 
 type D1Row = Record<string, unknown>;
-
-const SUBJECT_NAMES: Record<string, string> = {
-  CHEM: 'Chemistry',
-  CS: 'Computer Science',
-  ECE: 'Electrical and Computer Engineering',
-  ECON: 'Economics',
-  MATH: 'Mathematics',
-  RHET: 'Rhetoric',
-  STAT: 'Statistics',
-};
 
 class EvalD1Statement {
   private params: unknown[] = [];

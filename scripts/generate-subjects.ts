@@ -25,16 +25,77 @@ const CONFIG = {
 };
 
 interface D1Result {
-  results: { id: string }[];
+  results: SubjectRow[];
   success: boolean;
   meta: unknown;
 }
 
-function fetchSubjectsFromD1(): string[] {
+interface SubjectRow {
+  id: string;
+  name: string;
+}
+
+function normalizeSubjectAlias(value: string): string {
+  return value
+    .replace(/&amp;/g, ' and ')
+    .replace(/&/g, ' and ')
+    .replace(/[-/_,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+const EXTRA_SUBJECT_ALIASES: Record<string, string[]> = {
+  ANTH: ['anthro'],
+  CS: ['comp sci', 'comp-sci'],
+  ECE: ['electrical computer engineering', 'elec comp eng'],
+  MCB: ['molecular cellular biology', 'molecular cell bio'],
+  PS: ['poli sci', 'poly sci', 'political sci'],
+  PSYC: ['psych'],
+  STAT: ['stats'],
+};
+
+function subjectAliases(subject: SubjectRow): string[] {
+  const normalizedName = normalizeSubjectAlias(subject.name);
+  const aliases = new Set<string>();
+  const unsafeSubjectCode = CONFIG.UNSAFE_LOWERCASE_SUBJECTS.has(subject.id);
+  const isOneWordName = normalizedName.split(/\s+/).length === 1;
+
+  if (!(unsafeSubjectCode && isOneWordName)) {
+    aliases.add(normalizedName);
+  }
+
+  if (!unsafeSubjectCode) {
+    aliases.add(subject.id.toLowerCase());
+  }
+
+  if (normalizedName.includes(' and ')) {
+    aliases.add(normalizedName.replace(/\band\b/g, ' ').replace(/\s+/g, ' ').trim());
+  }
+
+  if (normalizedName.endsWith(' courses')) {
+    const withoutSuffix = normalizedName.replace(/\s+courses$/, '');
+    if (!(unsafeSubjectCode && withoutSuffix.split(/\s+/).length === 1)) {
+      aliases.add(withoutSuffix);
+    }
+  }
+
+  for (const alias of EXTRA_SUBJECT_ALIASES[subject.id] ?? []) {
+    aliases.add(normalizeSubjectAlias(alias));
+  }
+
+  return uniqueSorted(Array.from(aliases));
+}
+
+function fetchSubjectsFromD1(): SubjectRow[] {
   console.log(`Fetching subjects from D1 database (${CONFIG.DB_NAME})...`);
   try {
     // Execute SQL query via Wrangler
-    const cmd = `npx wrangler d1 execute ${CONFIG.DB_NAME} --command="SELECT DISTINCT id FROM subjects ORDER BY id" --json --remote`;
+    const cmd = `npx wrangler d1 execute ${CONFIG.DB_NAME} --command="SELECT DISTINCT id, COALESCE(name, id) AS name FROM subjects ORDER BY id" --json --remote`;
     const output = execSync(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
 
     const parsed = JSON.parse(output) as D1Result[];
@@ -43,14 +104,23 @@ function fetchSubjectsFromD1(): string[] {
       throw new Error('D1 query failed or returned no results');
     }
 
-    return parsed[0].results.map(row => row.id);
+    return parsed[0].results.map(row => ({ id: row.id, name: row.name || row.id }));
   } catch (error) {
     console.error('Failed to fetch subjects from D1:', error);
     return [];
   }
 }
 
-async function fetchSubjectsFromCisApi(): Promise<string[]> {
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+async function fetchSubjectsFromCisApi(): Promise<SubjectRow[]> {
   console.log('Fetching subjects from CISAPI (fallback)...');
   const year = new Date().getFullYear();
   // Actually, better to fetch all terms for current year?
@@ -59,7 +129,7 @@ async function fetchSubjectsFromCisApi(): Promise<string[]> {
 
   // Dynamic current term determination
   const terms = ['spring', 'fall', 'summer', 'winter'];
-  const subjects = new Set<string>();
+  const subjects = new Map<string, string>();
 
   // Try to fetch current and next year to be safe
   const years = [year, year + 1];
@@ -72,10 +142,10 @@ async function fetchSubjectsFromCisApi(): Promise<string[]> {
         if (!response.ok) continue;
 
         const text = await response.text();
-        const regex = /<subject id="([^"]+)"/g;
+        const regex = /<subject id="([^"]+)"[^>]*>([^<]+)<\/subject>/g;
         let match;
         while ((match = regex.exec(text)) !== null) {
-          subjects.add(match[1]);
+          subjects.set(match[1], decodeXmlText(match[2]));
         }
       } catch {
         // Ignore errors for future terms that don't exist
@@ -106,14 +176,22 @@ async function fetchSubjectsFromCisApi(): Promise<string[]> {
        "RUSS", "SAME", "SBC", "SCAN", "SE", "SHS", "SLAV", "SLCL", "SOC", "SOCW",
        "SPAN", "SPED", "STAT", "SWAH", "TAM", "TE", "THEA", "TMGT", "TRST", "TURK",
        "UKR", "UP", "VCM", "VM", "WLOF", "WRIT", "YDSH"
-     ];
+     ].map(id => ({ id, name: id }));
   }
 
-  return Array.from(subjects).sort();
+  return Array.from(subjects.entries())
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function generateFileContent(subjects: string[]): string {
+function generateFileContent(subjects: SubjectRow[]): string {
   const timestamp = new Date().toISOString();
+  const subjectIds = subjects.map(subject => subject.id);
+  const subjectNames = Object.fromEntries(subjects.map(subject => [subject.id, subject.name]));
+  const subjectAliasEntries = subjects.map(subject => ({
+    subject: subject.id,
+    aliases: subjectAliases(subject),
+  }));
 
   // Convert Sets to arrays for JSON stringification
   const unsafeList = Array.from(CONFIG.UNSAFE_LOWERCASE_SUBJECTS).sort();
@@ -125,8 +203,12 @@ function generateFileContent(subjects: string[]): string {
 // These "unsafe" codes are only matched if uppercase or part of a clear course code (e.g. "IS 500")
 
 export const VALID_SUBJECTS = new Set([
-${subjects.map(s => `  "${s}"`).join(',\n')}
+${subjectIds.map(s => `  "${s}"`).join(',\n')}
 ]);
+
+export const SUBJECT_NAMES: Record<string, string> = ${JSON.stringify(subjectNames, null, 2)};
+
+export const SUBJECT_ALIASES: Array<{ subject: string; aliases: string[] }> = ${JSON.stringify(subjectAliasEntries, null, 2)};
 
 // Subjects that are also common English words - unsafe for lowercase matching
 export const UNSAFE_LOWERCASE_SUBJECTS = new Set([
@@ -141,22 +223,17 @@ ${safeList.map(s => `  "${s}"`).join(',\n')}
 `;
 }
 
-function main() {
-  let subjects = fetchSubjectsFromD1();
+async function main() {
+  let subjects = await fetchSubjectsFromCisApi();
 
   if (subjects.length === 0) {
-    // If D1 fails (e.g. no auth), fallback to CISAPI
-    // This allows build to succeed in CI/CD without D1 tokens
-    import('node:process').then(async () => {
-       subjects = await fetchSubjectsFromCisApi();
-       finish(subjects);
-    });
-  } else {
-    finish(subjects);
+    subjects = fetchSubjectsFromD1();
   }
+
+  finish(subjects);
 }
 
-function finish(subjects: string[]) {
+function finish(subjects: SubjectRow[]) {
   console.log(`Found ${subjects.length} subjects.`);
 
   const content = generateFileContent(subjects);
@@ -171,4 +248,4 @@ function finish(subjects: string[]) {
   console.log(`Generated ${CONFIG.OUTPUT_PATH}`);
 }
 
-main();
+void main();

@@ -228,8 +228,9 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 29,
     query: "organic chemistry",
-    expected_filters: {},
-    expected_residual: "organic chemistry",
+    expected_filters: { subject: "CHEM" },
+    expected_residual: "organic",
+    invariants: { subject: "CHEM" },
     category: "semantic"
   },
   {
@@ -623,5 +624,75 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_residual: "intro to compilers",
     category: "semantic",
     notes: "Introductory gateway intent requires a subject or explicit subject override; topic searches stay topical"
+  },
+  {
+    id: 76,
+    query: "philosophy",
+    expected_filters: { subject: "PHIL" },
+    expected_residual: "",
+    invariants: { subject: "PHIL" },
+    category: "structured",
+    notes: "Official subject names should resolve as subject filters, not loose topical text"
+  },
+  {
+    id: 77,
+    query: "intro to philosophy",
+    expected_filters: { subject: "PHIL" },
+    expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
+    expected_residual: "",
+    invariants: { subject: "PHIL" },
+    category: "structured",
+    notes: "Introductory gateway intent should work across official subject names, not only CS aliases"
+  },
+  {
+    id: 78,
+    query: "political science",
+    expected_filters: { subject: "PS" },
+    expected_residual: "",
+    invariants: { subject: "PS" },
+    category: "structured"
+  },
+  {
+    id: 79,
+    query: "information sciences",
+    expected_filters: { subject: "IS" },
+    expected_residual: "",
+    invariants: { subject: "IS" },
+    category: "structured",
+    notes: "Unsafe lowercase code IS should still be reachable through its official full name"
+  },
+  {
+    id: 80,
+    query: "art history",
+    expected_filters: { subject: "ARTH" },
+    expected_residual: "",
+    invariants: { subject: "ARTH" },
+    category: "structured",
+    notes: "Punctuation-normalized official names should beat shorter subject aliases such as ART"
+  },
+  {
+    id: 81,
+    query: "electrical computer engineering",
+    expected_filters: { subject: "ECE" },
+    expected_residual: "",
+    invariants: { subject: "ECE" },
+    category: "structured"
+  },
+  {
+    id: 82,
+    query: "stats",
+    expected_filters: { subject: "STAT" },
+    expected_residual: "",
+    invariants: { subject: "STAT" },
+    category: "structured",
+    notes: "Common student shorthand should be part of the subject alias corpus"
+  },
+  {
+    id: 83,
+    query: "psych",
+    expected_filters: { subject: "PSYC" },
+    expected_residual: "",
+    invariants: { subject: "PSYC" },
+    category: "structured"
   },
 ];

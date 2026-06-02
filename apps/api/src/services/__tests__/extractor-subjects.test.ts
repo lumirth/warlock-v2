@@ -50,10 +50,14 @@ describe('Subject Extraction Rules', () => {
     expect(subject).toBeUndefined();
   });
 
-  it('ignores "the" (not a subject)', () => {
+  it('ignores unsafe lowercase "the" while still allowing the Theatre subject name', () => {
     const result = extract("intro to the theatre");
-    const subject = result.hints.find(h => h.type === 'subject');
-    expect(subject).toBeUndefined();
+    expect(result.hints).not.toContainEqual(
+      expect.objectContaining({ type: 'subject', value: 'THE' })
+    );
+    expect(result.hints).toContainEqual(
+      expect.objectContaining({ type: 'subject', value: 'THEA' })
+    );
   });
 
   it('extracts "thea" (safe lowercase)', () => {
@@ -85,6 +89,22 @@ describe('Subject Extraction Rules', () => {
     expect(subject).toBeDefined();
     expect(subject?.value).toBe('CS');
     expect(result.residual).toBe('intro');
+  });
+
+  it.each([
+    ['philosophy', 'PHIL'],
+    ['intro to philosophy', 'PHIL'],
+    ['political science', 'PS'],
+    ['information sciences', 'IS'],
+    ['art history', 'ARTH'],
+    ['electrical computer engineering', 'ECE'],
+    ['stats', 'STAT'],
+    ['psych', 'PSYC'],
+  ])('extracts official and student subject alias "%s"', (query, expectedSubject) => {
+    const result = extract(query);
+    const subject = result.hints.find(h => h.type === 'subject');
+    expect(subject).toBeDefined();
+    expect(subject?.value).toBe(expectedSubject);
   });
 
   it('extracts "phil 101" as course code', () => {

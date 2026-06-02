@@ -1,3 +1,5 @@
+import { SUBJECT_ALIASES } from './data/valid-subjects.js';
+
 export type AliasKind = 'subject' | 'gened' | 'delivery' | 'status' | 'difficulty' | 'days' | 'time';
 
 export interface AliasEntry {
@@ -128,17 +130,18 @@ export function createDefaultRegistry(): AliasRegistry {
     { kind: 'delivery', canonical: 'false', aliases: ['in person', 'in-person', 'on campus', 'face to face'] },
   ]);
 
-  // High-confidence department aliases. Keep these specific; broad words like
-  // "science" belong to topical search or GenEd handling, not subject filters.
-  registry.addAll([
-    { kind: 'subject', canonical: 'CS', aliases: ['computer science', 'comp sci', 'comp-sci'] },
-    { kind: 'subject', canonical: 'ECE', aliases: ['electrical computer engineering', 'electrical and computer engineering', 'elec comp eng'] },
-    { kind: 'subject', canonical: 'MATH', aliases: ['mathematics'] },
-    { kind: 'subject', canonical: 'STAT', aliases: ['statistics'] },
-    { kind: 'subject', canonical: 'ECON', aliases: ['economics'] },
-    { kind: 'subject', canonical: 'PSYC', aliases: ['psychology', 'psych'] },
-    { kind: 'subject', canonical: 'SPAN', aliases: ['spanish'] },
-  ]);
+  // Official Course Explorer subject names plus conservative student shorthand.
+  // This is generated with the subject list so broad queries like "Philosophy"
+  // resolve as PHIL without maintaining a tiny hand-picked subset.
+  registry.addAll(
+    SUBJECT_ALIASES
+      .filter(entry => entry.aliases.length > 0)
+      .map(entry => ({
+        kind: 'subject',
+        canonical: entry.subject,
+        aliases: entry.aliases,
+      }))
+  );
 
   // Days aliases
   registry.addAll([

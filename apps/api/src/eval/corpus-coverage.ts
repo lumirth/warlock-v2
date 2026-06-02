@@ -22,15 +22,15 @@ export const CORPUS_COVERAGE_REQUIREMENTS: CorpusCoverageRequirement[] = [
   },
   {
     failureClass: 'subject_alias',
-    description: 'Subject codes, full department names, and student nicknames',
-    minimumCases: 5,
-    queryIds: [10, 25, 42, 72, 73, 74],
+    description: 'Subject codes, official full names, punctuation-normalized names, and student nicknames',
+    minimumCases: 12,
+    queryIds: [10, 25, 42, 72, 73, 74, 76, 77, 78, 79, 80, 81, 82, 83],
   },
   {
     failureClass: 'introductory_gateway',
     description: 'Generic beginner/introductory subject queries that should prefer gateway courses',
-    minimumCases: 4,
-    queryIds: [25, 72, 73, 74],
+    minimumCases: 5,
+    queryIds: [25, 72, 73, 74, 77],
   },
   {
     failureClass: 'topical_intro',

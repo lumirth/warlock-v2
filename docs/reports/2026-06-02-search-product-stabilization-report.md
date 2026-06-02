@@ -56,6 +56,18 @@ Latest passing CI on `main`:
 - Result: success
 - CI steps include install, typecheck, schema verification, tests, build, bundle budget, lint, secret scan, dependency audit, and search smoke eval artifact upload.
 
+## Follow-Up Corpus Checkpoint
+
+New issue covered on 2026-06-02: broad subject-name queries such as `Philosophy` were not systematically resolving to their official subjects. The subject alias corpus now uses the generated public Course Explorer subject names plus conservative student shorthand instead of a tiny hand-written subset.
+
+Evidence:
+
+- Generated current public subject list has 190 subject codes and includes official names such as `PHIL: Philosophy`, `IS: Information Sciences`, `ARTH: Art--History`, and `ECE: Electrical and Computer Engineering`.
+- Unsafe lowercase subject codes such as `is`, `me`, `up`, `law`, `art`, and `eng` are not promoted as hard aliases merely because they are common one-word text.
+- `npm test -w @uiuc-course-search/api -- src/services/__tests__/alias-registry.test.ts src/services/__tests__/extractor-subjects.test.ts`: 46/46 passing.
+- `npm run eval:smoke`: 83/83 passing, 0 violations; subject-alias coverage now has 14 cases and includes `philosophy`, `intro to philosophy`, `political science`, `information sciences`, `art history`, `electrical computer engineering`, `stats`, and `psych`.
+- Root `npm run typecheck`, `npm test`, `npm run lint`, and `npm run build` passed after the corpus expansion.
+
 ## Staging Evidence
 
 Staging API URL: https://uiuc-course-search-staging.lumirth.workers.dev
