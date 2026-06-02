@@ -48,6 +48,18 @@ npm run data:freshness:audit -- --input artifacts/sync-status.json --output arti
 
 For production-grade historical coverage, raise `--min-historical-terms` to the expected term count for the supported backfill window. The audit fails on stale terms, stale GPA/RMP sync state, missing current-term coverage, and missing course/section counts for the current term.
 
+Generate the expected term coverage and concrete backfill command list from Course Explorer term discovery:
+
+```bash
+npm run data:term-coverage -- \
+  --from-year 2004 \
+  --to-year 2027 \
+  --status-input artifacts/sync-status.json \
+  --output artifacts/term-coverage-plan.json
+```
+
+The coverage plan exits non-zero while discovered terms are missing, stale, missing counts, or while an upstream term-list year fails. That is intentional: the plan is an operator gate, not a best-effort report.
+
 Default thresholds:
 
 - Active term data is stale after 36 hours without a sync.
