@@ -262,6 +262,16 @@ function isWorkerInvocationLimit(body: TermSyncResponse | null): boolean {
     && body.error.includes('Too many API requests by single Worker invocation');
 }
 
+function isAdaptiveSplitError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message.includes('timed out')
+    || error.message.includes('Too many API requests by single Worker invocation')
+    || /HTTP (408|429|500|502|503|504)/.test(error.message);
+}
+
 function numeric(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -295,6 +305,7 @@ async function postSyncPage(
   token: string,
   args: BackfillArgs & { year: number; term: Term; status: TermStatus },
   offset: number,
+  limit: number,
   options: {
     maxAttempts: number;
     retryDelayMs: number;
@@ -304,7 +315,7 @@ async function postSyncPage(
 ): Promise<TermSyncResponse> {
   const url = endpoint(
     baseUrl,
-    `admin/sync/${args.year}/${args.term}?offset=${offset}&limit=${args.pageSize}&status=${args.status}${args.forceRunningLocks ? '&force=true' : ''}`
+    `admin/sync/${args.year}/${args.term}?offset=${offset}&limit=${limit}&status=${args.status}${args.forceRunningLocks ? '&force=true' : ''}`
   );
 
   for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
@@ -333,7 +344,9 @@ async function postSyncPage(
       ]);
     } catch (error) {
       if (controller.signal.aborted || (error instanceof Error && error.message.includes('timed out'))) {
-        throw new Error(`Backfill page ${offset} timed out after ${options.pageTimeoutMs}ms`);
+        throw new Error(`Backfill page ${offset} timed out after ${options.pageTimeoutMs}ms`, {
+          cause: error,
+        });
       }
       throw error;
     } finally {
@@ -364,6 +377,31 @@ async function postSyncPage(
   }
 
   throw new Error(`Backfill page ${offset} failed after ${options.maxAttempts} attempts`);
+}
+
+function addPageToReport(
+  report: BackfillReport,
+  page: BackfillPageResult,
+  onPage: ProgressReporter | undefined
+): void {
+  report.pages.push(page);
+  report.totals.successfulSubjects += page.successfulSubjects;
+  report.totals.failedSubjects += page.failedSubjects;
+  report.totals.skippedSubjects += page.skippedSubjects;
+  report.totals.courses += page.totalCourses;
+  report.totals.sections += page.totalSections;
+  report.totals.rateLimitHits += page.rateLimitHits;
+  onPage?.(page, report);
+}
+
+function nextOffsetFromBody(body: TermSyncResponse, offset: number, limit: number): number {
+  return body.pagination
+    ? body.pagination.offset + body.pagination.limit
+    : offset + limit;
+}
+
+function shouldStopForMaxPages(report: BackfillReport, maxPages: number | undefined): boolean {
+  return maxPages !== undefined && report.pages.length >= maxPages;
 }
 
 function backupArgs(args: BackfillArgs): D1BackupEvidenceArgs {
@@ -446,33 +484,77 @@ export async function runTermBackfill(
     return report;
   }
 
-  let offset = args.startOffset;
-  while (true) {
-    const body = await postSyncPage(fetcher, baseUrl, adminToken, args, offset, {
+  const syncPage = async (
+    offset: number,
+    limit: number,
+    extraWarning?: string
+  ): Promise<{ body: TermSyncResponse; page: BackfillPageResult; nextOffset: number }> => {
+    const body = await postSyncPage(fetcher, baseUrl, adminToken, args, offset, limit, {
       maxAttempts: maxPageAttempts,
       retryDelayMs,
       sleep: sleeper,
       pageTimeoutMs,
     });
-    const page = pageFromResponse(offset, args.pageSize, body);
-    report.pages.push(page);
-    report.totals.successfulSubjects += page.successfulSubjects;
-    report.totals.failedSubjects += page.failedSubjects;
-    report.totals.skippedSubjects += page.skippedSubjects;
-    report.totals.courses += page.totalCourses;
-    report.totals.sections += page.totalSections;
-    report.totals.rateLimitHits += page.rateLimitHits;
-    options.onPage?.(page, report);
+    const page = pageFromResponse(offset, limit, body);
+    if (extraWarning) {
+      page.warnings.unshift(extraWarning);
+    }
+    return {
+      body,
+      page,
+      nextOffset: nextOffsetFromBody(body, offset, limit),
+    };
+  };
 
-    const nextOffset = body.pagination
-      ? body.pagination.offset + body.pagination.limit
-      : offset + args.pageSize;
-    report.next_offset = page.hasMore ? nextOffset : null;
+  const syncSplitPage = async (offset: number, reason: string): Promise<number | null> => {
+    let splitOffset = offset;
+    for (let index = 0; index < args.pageSize; index += 1) {
+      const split = await syncPage(
+        splitOffset,
+        1,
+        index === 0 ? `adaptive split from offset ${offset} limit ${args.pageSize}: ${reason}` : undefined
+      );
+      addPageToReport(report, split.page, options.onPage);
+      report.next_offset = split.page.hasMore ? split.nextOffset : null;
 
-    if (!page.hasMore) {
+      if (!split.page.hasMore) {
+        return null;
+      }
+      if (shouldStopForMaxPages(report, args.maxPages)) {
+        report.stopped_early = true;
+        return split.nextOffset;
+      }
+
+      splitOffset = split.nextOffset;
+    }
+
+    return splitOffset;
+  };
+
+  let offset = args.startOffset;
+  while (true) {
+    let nextOffset: number | null;
+    try {
+      const result = await syncPage(offset, args.pageSize);
+      if (result.page.failedSubjects > 0 && args.pageSize > 1) {
+        nextOffset = await syncSplitPage(offset, `${result.page.failedSubjects} failed subject(s) reported by aggregate page`);
+      } else {
+        addPageToReport(report, result.page, options.onPage);
+        nextOffset = result.page.hasMore ? result.nextOffset : null;
+        report.next_offset = nextOffset;
+      }
+    } catch (error) {
+      if (args.pageSize <= 1 || !isAdaptiveSplitError(error)) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      nextOffset = await syncSplitPage(offset, message);
+    }
+
+    if (nextOffset === null) {
       break;
     }
-    if (args.maxPages !== undefined && report.pages.length >= args.maxPages) {
+    if (report.stopped_early || shouldStopForMaxPages(report, args.maxPages)) {
       report.stopped_early = true;
       break;
     }

@@ -174,7 +174,7 @@ describe('term backfill runner', () => {
     }, 500));
     const sleep = vi.fn(async () => {});
 
-    await expect(runTermBackfill(args(), {
+    await expect(runTermBackfill(args({ pageSize: 1 }), {
       env: {
         STAGING_API_BASE_URL: 'https://staging.example.test',
         STAGING_ADMIN_TOKEN: 'admin-token',
@@ -186,6 +186,85 @@ describe('term backfill runner', () => {
 
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('splits a failed aggregate page into one-subject pages before continuing', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({
+        successfulSubjects: 4,
+        failedSubjects: 1,
+        totalCourses: 100,
+        totalSections: 250,
+        pagination: { total: 6, offset: 0, limit: 5, hasMore: true },
+      }))
+      .mockResolvedValueOnce(response({
+        successfulSubjects: 1,
+        failedSubjects: 0,
+        totalCourses: 10,
+        totalSections: 20,
+        pagination: { total: 6, offset: 0, limit: 1, hasMore: true },
+      }))
+      .mockResolvedValueOnce(response({
+        successfulSubjects: 1,
+        failedSubjects: 0,
+        totalCourses: 20,
+        totalSections: 40,
+        pagination: { total: 6, offset: 1, limit: 1, hasMore: true },
+      }))
+      .mockResolvedValueOnce(response({
+        successfulSubjects: 1,
+        failedSubjects: 0,
+        totalCourses: 30,
+        totalSections: 60,
+        pagination: { total: 6, offset: 2, limit: 1, hasMore: true },
+      }))
+      .mockResolvedValueOnce(response({
+        successfulSubjects: 1,
+        failedSubjects: 0,
+        totalCourses: 40,
+        totalSections: 80,
+        pagination: { total: 6, offset: 3, limit: 1, hasMore: true },
+      }))
+      .mockResolvedValueOnce(response({
+        successfulSubjects: 1,
+        failedSubjects: 0,
+        totalCourses: 50,
+        totalSections: 100,
+        pagination: { total: 6, offset: 4, limit: 1, hasMore: true },
+      }))
+      .mockResolvedValueOnce(response({
+        successfulSubjects: 1,
+        failedSubjects: 0,
+        totalCourses: 60,
+        totalSections: 120,
+        pagination: { total: 6, offset: 5, limit: 5, hasMore: false },
+      }));
+
+    const report = await runTermBackfill(args(), {
+      env: {
+        STAGING_API_BASE_URL: 'https://staging.example.test',
+        STAGING_ADMIN_TOKEN: 'admin-token',
+      },
+      fetcher,
+      validateBackupEvidence: vi.fn(async () => {}),
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(7);
+    expect((fetcher.mock.calls[0][0] as Request).url).toBe('https://staging.example.test/admin/sync/2025/fall?offset=0&limit=5&status=historical');
+    expect((fetcher.mock.calls[1][0] as Request).url).toBe('https://staging.example.test/admin/sync/2025/fall?offset=0&limit=1&status=historical');
+    expect((fetcher.mock.calls[5][0] as Request).url).toBe('https://staging.example.test/admin/sync/2025/fall?offset=4&limit=1&status=historical');
+    expect((fetcher.mock.calls[6][0] as Request).url).toBe('https://staging.example.test/admin/sync/2025/fall?offset=5&limit=5&status=historical');
+    expect(report.pages).toHaveLength(6);
+    expect(report.pages[0].warnings[0]).toContain('adaptive split from offset 0 limit 5');
+    expect(report.totals).toEqual({
+      successfulSubjects: 6,
+      failedSubjects: 0,
+      skippedSubjects: 0,
+      courses: 210,
+      sections: 420,
+      rateLimitHits: 0,
+    });
+    expect(report.next_offset).toBeNull();
   });
 
   it('reports skipped subjects from active running locks', async () => {
