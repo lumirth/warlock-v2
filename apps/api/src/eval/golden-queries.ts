@@ -523,10 +523,9 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     id: 64,
     query: "with Liu-Prasad",
     expected_filters: {},
-    expected_filter_keys: ["instructor_ids"],
     expected_residual: "",
     category: "instructor",
-    notes: "Hyphenated instructor names should be preserved"
+    notes: "Hyphenated instructor names should be preserved without broadening absent names to unrelated first-token matches"
   },
   {
     id: 65,

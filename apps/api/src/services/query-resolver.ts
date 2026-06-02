@@ -318,12 +318,44 @@ function resolveGened(value: string, plan: SearchPlan): void {
 async function resolveInstructor(db: D1Database, name: string): Promise<number[]> {
   const query = `
     SELECT id FROM instructors
-    WHERE last_name LIKE ? OR display_name LIKE ?
+    WHERE LOWER(last_name) LIKE ? OR LOWER(display_name) LIKE ?
     LIMIT 10
   `;
-  const { results } = await db.prepare(query)
-    .bind(`%${name}%`, `%${name}%`)
-    .all<{ id: number }>();
+  const seen = new Set<number>();
+  const ids: number[] = [];
 
-  return results.map(r => r.id);
+  for (const needle of instructorSearchNeedles(name)) {
+    const pattern = `%${needle}%`;
+    const { results } = await db.prepare(query)
+      .bind(pattern, pattern)
+      .all<{ id: number }>();
+
+    for (const row of results) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        ids.push(row.id);
+      }
+    }
+
+    if (ids.length > 0) {
+      return ids;
+    }
+  }
+
+  return ids;
+}
+
+function instructorSearchNeedles(name: string): string[] {
+  const normalized = name.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!normalized) return [];
+
+  const needles = [normalized];
+  const tokens = normalized.split(/[^a-z0-9']+/).filter(token => token.length >= 3);
+  const likelyLastName = tokens.at(-1);
+
+  if (tokens.length > 1 && likelyLastName && likelyLastName !== normalized) {
+    needles.push(likelyLastName);
+  }
+
+  return [...new Set(needles)];
 }

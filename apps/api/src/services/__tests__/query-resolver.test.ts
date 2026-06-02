@@ -91,6 +91,52 @@ describe('resolveQuery', () => {
       expect(plan.filters.instructor_ids).toEqual([123]);
       expect(plan.semanticQuery).toBe('cs 225');
     });
+
+    it('falls back to likely last-name tokens for natural full-name instructor phrases', async () => {
+      const mockStmt = {
+        bind: vi.fn().mockReturnThis(),
+        all: vi.fn()
+          .mockResolvedValueOnce({ results: [] })
+          .mockResolvedValueOnce({ results: [{ id: 3365 }] }),
+        first: vi.fn()
+      };
+      mockDb.prepare.mockReturnValue(mockStmt);
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'taught by wade fagen algorithms',
+        hints: [{ type: 'instructor', value: 'wade fagen', confidence: 0.8 }],
+        residual: 'algorithms'
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.instructor_ids).toEqual([3365]);
+      expect(mockStmt.bind).toHaveBeenNthCalledWith(1, '%wade fagen%', '%wade fagen%');
+      expect(mockStmt.bind).toHaveBeenNthCalledWith(2, '%fagen%', '%fagen%');
+    });
+
+    it('does not broaden absent hyphenated names to the first token', async () => {
+      const mockStmt = {
+        bind: vi.fn().mockReturnThis(),
+        all: vi.fn()
+          .mockResolvedValueOnce({ results: [] })
+          .mockResolvedValueOnce({ results: [] }),
+        first: vi.fn()
+      };
+      mockDb.prepare.mockReturnValue(mockStmt);
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'with Liu-Prasad',
+        hints: [{ type: 'instructor', value: 'Liu-Prasad', confidence: 0.8 }],
+        residual: ''
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.instructor_ids).toBeUndefined();
+      expect(mockStmt.bind).toHaveBeenNthCalledWith(1, '%liu-prasad%', '%liu-prasad%');
+      expect(mockStmt.bind).toHaveBeenNthCalledWith(2, '%prasad%', '%prasad%');
+    });
   });
 
   describe('gened hints', () => {
