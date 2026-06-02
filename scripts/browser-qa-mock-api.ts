@@ -118,12 +118,28 @@ function searchResponse(query: string): SearchResponseDto {
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, { 'Content-Type': 'application/json' });
+  response.writeHead(status, {
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Origin': '*',
+    'Content-Type': 'application/json',
+  });
   response.end(JSON.stringify(body));
 }
 
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? `localhost:${PORT}`}`);
+  console.log(`[mock-api] ${request.method ?? 'GET'} ${url.pathname}`);
+
+  if (request.method === 'OPTIONS') {
+    response.writeHead(204, {
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Origin': '*',
+    });
+    response.end();
+    return;
+  }
 
   if (url.pathname === '/health') {
     sendJson(response, 200, { healthy: true });
