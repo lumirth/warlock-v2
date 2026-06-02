@@ -30,6 +30,20 @@ export interface GoldQuery {
   notes?: string;
 }
 
+export type QueryFailureClass =
+  | 'course_code_navigation'
+  | 'subject_alias'
+  | 'introductory_gateway'
+  | 'topical_intro'
+  | 'instructor_name'
+  | 'gened_language'
+  | 'schedule_delivery'
+  | 'score_quality'
+  | 'power_syntax'
+  | 'ambiguity'
+  | 'semantic_topic'
+  | 'unsupported_language';
+
 export interface EvalResult {
   query: GoldQuery;
   actualFilters: Record<string, unknown>;

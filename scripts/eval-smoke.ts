@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import { GOLDEN_QUERIES } from '../apps/api/src/eval/golden-queries.js';
 import { checkExpectedKeys, checkExpectedObject, checkExpectedResidual } from '../apps/api/src/eval/checks.js';
+import { evaluateCorpusCoverage, findDuplicateQueryIds, formatCorpusCoverageReport } from '../apps/api/src/eval/corpus-coverage.js';
 import { createSearchPlan } from '../apps/api/src/services/search-pipeline.js';
 import { VALID_SUBJECTS } from '../apps/api/src/services/data/valid-subjects.js';
 import type { EvalResult } from '../apps/api/src/eval/types.js';
@@ -154,13 +155,22 @@ async function main(): Promise<void> {
   }
 
   mkdirSync('artifacts', { recursive: true });
-  writeFileSync('artifacts/eval-smoke-report.md', formatReport(results));
+  const coverage = evaluateCorpusCoverage(GOLDEN_QUERIES);
+  const duplicateIds = findDuplicateQueryIds(GOLDEN_QUERIES);
+  const report = `${formatReport(results)}\n${formatCorpusCoverageReport(coverage)}`;
+
+  writeFileSync('artifacts/eval-smoke-report.md', report);
   writeFileSync('artifacts/eval-smoke-results.json', `${JSON.stringify(results, null, 2)}\n`);
 
   const failures = results.filter(result => result.violations.length > 0);
-  console.log(formatReport(results));
+  const coverageFailures = coverage.filter(result => !result.passes);
+  console.log(report);
 
-  if (failures.length > 0) {
+  if (duplicateIds.length > 0) {
+    console.error(`Duplicate golden query ids: ${duplicateIds.join(', ')}`);
+  }
+
+  if (failures.length > 0 || coverageFailures.length > 0 || duplicateIds.length > 0) {
     process.exitCode = 1;
   }
 }
