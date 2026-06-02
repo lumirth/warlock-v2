@@ -165,7 +165,7 @@ function backfillCommand(row: TermCoverageRow): string {
     `--year ${row.year}`,
     `--term ${row.term}`,
     `--status ${row.expected_status}`,
-    '--page-size 20',
+    '--page-size 5',
     '--backup-ref "$BACKUP_REF"',
     '--evidence-file "artifacts/d1-backups/$BACKUP_REF-term-coverage/evidence.md"',
     '--restore-verified',

@@ -21,6 +21,9 @@ type GenEdCleanup = {
 };
 
 const SUBJECT_SYNC_LOCK_TTL_SECONDS = 30 * 60;
+const SUBJECT_CASCADE_TIMEOUT_MS = 60_000;
+const SUBJECT_LIST_TIMEOUT_MS = 30_000;
+const D1_WRITE_BATCH_SIZE = 100;
 
 type CourseForEmbedding = CourseWithSections['course'];
 
@@ -78,7 +81,7 @@ async function fetchSubjectCascade(
 
   const url = `${config.cisapiBase}/schedule/${year}/${term}/${subject}.xml?mode=cascade`;
 
-  const response = await browserFetch(url);
+  const response = await browserFetch(url, { timeoutMs: SUBJECT_CASCADE_TIMEOUT_MS });
 
   if (!response.ok) {
     if (upstreamBackoff.isRateLimited(response.status)) {
@@ -200,11 +203,9 @@ async function saveSubjectData(
   }
 
   // Execute batches in chunks to avoid limits
-  const BATCH_SIZE = 50;
-
   const executeBatch = async (stmts: D1PreparedStatement[]) => {
-    for (let i = 0; i < stmts.length; i += BATCH_SIZE) {
-      const chunk = stmts.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < stmts.length; i += D1_WRITE_BATCH_SIZE) {
+      const chunk = stmts.slice(i, i + D1_WRITE_BATCH_SIZE);
       if (chunk.length > 0) await db.batch(chunk);
     }
   };
@@ -212,9 +213,7 @@ async function saveSubjectData(
   // Order matters for FK constraints and linking logic
   await executeBatch(courseStatements);
   await executeBatch(genedStatements);
-  for (const cleanup of genedCleanup) {
-    await pruneStaleCourseGeneds(db, cleanup);
-  }
+  await executeBatch(genedCleanup.map(cleanup => preparePruneStaleCourseGeneds(db, cleanup)));
   await executeBatch(sectionStatements);
   await executeBatch(instructorStatements); // Upsert instructors first so they exist for linking
   await executeBatch(meetingStatements);    // Upsert meetings so they exist for linking
@@ -250,11 +249,13 @@ async function saveSubjectData(
 }
 
 export async function pruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): Promise<void> {
+  await preparePruneStaleCourseGeneds(db, cleanup).run();
+}
+
+function preparePruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): D1PreparedStatement {
   if (cleanup.currentKeys.length === 0) {
-    await db.prepare('DELETE FROM course_gened WHERE course_id = ?')
-      .bind(cleanup.courseId)
-      .run();
-    return;
+    return db.prepare('DELETE FROM course_gened WHERE course_id = ?')
+      .bind(cleanup.courseId);
   }
 
   const keepClauses = cleanup.currentKeys
@@ -262,11 +263,11 @@ export async function pruneStaleCourseGeneds(db: D1Database, cleanup: GenEdClean
     .join(' OR ');
   const params = cleanup.currentKeys.flatMap(key => [key.categoryId, key.attributeCode ?? '']);
 
-  await db.prepare(`
+  return db.prepare(`
     DELETE FROM course_gened
     WHERE course_id = ?
       AND NOT (${keepClauses})
-  `).bind(cleanup.courseId, ...params).run();
+  `).bind(cleanup.courseId, ...params);
 }
 
 export async function pruneStaleSubjectRows(
@@ -332,7 +333,7 @@ export async function getSubjectsForTerm(
   await upstreamBackoff.waitIfNeeded();
 
   const url = `${config.cisapiBase}/schedule/${year}/${term}.xml`;
-  const response = await browserFetch(url);
+  const response = await browserFetch(url, { timeoutMs: SUBJECT_LIST_TIMEOUT_MS });
 
   if (!response.ok) {
     throw new Error(`Failed to get subjects: HTTP ${response.status}`);

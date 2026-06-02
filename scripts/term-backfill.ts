@@ -5,7 +5,7 @@ import { validateD1BackupEvidence, type D1BackupEvidenceArgs } from './lib/d1-ba
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
 const STATUSES = ['registrable', 'active', 'historical'] as const;
-const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 5;
 const MAX_PAGE_SIZE = 20;
 const DEFAULT_DATABASE = 'course-search-db-staging';
 const DEFAULT_MAX_PAGE_ATTEMPTS = 8;
@@ -16,6 +16,7 @@ type Term = typeof TERMS[number];
 type TermStatus = typeof STATUSES[number];
 type Fetcher = (request: Request) => Promise<Response>;
 type Sleeper = (ms: number) => Promise<void>;
+type ProgressReporter = (page: BackfillPageResult, report: BackfillReport) => void;
 
 export type { Term, TermStatus };
 
@@ -43,6 +44,7 @@ type SyncPagination = {
 };
 
 type TermSyncResponse = {
+  error?: string;
   termId?: string;
   year?: number;
   term?: string;
@@ -246,6 +248,11 @@ function isTransientStatus(status: number): boolean {
   return TRANSIENT_STATUS_CODES.has(status);
 }
 
+function isWorkerInvocationLimit(body: TermSyncResponse | null): boolean {
+  return typeof body?.error === 'string'
+    && body.error.includes('Too many API requests by single Worker invocation');
+}
+
 function numeric(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -311,7 +318,7 @@ async function postSyncPage(
       return body ?? {};
     }
 
-    if (!isTransientStatus(response.status) || attempt === options.maxAttempts) {
+    if (isWorkerInvocationLimit(body) || !isTransientStatus(response.status) || attempt === options.maxAttempts) {
       throw new Error(`Backfill page ${offset} failed with HTTP ${response.status}: ${JSON.stringify(body)}`);
     }
 
@@ -339,6 +346,7 @@ export async function runTermBackfill(
     sleep?: Sleeper;
     maxPageAttempts?: number;
     retryDelayMs?: number;
+    onPage?: ProgressReporter;
   } = {}
 ): Promise<BackfillReport> {
   validateBackfillArgs(args);
@@ -414,6 +422,7 @@ export async function runTermBackfill(
     report.totals.courses += page.totalCourses;
     report.totals.sections += page.totalSections;
     report.totals.rateLimitHits += page.rateLimitHits;
+    options.onPage?.(page, report);
 
     const nextOffset = body.pagination
       ? body.pagination.offset + body.pagination.limit
@@ -482,7 +491,19 @@ function writeReport(output: string, report: BackfillReport): void {
 async function main(): Promise<void> {
   const args = parseBackfillArgs(process.argv.slice(2));
   try {
-    const report = await runTermBackfill(args);
+    const report = await runTermBackfill(args, {
+      onPage: (page, partialReport) => {
+        const nextOffset = page.hasMore ? page.offset + page.limit : null;
+        process.stderr.write([
+          `synced ${partialReport.term_id}`,
+          `offset=${page.offset}`,
+          `subjects=${page.successfulSubjects}`,
+          `failed=${page.failedSubjects}`,
+          `skipped=${page.skippedSubjects}`,
+          `next=${nextOffset ?? 'complete'}`,
+        ].join(' ') + '\n');
+      },
+    });
     if (args.output) {
       writeReport(args.output, report);
     }

@@ -13,7 +13,7 @@ import {
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
 const STATUSES = ['registrable', 'active', 'historical'] as const;
-const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 5;
 const MAX_PAGE_SIZE = 20;
 const DEFAULT_DATABASE = 'course-search-db-staging';
 

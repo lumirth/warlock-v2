@@ -166,6 +166,26 @@ describe('term backfill runner', () => {
     expect(report.next_offset).toBeNull();
   });
 
+  it('does not retry Worker invocation limit failures', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({
+      error: 'Error: Too many API requests by single Worker invocation.',
+    }, 500));
+    const sleep = vi.fn(async () => {});
+
+    await expect(runTermBackfill(args(), {
+      env: {
+        STAGING_API_BASE_URL: 'https://staging.example.test',
+        STAGING_ADMIN_TOKEN: 'admin-token',
+      },
+      fetcher,
+      sleep,
+      validateBackupEvidence: vi.fn(async () => {}),
+    })).rejects.toThrow('Too many API requests by single Worker invocation');
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it('reports skipped subjects from active running locks', async () => {
     const fetcher = vi.fn().mockResolvedValue(response({
       subjectResults: [

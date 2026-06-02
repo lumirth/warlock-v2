@@ -26,6 +26,7 @@ export const BROWSER_HEADERS: Record<string, string> = {
 export interface BrowserFetchOptions extends RequestInit {
   retries?: number;
   retryDelay?: number;
+  timeoutMs?: number;
 }
 
 /**
@@ -36,7 +37,7 @@ export async function browserFetch(
   url: string,
   options: BrowserFetchOptions = {}
 ): Promise<Response> {
-  const { retries = 3, retryDelay = 1000, ...fetchOptions } = options;
+  const { retries = 3, retryDelay = 1000, timeoutMs, ...fetchOptions } = options;
   const headers = new Headers(fetchOptions.headers);
 
   // Add browser headers if not already set
@@ -50,10 +51,7 @@ export async function browserFetch(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await fetch(url, {
-        ...fetchOptions,
-        headers
-      });
+      const response = await fetchWithTimeout(url, fetchOptions, headers, timeoutMs);
 
       // Check for WAF challenge - retry if challenged
       if (isWafChallenge(response) && attempt < retries) {
@@ -87,4 +85,43 @@ export function isWafChallenge(response: Response): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  headers: Headers,
+  timeoutMs: number | undefined
+): Promise<Response> {
+  if (!timeoutMs) {
+    return fetch(url, {
+      ...options,
+      headers
+    });
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort(`fetch timed out after ${timeoutMs}ms`);
+  }, timeoutMs);
+
+  const upstreamSignal = options.signal;
+  const abortFromUpstream = () => {
+    controller.abort(upstreamSignal?.reason);
+  };
+
+  if (upstreamSignal?.aborted) {
+    abortFromUpstream();
+  } else {
+    upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
+  }
+
+  return fetch(url, {
+    ...options,
+    headers,
+    signal: controller.signal,
+  }).finally(() => {
+    clearTimeout(timeout);
+    upstreamSignal?.removeEventListener('abort', abortFromUpstream);
+  });
 }
