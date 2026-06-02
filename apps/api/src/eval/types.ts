@@ -34,6 +34,7 @@ export type QueryFailureClass =
   | 'course_code_navigation'
   | 'subject_alias'
   | 'misspelling'
+  | 'topic_synonym'
   | 'introductory_gateway'
   | 'topical_intro'
   | 'instructor_name'

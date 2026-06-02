@@ -56,6 +56,7 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     ai = {} as unknown as Ai;
     pipeline = new SearchPipeline(db, vectorize, ai);
     vi.clearAllMocks();
+    vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
   });
 
   it('Tier 1: "CS 225" should return strict match immediately', async () => {
@@ -123,7 +124,7 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     });
   });
 
-  it('Tier 3: "easy ai classes" should expand topics', async () => {
+  it('"easy ai classes" expands topics before the initial search', async () => {
     const query = 'easy ai classes';
     
     const extraction: ExtractionResult = {
@@ -139,20 +140,23 @@ describe('SearchPipeline Tiered Logic Integration', () => {
 
     vi.mocked(extractor.extractQuery).mockReturnValue(extraction);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(plan);
-    vi.mocked(topicRegistry.expandTopics).mockReturnValue(['artificial intelligence', 'machine learning']);
+    vi.mocked(search.sanitizeFtsQuery).mockImplementation(queryText => queryText);
+    vi.mocked(topicRegistry.expandTopics).mockReturnValue(['artificial intelligence']);
 
     vi.mocked(search.hybridSearchWithTermRanking)
-      .mockResolvedValueOnce([{ course: mockCourse({ id: 'AI-101', title: 'Intro to AI' }), score: 0.5, termPriority: 0 }])
-      .mockResolvedValueOnce([
-        { course: mockCourse({ id: 'AI-101', title: 'Intro to AI' }), score: 0.5, termPriority: 0 },
-        { course: mockCourse({ id: 'CS-440', title: 'Artificial Intelligence' }), score: 0.9, termPriority: 0 }
-      ]);
+      .mockResolvedValueOnce([{ course: mockCourse({ id: 'CS-440', title: 'Artificial Intelligence' }), score: 0.9, termPriority: 0 }]);
 
     const result = await pipeline.search(query);
 
     expect(topicRegistry.expandTopics).toHaveBeenCalledWith('ai classes');
-    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(2);
-    expect(result.results).toHaveLength(2);
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3]).toMatchObject({
+      filters: { difficulty: 'easy' },
+      semanticQuery: 'ai classes artificial intelligence',
+      keywordQuery: 'ai classes artificial intelligence',
+      softPreferences: { topicExpansions: ['artificial intelligence'] },
+    });
+    expect(result.results).toHaveLength(1);
     expect(result.results[0].course.id).toBe('CS-440');
   });
 

@@ -763,4 +763,79 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     invariants: { subject: "PSYC" },
     category: "structured"
   },
+  {
+    id: 92,
+    query: "ai",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["artificial intelligence"] },
+    expected_residual: "ai",
+    category: "semantic",
+    notes: "Acronym topics should expand into canonical search language"
+  },
+  {
+    id: 93,
+    query: "ai/ml",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["artificial intelligence", "machine learning"] },
+    expected_residual: "ai/ml",
+    category: "semantic",
+    notes: "Punctuation-separated acronyms should be understood independently"
+  },
+  {
+    id: 94,
+    query: "artifical inteligence",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["artificial intelligence"] },
+    expected_residual: "artifical inteligence",
+    category: "semantic",
+    notes: "Long typoed topic phrase should expand conservatively"
+  },
+  {
+    id: 95,
+    query: "machne learning",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["machine learning"] },
+    expected_residual: "machne learning",
+    category: "semantic"
+  },
+  {
+    id: 96,
+    query: "database systems",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["database"] },
+    expected_residual: "database systems",
+    category: "semantic"
+  },
+  {
+    id: 97,
+    query: "cyber security",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["cybersecurity"] },
+    expected_residual: "cyber security",
+    category: "semantic"
+  },
+  {
+    id: 98,
+    query: "human compter interaction",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["human computer interaction"] },
+    expected_residual: "human compter interaction",
+    category: "semantic"
+  },
+  {
+    id: 99,
+    query: "c++",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["c++ programming"] },
+    expected_residual: "c++",
+    category: "semantic"
+  },
+  {
+    id: 100,
+    query: "software development",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["software engineering"] },
+    expected_residual: "software development",
+    category: "semantic"
+  },
 ];

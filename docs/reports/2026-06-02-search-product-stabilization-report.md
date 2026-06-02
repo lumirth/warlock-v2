@@ -75,6 +75,13 @@ Additional typo-tolerance checkpoint:
 - Focused alias/extractor tests: 61/61 passing.
 - Root `npm run typecheck`, `npm test`, `npm run lint`, and `npm run build` passed after the typo-tolerance expansion.
 
+Additional synonym/acronym checkpoint:
+
+- Topic expansion now uses grouped topic entries with synonym, acronym, punctuation, and typo variants rather than a flat one-off alias map.
+- The search plan exposes `softPreferences.topicExpansions`, so evals can assert that terms such as `ai`, `ai/ml`, `artifical inteligence`, `database systems`, `cyber security`, `human compter interaction`, `c++`, and `software development` were understood.
+- `npm run eval:smoke`: 100/100 passing, 0 violations; added an explicit `topic_synonym` corpus class with 9/9 cases.
+- Focused topic/pipeline tests: 23/23 passing.
+
 ## Staging Evidence
 
 Staging API URL: https://uiuc-course-search-staging.lumirth.workers.dev

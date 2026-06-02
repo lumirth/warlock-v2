@@ -201,6 +201,22 @@ function applyIntroductoryGatewayIntent(plan: SearchPlan): boolean {
   return true;
 }
 
+function applyTopicExpansion(plan: SearchPlan): string[] {
+  const sourceQuery = plan.semanticQuery || plan.keywordQuery || '';
+  const expansions = expandTopics(sourceQuery);
+  if (expansions.length === 0) {
+    return [];
+  }
+
+  plan.softPreferences = {
+    ...plan.softPreferences,
+    topicExpansions: expansions,
+  };
+  plan.semanticQuery = appendQueryText(plan.semanticQuery, expansions.join(' '));
+  plan.keywordQuery = appendQueryText(plan.keywordQuery, expansions.join(' '));
+  return expansions;
+}
+
 const MIN_INTRODUCTORY_GATEWAY_CANDIDATES = 40;
 
 export function searchCandidateLimit(plan: SearchPlan, requestedLimit: number): number {
@@ -279,6 +295,8 @@ export async function createSearchPlan(
     queryResidual = plan.semanticQuery;
   }
 
+  applyTopicExpansion(plan);
+
   plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);
   plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
 
@@ -330,7 +348,12 @@ export class SearchPipeline {
       // If we have few results, try expansion
       if (results.length < 3) {
         // Tier 3: Topic Hybrid (Topic expansion)
-        const expandedKeywords = expandTopics(queryResidual);
+        const existingExpansions = Array.isArray(plan.softPreferences?.topicExpansions)
+          ? plan.softPreferences.topicExpansions
+          : [];
+        const expandedKeywords = existingExpansions.length > 0
+          ? []
+          : expandTopics(queryResidual);
         if (expandedKeywords.length > 0) {
           tierReached = 3;
           const expandedPlan: SearchPlan = {

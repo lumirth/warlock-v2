@@ -56,6 +56,7 @@ describe('SearchPipeline', () => {
     ai = {} as unknown as Ai;
     pipeline = new SearchPipeline(db, vectorize, ai);
     vi.clearAllMocks();
+    vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
   });
 
   it('Tier 1: should return results immediately for navigational queries', async () => {
@@ -147,26 +148,29 @@ describe('SearchPipeline', () => {
     expect(searchCandidateLimit({ filters: {}, semanticQuery: 'systems', keywordQuery: 'systems' }, 5)).toBe(5);
   });
 
-  it('Tier 3: should expand topics if Tier 2 returns few results', async () => {
+  it('applies topic expansions to the initial search plan', async () => {
     const query = 'ml courses';
     const mockExtracted: ExtractionResult = { hints: [], residual: 'ml' };
     const mockPlan: SearchPlan = { filters: {}, semanticQuery: 'ml', keywordQuery: 'ml' };
     
     vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
+    vi.mocked(search.sanitizeFtsQuery).mockImplementation(queryText => queryText);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue(['machine learning']);
     
-    // Tier 2 returns 1 result, trigger Tier 3
     vi.mocked(search.hybridSearchWithTermRanking)
-      .mockResolvedValueOnce([{ course: mockCourse({ id: '1' }), score: 0.5 }]) 
-      .mockResolvedValueOnce([{ course: mockCourse({ id: '1' }), score: 0.5 }, { course: mockCourse({ id: '2' }), score: 0.9 }]);
+      .mockResolvedValueOnce([{ course: mockCourse({ id: '1' }), score: 0.5 }]);
 
     const result = await pipeline.search(query);
 
     expect(topicRegistry.expandTopics).toHaveBeenCalledWith('ml');
-    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(2);
-    // Result should be the best ones found
-    expect(result.results.length).toBe(2);
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3]).toMatchObject({
+      semanticQuery: 'ml machine learning',
+      keywordQuery: 'ml machine learning',
+      softPreferences: { topicExpansions: ['machine learning'] },
+    });
+    expect(result.results.length).toBe(1);
   });
 
   it('applies Query Language v1 power fields, quoted phrases, and dash negation', async () => {

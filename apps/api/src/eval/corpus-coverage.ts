@@ -33,6 +33,12 @@ export const CORPUS_COVERAGE_REQUIREMENTS: CorpusCoverageRequirement[] = [
     queryIds: [84, 85, 86, 87, 88, 89, 90, 91],
   },
   {
+    failureClass: 'topic_synonym',
+    description: 'Acronyms, synonyms, punctuation variants, and typoed topic phrases that expand into canonical search language',
+    minimumCases: 9,
+    queryIds: [92, 93, 94, 95, 96, 97, 98, 99, 100],
+  },
+  {
     failureClass: 'introductory_gateway',
     description: 'Generic beginner/introductory subject queries that should prefer gateway courses',
     minimumCases: 5,
