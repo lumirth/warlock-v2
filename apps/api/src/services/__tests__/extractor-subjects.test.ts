@@ -107,6 +107,22 @@ describe('Subject Extraction Rules', () => {
     expect(subject?.value).toBe(expectedSubject);
   });
 
+  it.each([
+    ['philosphy', 'PHIL'],
+    ['intro to philosphy', 'PHIL'],
+    ['computr science', 'CS'],
+    ['politcal science', 'PS'],
+    ['informaton sciences', 'IS'],
+    ['art histry', 'ARTH'],
+    ['organic chemstry', 'CHEM'],
+    ['psycology', 'PSYC'],
+  ])('extracts typo-tolerant subject alias "%s"', (query, expectedSubject) => {
+    const result = extract(query);
+    const subject = result.hints.find(h => h.type === 'subject');
+    expect(subject).toBeDefined();
+    expect(subject?.value).toBe(expectedSubject);
+  });
+
   it('extracts "phil 101" as course code', () => {
     const result = extract("phil 101");
     const course = result.hints.find(h => h.type === 'courseCode');

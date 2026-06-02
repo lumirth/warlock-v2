@@ -695,4 +695,72 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     invariants: { subject: "PSYC" },
     category: "structured"
   },
+  {
+    id: 84,
+    query: "philosphy",
+    expected_filters: { subject: "PHIL" },
+    expected_residual: "",
+    invariants: { subject: "PHIL" },
+    category: "structured",
+    notes: "Common single-character typo should still resolve to the official subject"
+  },
+  {
+    id: 85,
+    query: "intro to philosphy",
+    expected_filters: { subject: "PHIL" },
+    expected_soft_preferences: { levelBoost: 100, introductoryIntent: "gateway" },
+    expected_residual: "",
+    invariants: { subject: "PHIL" },
+    category: "structured",
+    notes: "Typo-tolerant subject aliases should participate in introductory gateway intent"
+  },
+  {
+    id: 86,
+    query: "computr science",
+    expected_filters: { subject: "CS" },
+    expected_residual: "",
+    invariants: { subject: "CS" },
+    category: "structured"
+  },
+  {
+    id: 87,
+    query: "politcal science",
+    expected_filters: { subject: "PS" },
+    expected_residual: "",
+    invariants: { subject: "PS" },
+    category: "structured"
+  },
+  {
+    id: 88,
+    query: "informaton sciences",
+    expected_filters: { subject: "IS" },
+    expected_residual: "",
+    invariants: { subject: "IS" },
+    category: "structured"
+  },
+  {
+    id: 89,
+    query: "art histry",
+    expected_filters: { subject: "ARTH" },
+    expected_residual: "",
+    invariants: { subject: "ARTH" },
+    category: "structured"
+  },
+  {
+    id: 90,
+    query: "organic chemstry",
+    expected_filters: { subject: "CHEM" },
+    expected_residual: "organic",
+    invariants: { subject: "CHEM" },
+    category: "semantic",
+    notes: "Subject typo should become a hard subject filter while preserving topical residual"
+  },
+  {
+    id: 91,
+    query: "psycology",
+    expected_filters: { subject: "PSYC" },
+    expected_residual: "",
+    invariants: { subject: "PSYC" },
+    category: "structured"
+  },
 ];

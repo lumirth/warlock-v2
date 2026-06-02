@@ -19,6 +19,13 @@ export interface AliasMatch {
 
 // Cue words that indicate gened filter intent
 const GENED_CUES = ['gen ed', 'gened', 'gen-ed', 'requirement', 'category'];
+const FUZZY_SUBJECT_CONFIDENCE = 0.72;
+
+interface TokenSpan {
+  text: string;
+  start: number;
+  end: number;
+}
 
 export class AliasRegistry {
   private entries: AliasEntry[] = [];
@@ -96,8 +103,125 @@ export class AliasRegistry {
       }
     }
 
+    const fuzzySubjectMatches = this.matchFuzzySubjects(text, sortedEntries, consumed);
+    matches.push(...fuzzySubjectMatches);
+
     return matches;
   }
+
+  private matchFuzzySubjects(text: string, sortedEntries: AliasEntry[], consumed: Set<number>): AliasMatch[] {
+    const tokens = tokenize(text);
+    if (tokens.length === 0) return [];
+
+    const matches: AliasMatch[] = [];
+
+    for (const entry of sortedEntries) {
+      if (entry.kind !== 'subject') continue;
+
+      for (const alias of entry.aliases.sort((a, b) => b.length - a.length)) {
+        if (!shouldFuzzyMatchSubjectAlias(alias)) continue;
+
+        const aliasLower = alias.toLowerCase();
+        const aliasWords = aliasLower.split(/\s+/).filter(Boolean);
+        if (aliasWords.length === 0 || aliasWords.length > tokens.length) continue;
+
+        const maxDistance = maxFuzzySubjectDistance(aliasLower);
+        for (let start = 0; start <= tokens.length - aliasWords.length; start++) {
+          const spanTokens = tokens.slice(start, start + aliasWords.length);
+          const spanStart = spanTokens[0].start;
+          const spanEnd = spanTokens[spanTokens.length - 1].end;
+          if (isConsumed(spanStart, spanEnd, consumed)) continue;
+
+          const candidate = spanTokens.map(token => token.text).join(' ');
+          const distance = boundedLevenshtein(aliasLower, candidate, maxDistance);
+          if (distance > maxDistance) continue;
+
+          matches.push({
+            kind: entry.kind,
+            canonical: entry.canonical,
+            span: [spanStart, spanEnd],
+            confidence: distance === 0 ? 0.86 : FUZZY_SUBJECT_CONFIDENCE,
+            raw: text.slice(spanStart, spanEnd),
+          });
+
+          for (let i = spanStart; i < spanEnd; i++) {
+            consumed.add(i);
+          }
+        }
+      }
+    }
+
+    return matches;
+  }
+}
+
+function tokenize(text: string): TokenSpan[] {
+  const tokens: TokenSpan[] = [];
+  const regex = /[a-z0-9]+/gi;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    tokens.push({
+      text: match[0].toLowerCase(),
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  return tokens;
+}
+
+function isConsumed(start: number, end: number, consumed: Set<number>): boolean {
+  for (let i = start; i < end; i++) {
+    if (consumed.has(i)) return true;
+  }
+
+  return false;
+}
+
+function shouldFuzzyMatchSubjectAlias(alias: string): boolean {
+  const words = alias.split(/\s+/).filter(Boolean);
+  const compactLength = words.join('').length;
+  if (compactLength < 8) return false;
+
+  return words.length > 1 || compactLength >= 8;
+}
+
+function maxFuzzySubjectDistance(alias: string): number {
+  const compactLength = alias.replace(/\s+/g, '').length;
+  return compactLength >= 18 ? 2 : 1;
+}
+
+function boundedLevenshtein(left: string, right: string, maxDistance: number): number {
+  if (Math.abs(left.length - right.length) > maxDistance) {
+    return maxDistance + 1;
+  }
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  let current = new Array<number>(right.length + 1);
+
+  for (let i = 1; i <= left.length; i++) {
+    current[0] = i;
+    let rowMin = current[0];
+
+    for (let j = 1; j <= right.length; j++) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + cost
+      );
+      rowMin = Math.min(rowMin, current[j]);
+    }
+
+    if (rowMin > maxDistance) {
+      return maxDistance + 1;
+    }
+
+    [previous, current] = [current, previous];
+  }
+
+  return previous[right.length];
 }
 
 export function createDefaultRegistry(): AliasRegistry {

@@ -33,7 +33,7 @@ The pass is complete only when every item below has concrete evidence in the fin
 | --- | --- |
 | Pre-alpha, no users, greenfield cutovers | This plan, implementation commits, deleted duplicate paths, docs stating no compatibility obligations |
 | Search Product Contract v2 | `docs/plans/2026-06-02-search-product-corpus-feedback-master-plan.md`, shared DTOs in `packages/query-types`, API/web tests |
-| Comprehensive query/eval corpus | Typed corpus files, generated official subject-name aliases, eval runner assertions, CI/local `npm run eval:smoke` output |
+| Comprehensive query/eval corpus | Typed corpus files, generated official subject-name aliases, typo-tolerant subject cases, eval runner assertions, CI/local `npm run eval:smoke` output |
 | Instructor/professor search | Extractor/resolver tests, corpus cases, API integration tests, Browser QA queries |
 | Low-friction feedback | Migration/schema, API route, frontend UI, triage/report docs, feedback tests |
 | Feedback-to-eval path | Feedback triage docs/script or admin route, corpus promotion workflow, tests |

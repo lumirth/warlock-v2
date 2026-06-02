@@ -104,6 +104,25 @@ describe('AliasRegistry', () => {
         expect.objectContaining({ kind: 'subject', canonical: 'ME' })
       );
     });
+
+    it.each([
+      ['philosphy', 'PHIL'],
+      ['computr science', 'CS'],
+      ['politcal science', 'PS'],
+      ['informaton sciences', 'IS'],
+      ['art histry', 'ARTH'],
+      ['psycology', 'PSYC'],
+    ])('fuzzy-matches typo "%s" as %s', (query, subject) => {
+      const matches = registry.match(query);
+      expect(matches).toContainEqual(
+        expect.objectContaining({ kind: 'subject', canonical: subject })
+      );
+    });
+
+    it('keeps fuzzy subject matching away from short aliases and common prose', () => {
+      const matches = registry.match('this is a test for me about art and law');
+      expect(matches.filter(match => match.kind === 'subject')).toHaveLength(0);
+    });
   });
 
   describe('days aliases', () => {

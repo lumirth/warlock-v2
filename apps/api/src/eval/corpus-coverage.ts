@@ -27,10 +27,16 @@ export const CORPUS_COVERAGE_REQUIREMENTS: CorpusCoverageRequirement[] = [
     queryIds: [10, 25, 42, 72, 73, 74, 76, 77, 78, 79, 80, 81, 82, 83],
   },
   {
+    failureClass: 'misspelling',
+    description: 'Typo-tolerant official subject names and common subject phrases without broad short-code fuzziness',
+    minimumCases: 8,
+    queryIds: [84, 85, 86, 87, 88, 89, 90, 91],
+  },
+  {
     failureClass: 'introductory_gateway',
     description: 'Generic beginner/introductory subject queries that should prefer gateway courses',
     minimumCases: 5,
-    queryIds: [25, 72, 73, 74, 77],
+    queryIds: [25, 72, 73, 74, 77, 85],
   },
   {
     failureClass: 'topical_intro',

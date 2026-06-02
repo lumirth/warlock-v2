@@ -68,6 +68,13 @@ Evidence:
 - `npm run eval:smoke`: 83/83 passing, 0 violations; subject-alias coverage now has 14 cases and includes `philosophy`, `intro to philosophy`, `political science`, `information sciences`, `art history`, `electrical computer engineering`, `stats`, and `psych`.
 - Root `npm run typecheck`, `npm test`, `npm run lint`, and `npm run build` passed after the corpus expansion.
 
+Additional typo-tolerance checkpoint:
+
+- Subject aliases now use conservative fuzzy matching only for long official subject aliases, after exact matches, with short-code and common-prose guards intact.
+- `npm run eval:smoke`: 91/91 passing, 0 violations; added an explicit `misspelling` corpus class with `philosphy`, `intro to philosphy`, `computr science`, `politcal science`, `informaton sciences`, `art histry`, `organic chemstry`, and `psycology`.
+- Focused alias/extractor tests: 61/61 passing.
+- Root `npm run typecheck`, `npm test`, `npm run lint`, and `npm run build` passed after the typo-tolerance expansion.
+
 ## Staging Evidence
 
 Staging API URL: https://uiuc-course-search-staging.lumirth.workers.dev

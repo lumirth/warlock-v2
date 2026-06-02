@@ -33,6 +33,7 @@ export interface GoldQuery {
 export type QueryFailureClass =
   | 'course_code_navigation'
   | 'subject_alias'
+  | 'misspelling'
   | 'introductory_gateway'
   | 'topical_intro'
   | 'instructor_name'
