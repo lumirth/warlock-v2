@@ -251,7 +251,10 @@ function termReport(row: CoveragePlanTerm, report: BackfillReport): CoverageBack
     term: row.term,
     status: row.expected_status,
     reason: row.reason,
-    complete: report.next_offset === null && !report.stopped_early && report.totals.skippedSubjects === 0,
+    complete: report.next_offset === null
+      && !report.stopped_early
+      && report.totals.failedSubjects === 0
+      && report.totals.skippedSubjects === 0,
     stopped_early: report.stopped_early,
     next_offset: report.next_offset,
     totals: report.totals,
