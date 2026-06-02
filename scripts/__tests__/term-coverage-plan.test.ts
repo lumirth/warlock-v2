@@ -169,6 +169,42 @@ describe('term coverage plan', () => {
     });
   });
 
+  it('keeps terms with impossible subject counts in the backfill plan', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring' }));
+    const status = {
+      syncStates: [
+        { id: 'course-sync:2026-spring:CS', last_status: 'complete' },
+        { id: 'course-sync:2026-spring:MATH', last_status: 'complete' },
+        { id: 'course-sync:2026-spring:STAT', last_status: 'complete' },
+      ],
+      termStates: [
+        {
+          term_id: '2026-spring',
+          year: 2026,
+          term: 'spring',
+          status: 'active',
+          subjects_count: 1,
+          courses_count: 1200,
+          sections_count: 5000,
+          last_synced: 1780000000,
+        },
+      ],
+      freshness: { staleTermIds: [] },
+    };
+
+    const report = await buildTermCoverageReport(args({ fromYear: 2026, toYear: 2026 }), {
+      fetcher,
+      status,
+    });
+
+    expect(report.counts.terms_needing_backfill).toBe(1);
+    expect(report.terms[0]).toMatchObject({
+      term_id: '2026-spring',
+      needs_backfill: true,
+      reason: 'term_state records 1 subjects but 3 subjects have complete sync states',
+    });
+  });
+
   it('formats a readable markdown coverage report', async () => {
     const fetcher = vi.fn().mockResolvedValue(response({ Fall: 'fall' }));
     const report = await buildTermCoverageReport(args({ fromYear: 2025, toYear: 2025 }), {

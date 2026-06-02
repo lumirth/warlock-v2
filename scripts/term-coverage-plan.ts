@@ -183,20 +183,26 @@ function buildRow(
   const present = stored !== undefined;
   const stale = staleTerms.has(term.term_id);
   const missingCounts = present && (!positive(coursesCount) || !positive(sectionsCount));
+  const inconsistentSubjectCount = present
+    && subjectsCount !== null
+    && subjectsCount > 0
+    && completedSubjects > subjectsCount;
   const incompleteSubjects = present
     && subjectsCount !== null
     && subjectsCount > 0
     && completedSubjects < subjectsCount;
-  const needsBackfill = !present || stale || missingCounts || incompleteSubjects;
+  const needsBackfill = !present || stale || missingCounts || inconsistentSubjectCount || incompleteSubjects;
   const reason = !present
     ? 'missing from term_state'
     : stale
       ? 'stale in freshness summary'
       : missingCounts
         ? 'missing course or section counts'
-        : incompleteSubjects
-          ? `only ${completedSubjects}/${subjectsCount} subjects synced`
-          : 'covered';
+        : inconsistentSubjectCount
+          ? `term_state records ${subjectsCount} subjects but ${completedSubjects} subjects have complete sync states`
+          : incompleteSubjects
+            ? `only ${completedSubjects}/${subjectsCount} subjects synced`
+            : 'covered';
 
   return {
     ...term,
