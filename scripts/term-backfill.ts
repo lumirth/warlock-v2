@@ -309,25 +309,38 @@ async function postSyncPage(
 
   for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort(`Backfill page ${offset} timed out after ${options.pageTimeoutMs}ms`);
-    }, options.pageTimeoutMs);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        const message = `Backfill page ${offset} timed out after ${options.pageTimeoutMs}ms`;
+        controller.abort(message);
+        reject(new Error(message));
+      }, options.pageTimeoutMs);
+    });
+    const request = new Request(url.toString(), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+
     let response: Response;
+    let body: TermSyncResponse | null;
     try {
-      response = await fetcher(new Request(url.toString(), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        signal: controller.signal,
-      }));
+      response = await Promise.race([fetcher(request), timeoutPromise]);
+      body = await Promise.race([
+        response.json().catch(() => null) as Promise<TermSyncResponse | null>,
+        timeoutPromise,
+      ]);
     } catch (error) {
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || (error instanceof Error && error.message.includes('timed out'))) {
         throw new Error(`Backfill page ${offset} timed out after ${options.pageTimeoutMs}ms`);
       }
       throw error;
     } finally {
-      clearTimeout(timeout);
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
     }
-    const body = await response.json().catch(() => null) as TermSyncResponse | null;
 
     if (response.ok) {
       if (attempt > 1) {
