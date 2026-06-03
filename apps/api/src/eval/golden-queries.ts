@@ -589,9 +589,11 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     id: 70,
     query: "sort by difficulty",
     expected_filters: {},
-    expected_residual: "sort by difficulty",
+    expected_soft_preferences: { inferredSort: { field: "workload", direction: "asc" } },
+    expected_residual: "",
+    expected_results: { non_empty: true, top_k: 10 },
     category: "semantic",
-    notes: "Generic by-phrases must not become instructor filters"
+    notes: "Generic sort commands should become ranking controls, not keyword text"
   },
   {
     id: 71,

@@ -409,11 +409,27 @@ function buildTopicExpansionKeywordQuery(
   return uniqueTerms.join(" OR ");
 }
 
-function applySortIntent(plan: SearchPlan, rawQuery: string): void {
+function applySortIntent(plan: SearchPlan, rawQuery: string): boolean {
   const normalized = rawQuery.toLowerCase();
   let inferredSort: SearchSort | null = null;
+  const explicitSortMatch = /\b(?:sort|order|rank)(?:\s+(?:courses?|classes?|results?))?\s+by\s+(avg\s+gpa|gpa|difficulty|workload|quality|professor\s+rating|instructor\s+rating|rating|level|credits?)\b/.exec(normalized);
 
-  if (/\b(?:highest|best|top)\s+(?:avg\s+)?gpa\b|\b(?:avg\s+)?gpa\s+(?:highest|best|top)\b/.test(normalized)) {
+  if (explicitSortMatch) {
+    const field = explicitSortMatch[1];
+    if (field.includes("gpa")) {
+      inferredSort = { field: "gpa", direction: "desc" };
+    } else if (field.includes("rating")) {
+      inferredSort = { field: "instructor_rating", direction: "desc" };
+    } else if (field === "quality") {
+      inferredSort = { field: "quality", direction: "desc" };
+    } else if (field === "level") {
+      inferredSort = { field: "level", direction: "asc" };
+    } else if (field.startsWith("credit")) {
+      inferredSort = { field: "credits", direction: "asc" };
+    } else {
+      inferredSort = { field: "workload", direction: "asc" };
+    }
+  } else if (/\b(?:highest|best|top)\s+(?:avg\s+)?gpa\b|\b(?:avg\s+)?gpa\s+(?:highest|best|top)\b/.test(normalized)) {
     inferredSort = { field: "gpa", direction: "desc" };
   } else if (/\b(?:best|top|highest\s+rated)\s+(?:professors?|instructors?)\b|\b(?:professor|instructor)\s+rating\b/.test(normalized)) {
     inferredSort = { field: "instructor_rating", direction: "desc" };
@@ -430,7 +446,7 @@ function applySortIntent(plan: SearchPlan, rawQuery: string): void {
   }
 
   if (!inferredSort) {
-    return;
+    return false;
   }
 
   plan.softPreferences = {
@@ -439,10 +455,12 @@ function applySortIntent(plan: SearchPlan, rawQuery: string): void {
   };
   plan.keywordQuery = removeSortScaffolding(plan.keywordQuery);
   plan.semanticQuery = removeSortScaffolding(plan.semanticQuery);
+  return true;
 }
 
 function removeSortScaffolding(query: string): string {
   return query
+    .replace(/\b(?:sort|order|rank)(?:\s+(?:courses?|classes?|results?))?\s+by\s+(?:avg\s+gpa|gpa|difficulty|workload|quality|professor\s+rating|instructor\s+rating|rating|level|credits?)\b/gi, " ")
     .replace(/\b(?:highest|best|top)\s+(?:avg\s+)?gpa\b/gi, " ")
     .replace(/\b(?:avg\s+)?gpa\s+(?:highest|best|top)\b/gi, " ")
     .replace(/\b(?:best|top|highest\s+rated)\s+(?:professors?|instructors?)\b/gi, " ")
@@ -821,7 +839,9 @@ export async function createSearchPlan(
   const rescueResult = applyDecisionSearchRescue(plan, query, queryResidual);
   queryResidual = rescueResult.queryResidual;
 
-  applySortIntent(plan, query);
+  if (applySortIntent(plan, query)) {
+    queryResidual = removeSortScaffolding(queryResidual);
+  }
 
   const topicExpansions = applyTopicExpansion(plan);
   syncDecisionSearchExpansions(plan, topicExpansions);

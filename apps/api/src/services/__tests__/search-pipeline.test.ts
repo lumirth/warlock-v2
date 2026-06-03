@@ -242,6 +242,44 @@ describe("SearchPipeline", () => {
     expect(result.results[0].course.id).toBe("HIGH");
   });
 
+  it("infers explicit sort-by commands without leaving sort words in the residual query", async () => {
+    const query = "sort by difficulty";
+    vi.mocked(extractor.extractQuery).mockReturnValue({
+      hints: [],
+      residual: "sort by difficulty",
+    });
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
+      filters: {},
+      semanticQuery: "sort by difficulty",
+      keywordQuery: "sort by difficulty",
+    });
+    vi.mocked(search.sanitizeFtsQuery).mockImplementation(
+      (queryText) => queryText,
+    );
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([
+      { course: mockCourse({ id: "HARD", difficulty_score: 82 }), score: 2 },
+      { course: mockCourse({ id: "EASY", difficulty_score: 12 }), score: 1 },
+    ]);
+
+    const result = await pipeline.search(query, 1);
+
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        keywordQuery: "",
+        semanticQuery: "",
+        softPreferences: expect.objectContaining({
+          inferredSort: { field: "workload", direction: "asc" },
+        }),
+      }),
+      200,
+    );
+    expect(result.meta.appliedSort).toEqual({ field: "workload", direction: "asc" });
+    expect(result.results[0].course.id).toBe("EASY");
+  });
+
   it("applies topic expansions to the initial search plan", async () => {
     const query = "ml courses";
     const mockExtracted: ExtractionResult = { hints: [], residual: "ml" };
