@@ -1,70 +1,80 @@
 import { Routes, Route } from 'react-router-dom'
-import { ActionIcon, AppShell, Box, Container, Group, Title, Tooltip } from '@mantine/core'
-import { IconBrandGithub, IconHome } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
+import { Code2Icon, HomeIcon } from 'lucide-react'
 import courseSearchLogo from './assets/course-search-logo.png'
 import { SearchPage } from './pages/SearchPage'
 import { CoursePage } from './pages/CoursePage'
+import { buttonVariants } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { PageContainer } from '@/components/PageContainer'
 
 function App() {
   return (
-    <AppShell
-      header={{ height: 60 }}
-      padding="md"
-    >
-      <AppShell.Header>
-        <Container size="xl" h="100%">
-          <Group h="100%" wrap="nowrap">
-            <Link
-              to="/"
-              style={{ color: 'inherit', textDecoration: 'none', minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--mantine-spacing-xs)' }}
-            >
-              <Box
-                component="img"
-                src={courseSearchLogo}
-                alt=""
-                aria-hidden
-                style={{ width: 36, height: 36, flex: '0 0 auto' }}
-              />
-              <Title
-                order={3}
-                fz={{ base: 18, sm: 24 }}
-                lh={{ base: '22px', sm: '32px' }}
-                style={{ color: 'inherit', textDecoration: 'none', minWidth: 0, whiteSpace: 'nowrap' }}
-              >
-                UIUC Course Search
-              </Title>
-            </Link>
-            <Group ml="auto" gap="xs" wrap="nowrap">
-              <Tooltip label="Home">
-                <ActionIcon variant="subtle" component={Link} to="/" aria-label="Home">
-                  <IconHome size={18} />
-                </ActionIcon>
-              </Tooltip>
-              <Tooltip label="GitHub">
-                <ActionIcon
-                  variant="subtle"
-                  component="a"
+    <div className="bg-background text-foreground min-h-screen">
+      <header className="bg-card sticky top-0 border-b">
+        <PageContainer className="flex h-[60px] items-center gap-3">
+          <Link
+            to="/"
+            className="text-foreground flex min-w-0 items-center gap-2 no-underline"
+          >
+            <img
+              src={courseSearchLogo}
+              alt=""
+              aria-hidden
+              className="size-9 shrink-0"
+            />
+            <span className="truncate text-lg leading-6 font-semibold sm:text-2xl">
+              UIUC Course Search
+            </span>
+          </Link>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to="/"
+                  aria-label="Home"
+                  className={buttonVariants({
+                    variant: 'ghost',
+                    size: 'icon-sm',
+                  })}
+                >
+                  <HomeIcon aria-hidden />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>Home</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
                   href="https://github.com/lewisblack/uiuc-course-search"
                   target="_blank"
                   rel="noreferrer"
                   aria-label="GitHub"
+                  className={buttonVariants({
+                    variant: 'ghost',
+                    size: 'icon-sm',
+                  })}
                 >
-                  <IconBrandGithub size={18} />
-                </ActionIcon>
-              </Tooltip>
-            </Group>
-          </Group>
-        </Container>
-      </AppShell.Header>
+                  <Code2Icon aria-hidden />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>GitHub</TooltipContent>
+            </Tooltip>
+          </div>
+        </PageContainer>
+      </header>
 
-      <AppShell.Main>
+      <main>
         <Routes>
           <Route path="/" element={<SearchPage />} />
           <Route path="/course/:subject/:number" element={<CoursePage />} />
         </Routes>
-      </AppShell.Main>
-    </AppShell>
+      </main>
+    </div>
   )
 }
 

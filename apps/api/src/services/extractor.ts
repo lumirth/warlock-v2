@@ -18,6 +18,8 @@ const LEVEL_KEYWORDS_SOFT: Record<string, number> = {
   'intro': 100,
   'introductory': 100,
   'beginner': 100,
+  'freshman': 100,
+  'first year': 100,
 };
 
 // Stop-phrase removal - high-frequency generic tokens

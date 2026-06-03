@@ -1,4 +1,5 @@
 import type { GoldQuery, EvalResult } from './types.js';
+import type { SearchPlanRescue } from '@uiuc-course-search/query-types';
 
 export interface ApiSearchResult {
   id: string;
@@ -16,6 +17,7 @@ export interface SearchResponseForEval {
     plan: {
       filters: Record<string, unknown>;
       softPreferences?: Record<string, unknown>;
+      rescue?: SearchPlanRescue;
     };
     extraction: {
       hints: unknown[];
@@ -99,6 +101,47 @@ export function checkExpectedResidual(query: GoldQuery, actualResidual: string):
     : [`residual expected ${formatValue(query.expected_residual)}, got ${formatValue(actualResidual)}`];
 }
 
+function checkExpectedArraySubset<T>(
+  label: string,
+  expected: T[] | undefined,
+  actual: T[] | undefined
+): string[] {
+  if (!expected || expected.length === 0) return [];
+  const actualValues = new Set(actual ?? []);
+
+  return expected
+    .filter(value => !actualValues.has(value))
+    .map(value => `${label} expected to include ${formatValue(value)}, got ${formatValue(actual ?? [])}`);
+}
+
+export function checkExpectedRescue(query: GoldQuery, rescue: SearchPlanRescue | undefined): string[] {
+  if (!query.expected_rescue) return [];
+  const expected = query.expected_rescue;
+  const violations = [
+    ...checkExpectedArraySubset('rescue.queryTypes', expected.queryTypes, rescue?.queryTypes),
+    ...checkExpectedArraySubset('rescue.negativeTerms', expected.negativeTerms, rescue?.negativeTerms),
+    ...checkExpectedArraySubset('rescue.warnings', expected.warnings, rescue?.warnings.map(warning => warning.kind)),
+    ...checkExpectedArraySubset('rescue.retrievalLanes', expected.retrievalLanes, rescue?.retrievalLanes),
+    ...checkExpectedArraySubset('rescue.relaxationPlan', expected.relaxationSteps, rescue?.relaxationPlan.map(step => step.id)),
+    ...checkExpectedArraySubset('rescue.assumptions', expected.assumptions, rescue?.assumptions.map(assumption => assumption.kind)),
+  ];
+
+  if (
+    expected.needsStudentProfile !== undefined
+    && rescue?.needsStudentProfile !== expected.needsStudentProfile
+  ) {
+    violations.push(
+      `rescue.needsStudentProfile expected ${formatValue(expected.needsStudentProfile)}, got ${formatValue(rescue?.needsStudentProfile)}`
+    );
+  }
+
+  if (!rescue) {
+    violations.push('rescue expected to be present');
+  }
+
+  return violations;
+}
+
 export function checkInvariants(query: GoldQuery, results: ApiSearchResult[]): string[] {
   const violations: string[] = [];
   if (!query.invariants) return violations;
@@ -161,6 +204,7 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
     ...checkExpectedObject('filters', query.expected_filters, data.meta.plan.filters),
     ...checkExpectedKeys('filters', query.expected_filter_keys, data.meta.plan.filters),
     ...checkExpectedObject('softPreferences', query.expected_soft_preferences, data.meta.plan.softPreferences),
+    ...checkExpectedRescue(query, data.meta.plan.rescue),
     ...checkExpectedResidual(query, data.meta.query.residual),
     ...checkInvariants(query, results),
   ];

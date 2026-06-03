@@ -1,10 +1,24 @@
-import { useState } from 'react'
-import { Alert, Button, Group, Paper, Stack, Text, TextInput, Textarea, type ButtonProps } from '@mantine/core'
-import { IconCheck, IconMessageCircle, IconX } from '@tabler/icons-react'
-import type { FeedbackIssue, FeedbackKind, FeedbackSubmitDto } from '@uiuc-course-search/query-types'
+import { useId, useState, type ComponentProps } from 'react'
+import { CheckIcon, MessageCircleIcon, SendIcon, XIcon } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
+import type {
+  FeedbackIssue,
+  FeedbackKind,
+  FeedbackSubmitDto,
+} from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
 
-type FeedbackContext = Omit<Partial<FeedbackSubmitDto>, 'kind' | 'issue' | 'page' | 'expected' | 'message'>
+type FeedbackContext = Omit<
+  Partial<FeedbackSubmitDto>,
+  'kind' | 'issue' | 'page' | 'expected' | 'message'
+>
 
 interface FeedbackButtonProps {
   buttonLabel: string
@@ -15,7 +29,7 @@ interface FeedbackButtonProps {
   expectedPlaceholder?: string
   messagePlaceholder?: string
   fullWidth?: boolean
-  buttonVariant?: ButtonProps['variant']
+  buttonVariant?: ComponentProps<typeof Button>['variant']
 }
 
 export function FeedbackButton({
@@ -27,7 +41,7 @@ export function FeedbackButton({
   expectedPlaceholder = 'What did you expect instead?',
   messagePlaceholder = 'Anything else we should know?',
   fullWidth = false,
-  buttonVariant = 'subtle',
+  buttonVariant = 'ghost',
 }: FeedbackButtonProps) {
   const [open, setOpen] = useState(false)
   const [expected, setExpected] = useState('')
@@ -35,6 +49,8 @@ export function FeedbackButton({
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const expectedId = useId()
+  const messageId = useId()
 
   const submit = async () => {
     setSubmitting(true)
@@ -53,7 +69,9 @@ export function FeedbackButton({
       setExpected('')
       setMessage('')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Feedback could not be sent')
+      setError(
+        err instanceof Error ? err.message : 'Feedback could not be sent'
+      )
     } finally {
       setSubmitting(false)
     }
@@ -61,66 +79,85 @@ export function FeedbackButton({
 
   if (success) {
     return (
-      <Alert color="teal" variant="light" icon={<IconCheck size={16} />} py="xs" w={fullWidth ? '100%' : undefined}>
-        Feedback received.
+      <Alert
+        className={cn('border-success/30 text-success', fullWidth && 'w-full')}
+      >
+        <CheckIcon aria-hidden />
+        <AlertDescription className="text-success">
+          Feedback received.
+        </AlertDescription>
       </Alert>
     )
   }
 
   return (
-    <Stack gap="xs" w={fullWidth ? '100%' : undefined}>
+    <div className={cn('flex flex-col gap-2', fullWidth && 'w-full')}>
       {!open && (
         <Button
           variant={buttonVariant}
           size="xs"
-          fullWidth={fullWidth}
-          leftSection={<IconMessageCircle size={14} />}
+          className={cn(fullWidth && 'w-full')}
           onClick={() => setOpen(true)}
         >
+          <MessageCircleIcon data-icon="inline-start" aria-hidden />
           {buttonLabel}
         </Button>
       )}
 
       {open && (
-        <Paper withBorder p="sm" radius="md" shadow="xs">
-          <Stack gap="xs">
-            <Group justify="space-between" align="center">
-              <Text size="sm" fw={600}>Send feedback</Text>
-              <Button
-                variant="subtle"
-                size="compact-xs"
-                leftSection={<IconX size={12} />}
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </Button>
-            </Group>
-            <TextInput
-              aria-label="Expected result"
-              placeholder={expectedPlaceholder}
-              value={expected}
-              onChange={(event) => setExpected(event.currentTarget.value)}
-            />
-            <Textarea
-              aria-label="Feedback note"
-              placeholder={messagePlaceholder}
-              minRows={2}
-              value={message}
-              onChange={(event) => setMessage(event.currentTarget.value)}
-            />
-            {error && (
-              <Alert color="red" variant="light" py="xs">
-                {error}
-              </Alert>
-            )}
-            <Group justify="flex-end">
-              <Button size="xs" onClick={submit} loading={submitting}>
-                Send
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
+        <Card size="sm">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardTitle>Send feedback</CardTitle>
+            <Button variant="ghost" size="xs" onClick={() => setOpen(false)}>
+              <XIcon data-icon="inline-start" aria-hidden />
+              Close
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup className="gap-3">
+              <Field>
+                <FieldLabel htmlFor={expectedId} className="sr-only">
+                  Expected result
+                </FieldLabel>
+                <Input
+                  id={expectedId}
+                  autoComplete="off"
+                  placeholder={expectedPlaceholder}
+                  value={expected}
+                  onChange={(event) => setExpected(event.currentTarget.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={messageId} className="sr-only">
+                  Feedback note
+                </FieldLabel>
+                <Textarea
+                  id={messageId}
+                  placeholder={messagePlaceholder}
+                  rows={2}
+                  value={message}
+                  onChange={(event) => setMessage(event.currentTarget.value)}
+                />
+              </Field>
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <div className="flex justify-end">
+                <Button size="xs" onClick={submit} disabled={submitting}>
+                  {submitting ? (
+                    <Spinner data-icon="inline-start" aria-hidden />
+                  ) : (
+                    <SendIcon data-icon="inline-start" aria-hidden />
+                  )}
+                  Send
+                </Button>
+              </div>
+            </FieldGroup>
+          </CardContent>
+        </Card>
       )}
-    </Stack>
+    </div>
   )
 }

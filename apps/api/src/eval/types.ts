@@ -1,9 +1,22 @@
+import type { DecisionQueryType, RetrievalLane, SearchPlanWarningKind } from '@uiuc-course-search/query-types';
+
+export interface ExpectedRescuePlan {
+  queryTypes?: DecisionQueryType[];
+  negativeTerms?: string[];
+  warnings?: SearchPlanWarningKind[];
+  retrievalLanes?: RetrievalLane[];
+  relaxationSteps?: string[];
+  assumptions?: string[];
+  needsStudentProfile?: boolean;
+}
+
 export interface GoldQuery {
   id: number;
   query: string;
   expected_filters: Record<string, unknown>;
   expected_filter_keys?: string[];
   expected_soft_preferences?: Record<string, unknown>;
+  expected_rescue?: ExpectedRescuePlan;
   expected_residual: string;
   expected_top1?: string;
   expected_top1_title?: string;
@@ -26,7 +39,9 @@ export interface GoldQuery {
     | 'disambiguation'
     | 'instructor'
     | 'score'
-    | 'schedule';
+    | 'schedule'
+    | 'decision'
+    | 'unsupported_language';
   notes?: string;
 }
 
@@ -44,7 +59,11 @@ export type QueryFailureClass =
   | 'power_syntax'
   | 'ambiguity'
   | 'semantic_topic'
-  | 'unsupported_language';
+  | 'unsupported_language'
+  | 'decision_query_rescue'
+  | 'avoidance_language'
+  | 'requirement_uncertainty'
+  | 'no_result_recovery';
 
 export interface EvalResult {
   query: GoldQuery;

@@ -4,7 +4,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CourseDto } from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
-import { TestMantineProvider } from '../test/TestMantineProvider'
+import { TestUiProvider } from '../test/TestUiProvider'
 import { SearchPage } from './SearchPage'
 import { CoursePage } from './CoursePage'
 
@@ -44,7 +44,7 @@ async function expectNoA11yViolations(container: HTMLElement): Promise<void> {
       'color-contrast': { enabled: false },
     },
   })
-  expect(result.violations.map(violation => violation.id)).toEqual([])
+  expect(result.violations.map((violation) => violation.id)).toEqual([])
 }
 
 afterEach(() => {
@@ -55,9 +55,11 @@ afterEach(() => {
 describe('page accessibility', () => {
   it('keeps the search page free of automated accessibility violations', async () => {
     const { container } = render(
-      <TestMantineProvider>
-        <RouterProvider router={createMemoryRouter([{ path: '/', element: <SearchPage /> }])} />
-      </TestMantineProvider>
+      <TestUiProvider>
+        <RouterProvider
+          router={createMemoryRouter([{ path: '/', element: <SearchPage /> }])}
+        />
+      </TestUiProvider>
     )
 
     await expectNoA11yViolations(container)
@@ -67,12 +69,17 @@ describe('page accessibility', () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(course())
 
     const { container } = render(
-      <TestMantineProvider>
-        <RouterProvider router={createMemoryRouter([
-          { path: '/course/:subject/:number', element: <CoursePage /> },
-          { path: '/', element: <div /> },
-        ], { initialEntries: ['/course/CS/225?term=spring&year=2026'] })} />
-      </TestMantineProvider>
+      <TestUiProvider>
+        <RouterProvider
+          router={createMemoryRouter(
+            [
+              { path: '/course/:subject/:number', element: <CoursePage /> },
+              { path: '/', element: <div /> },
+            ],
+            { initialEntries: ['/course/CS/225?term=spring&year=2026'] }
+          )}
+        />
+      </TestUiProvider>
     )
 
     await screen.findByText(/CS 225: Data Structures/i)

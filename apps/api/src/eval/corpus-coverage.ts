@@ -96,7 +96,31 @@ export const CORPUS_COVERAGE_REQUIREMENTS: CorpusCoverageRequirement[] = [
     failureClass: 'unsupported_language',
     description: 'Unsupported filters and generic natural-language commands that must remain searchable',
     minimumCases: 4,
-    queryIds: [53, 54, 56, 70],
+    queryIds: [53, 54, 70, 112],
+  },
+  {
+    failureClass: 'decision_query_rescue',
+    description: 'Short, vague, and clunky advising-style queries compile into typed rescue plans',
+    minimumCases: 8,
+    queryIds: [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
+  },
+  {
+    failureClass: 'avoidance_language',
+    description: 'Student avoidance phrases like no essays, no tests, not math, and less bio become negative preferences',
+    minimumCases: 5,
+    queryIds: [103, 104, 107, 108, 109, 111],
+  },
+  {
+    failureClass: 'requirement_uncertainty',
+    description: 'Counts-for and requirement language marks student-profile uncertainty instead of overclaiming degree progress',
+    minimumCases: 3,
+    queryIds: [104, 106, 110],
+  },
+  {
+    failureClass: 'no_result_recovery',
+    description: 'Over-constrained decision searches carry a relaxation plan for grouped recovery paths',
+    minimumCases: 2,
+    queryIds: [110, 111],
   },
 ];
 

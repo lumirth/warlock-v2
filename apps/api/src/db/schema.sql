@@ -369,6 +369,35 @@ INSERT OR IGNORE INTO topic_aliases (abbreviation, expansion) VALUES
   ('ds', 'data science'),
   ('stats', 'statistics');
 
+CREATE TABLE IF NOT EXISTS course_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'student_query',
+    source TEXT NOT NULL DEFAULT 'manual',
+    confidence REAL NOT NULL DEFAULT 0.7,
+    created_at INTEGER DEFAULT (unixepoch()),
+    UNIQUE(course_id, alias, kind),
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_course_aliases_course ON course_aliases(course_id);
+CREATE INDEX IF NOT EXISTS idx_course_aliases_alias ON course_aliases(alias);
+
+CREATE TABLE IF NOT EXISTS course_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id TEXT NOT NULL,
+    signal_type TEXT NOT NULL,
+    value REAL NOT NULL,
+    source TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.6,
+    explanation TEXT NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch()),
+    UNIQUE(course_id, signal_type, source, explanation),
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_course_signals_course ON course_signals(course_id);
+CREATE INDEX IF NOT EXISTS idx_course_signals_type ON course_signals(signal_type);
+
 -- Full-text search with trigram tokenizer
 CREATE VIRTUAL TABLE IF NOT EXISTS courses_fts USING fts5(
     subject,
@@ -427,4 +456,58 @@ CREATE TRIGGER IF NOT EXISTS sections_fts_update AFTER UPDATE ON sections BEGIN
     VALUES('delete', old.rowid, old.section_title, old.instructor, old.section_text, old.section_notes);
     INSERT INTO sections_fts(rowid, section_title, instructor, section_text, section_notes)
     VALUES (new.rowid, new.section_title, new.instructor, new.section_text, new.section_notes);
+END;
+
+-- Full-text search for student-language aliases
+CREATE VIRTUAL TABLE IF NOT EXISTS course_aliases_fts USING fts5(
+    alias,
+    kind,
+    source,
+    content='course_aliases',
+    content_rowid='rowid',
+    tokenize='trigram'
+);
+
+CREATE TRIGGER IF NOT EXISTS course_aliases_fts_insert AFTER INSERT ON course_aliases BEGIN
+    INSERT INTO course_aliases_fts(rowid, alias, kind, source)
+    VALUES (new.rowid, new.alias, new.kind, new.source);
+END;
+
+CREATE TRIGGER IF NOT EXISTS course_aliases_fts_delete AFTER DELETE ON course_aliases BEGIN
+    INSERT INTO course_aliases_fts(course_aliases_fts, rowid, alias, kind, source)
+    VALUES('delete', old.rowid, old.alias, old.kind, old.source);
+END;
+
+CREATE TRIGGER IF NOT EXISTS course_aliases_fts_update AFTER UPDATE ON course_aliases BEGIN
+    INSERT INTO course_aliases_fts(course_aliases_fts, rowid, alias, kind, source)
+    VALUES('delete', old.rowid, old.alias, old.kind, old.source);
+    INSERT INTO course_aliases_fts(rowid, alias, kind, source)
+    VALUES (new.rowid, new.alias, new.kind, new.source);
+END;
+
+-- Full-text search for workload/evidence signals
+CREATE VIRTUAL TABLE IF NOT EXISTS course_signals_fts USING fts5(
+    signal_type,
+    source,
+    explanation,
+    content='course_signals',
+    content_rowid='rowid',
+    tokenize='trigram'
+);
+
+CREATE TRIGGER IF NOT EXISTS course_signals_fts_insert AFTER INSERT ON course_signals BEGIN
+    INSERT INTO course_signals_fts(rowid, signal_type, source, explanation)
+    VALUES (new.rowid, new.signal_type, new.source, new.explanation);
+END;
+
+CREATE TRIGGER IF NOT EXISTS course_signals_fts_delete AFTER DELETE ON course_signals BEGIN
+    INSERT INTO course_signals_fts(course_signals_fts, rowid, signal_type, source, explanation)
+    VALUES('delete', old.rowid, old.signal_type, old.source, old.explanation);
+END;
+
+CREATE TRIGGER IF NOT EXISTS course_signals_fts_update AFTER UPDATE ON course_signals BEGIN
+    INSERT INTO course_signals_fts(course_signals_fts, rowid, signal_type, source, explanation)
+    VALUES('delete', old.rowid, old.signal_type, old.source, old.explanation);
+    INSERT INTO course_signals_fts(rowid, signal_type, source, explanation)
+    VALUES (new.rowid, new.signal_type, new.source, new.explanation);
 END;

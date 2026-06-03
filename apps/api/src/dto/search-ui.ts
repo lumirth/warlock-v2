@@ -14,13 +14,13 @@ import type {
 
 export function buildSearchUiPlan(hints: Hint[], plan: SearchPlan, residual: string): SearchUiPlanDto {
   return {
-    chips: buildSearchChips(hints, residual),
+    chips: buildSearchChips(hints, plan, residual),
     advanced: buildAdvancedState(hints, plan.filters, residual),
     ambiguityActions: buildAmbiguityActions(plan.ambiguities ?? []),
   };
 }
 
-function buildSearchChips(hints: Hint[], residual: string): SearchChipDto[] {
+function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): SearchChipDto[] {
   const chips = hints.map((hint, index): SearchChipDto => ({
     id: `${hint.type}-${index}`,
     type: hint.type,
@@ -50,7 +50,36 @@ function buildSearchChips(hints: Hint[], residual: string): SearchChipDto[] {
     });
   }
 
+  const existingLabels = new Set(chips.map(chip => chip.label.toLowerCase()));
+  for (const assumption of plan.rescue?.assumptions ?? []) {
+    if (existingLabels.has(assumption.label.toLowerCase())) {
+      continue;
+    }
+    chips.push({
+      id: `assumption-${assumption.kind}`,
+      type: 'assumption',
+      label: assumption.label,
+      value: assumption.kind,
+      source: 'natural_language',
+      removable: true,
+      editable: false,
+      queryPatch: {
+        removeText: textToRemoveForAssumption(assumption.kind, residual),
+      },
+    });
+  }
+
   return chips;
+}
+
+function textToRemoveForAssumption(kind: string, residual: string): string | undefined {
+  if (kind === 'low_writing') return 'no essays';
+  if (kind === 'low_exams') return 'no tests';
+  if (kind === 'low_math') return 'not math';
+  if (kind === 'low_workload') return 'easy';
+  if (kind === 'no_listed_prereq') return 'no prereq';
+  if (kind === 'online_preferred') return 'online';
+  return residual || undefined;
 }
 
 function buildAdvancedState(hints: Hint[], filters: SearchFilters, residual: string): AdvancedSearchStateDto {

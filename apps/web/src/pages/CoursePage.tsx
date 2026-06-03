@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { Box, Container, Title, Text, Button, Loader, Flex, Grid, Stack, Group, Paper, Alert, ScrollArea } from '@mantine/core'
-import { IconAlertCircle, IconExternalLink } from '@tabler/icons-react'
+import { AlertCircleIcon, ExternalLinkIcon } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { PageContainer } from '@/components/PageContainer'
 import { Scorecard } from '../components/Scorecard'
 import { SectionsTable } from '../components/SectionsTable'
 import { FeedbackButton } from '../components/FeedbackButton'
@@ -12,7 +16,9 @@ export function CoursePage() {
   const { subject, number } = useParams()
   const [searchParams] = useSearchParams()
   const term = searchParams.get('term') || undefined
-  const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined
+  const year = searchParams.get('year')
+    ? parseInt(searchParams.get('year')!)
+    : undefined
 
   const [course, setCourse] = useState<CourseDto | null>(null)
   const [loading, setLoading] = useState(true)
@@ -27,7 +33,13 @@ export function CoursePage() {
       setError(null)
 
       try {
-        const data = await api.getCourse(subject, number, term, year, controller.signal)
+        const data = await api.getCourse(
+          subject,
+          number,
+          term,
+          year,
+          controller.signal
+        )
         setCourse(data)
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return
@@ -48,58 +60,81 @@ export function CoursePage() {
 
   if (loading) {
     return (
-      <Container size="xl" py="xl">
-        <Flex justify="center" align="center" mih="50vh" role="status" aria-live="polite" aria-label="Loading course">
-          <Loader size="lg" aria-hidden />
-        </Flex>
-      </Container>
+      <PageContainer className="py-8">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label="Loading course"
+          className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]"
+        >
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+          <div className="flex flex-col gap-4">
+            <Skeleton className="h-10 w-3/4" />
+            <Skeleton className="h-5 w-1/2" />
+            <Skeleton className="h-36 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </div>
+      </PageContainer>
     )
   }
 
   if (error || !course) {
     return (
-      <Container size="xl" py="xl">
-        <Button component={Link} to="/" variant="subtle" mb="md">Back to search</Button>
-        <Alert role="alert" variant="light" color="red" title="Error loading course" icon={<IconAlertCircle />}>
-          {error || 'Course not found'}
+      <PageContainer className="py-8">
+        <Button asChild variant="ghost" className="mb-4">
+          <Link to="/">Back to search</Link>
+        </Button>
+        <Alert variant="destructive">
+          <AlertCircleIcon aria-hidden />
+          <AlertTitle>Error loading course</AlertTitle>
+          <AlertDescription>{error || 'Course not found'}</AlertDescription>
         </Alert>
-      </Container>
+      </PageContainer>
     )
   }
 
   return (
-    <Container size="xl" py="xl">
-      <Button component={Link} to="/" variant="subtle" mb="md">
-        Back to search
+    <PageContainer className="py-8">
+      <Button asChild variant="ghost" className="mb-4">
+        <Link to="/">Back to search</Link>
       </Button>
 
-      <Stack gap="xs" mb="xl">
-        <Group align="center">
-          <Title order={1} fz={30}>{course.subject} {course.number}: {course.title}</Title>
-          {course.gened && <Text size="sm" fw={600} c="dimmed">{course.gened}</Text>}
+      <div className="mb-8 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl leading-tight font-semibold">
+            {course.subject} {course.number}: {course.title}
+          </h1>
+          {course.gened && (
+            <span className="text-muted-foreground text-sm font-semibold">
+              {course.gened}
+            </span>
+          )}
           {course.course_explorer_url && (
-            <Button
-              component="a"
-              href={course.course_explorer_url}
-              target="_blank"
-              rel="noreferrer"
-              variant="outline"
-              size="xs"
-              leftSection={<IconExternalLink size={14} />}
-            >
-              Course Explorer
+            <Button asChild variant="outline" size="xs">
+              <a
+                href={course.course_explorer_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLinkIcon data-icon="inline-start" aria-hidden />
+                Course Explorer
+              </a>
             </Button>
           )}
-        </Group>
-        <Text size="lg" c="dimmed">
+        </div>
+        <p className="text-muted-foreground text-lg">
           {course.credit_hours} credit hours / {course.term} {course.year}
           {course.primary_instructor && ` / ${course.primary_instructor}`}
-        </Text>
-      </Stack>
+        </p>
+      </div>
 
-      <Grid gutter="xl">
-        <Grid.Col span={{ base: 12, md: 4 }}>
-          <Stack gap="sm" className="course-sidebar">
+      <div className="grid gap-8 xl:grid-cols-[21rem_minmax(0,1fr)]">
+        <aside className="min-w-0 xl:sticky xl:top-24 xl:self-start">
+          <div className="flex flex-col gap-3">
             <Scorecard
               qualityScore={course.quality_score}
               difficultyScore={course.difficulty_score}
@@ -107,72 +142,61 @@ export function CoursePage() {
               gpaSampleSize={course.gpa_sample_size}
               primaryInstructorRmp={course.primary_instructor_rmp}
             />
-            <Box className="course-feedback-action">
-              <FeedbackButton
-                buttonLabel="Score feedback"
-                page="course"
-                kind="score"
-                issue="wrong_score"
-                fullWidth
-                buttonVariant="default"
-                context={{
-                  courseId: course.id,
-                  subject: course.subject,
-                  number: course.number,
-                  term: course.term,
-                  year: course.year,
-                  metadata: {
-                    qualityScore: course.quality_score,
-                    difficultyScore: course.difficulty_score,
-                    avgGpa: course.avg_gpa,
-                    primaryInstructorRmp: course.primary_instructor_rmp,
-                  },
-                }}
-              />
-            </Box>
-          </Stack>
-        </Grid.Col>
+            <FeedbackButton
+              buttonLabel="Score feedback"
+              page="course"
+              kind="score"
+              issue="wrong_score"
+              fullWidth
+              buttonVariant="default"
+              context={{
+                courseId: course.id,
+                subject: course.subject,
+                number: course.number,
+                term: course.term,
+                year: course.year,
+                metadata: {
+                  qualityScore: course.quality_score,
+                  difficultyScore: course.difficulty_score,
+                  avgGpa: course.avg_gpa,
+                  primaryInstructorRmp: course.primary_instructor_rmp,
+                },
+              }}
+            />
+          </div>
+        </aside>
 
-        <Grid.Col span={{ base: 12, md: 8 }}>
-          <Stack gap="xl">
-            <Paper p="md" withBorder bg="stone.0">
-              <Title order={2} size="h4" mb="xs">Description</Title>
-              <Text lh={1.6}>{course.description}</Text>
-            </Paper>
+        <div className="flex min-w-0 flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <h2 className="text-xl leading-snug font-semibold">
+                Description
+              </h2>
+            </CardHeader>
+            <CardContent>
+              <p className="leading-7">{course.description}</p>
+            </CardContent>
+          </Card>
 
-            <div>
-              <Title order={2} size="h3" mb="md">Sections and instructors</Title>
-              <Paper
-                withBorder
-                radius="md"
-                shadow="none"
-                className="sections-table-shell"
-                style={{ position: 'relative', overflow: 'hidden' }}
-              >
-                <ScrollArea type="always" offsetScrollbars aria-label="Sections table with horizontal scrolling">
+          <section className="flex min-w-0 flex-col gap-3">
+            <h2 className="text-xl font-semibold">Sections and instructors</h2>
+            <Card>
+              <CardContent className="p-0">
+                <div
+                  aria-label="Sections table with horizontal scrolling"
+                  className="relative overflow-hidden"
+                >
                   <SectionsTable
                     sections={course.sections || []}
                     instructorLinks={course.instructor_links}
                     courseExplorerUrl={course.course_explorer_url}
                   />
-                </ScrollArea>
-                <Box
-                  aria-hidden
-                  className="sections-table-scroll-cue"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    bottom: 14,
-                    width: 28,
-                    pointerEvents: 'none',
-                  }}
-                />
-              </Paper>
-            </div>
-          </Stack>
-        </Grid.Col>
-      </Grid>
-    </Container>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        </div>
+      </div>
+    </PageContainer>
   )
 }

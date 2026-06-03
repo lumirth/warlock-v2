@@ -9,6 +9,7 @@ import type {
   MatchEvidenceKind,
   MatchEvidenceSource,
   MatchEvidenceWeight,
+  ResultExplanation,
   ResultWarning,
   SearchPlan,
   SectionMatchDto,
@@ -68,6 +69,7 @@ export type CourseDtoOptions = {
   fetchedAt?: number;
   termStatus?: string;
   matchEvidence?: MatchEvidence[];
+  explanation?: ResultExplanation;
   warnings?: ResultWarning[];
   sectionMatches?: SectionMatchDto[];
 };
@@ -169,6 +171,7 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     _fetched_at: options.fetchedAt,
     _term_status: options.termStatus,
     match_evidence: options.matchEvidence,
+    explanation: options.explanation,
     warnings: options.warnings,
     section_matches: options.sectionMatches,
   };
@@ -319,6 +322,25 @@ export function buildMatchEvidence(
     }
   }
 
+  if (result.laneMatches?.includes('student_language_alias')) {
+    addEvidence(evidence, seen, 'alias', 'Student-language alias match', 'alias', 'rank');
+  }
+
+  if (result.laneMatches?.includes('workload_evidence')) {
+    const claims = result.supportedSubjectiveClaims?.length
+      ? result.supportedSubjectiveClaims.join(', ')
+      : undefined;
+    addEvidence(evidence, seen, 'workload', 'Workload evidence match', 'signal', 'soft', claims);
+  }
+
+  if (result.laneMatches?.includes('requirement')) {
+    addEvidence(evidence, seen, 'gened', 'Requirement lane match', 'filter', 'soft', course.gened ?? undefined);
+  }
+
+  if (result.laneMatches?.includes('structured_section')) {
+    addEvidence(evidence, seen, 'schedule', 'Section availability or schedule match', 'filter', 'soft');
+  }
+
   if (softPreferences?.levelBoost) {
     const levelLabel = softPreferences.levelBoost === 100
       ? 'Introductory course'
@@ -358,13 +380,91 @@ export function buildResultWarnings(result: SearchResult): ResultWarning[] {
   return warnings;
 }
 
+export function buildResultExplanation(
+  result: SearchResult,
+  context: SearchResultEvidenceContext,
+  evidence: MatchEvidence[],
+  warnings: ResultWarning[]
+): ResultExplanation {
+  const rescue = context.plan.rescue;
+  const whyMatched = evidence
+    .slice(0, 7)
+    .map(item => item.value ? `${item.label}: ${item.value}` : item.label);
+
+  const watchOut = [
+    ...warnings.map(warning => warning.message),
+    ...(rescue?.warnings.map(warning => warning.message) ?? []),
+  ];
+
+  if (
+    rescue?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
+    && !result.laneMatches?.includes('workload_evidence')
+    && !result.supportedSubjectiveClaims?.length
+  ) {
+    watchOut.push('Subjective preferences are not fully backed by assignment-level evidence for this course.');
+  }
+
+  const matchedChips = rescue?.assumptions.map(item => item.label) ?? [];
+  const confidenceScore = explanationConfidenceScore(result, context.plan);
+  const confidenceLabel: ResultExplanation['confidence']['label'] =
+    confidenceScore >= 0.82 ? 'high'
+      : confidenceScore >= 0.62 ? 'medium'
+        : confidenceScore >= 0.42 ? 'low'
+          : 'uncertain';
+
+  return {
+    whyMatched,
+    watchOut: Array.from(new Set(watchOut)).slice(0, 6),
+    matchedChips,
+    confidence: {
+      score: confidenceScore,
+      label: confidenceLabel,
+      reasons: explanationConfidenceReasons(result, context.plan),
+    },
+  };
+}
+
+function explanationConfidenceScore(result: SearchResult, plan: SearchPlan): number {
+  let score = plan.rescue?.confidence ?? 0.72;
+  if (result.laneMatches?.includes('exact')) score += 0.12;
+  if (result.laneMatches?.includes('requirement')) score += 0.08;
+  if (result.laneMatches?.includes('structured_section')) score += 0.05;
+  if (result.laneMatches?.includes('workload_evidence')) score += 0.1;
+  if (
+    plan.rescue?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
+    && !result.laneMatches?.includes('workload_evidence')
+    && !result.supportedSubjectiveClaims?.length
+  ) {
+    score -= 0.22;
+  }
+  return Math.max(0.1, Math.min(0.98, Number(score.toFixed(2))));
+}
+
+function explanationConfidenceReasons(result: SearchResult, plan: SearchPlan): string[] {
+  const reasons: string[] = [];
+  if (result.laneMatches?.includes('exact')) reasons.push('Exact course lookup is structured.');
+  if (result.laneMatches?.includes('requirement')) reasons.push('Requirement evidence came from structured mappings.');
+  if (result.laneMatches?.includes('structured_section')) reasons.push('Schedule or availability evidence came from section data.');
+  if (result.laneMatches?.includes('workload_evidence')) reasons.push('Subjective workload preference has an evidence signal.');
+  if (
+    plan.rescue?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
+    && !result.laneMatches?.includes('workload_evidence')
+  ) {
+    reasons.push('Subjective workload evidence is incomplete for this course.');
+  }
+  return reasons.length > 0 ? reasons : ['Matched by course text and structured filters.'];
+}
+
 export function searchResultToCourseDto(result: SearchResult, context?: SearchResultEvidenceContext): CourseDto {
+  const matchEvidence = context ? buildMatchEvidence(result, context) : undefined;
+  const warnings = buildResultWarnings(result);
   return toCourseDto(result.course, {
     score: result.score,
     semanticRank: result.semanticRank,
     keywordRank: result.keywordRank,
     historical: result.historical,
-    matchEvidence: context ? buildMatchEvidence(result, context) : undefined,
-    warnings: buildResultWarnings(result),
+    matchEvidence,
+    explanation: context && matchEvidence ? buildResultExplanation(result, context, matchEvidence, warnings) : undefined,
+    warnings,
   });
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import { applySearchIntentBoosts, applyTitleBoost, buildTermPriorityMap, hybridSearch } from '../search.js';
+import { applySearchIntentBoosts, applyTitleBoost, applyUsefulnessRerank, buildTermPriorityMap, hybridSearch } from '../search.js';
 import type { SearchResult } from '../search.js';
 import type { Course } from '../../db/index.js';
 
@@ -179,6 +179,64 @@ describe('introductory gateway intent boost', () => {
       keywordQuery: 'intro to compilers',
       softPreferences: { levelBoost: 100 },
     })).toEqual(results);
+  });
+});
+
+describe('decision-search usefulness reranking', () => {
+  it('prefers evidence-backed low-workload requirement matches over unsupported topical matches', () => {
+    const results: SearchResult[] = [
+      {
+        course: course({
+          id: 'FILM-120',
+          subject: 'MACS',
+          number: '120',
+          title: 'Film and Culture',
+          gened: 'HUM',
+          quality_score: 82,
+          difficulty_score: 28,
+          avg_gpa: 3.72,
+        }),
+        score: 0.5,
+        laneMatches: ['requirement', 'student_language_alias', 'workload_evidence'],
+        supportedSubjectiveClaims: ['low_workload', 'low_writing'],
+      },
+      {
+        course: course({
+          id: 'MACS-420',
+          subject: 'MACS',
+          number: '420',
+          title: 'Advanced Film Theory',
+          gened: null,
+          quality_score: null,
+          difficulty_score: null,
+          avg_gpa: null,
+        }),
+        score: 0.8,
+        laneMatches: ['topic_semantic'],
+      },
+    ];
+
+    const reranked = applyUsefulnessRerank(results, {
+      filters: { gened_code: 'HUM' },
+      semanticQuery: 'movies',
+      keywordQuery: 'movies',
+      rescue: {
+        queryTypes: ['requirement', 'topic', 'subjective_vibe', 'avoidance'],
+        negativeTerms: ['writing_heavy'],
+        topicTerms: ['movies'],
+        expandedTerms: ['film cinema media documentary television pop culture visual culture'],
+        assumptions: [],
+        warnings: [],
+        retrievalLanes: ['requirement', 'student_language_alias', 'topic_semantic', 'workload_evidence'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.82,
+      },
+      softPreferences: { lowWriting: 0.9, lowWorkload: 0.84 },
+    });
+
+    expect(reranked[0].course.id).toBe('FILM-120');
+    expect(reranked[0].score).toBeGreaterThan(reranked[1].score);
   });
 });
 

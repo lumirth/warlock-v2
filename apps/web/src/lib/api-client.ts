@@ -1,20 +1,28 @@
-import type { CourseDto, FeedbackResponseDto, FeedbackSubmitDto, SearchResponseDto } from '@uiuc-course-search/query-types'
+import type {
+  AdvancedSearchStateDto,
+  CourseDto,
+  FeedbackResponseDto,
+  FeedbackSubmitDto,
+  SearchResponseDto,
+} from '@uiuc-course-search/query-types'
 
 // Allow base URL configuration via env var
-const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.PROD ? 'https://uiuc-course-search.lumirth.workers.dev' : '');
+const DEFAULT_API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD ? 'https://uiuc-course-search.lumirth.workers.dev' : '')
 
 export type SearchRequestOptions = {
   signal?: AbortSignal
   limit?: number
   offset?: number
+  filters?: AdvancedSearchStateDto
 }
 
 export class ApiClient {
-  private baseUrl: string;
+  private baseUrl: string
 
   constructor(baseUrl: string = DEFAULT_API_BASE) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl
   }
 
   private async fetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -29,7 +37,7 @@ export class ApiClient {
       // Try to parse JSON error message
       let apiError: string | null = null
       try {
-        const errorBody = await res.json() as { error?: string }
+        const errorBody = (await res.json()) as { error?: string }
         if (errorBody.error) {
           apiError = errorBody.error
         }
@@ -45,27 +53,46 @@ export class ApiClient {
     return res.json()
   }
 
-  async search(query: string, options?: SearchRequestOptions | AbortSignal): Promise<SearchResponseDto> {
-    const requestOptions: SearchRequestOptions = options instanceof AbortSignal
-      ? { signal: options }
-      : options ?? {}
+  async search(
+    query: string,
+    options?: SearchRequestOptions | AbortSignal
+  ): Promise<SearchResponseDto> {
+    const requestOptions: SearchRequestOptions =
+      options instanceof AbortSignal ? { signal: options } : (options ?? {})
     const params = new URLSearchParams({ q: query })
-    if (requestOptions.limit !== undefined) params.set('limit', requestOptions.limit.toString())
-    if (requestOptions.offset !== undefined) params.set('offset', requestOptions.offset.toString())
+    if (requestOptions.limit !== undefined)
+      params.set('limit', requestOptions.limit.toString())
+    if (requestOptions.offset !== undefined)
+      params.set('offset', requestOptions.offset.toString())
+    appendSearchFilters(params, requestOptions.filters)
 
-    return this.fetch<SearchResponseDto>(`api/search?${params.toString()}`, { signal: requestOptions.signal })
+    return this.fetch<SearchResponseDto>(`api/search?${params.toString()}`, {
+      signal: requestOptions.signal,
+    })
   }
 
-  async getCourse(subject: string, number: string, term?: string, year?: number, signal?: AbortSignal): Promise<CourseDto> {
+  async getCourse(
+    subject: string,
+    number: string,
+    term?: string,
+    year?: number,
+    signal?: AbortSignal
+  ): Promise<CourseDto> {
     const params = new URLSearchParams()
     if (term) params.append('term', term)
     if (year) params.append('year', year.toString())
     const queryString = params.toString() ? `?${params.toString()}` : ''
 
-    return this.fetch<CourseDto>(`api/course/${subject}/${number}${queryString}`, { signal })
+    return this.fetch<CourseDto>(
+      `api/course/${subject}/${number}${queryString}`,
+      { signal }
+    )
   }
 
-  async submitFeedback(feedback: FeedbackSubmitDto, signal?: AbortSignal): Promise<FeedbackResponseDto> {
+  async submitFeedback(
+    feedback: FeedbackSubmitDto,
+    signal?: AbortSignal
+  ): Promise<FeedbackResponseDto> {
     return this.fetch<FeedbackResponseDto>('api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,6 +100,27 @@ export class ApiClient {
       signal,
     })
   }
+}
+
+function appendSearchFilters(
+  params: URLSearchParams,
+  filters: AdvancedSearchStateDto | undefined
+) {
+  if (!filters) return
+
+  if (filters.subject) params.set('subject', filters.subject)
+  if (filters.number) params.set('number', filters.number)
+  if (filters.instructor) params.set('instructor', filters.instructor)
+  if (filters.term) params.set('term', filters.term)
+  if (filters.year !== undefined) params.set('year', filters.year.toString())
+  if (filters.gened) params.set('gened', filters.gened)
+  if (filters.credits !== undefined)
+    params.set('credits', filters.credits.toString())
+  if (filters.days) params.set('days', filters.days)
+  if (filters.time) params.set('time', filters.time)
+  if (filters.online !== undefined) params.set('online', String(filters.online))
+  if (filters.status) params.set('status', filters.status)
+  if (filters.difficulty) params.set('difficulty', filters.difficulty)
 }
 
 export const api = new ApiClient()

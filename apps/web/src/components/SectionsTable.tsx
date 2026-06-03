@@ -1,4 +1,12 @@
-import { Table, Text, Group, Stack, Anchor } from '@mantine/core'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import {
   buildRmpProfessorUrl,
   buildRmpSearchUrl,
@@ -16,7 +24,10 @@ interface SectionsTableProps {
 
 function splitInstructorNames(section: CourseSectionDto): string[] {
   return section.instructor
-    ? section.instructor.split(';').map((name) => name.trim()).filter(Boolean)
+    ? section.instructor
+        .split(';')
+        .map((name) => name.trim())
+        .filter(Boolean)
     : []
 }
 
@@ -33,168 +44,213 @@ function getSectionStats(
     .filter((stat): stat is InstructorLinkDto => Boolean(stat))
 }
 
-function getRmpHref(stat: InstructorLinkDto, fallbackName: string): string | null {
-  return stat.rmp_url
-    ?? buildRmpProfessorUrl(stat.rmp_id)
-    ?? stat.rmp_search_url
-    ?? buildRmpSearchUrl(stat.instructor_name ?? fallbackName)
+function getRmpHref(
+  stat: InstructorLinkDto,
+  fallbackName: string
+): string | null {
+  return (
+    stat.rmp_url ??
+    buildRmpProfessorUrl(stat.rmp_id) ??
+    stat.rmp_search_url ??
+    buildRmpSearchUrl(stat.instructor_name ?? fallbackName)
+  )
 }
 
-export function SectionsTable({ sections, instructorLinks, courseExplorerUrl }: SectionsTableProps) {
+export function SectionsTable({
+  sections,
+  instructorLinks,
+  courseExplorerUrl,
+}: SectionsTableProps) {
   if (sections.length === 0) {
-    return <Text c="dimmed" fs="italic">No sections found for this term.</Text>
+    return (
+      <p className="text-muted-foreground text-sm italic">
+        No sections found for this term.
+      </p>
+    )
   }
 
   const rows = sections.map((section) => {
     const sectionStats = getSectionStats(section, instructorLinks)
-    const ratingStat = sectionStats.find((stat) => typeof stat.rmp_rating === 'number')
-    const gpaStat = sectionStats.find((stat) => typeof stat.avg_gpa === 'number')
-    const displayedRating = section.instructorRmp ?? ratingStat?.rmp_rating ?? null
+    const ratingStat = sectionStats.find(
+      (stat) => typeof stat.rmp_rating === 'number'
+    )
+    const gpaStat = sectionStats.find(
+      (stat) => typeof stat.avg_gpa === 'number'
+    )
+    const displayedRating =
+      section.instructorRmp ?? ratingStat?.rmp_rating ?? null
     const displayedGpa = section.instructorGpa ?? gpaStat?.avg_gpa ?? null
     const displayedGpaSampleSize = gpaStat?.gpa_sample_size ?? null
 
     // Determine how to display instructors and their stats
     const renderInstructors = () => {
       if (!section.instructor || section.instructor === 'TBA') {
-        return <Text size="sm" fw={500}>TBA</Text>;
+        return <span className="text-sm font-medium">TBA</span>
       }
 
       // If we have enriched stats, use them
       if (sectionStats.length > 0) {
         return (
-          <Stack gap={4}>
+          <div className="flex flex-col gap-1">
             {sectionStats.map((stat, idx) => (
-              <Group key={`${stat.instructor_name ?? 'instructor'}-${idx}`} gap="xs" wrap="nowrap">
-                {getRmpHref(stat, section.instructor.split(';')[idx]?.trim() ?? '') ? (
-                  <Anchor
-                    href={getRmpHref(stat, section.instructor.split(';')[idx]?.trim() ?? '') ?? undefined}
+              <div
+                key={`${stat.instructor_name ?? 'instructor'}-${idx}`}
+                className="flex items-center gap-2"
+              >
+                {getRmpHref(
+                  stat,
+                  section.instructor.split(';')[idx]?.trim() ?? ''
+                ) ? (
+                  <a
+                    href={
+                      getRmpHref(
+                        stat,
+                        section.instructor.split(';')[idx]?.trim() ?? ''
+                      ) ?? undefined
+                    }
                     target="_blank"
                     rel="noreferrer"
-                    size="sm"
-                    fw={500}
-                    underline="hover"
+                    className="text-sm font-medium underline-offset-4 hover:underline"
                     title="Open Rate My Professors"
                   >
-                    {stat.instructor_name || section.instructor.split(';')[idx]?.trim() || 'Instructor'}
-                  </Anchor>
+                    {stat.instructor_name ||
+                      section.instructor.split(';')[idx]?.trim() ||
+                      'Instructor'}
+                  </a>
                 ) : (
-                  <Text size="sm" fw={500}>
-                    {stat.instructor_name || section.instructor.split(';')[idx]?.trim() || 'Instructor'}
-                  </Text>
+                  <span className="text-sm font-medium">
+                    {stat.instructor_name ||
+                      section.instructor.split(';')[idx]?.trim() ||
+                      'Instructor'}
+                  </span>
                 )}
-              </Group>
+              </div>
             ))}
-          </Stack>
-        );
+          </div>
+        )
       }
 
       // Fallback: Split string if no stats
       return (
-        <Stack gap={4}>
+        <div className="flex flex-col gap-1">
           {section.instructor.split(';').map((name, idx) => {
-            const trimmedName = name.trim();
-            const linkData = instructorLinks?.[trimmedName];
-            const rmpHref = linkData ? getRmpHref(linkData, trimmedName) : buildRmpSearchUrl(trimmedName);
+            const trimmedName = name.trim()
+            const linkData = instructorLinks?.[trimmedName]
+            const rmpHref = linkData
+              ? getRmpHref(linkData, trimmedName)
+              : buildRmpSearchUrl(trimmedName)
             return (
-              <Group key={idx} gap="xs" wrap="nowrap">
+              <div key={idx} className="flex items-center gap-2">
                 {rmpHref ? (
-                  <Anchor
+                  <a
                     href={rmpHref}
                     target="_blank"
                     rel="noreferrer"
-                    size="sm"
-                    fw={500}
-                    underline="hover"
+                    className="text-sm font-medium underline-offset-4 hover:underline"
                     title="Open Rate My Professors"
                   >
                     {trimmedName}
-                  </Anchor>
+                  </a>
                 ) : (
-                  <Text size="sm" fw={500}>{trimmedName}</Text>
+                  <span className="text-sm font-medium">{trimmedName}</span>
                 )}
-              </Group>
-            );
+              </div>
+            )
           })}
-        </Stack>
-      );
-    };
+        </div>
+      )
+    }
 
     return (
-      <Table.Tr key={section.crn}>
-        <Table.Td>
-          {renderInstructors()}
-        </Table.Td>
-        <Table.Td>
+      <TableRow key={section.crn}>
+        <TableCell>{renderInstructors()}</TableCell>
+        <TableCell>
           {typeof displayedRating === 'number' ? (
-            <Text size="sm" fw={600} c={displayedRating > RMP_THRESHOLDS.GOOD ? 'green.7' : 'orange.7'}>
+            <span
+              className={cn(
+                'text-sm font-semibold',
+                displayedRating > RMP_THRESHOLDS.GOOD
+                  ? 'text-success'
+                  : 'text-warning'
+              )}
+            >
               {displayedRating.toFixed(1)} ★
-            </Text>
+            </span>
           ) : (
-            <Text size="xs" c="dimmed">-</Text>
+            <span className="text-muted-foreground text-xs">-</span>
           )}
-        </Table.Td>
-        <Table.Td>
-            {typeof displayedGpa === 'number' ? (
-              <Stack gap={0}>
-                <Text size="sm" fw={500}>{displayedGpa.toFixed(2)}</Text>
-                {typeof displayedGpaSampleSize === 'number' && (
-                  <Text size="xs" c="dimmed">{displayedGpaSampleSize.toLocaleString()} records</Text>
-                )}
-              </Stack>
-            ) : (
-                <Text size="xs" c="dimmed">-</Text>
+        </TableCell>
+        <TableCell>
+          {typeof displayedGpa === 'number' ? (
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">
+                {displayedGpa.toFixed(2)}
+              </span>
+              {typeof displayedGpaSampleSize === 'number' && (
+                <span className="text-muted-foreground text-xs">
+                  {displayedGpaSampleSize.toLocaleString()} records
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-muted-foreground text-xs">-</span>
+          )}
+        </TableCell>
+        <TableCell>
+          <div className="text-sm">{section.days || 'Arranged'}</div>
+          <div className="text-muted-foreground text-xs">
+            {section.startTime
+              ? `${formatTime(section.startTime)} - ${formatTime(section.endTime)}`
+              : ''}
+          </div>
+        </TableCell>
+        <TableCell>
+          <span className="text-sm">{section.location || 'TBA'}</span>
+        </TableCell>
+        <TableCell className="w-32">
+          <span
+            className={cn(
+              'text-sm font-semibold',
+              section.status.toLowerCase().includes('open')
+                ? 'text-success'
+                : 'text-destructive'
             )}
-        </Table.Td>
-        <Table.Td>
-          <Text size="sm">{section.days || 'Arranged'}</Text>
-          <Text size="xs" c="dimmed">
-            {section.startTime ? `${formatTime(section.startTime)} - ${formatTime(section.endTime)}` : ''}
-          </Text>
-        </Table.Td>
-        <Table.Td>
-          <Text size="sm">{section.location || 'TBA'}</Text>
-        </Table.Td>
-        <Table.Td style={{ width: '7.5rem', whiteSpace: 'nowrap' }}>
-          <Text
-            size="sm"
-            fw={600}
-            c={section.status.toLowerCase().includes('open') ? 'green.7' : 'red.7'}
           >
             {section.status}
-          </Text>
-        </Table.Td>
-        <Table.Td>
+          </span>
+        </TableCell>
+        <TableCell>
           {(section.course_explorer_url ?? courseExplorerUrl) ? (
-            <Anchor
+            <a
               href={section.course_explorer_url ?? courseExplorerUrl}
               target="_blank"
               rel="noreferrer"
-              size="sm"
+              className="text-sm underline-offset-4 hover:underline"
             >
               CRN {section.crn}
-            </Anchor>
+            </a>
           ) : (
-            <Text size="sm">CRN {section.crn}</Text>
+            <span className="text-sm">CRN {section.crn}</span>
           )}
-        </Table.Td>
-      </Table.Tr>
+        </TableCell>
+      </TableRow>
     )
   })
 
   return (
-    <Table miw={700}>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Instructor</Table.Th>
-          <Table.Th>Rating</Table.Th>
-          <Table.Th>Avg GPA</Table.Th>
-          <Table.Th>Time</Table.Th>
-          <Table.Th>Location</Table.Th>
-          <Table.Th>Status</Table.Th>
-          <Table.Th>Official</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>{rows}</Table.Tbody>
+    <Table className="min-w-[700px]">
+      <TableHeader>
+        <TableRow>
+          <TableHead>Instructor</TableHead>
+          <TableHead>Rating</TableHead>
+          <TableHead>Avg GPA</TableHead>
+          <TableHead>Time</TableHead>
+          <TableHead>Location</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Official</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>{rows}</TableBody>
     </Table>
   )
 }

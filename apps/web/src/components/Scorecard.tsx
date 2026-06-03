@@ -1,5 +1,7 @@
-import { Paper, Group, Stack, Text } from '@mantine/core'
-import { getLetterGrade, getGradeColor } from '../utils/grading'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+import { getQualityLabel, getQualityTone } from '../utils/grading'
 import { DIFFICULTY } from '../config/constants'
 
 interface ScorecardProps {
@@ -17,65 +19,96 @@ export function Scorecard({
   gpaSampleSize,
   primaryInstructorRmp,
 }: ScorecardProps) {
-  const grade = qualityScore !== null ? getLetterGrade(qualityScore) : 'N/A'
-  const color = getGradeColor(grade)
+  const qualityLabel =
+    qualityScore !== null ? getQualityLabel(qualityScore) : 'N/A'
+  const qualityTone = getQualityTone(qualityLabel)
 
   // Explicit check for null/undefined to handle 0 correctly
-  const hasDifficulty = difficultyScore !== null && difficultyScore !== undefined
+  const hasDifficulty =
+    difficultyScore !== null && difficultyScore !== undefined
   const hasAvgGpa = typeof avgGpa === 'number'
   const hasPrimaryRating = typeof primaryInstructorRmp === 'number'
 
   const difficultyLabel = !hasDifficulty
     ? 'N/A'
-    : difficultyScore! > DIFFICULTY.HARD ? 'Hard'
-    : difficultyScore! > DIFFICULTY.MODERATE ? 'Moderate'
-    : 'Easy'
+    : difficultyScore! > DIFFICULTY.HARD
+      ? 'Hard'
+      : difficultyScore! > DIFFICULTY.MODERATE
+        ? 'Moderate'
+        : 'Easy'
 
-  const difficultyColor = !hasDifficulty
-    ? 'gray'
-    : difficultyScore! > DIFFICULTY.HARD ? 'red'
-    : difficultyScore! > DIFFICULTY.MODERATE ? 'yellow'
-    : 'teal'
+  const difficultyTone = !hasDifficulty
+    ? 'muted'
+    : difficultyScore! > DIFFICULTY.HARD
+      ? 'destructive'
+      : difficultyScore! > DIFFICULTY.MODERATE
+        ? 'warning'
+        : 'success'
+
+  const toneClass = (tone: 'success' | 'warning' | 'destructive' | 'muted') =>
+    cn(
+      tone === 'success' && 'text-success',
+      tone === 'warning' && 'text-warning',
+      tone === 'destructive' && 'text-destructive',
+      tone === 'muted' && 'text-muted-foreground'
+    )
 
   return (
-    <Paper withBorder p="md" radius="md" shadow="none">
-      <Stack gap="sm">
-        <Text fw={600}>Course scores</Text>
-
-        <Stack gap={6}>
-          <Group justify="space-between" gap="md">
-            <Text size="sm" c="dimmed">Quality</Text>
-            <Text size="sm" fw={600} c={color === 'gray' ? 'dimmed' : color}>{grade}</Text>
-          </Group>
-          <Group justify="space-between" gap="md">
-            <Text size="sm" c="dimmed">Workload</Text>
-            <Text size="sm" fw={600} c={difficultyColor === 'gray' ? 'dimmed' : difficultyColor}>{difficultyLabel}</Text>
-          </Group>
+    <Card>
+      <CardHeader>
+        <CardTitle>Course scores</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <dl className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted-foreground text-sm">Quality</dt>
+            <dd className={cn('text-sm font-semibold', toneClass(qualityTone))}>
+              {qualityLabel}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted-foreground text-sm">Workload</dt>
+            <dd
+              className={cn('text-sm font-semibold', toneClass(difficultyTone))}
+            >
+              {difficultyLabel}
+            </dd>
+          </div>
           {hasPrimaryRating && (
-            <Group justify="space-between" gap="md">
-              <Text size="sm" c="dimmed">Instructor rating</Text>
-              <Text size="sm" fw={600}>{primaryInstructorRmp.toFixed(1)}</Text>
-            </Group>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground text-sm">
+                Instructor rating
+              </dt>
+              <dd className="text-sm font-semibold">
+                {primaryInstructorRmp.toFixed(1)}
+              </dd>
+            </div>
           )}
           {hasAvgGpa && (
-            <Group justify="space-between" gap="md" align="flex-start">
-              <Text size="sm" c="dimmed">Average GPA</Text>
-              <Stack gap={0} align="flex-end">
-                <Text size="sm" fw={600} ta="right">{avgGpa.toFixed(2)}</Text>
+            <div className="flex items-start justify-between gap-4">
+              <dt className="text-muted-foreground text-sm">Average GPA</dt>
+              <dd className="flex flex-col items-end">
+                <span className="text-right text-sm font-semibold">
+                  {avgGpa.toFixed(2)}
+                </span>
                 {typeof gpaSampleSize === 'number' && (
-                  <Text size="xs" c="dimmed" ta="right">{gpaSampleSize.toLocaleString()} records</Text>
+                  <span className="text-muted-foreground text-right text-xs">
+                    {gpaSampleSize.toLocaleString()} records
+                  </span>
                 )}
-              </Stack>
-            </Group>
+              </dd>
+            </div>
           )}
-        </Stack>
+        </dl>
 
-        <Text size="xs" c="dimmed">
+        <Badge variant="outline" className="text-muted-foreground w-fit">
           {typeof qualityScore === 'number'
-            ? `Based on composite quality score of ${qualityScore.toFixed(1)}`
-            : 'Insufficient data for quality score'}
-        </Text>
-      </Stack>
-    </Paper>
+            ? typeof gpaSampleSize === 'number'
+              ? `Based on ${gpaSampleSize.toLocaleString()} records`
+              : 'Record count unavailable'
+            : 'Not enough records for a quality label'}
+        </Badge>
+      </CardContent>
+    </Card>
   )
 }

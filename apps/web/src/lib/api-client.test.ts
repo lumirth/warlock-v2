@@ -25,20 +25,22 @@ describe('ApiClient', () => {
       quality_score: null,
       difficulty_score: null,
       instructor_links: {},
-      sections: [{
-        crn: '12345',
-        sectionNumber: 'AL1',
-        status: 'Open',
-        type: 'Lecture',
-        days: 'MWF',
-        startTime: '09:00',
-        endTime: '09:50',
-        location: 'Siebel 1404',
-        instructor: 'TBA',
-        instructorRmp: null,
-        instructorGpa: null,
-        instructorStats: [],
-      }],
+      sections: [
+        {
+          crn: '12345',
+          sectionNumber: 'AL1',
+          status: 'Open',
+          type: 'Lecture',
+          days: 'MWF',
+          startTime: '09:00',
+          endTime: '09:50',
+          location: 'Siebel 1404',
+          instructor: 'TBA',
+          instructorRmp: null,
+          instructorGpa: null,
+          instructorStats: [],
+        },
+      ],
     }
 
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -47,7 +49,9 @@ describe('ApiClient', () => {
     } as Response)
 
     const client = new ApiClient('https://api.example.test/')
-    await expect(client.getCourse('CS', '225', 'spring', 2026)).resolves.toEqual(course)
+    await expect(
+      client.getCourse('CS', '225', 'spring', 2026)
+    ).resolves.toEqual(course)
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.test/api/course/CS/225?term=spring&year=2026',
       { signal: undefined }
@@ -74,16 +78,30 @@ describe('ApiClient', () => {
         meta: {
           query: { raw: 'intro to CS', residual: '' },
           extraction: { hints: [] },
-          plan: { filters: { subject: 'CS' }, semanticQuery: '', keywordQuery: '' },
+          plan: {
+            filters: { subject: 'CS' },
+            semanticQuery: '',
+            keywordQuery: '',
+          },
           timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
         },
-        pagination: { total: 21, limit: 20, offset: 20, hasMore: true, nextOffset: 40 },
+        pagination: {
+          total: 21,
+          limit: 20,
+          offset: 20,
+          hasMore: true,
+          nextOffset: 40,
+        },
       }),
     } as Response)
 
     const controller = new AbortController()
     const client = new ApiClient('https://api.example.test')
-    await client.search('intro to CS', { limit: 20, offset: 20, signal: controller.signal })
+    await client.search('intro to CS', {
+      limit: 20,
+      offset: 20,
+      signal: controller.signal,
+    })
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.test/api/search?q=intro+to+CS&limit=20&offset=20',
@@ -91,20 +109,79 @@ describe('ApiClient', () => {
     )
   })
 
-  it('submits typed feedback to the public feedback endpoint', async () => {
+  it('sends structured advanced search filters as query parameters', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({ id: 'feedback-1', status: 'accepted', received_at: 1780358400 }),
+      json: async () => ({
+        results: [],
+        meta: {
+          query: { raw: 'algorithms', residual: 'algorithms' },
+          extraction: { hints: [] },
+          plan: {
+            filters: { subject: 'CS' },
+            semanticQuery: 'algorithms',
+            keywordQuery: 'algorithms',
+          },
+          timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+        },
+        pagination: {
+          total: 0,
+          limit: 20,
+          offset: 0,
+        },
+      }),
     } as Response)
 
     const client = new ApiClient('https://api.example.test')
-    await expect(client.submitFeedback({
-      kind: 'search_results',
-      issue: 'expected_different_results',
-      page: 'search',
-      query: 'professor fagen',
-      expected: 'classes with Wade Fagen-Ulmschneider',
-    })).resolves.toEqual({ id: 'feedback-1', status: 'accepted', received_at: 1780358400 })
+    await client.search('algorithms', {
+      limit: 20,
+      offset: 0,
+      filters: {
+        subject: 'CS',
+        number: '225',
+        instructor: 'Fagen',
+        term: 'spring',
+        year: 2026,
+        gened: 'HUM',
+        credits: 4,
+        days: 'MWF',
+        time: 'morning',
+        online: true,
+        status: 'open',
+        difficulty: 'easy',
+      },
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.test/api/search?q=algorithms&limit=20&offset=0&subject=CS&number=225&instructor=Fagen&term=spring&year=2026&gened=HUM&credits=4&days=MWF&time=morning&online=true&status=open&difficulty=easy',
+      { signal: undefined }
+    )
+  })
+
+  it('submits typed feedback to the public feedback endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'feedback-1',
+        status: 'accepted',
+        received_at: 1780358400,
+      }),
+    } as Response)
+
+    const client = new ApiClient('https://api.example.test')
+    await expect(
+      client.submitFeedback({
+        kind: 'search_results',
+        issue: 'expected_different_results',
+        page: 'search',
+        query: 'professor fagen',
+        expected: 'classes with Wade Fagen-Ulmschneider',
+      })
+    ).resolves.toEqual({
+      id: 'feedback-1',
+      status: 'accepted',
+      received_at: 1780358400,
+    })
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.test/api/feedback',

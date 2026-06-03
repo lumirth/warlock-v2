@@ -103,4 +103,32 @@ describe('buildSearchUiPlan', () => {
 
     expect(plan.chips.map(chip => chip.label)).toEqual(['Introductory courses']);
   });
+
+  it('adds interpreted rescue assumptions as removable chips', () => {
+    const plan = buildSearchUiPlan([], {
+      filters: { online: true },
+      keywordQuery: '',
+      semanticQuery: '',
+      rescue: {
+        queryTypes: ['schedule', 'subjective_vibe', 'avoidance'],
+        negativeTerms: ['writing_heavy'],
+        topicTerms: [],
+        expandedTerms: [],
+        assumptions: [
+          { kind: 'online_preferred', label: 'Online preferred', confidence: 0.86, source: 'rule' },
+          { kind: 'low_writing', label: 'Low writing preferred', confidence: 0.82, source: 'rule' },
+        ],
+        warnings: [],
+        retrievalLanes: ['structured_section', 'student_language_alias', 'workload_evidence'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.82,
+      },
+    }, '');
+
+    expect(plan.chips).toEqual([
+      expect.objectContaining({ type: 'assumption', label: 'Online preferred', queryPatch: { removeText: 'online' } }),
+      expect.objectContaining({ type: 'assumption', label: 'Low writing preferred', queryPatch: { removeText: 'no essays' } }),
+    ]);
+  });
 });

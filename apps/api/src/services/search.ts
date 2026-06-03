@@ -2,7 +2,7 @@ import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { searchCourses as semanticSearch } from './embeddings.js';
 import { validateSubject } from './query-resolver.js';
 import type { Course } from '../db/index.js';
-import type { SearchPlan, SearchFilters } from '@uiuc-course-search/query-types';
+import type { RetrievalLane, SearchPlan, SearchFilters } from '@uiuc-course-search/query-types';
 import { errorFields, logger } from '../observability/logger.js';
 
 export interface SearchResult {
@@ -10,6 +10,9 @@ export interface SearchResult {
   score: number;
   semanticRank?: number;
   keywordRank?: number;
+  laneMatches?: RetrievalLane[];
+  laneRanks?: Partial<Record<RetrievalLane, number>>;
+  supportedSubjectiveClaims?: string[];
   termPriority?: number;
   historical?: boolean;
 }
@@ -109,10 +112,19 @@ export function buildTermPriorityMap(termStates: TermInfo[]): Map<string, number
 // Reciprocal Rank Fusion constant
 const RRF_K = 60;
 
-function rrfScore(rank: number, qualityScore?: number): number {
-  // Boost score slightly by quality (0-100 normalized to 0-0.5)
-  const qualityBoost = qualityScore ? (qualityScore / 200) : 0;
-  return (1 / (RRF_K + rank)) + qualityBoost;
+const LANE_WEIGHTS: Record<RetrievalLane, number> = {
+  exact: 9,
+  official_text: 1.8,
+  requirement: 2.4,
+  structured_section: 2,
+  student_language_alias: 2.1,
+  topic_semantic: 1.4,
+  workload_evidence: 2.2,
+  help_path: 1,
+};
+
+function laneRrfScore(lane: RetrievalLane, rank: number): number {
+  return LANE_WEIGHTS[lane] / (RRF_K + rank);
 }
 
 export function applyTitleBoost<T extends { id: string; score: number; title?: string }>(
@@ -656,6 +668,221 @@ export async function sectionKeywordSearch(
   return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
 }
 
+export async function requirementLaneSearch(
+  db: D1Database,
+  plan: SearchPlan,
+  limit: number = 50
+): Promise<{ id: string; rank: number }[]> {
+  const hasRequirementFilter = Boolean(
+    plan.filters.gened_code
+    || plan.filters.gened_any?.length
+    || plan.filters.gened_all?.length
+  );
+  const hasRequirementIntent = plan.rescue?.queryTypes.includes('requirement')
+    || plan.rescue?.queryTypes.includes('degree_progress');
+
+  if (!hasRequirementFilter && !hasRequirementIntent) {
+    return [];
+  }
+
+  const filterResults = buildFilterClauses(plan.filters);
+  const { joins, where, params, groupBy, having, havingParams } = filterResults;
+
+  if (where.length === 0 && joins.length === 0) {
+    return [];
+  }
+
+  const sql = `
+    SELECT DISTINCT c.id
+    FROM courses c
+    ${joins.join(' ')}
+    ${where.length > 0 ? 'WHERE ' + where.join(' AND ') : ''}
+    ${groupBy ? 'GROUP BY ' + groupBy : ''}
+    ${having ? 'HAVING ' + having : ''}
+    ORDER BY c.year DESC, c.subject, c.number
+    LIMIT ?
+  `;
+
+  const result = await db.prepare(sql)
+    .bind(...params, ...(havingParams ?? []), limit)
+    .all<{ id: string }>();
+
+  return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+}
+
+export async function structuredSectionLaneSearch(
+  db: D1Database,
+  plan: SearchPlan,
+  limit: number = 50
+): Promise<{ id: string; rank: number }[]> {
+  const hasSectionFilter = Boolean(
+    plan.filters.online !== undefined
+    || plan.filters.days
+    || plan.filters.time
+    || plan.filters.status
+    || plan.filters.partOfTerm
+  );
+  const hasSectionPreference = Boolean(
+    plan.softPreferences?.startAfterMinutes
+    || plan.softPreferences?.startBeforeMinutes
+    || plan.softPreferences?.compressedTerm
+    || plan.softPreferences?.asyncFriendly
+  );
+
+  if (!hasSectionFilter && !hasSectionPreference) {
+    return [];
+  }
+
+  const filterResults = buildFilterClauses(plan.filters);
+  const { joins, where, params, groupBy, having, havingParams } = filterResults;
+  if (joins.length === 0 && where.length === 0) {
+    return [];
+  }
+
+  const sql = `
+    SELECT DISTINCT c.id
+    FROM courses c
+    ${joins.join(' ')}
+    ${where.length > 0 ? 'WHERE ' + where.join(' AND ') : ''}
+    ${groupBy ? 'GROUP BY ' + groupBy : ''}
+    ${having ? 'HAVING ' + having : ''}
+    ORDER BY c.year DESC, c.subject, c.number
+    LIMIT ?
+  `;
+
+  const result = await db.prepare(sql)
+    .bind(...params, ...(havingParams ?? []), limit)
+    .all<{ id: string }>();
+
+  return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+}
+
+export async function studentAliasLaneSearch(
+  db: D1Database,
+  plan: SearchPlan,
+  limit: number = 50
+): Promise<{ id: string; rank: number }[]> {
+  const aliasQuery = buildAliasLaneQuery(plan);
+  if (!aliasQuery) {
+    return [];
+  }
+
+  const filterResults = buildFilterClauses(plan.filters);
+  const { joins, where, params, groupBy, having, havingParams } = filterResults;
+  const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
+  const joinClause = joins.join(' ');
+
+  const sql = `
+    SELECT DISTINCT c.id, bm25(course_aliases_fts) as fts_score
+    FROM course_aliases_fts fts
+    JOIN course_aliases ca ON ca.rowid = fts.rowid
+    JOIN courses c ON c.id = ca.course_id
+    ${joinClause}
+    ${whereClause}
+    ${whereClause ? 'AND' : 'WHERE'} course_aliases_fts MATCH ?
+    ${groupBy ? 'GROUP BY ' + groupBy : ''}
+    ${having ? 'HAVING ' + having : ''}
+    ORDER BY fts_score ASC
+    LIMIT ?
+  `;
+
+  const result = await db.prepare(sql)
+    .bind(...params, aliasQuery, ...(havingParams ?? []), limit)
+    .all<{ id: string; fts_score: number }>();
+
+  return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+}
+
+export async function workloadEvidenceLaneSearch(
+  db: D1Database,
+  plan: SearchPlan,
+  limit: number = 50
+): Promise<{ id: string; rank: number; claims: string[] }[]> {
+  const signalTypes = workloadSignalTypes(plan);
+  if (signalTypes.length === 0) {
+    return [];
+  }
+
+  const filterResults = buildFilterClauses(plan.filters);
+  const { joins, where, params, groupBy, having, havingParams } = filterResults;
+  const signalPlaceholders = signalTypes.map(() => '?').join(',');
+  const whereParts = [`cs.signal_type IN (${signalPlaceholders})`, ...where];
+
+  const sql = `
+    SELECT c.id,
+      GROUP_CONCAT(DISTINCT cs.signal_type) as claims,
+      MAX(COALESCE(cs.confidence, 0) * COALESCE(cs.value, 0)) as evidence_score
+    FROM course_signals cs
+    JOIN courses c ON c.id = cs.course_id
+    ${joins.join(' ')}
+    WHERE ${whereParts.join(' AND ')}
+    ${groupBy ? 'GROUP BY ' + groupBy + ', c.id' : 'GROUP BY c.id'}
+    ${having ? 'HAVING ' + having : ''}
+    ORDER BY evidence_score DESC, c.year DESC, c.subject, c.number
+    LIMIT ?
+  `;
+
+  const result = await db.prepare(sql)
+    .bind(...signalTypes, ...params, ...(havingParams ?? []), limit)
+    .all<{ id: string; claims: string | null; evidence_score: number | null }>();
+
+  return result.results.map((r, i) => ({
+    id: r.id,
+    rank: i + 1,
+    claims: r.claims?.split(',').filter(Boolean) ?? [],
+  }));
+}
+
+function buildAliasLaneQuery(plan: SearchPlan): string {
+  const terms = new Set<string>();
+  for (const value of [plan.keywordQuery, plan.semanticQuery]) {
+    if (value?.trim()) terms.add(value.trim());
+  }
+  for (const value of plan.rescue?.topicTerms ?? []) terms.add(value);
+  for (const value of plan.rescue?.expandedTerms ?? []) terms.add(value);
+  for (const value of plan.rescue?.negativeTerms ?? []) terms.add(value.replace(/_/g, ' '));
+  for (const assumption of plan.rescue?.assumptions ?? []) {
+    terms.add(assumption.kind.replace(/_/g, ' '));
+    terms.add(assumption.label);
+  }
+
+  const sanitizedTerms = Array.from(terms)
+    .map(term => sanitizeFtsQuery(term))
+    .filter(Boolean)
+    .slice(0, 12);
+
+  return sanitizedTerms.length > 0 ? sanitizedTerms.join(' OR ') : '';
+}
+
+function workloadSignalTypes(plan: SearchPlan): string[] {
+  const types = new Set<string>();
+  const soft = plan.softPreferences ?? {};
+
+  if (soft.lowWorkload || plan.filters.difficulty === 'easy') {
+    ['low_workload', 'high_avg_gpa', 'non_major_friendly'].forEach(type => types.add(type));
+  }
+  if (soft.lowWriting) {
+    ['low_writing', 'writing_light', 'few_papers'].forEach(type => types.add(type));
+  }
+  if (soft.lowReading) {
+    ['low_reading', 'reading_light'].forEach(type => types.add(type));
+  }
+  if (soft.lowExams) {
+    ['low_exams', 'low_exam', 'quiz_based'].forEach(type => types.add(type));
+  }
+  if (soft.lowMath) {
+    ['low_math', 'non_quantitative', 'non_major_friendly'].forEach(type => types.add(type));
+  }
+  if (soft.noListedPrereq) {
+    ['no_listed_prereq', 'non_major_friendly'].forEach(type => types.add(type));
+  }
+  if (soft.fun) {
+    types.add('interesting_topic');
+  }
+
+  return Array.from(types);
+}
+
 /**
  * Enforces hard constraints on semantic search results.
  * Vectorize is great for meaning but bad at hard filters (credits, geneds).
@@ -731,7 +958,15 @@ export async function hybridSearch(
   const runSemantic = hasSemanticQuery && !isNavigational;
 
   // Run all searches in parallel, skipping empty queries
-  const [rawSemanticResults, courseKeywordResults, sectionKeywordResults] = await Promise.all([
+  const [
+    rawSemanticResults,
+    courseKeywordResults,
+    sectionKeywordResults,
+    requirementResults,
+    structuredSectionResults,
+    aliasResults,
+    workloadResults,
+  ] = await Promise.all([
     runSemantic
       ? semanticSearch(vectorize, ai, plan.semanticQuery, plan.filters, candidateLimit).catch(err => {
           logger.warn('search.semantic.failed', { ...errorFields(err) });
@@ -739,7 +974,23 @@ export async function hybridSearch(
         })
       : Promise.resolve([]),
     keywordSearch(db, plan, candidateLimit),
-    hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, candidateLimit) : Promise.resolve([])
+    hasKeywordQuery ? sectionKeywordSearch(db, plan.keywordQuery!, plan.filters, candidateLimit) : Promise.resolve([]),
+    requirementLaneSearch(db, plan, candidateLimit).catch(err => {
+      logger.warn('search.requirement_lane.failed', { ...errorFields(err) });
+      return [];
+    }),
+    structuredSectionLaneSearch(db, plan, candidateLimit).catch(err => {
+      logger.warn('search.section_lane.failed', { ...errorFields(err) });
+      return [];
+    }),
+    studentAliasLaneSearch(db, plan, candidateLimit).catch(err => {
+      logger.warn('search.alias_lane.failed', { ...errorFields(err) });
+      return [];
+    }),
+    workloadEvidenceLaneSearch(db, plan, candidateLimit).catch(err => {
+      logger.warn('search.workload_lane.failed', { ...errorFields(err) });
+      return [];
+    }),
   ]);
 
   // Post-filter semantic results for hard constraints
@@ -747,44 +998,68 @@ export async function hybridSearch(
     ? await postFilterSemanticResults(db, rawSemanticResults, plan.filters)
     : [];
 
-  // Build rank maps
-  const semanticRanks = new Map<string, number>();
-  semanticResults.forEach((r, i) => semanticRanks.set(r.id, i + 1));
+  const laneRanks = new Map<string, Partial<Record<RetrievalLane, number>>>();
+  const supportedClaims = new Map<string, Set<string>>();
+  const addLaneRanks = (lane: RetrievalLane, rows: { id: string; rank: number }[]): void => {
+    rows.forEach((row, index) => {
+      const rank = row.rank ?? index + 1;
+      const ranks = laneRanks.get(row.id) ?? {};
+      const existing = ranks[lane];
+      if (!existing || rank < existing) {
+        ranks[lane] = rank;
+      }
+      laneRanks.set(row.id, ranks);
+    });
+  };
 
-  const keywordRanks = new Map<string, number>();
-  courseKeywordResults.forEach((r) => keywordRanks.set(r.id, r.rank));
+  addLaneRanks(isNavigational ? 'exact' : 'official_text', courseKeywordResults);
+  addLaneRanks('structured_section', sectionKeywordResults);
+  addLaneRanks('requirement', requirementResults);
+  addLaneRanks('structured_section', structuredSectionResults);
+  addLaneRanks('student_language_alias', aliasResults);
+  addLaneRanks('topic_semantic', semanticResults.map((row, index) => ({ id: row.id, rank: index + 1 })));
+  addLaneRanks('workload_evidence', workloadResults);
+  for (const row of workloadResults) {
+    supportedClaims.set(row.id, new Set(row.claims));
+  }
 
-  // Merge section results into keyword ranks (take best rank if duplicate)
-  sectionKeywordResults.forEach((r) => {
-    const existing = keywordRanks.get(r.id);
-    if (!existing || r.rank < existing) {
-      keywordRanks.set(r.id, r.rank);
-    }
-  });
-
-  // Collect all unique IDs
-  const allIds = new Set([...semanticRanks.keys(), ...keywordRanks.keys()]);
+  const allIds = new Set(laneRanks.keys());
 
   const allIdList = Array.from(allIds);
   const qualityScores = await fetchQualityScores(db, allIdList);
 
-  // Calculate RRF scores
-  const scores: { id: string; score: number; semanticRank?: number; keywordRank?: number }[] = [];
+  const scores: {
+    id: string;
+    score: number;
+    semanticRank?: number;
+    keywordRank?: number;
+    laneMatches: RetrievalLane[];
+    laneRanks: Partial<Record<RetrievalLane, number>>;
+    supportedSubjectiveClaims: string[];
+  }[] = [];
 
   for (const id of allIdList) {
     let score = 0;
-    const semanticRank = semanticRanks.get(id);
-    const keywordRank = keywordRanks.get(id);
+    const ranks = laneRanks.get(id) ?? {};
+    const semanticRank = ranks.topic_semantic;
+    const keywordRank = bestKeywordLikeRank(ranks);
     const qualityScore = qualityScores.get(id);
 
-    if (semanticRank) {
-      score += rrfScore(semanticRank, qualityScore);
+    for (const [lane, rank] of Object.entries(ranks) as [RetrievalLane, number][]) {
+      score += laneRrfScore(lane, rank);
+      if (lane === 'exact') score += 3.5;
     }
-    if (keywordRank) {
-      score += rrfScore(keywordRank, qualityScore);
-    }
+    if (qualityScore) score += qualityScore / 250;
 
-    scores.push({ id, score, semanticRank, keywordRank });
+    scores.push({
+      id,
+      score,
+      semanticRank,
+      keywordRank,
+      laneMatches: Object.keys(ranks) as RetrievalLane[],
+      laneRanks: ranks,
+      supportedSubjectiveClaims: Array.from(supportedClaims.get(id) ?? []),
+    });
   }
 
   // Sort by RRF score
@@ -820,12 +1095,177 @@ export async function hybridSearch(
   const boostedResults = applyTitleBoost(resultsWithTitles, plan.keywordQuery || '');
 
   // Return results with scores
-  return boostedResults.map(s => ({
+  const rankedResults = boostedResults.map(s => ({
     course: courseMap.get(s.id)!,
     score: s.score,
     semanticRank: s.semanticRank,
-    keywordRank: s.keywordRank
+    keywordRank: s.keywordRank,
+    laneMatches: s.laneMatches,
+    laneRanks: s.laneRanks,
+    supportedSubjectiveClaims: s.supportedSubjectiveClaims,
   })).filter(r => r.course);
+
+  return applyUsefulnessRerank(rankedResults, plan);
+}
+
+function bestKeywordLikeRank(ranks: Partial<Record<RetrievalLane, number>>): number | undefined {
+  const keywordRanks = [
+    ranks.exact,
+    ranks.official_text,
+    ranks.requirement,
+    ranks.structured_section,
+    ranks.student_language_alias,
+    ranks.workload_evidence,
+  ].filter((rank): rank is number => typeof rank === 'number');
+
+  return keywordRanks.length > 0 ? Math.min(...keywordRanks) : undefined;
+}
+
+export function applyUsefulnessRerank(results: SearchResult[], plan: SearchPlan): SearchResult[] {
+  const reranked = results.map(result => {
+    let score = result.score;
+    const course = result.course;
+
+    if (result.laneMatches?.includes('exact')) {
+      score += 2.5;
+    }
+
+    if (matchesRequestedRequirement(course, plan.filters)) {
+      score += 0.9;
+    } else if (hasRequirementIntent(plan) && course.gened) {
+      score += 0.25;
+    } else if (hasRequirementIntent(plan) && !course.gened) {
+      score -= 0.25;
+    }
+
+    if (result.laneMatches?.includes('structured_section')) {
+      score += 0.35;
+    }
+
+    if (result.laneMatches?.includes('student_language_alias')) {
+      score += 0.25;
+    }
+
+    if (result.laneMatches?.includes('workload_evidence')) {
+      score += 0.45;
+    }
+
+    score += workloadUsefulnessAdjustment(result, plan);
+    score += eligibilityAdjustment(course, plan);
+    score += negativePreferencePenalty(course, plan);
+    score += unsupportedSubjectivePenalty(result, plan);
+
+    return {
+      ...result,
+      score,
+    };
+  });
+
+  return reranked.sort((a, b) => b.score - a.score);
+}
+
+function hasRequirementIntent(plan: SearchPlan): boolean {
+  return Boolean(
+    plan.filters.gened_code
+    || plan.filters.gened_any?.length
+    || plan.filters.gened_all?.length
+    || plan.rescue?.queryTypes.includes('requirement')
+    || plan.rescue?.queryTypes.includes('degree_progress')
+  );
+}
+
+function matchesRequestedRequirement(course: Course, filters: SearchFilters): boolean {
+  const requested = [
+    filters.gened_code,
+    ...(filters.gened_any ?? []),
+    ...(filters.gened_all ?? []),
+  ].filter((value): value is string => Boolean(value));
+
+  if (requested.length === 0) {
+    return false;
+  }
+
+  const courseGened = (course.gened ?? '').toUpperCase();
+  return requested.some(value => courseGened.includes(value.toUpperCase()));
+}
+
+function workloadUsefulnessAdjustment(result: SearchResult, plan: SearchPlan): number {
+  const soft = plan.softPreferences ?? {};
+  if (!soft.lowWorkload && !soft.lowWriting && !soft.lowReading && !soft.lowExams && plan.filters.difficulty !== 'easy') {
+    return 0;
+  }
+
+  let adjustment = 0;
+  const { course } = result;
+  if (typeof course.quality_score === 'number' && course.quality_score >= 70) adjustment += 0.25;
+  if (typeof course.difficulty_score === 'number' && course.difficulty_score <= 35) adjustment += 0.3;
+  if (typeof course.avg_gpa === 'number' && course.avg_gpa >= 3.5) adjustment += 0.2;
+  if (catalogLevel(course.number) === 100) adjustment += 0.1;
+  if (result.laneMatches?.includes('workload_evidence')) adjustment += 0.3;
+
+  return adjustment;
+}
+
+function eligibilityAdjustment(course: Course, plan: SearchPlan): number {
+  if (!plan.softPreferences?.noListedPrereq) {
+    return 0;
+  }
+
+  const text = `${course.title ?? ''} ${course.description ?? ''}`.toLowerCase();
+  if (!/\b(prereq|prerequisite|consent|restricted|permission|credit or concurrent)\b/.test(text)) {
+    return 0.35;
+  }
+  return -0.35;
+}
+
+function negativePreferencePenalty(course: Course, plan: SearchPlan): number {
+  const negativeTerms = new Set(plan.rescue?.negativeTerms ?? []);
+  let penalty = 0;
+
+  if (negativeTerms.has('math_heavy')) {
+    const text = `${course.subject} ${course.title ?? ''} ${course.description ?? ''} ${course.gened ?? ''}`.toLowerCase();
+    if (/\b(qr|quantitative|calculus|statistics|statistical|programming|formal logic)\b/.test(text)) {
+      penalty -= 0.7;
+    }
+    if (['MATH', 'STAT'].includes(course.subject.toUpperCase())) {
+      penalty -= 0.4;
+    }
+  }
+
+  if (negativeTerms.has('writing_heavy')) {
+    const text = `${course.title ?? ''} ${course.description ?? ''} ${course.gened ?? ''}`.toLowerCase();
+    if (/\b(advanced composition|writing intensive|essay|papers?)\b/.test(text)) {
+      penalty -= 0.55;
+    }
+  }
+
+  if (negativeTerms.has('biology_heavy')) {
+    const text = `${course.subject} ${course.title ?? ''} ${course.description ?? ''}`.toLowerCase();
+    if (/\b(bio|biology|biological|molecular|cellular|anatomy|physiology)\b/.test(text)) {
+      penalty -= 0.45;
+    }
+    if (['IB', 'MCB'].includes(course.subject.toUpperCase())) {
+      penalty -= 0.35;
+    }
+  }
+
+  return penalty;
+}
+
+function unsupportedSubjectivePenalty(result: SearchResult, plan: SearchPlan): number {
+  const needsEvidence = Boolean(
+    plan.rescue?.queryTypes.includes('subjective_vibe')
+    || plan.rescue?.queryTypes.includes('avoidance')
+  );
+  if (!needsEvidence) return 0;
+
+  const hasStructuredSupport = result.laneMatches?.includes('workload_evidence')
+    || Boolean(result.supportedSubjectiveClaims?.length)
+    || typeof result.course.quality_score === 'number'
+    || typeof result.course.difficulty_score === 'number'
+    || typeof result.course.avg_gpa === 'number';
+
+  return hasStructuredSupport ? 0 : -0.35;
 }
 
 async function fetchQualityScores(db: D1Database, courseIds: string[]): Promise<Map<string, number>> {

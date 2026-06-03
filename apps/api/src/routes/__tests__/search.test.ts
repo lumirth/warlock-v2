@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Hono } from 'hono';
-import { searchRoutes } from '../search.js';
-import { SearchPipeline } from '../../services/search-pipeline.js';
-import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import type { SearchResponseDto } from '@uiuc-course-search/query-types';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Hono } from "hono";
+import { searchRoutes } from "../search.js";
+import { SearchPipeline } from "../../services/search-pipeline.js";
+import type { D1Database, VectorizeIndex, Ai } from "@cloudflare/workers-types";
+import type { SearchResponseDto } from "@uiuc-course-search/query-types";
 
-vi.mock('../../services/search-pipeline.js');
+vi.mock("../../services/search-pipeline.js");
 
 type SearchRouteBindings = {
   DB: D1Database;
@@ -13,7 +13,7 @@ type SearchRouteBindings = {
   AI: Ai;
 };
 
-describe('Search Routes', () => {
+describe("Search Routes", () => {
   let app: Hono<{ Bindings: SearchRouteBindings }>;
   let mockDB: D1Database;
   let mockVectorize: VectorizeIndex;
@@ -27,25 +27,25 @@ describe('Search Routes', () => {
     } as unknown as D1Database;
     mockVectorize = {} as unknown as VectorizeIndex;
     mockAI = {} as unknown as Ai;
-    
+
     app = new Hono();
-    app.route('/', searchRoutes);
+    app.route("/", searchRoutes);
     vi.clearAllMocks();
   });
 
-  it('GET /api/search should use SearchPipeline', async () => {
+  it("GET /api/search should use SearchPipeline", async () => {
     const mockResults = [
       {
         course: {
-          id: 'CS-225-2026-spring',
-          subject: 'CS',
-          number: '225',
-          title: 'Data Structures',
+          id: "CS-225-2026-spring",
+          subject: "CS",
+          number: "225",
+          title: "Data Structures",
           description: null,
           credit_hours: 4,
           gened: null,
           year: 2026,
-          term: 'spring',
+          term: "spring",
           avg_gpa: null,
           gpa_sample_size: null,
           primary_instructor: null,
@@ -57,117 +57,198 @@ describe('Search Routes', () => {
         semanticRank: 1,
         keywordRank: 1,
         termPriority: 0,
-        historical: false
-      }
+        historical: false,
+      },
     ];
 
     const mockPipelineResult = {
       results: mockResults,
       meta: {
-        query: { raw: 'CS 225', residual: '' },
+        query: { raw: "CS 225", residual: "" },
         extraction: { hints: [] },
-        plan: { filters: {}, semanticQuery: '', keywordQuery: '' },
-        timing: { extraction_ms: 10, search_ms: 20, total_ms: 30 }
-      }
+        plan: { filters: {}, semanticQuery: "", keywordQuery: "" },
+        timing: { extraction_ms: 10, search_ms: 20, total_ms: 30 },
+      },
     };
 
     const searchSpy = vi.fn().mockResolvedValue(mockPipelineResult);
     vi.mocked(SearchPipeline).mockImplementation(function () {
       return {
-      search: searchSpy
+        search: searchSpy,
       } as unknown as SearchPipeline;
     });
 
-    const res = await app.request('/api/search?q=CS+225', {}, {
-      DB: mockDB,
-      VECTORIZE: mockVectorize,
-      AI: mockAI
-    }, {
-      waitUntil: vi.fn(),
-      passThroughOnException: vi.fn()
-    } as unknown as ExecutionContext);
+    const res = await app.request(
+      "/api/search?q=CS+225",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
 
     if (res.status !== 200) {
       console.error(await res.text());
     }
 
     expect(res.status).toBe(200);
-    const data = await res.json() as SearchResponseDto;
+    const data = (await res.json()) as SearchResponseDto;
     expect(data.results).toBeDefined();
-    expect(data.results[0].id).toBe('CS-225-2026-spring');
+    expect(data.results[0].id).toBe("CS-225-2026-spring");
     expect(data.meta.ui).toEqual({
       chips: [],
       advanced: {},
       ambiguityActions: [],
     });
-    expect(searchSpy).toHaveBeenCalledWith('CS 225', 40, {}, expect.any(Function));
-  });
-
-  it('rejects malformed public search params before running search', async () => {
-    const searchSpy = vi.fn();
-    vi.mocked(SearchPipeline).mockImplementation(function () {
-      return {
-      search: searchSpy
-      } as unknown as SearchPipeline;
-    });
-
-    const res = await app.request('/api/search?q=cs&limit=999999', {}, {
-      DB: mockDB,
-      VECTORIZE: mockVectorize,
-      AI: mockAI
-    });
-
-    expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'limit must be between 1 and 50' });
-    expect(searchSpy).not.toHaveBeenCalled();
-  });
-
-  it('normalizes bounded manual search filters', async () => {
-    const searchSpy = vi.fn().mockResolvedValue({
-      results: [],
-      meta: {
-        query: { raw: 'systems', residual: 'systems' },
-        extraction: { hints: [] },
-        plan: { filters: {}, semanticQuery: 'systems', keywordQuery: 'systems' },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 }
-      }
-    });
-    vi.mocked(SearchPipeline).mockImplementation(function () {
-      return {
-      search: searchSpy
-      } as unknown as SearchPipeline;
-    });
-
-    const res = await app.request('/api/search?q=systems&subject=cs&credits=4&difficulty=easy', {}, {
-      DB: mockDB,
-      VECTORIZE: mockVectorize,
-      AI: mockAI
-    }, {
-      waitUntil: vi.fn(),
-      passThroughOnException: vi.fn()
-    } as unknown as ExecutionContext);
-
-    expect(res.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(
-      'systems',
+      "CS 225",
       40,
-      { subject: 'CS', credits: 4, difficulty: 'easy' },
-      expect.any(Function)
+      {},
+      expect.any(Function),
     );
   });
 
-  it('returns a sliced page with hasMore and nextOffset', async () => {
+  it("rejects malformed public search params before running search", async () => {
+    const searchSpy = vi.fn();
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: searchSpy,
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?q=cs&limit=999999",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({
+      error: "limit must be between 1 and 50",
+    });
+    expect(searchSpy).not.toHaveBeenCalled();
+  });
+
+  it("normalizes bounded manual search filters", async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: "systems", residual: "systems" },
+        extraction: { hints: [] },
+        plan: {
+          filters: {},
+          semanticQuery: "systems",
+          keywordQuery: "systems",
+        },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+      },
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: searchSpy,
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?q=systems&subject=cs&number=225&instructor=Fagen&term=spring&year=2026&gened=hum&credits=4&days=mwf&time=morning&online=true&status=open&difficulty=easy",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith(
+      "systems",
+      40,
+      {
+        subject: "CS",
+        number: "225",
+        instructorName: "Fagen",
+        term: "spring",
+        year: 2026,
+        gened_code: "HUM",
+        credits: 4,
+        days: "MWF",
+        time: "morning",
+        online: true,
+        status: "open",
+        difficulty: "easy",
+      },
+      expect.any(Function),
+    );
+  });
+
+  it("allows filter-only searches without fabricating query text", async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: "", residual: "" },
+        extraction: { hints: [] },
+        plan: {
+          filters: { online: true },
+          semanticQuery: "",
+          keywordQuery: "",
+        },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+      },
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: searchSpy,
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?online=true&credits=3",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith(
+      "",
+      40,
+      { credits: 3, online: true },
+      expect.any(Function),
+    );
+  });
+
+  it("returns a sliced page with hasMore and nextOffset", async () => {
     const mockResults = Array.from({ length: 16 }, (_, index) => ({
       course: {
         id: `CS-${index}-2026-spring`,
-        subject: 'CS',
+        subject: "CS",
         number: String(100 + index),
         title: `Course ${index}`,
         description: null,
         credit_hours: 3,
         gened: null,
         year: 2026,
-        term: 'spring',
+        term: "spring",
         avg_gpa: null,
         gpa_sample_size: null,
         primary_instructor: null,
@@ -180,36 +261,50 @@ describe('Search Routes', () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: mockResults,
       meta: {
-        query: { raw: 'intro to CS', residual: '' },
+        query: { raw: "intro to CS", residual: "" },
         extraction: { hints: [] },
-        plan: { filters: { subject: 'CS' }, semanticQuery: '', keywordQuery: '' },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 }
-      }
+        plan: {
+          filters: { subject: "CS" },
+          semanticQuery: "",
+          keywordQuery: "",
+        },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+      },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
       return {
-      search: searchSpy
+        search: searchSpy,
       } as unknown as SearchPipeline;
     });
 
-    const res = await app.request('/api/search?q=intro+to+CS&limit=5&offset=10', {}, {
-      DB: mockDB,
-      VECTORIZE: mockVectorize,
-      AI: mockAI
-    }, {
-      waitUntil: vi.fn(),
-      passThroughOnException: vi.fn()
-    } as unknown as ExecutionContext);
+    const res = await app.request(
+      "/api/search?q=intro+to+CS&limit=5&offset=10",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
 
     expect(res.status).toBe(200);
-    const data = await res.json() as SearchResponseDto;
-    expect(searchSpy).toHaveBeenCalledWith('intro to CS', 30, {}, expect.any(Function));
-    expect(data.results.map(result => result.id)).toEqual([
-      'CS-10-2026-spring',
-      'CS-11-2026-spring',
-      'CS-12-2026-spring',
-      'CS-13-2026-spring',
-      'CS-14-2026-spring',
+    const data = (await res.json()) as SearchResponseDto;
+    expect(searchSpy).toHaveBeenCalledWith(
+      "intro to CS",
+      30,
+      {},
+      expect.any(Function),
+    );
+    expect(data.results.map((result) => result.id)).toEqual([
+      "CS-10-2026-spring",
+      "CS-11-2026-spring",
+      "CS-12-2026-spring",
+      "CS-13-2026-spring",
+      "CS-14-2026-spring",
     ]);
     expect(data.pagination).toEqual({
       total: 16,
@@ -220,39 +315,59 @@ describe('Search Routes', () => {
     });
   });
 
-  it('allows deep historical result pages while keeping an offset cap', async () => {
+  it("allows deep historical result pages while keeping an offset cap", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
       meta: {
-        query: { raw: 'history', residual: 'history' },
+        query: { raw: "history", residual: "history" },
         extraction: { hints: [] },
-        plan: { filters: {}, semanticQuery: 'history', keywordQuery: 'history' },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 }
-      }
+        plan: {
+          filters: {},
+          semanticQuery: "history",
+          keywordQuery: "history",
+        },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+      },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
       return {
-      search: searchSpy
+        search: searchSpy,
       } as unknown as SearchPipeline;
     });
 
-    const ok = await app.request('/api/search?q=history&offset=1000', {}, {
-      DB: mockDB,
-      VECTORIZE: mockVectorize,
-      AI: mockAI
-    }, {
-      waitUntil: vi.fn(),
-      passThroughOnException: vi.fn()
-    } as unknown as ExecutionContext);
+    const ok = await app.request(
+      "/api/search?q=history&offset=1000",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
     expect(ok.status).toBe(200);
-    expect(searchSpy).toHaveBeenCalledWith('history', 1200, {}, expect.any(Function));
+    expect(searchSpy).toHaveBeenCalledWith(
+      "history",
+      1200,
+      {},
+      expect.any(Function),
+    );
 
-    const tooDeep = await app.request('/api/search?q=history&offset=1001', {}, {
-      DB: mockDB,
-      VECTORIZE: mockVectorize,
-      AI: mockAI
-    });
+    const tooDeep = await app.request(
+      "/api/search?q=history&offset=1001",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+    );
     expect(tooDeep.status).toBe(400);
-    await expect(tooDeep.json()).resolves.toEqual({ error: 'offset must be between 0 and 1000' });
+    await expect(tooDeep.json()).resolves.toEqual({
+      error: "offset must be between 0 and 1000",
+    });
   });
 });

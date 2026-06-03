@@ -24,6 +24,7 @@ type Bindings = {
   AI: Ai;
   SELF: Fetcher;
   GPA_CACHE: KVNamespace;
+  SEARCH_CACHE?: KVNamespace;
   SEARCH_RATE_LIMITER: RateLimit;
   COURSE_RATE_LIMITER: RateLimit;
   CURRENT_YEAR: string;

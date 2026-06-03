@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import { GOLDEN_QUERIES } from '../apps/api/src/eval/golden-queries.js';
-import { checkExpectedKeys, checkExpectedObject, checkExpectedResidual } from '../apps/api/src/eval/checks.js';
+import { checkExpectedKeys, checkExpectedObject, checkExpectedRescue, checkExpectedResidual } from '../apps/api/src/eval/checks.js';
 import { evaluateCorpusCoverage, findDuplicateQueryIds, formatCorpusCoverageReport } from '../apps/api/src/eval/corpus-coverage.js';
 import { createSearchPlan } from '../apps/api/src/services/search-pipeline.js';
 import { SUBJECT_NAMES, VALID_SUBJECTS } from '../apps/api/src/services/data/valid-subjects.js';
@@ -130,6 +130,7 @@ async function main(): Promise<void> {
       ...checkExpectedObject('filters', query.expected_filters, actualFilters),
       ...checkExpectedKeys('filters', query.expected_filter_keys, actualFilters),
       ...checkExpectedObject('softPreferences', query.expected_soft_preferences, plan.softPreferences),
+      ...checkExpectedRescue(query, plan.rescue),
       ...checkExpectedResidual(query, queryResidual),
     ];
 

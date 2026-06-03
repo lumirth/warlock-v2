@@ -455,10 +455,18 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     id: 56,
     query: "no exams CS",
     expected_filters: { subject: "CS" },
-    expected_residual: "no exams",
+    expected_soft_preferences: { lowExams: 0.88 },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["avoidance", "subjective_vibe"],
+      negativeTerms: ["exam_heavy", "tests", "exams"],
+      warnings: ["exam_evidence_incomplete"],
+      retrievalLanes: ["student_language_alias", "workload_evidence"],
+      assumptions: ["low_exams"]
+    },
     invariants: { subject: "CS" },
-    category: "structured",
-    notes: "Unsupported natural-language negation remains searchable text"
+    category: "decision",
+    notes: "No-exam language is now an evidence-backed avoidance preference"
   },
   {
     id: 57,
@@ -846,5 +854,163 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     invariants: { subject: "PHIL" },
     category: "structured",
     notes: "Common adjacent-letter swaps in official subject names should resolve as subject filters"
+  },
+  {
+    id: 102,
+    query: "easy online gen ed",
+    expected_filters: { difficulty: "easy", online: true },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["requirement", "schedule", "subjective_vibe"],
+      warnings: ["workload_evidence_incomplete"],
+      retrievalLanes: ["requirement", "structured_section", "student_language_alias", "workload_evidence"],
+      relaxationSteps: ["evidence-backed-workload", "any-delivery"],
+      assumptions: ["low_workload", "online_preferred"]
+    },
+    category: "decision"
+  },
+  {
+    id: 103,
+    query: "class about movies no essays",
+    expected_filters: {},
+    expected_soft_preferences: { lowWriting: 0.9, topicExpansions: ["film cinema media documentary television pop culture visual culture"] },
+    expected_residual: "about movies",
+    expected_rescue: {
+      queryTypes: ["topic", "subjective_vibe", "avoidance"],
+      negativeTerms: ["writing_heavy", "essays", "papers"],
+      warnings: ["writing_evidence_incomplete"],
+      retrievalLanes: ["official_text", "student_language_alias", "topic_semantic", "workload_evidence"],
+      relaxationSteps: ["evidence-backed-workload"],
+      assumptions: ["low_writing"]
+    },
+    category: "decision"
+  },
+  {
+    id: 104,
+    query: "not math but counts for science",
+    expected_filters: {},
+    expected_residual: "science",
+    expected_rescue: {
+      queryTypes: ["requirement", "topic", "avoidance", "subjective_vibe", "degree_progress"],
+      negativeTerms: ["math_heavy", "calculus", "statistics", "formal_logic", "quantitative"],
+      warnings: ["math_risk_inferred", "student_profile_required"],
+      retrievalLanes: ["official_text", "requirement", "student_language_alias", "topic_semantic", "workload_evidence"],
+      assumptions: ["low_math", "requirement_match"],
+      needsStudentProfile: true
+    },
+    category: "decision"
+  },
+  {
+    id: 105,
+    query: "chill 3 credit class after 2pm",
+    expected_filters: { difficulty: "easy", credits: 3 },
+    expected_soft_preferences: { lowWorkload: 0.84, startAfterMinutes: 840 },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["schedule", "subjective_vibe"],
+      warnings: ["workload_evidence_incomplete"],
+      retrievalLanes: ["structured_section", "student_language_alias", "workload_evidence"],
+      assumptions: ["low_workload", "credit_count", "startAfterMinutes"]
+    },
+    category: "decision"
+  },
+  {
+    id: 106,
+    query: "does this count for humanities",
+    expected_filters: { gened_code: "HUM" },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["requirement", "degree_progress"],
+      warnings: ["student_profile_required"],
+      retrievalLanes: ["official_text", "requirement", "help_path"],
+      assumptions: ["requirement_match"],
+      needsStudentProfile: true
+    },
+    category: "decision"
+  },
+  {
+    id: 107,
+    query: "psych but less bio",
+    expected_filters: { subject: "PSYC" },
+    expected_soft_preferences: { lowBiology: 0.72 },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["avoidance"],
+      negativeTerms: ["biology_heavy", "bio"],
+      retrievalLanes: ["student_language_alias", "workload_evidence"],
+      assumptions: ["low_biology"]
+    },
+    category: "decision"
+  },
+  {
+    id: 108,
+    query: "no prereq writing-light class",
+    expected_filters: {},
+    expected_soft_preferences: { noListedPrereq: true, lowWriting: 0.9 },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["eligibility", "subjective_vibe", "avoidance"],
+      negativeTerms: ["prerequisites", "restricted_access", "writing_heavy", "essays", "papers"],
+      warnings: ["prereq_evidence_incomplete", "writing_evidence_incomplete"],
+      retrievalLanes: ["student_language_alias", "workload_evidence"],
+      assumptions: ["no_listed_prereq", "low_writing"]
+    },
+    category: "decision"
+  },
+  {
+    id: 109,
+    query: "easy US minority no tests",
+    expected_filters: { difficulty: "easy", gened_code: "US" },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["requirement", "subjective_vibe", "avoidance"],
+      negativeTerms: ["exam_heavy", "tests", "exams"],
+      warnings: ["workload_evidence_incomplete", "exam_evidence_incomplete"],
+      retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
+      assumptions: ["low_workload", "low_exams", "requirement_match"]
+    },
+    category: "decision"
+  },
+  {
+    id: 110,
+    query: "online 8 week class that counts",
+    expected_filters: { online: true },
+    expected_soft_preferences: { compressedTerm: true },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["requirement", "schedule", "degree_progress"],
+      warnings: ["student_profile_required"],
+      retrievalLanes: ["official_text", "requirement", "structured_section", "help_path"],
+      relaxationSteps: ["strict", "any-delivery", "adjacent-requirements"],
+      assumptions: ["online_preferred", "compressed_term", "requirement_match"],
+      needsStudentProfile: true
+    },
+    category: "decision"
+  },
+  {
+    id: 111,
+    query: "online us minority no exams no essays 8 week",
+    expected_filters: { online: true, gened_code: "US" },
+    expected_soft_preferences: { lowWriting: 0.9, lowExams: 0.88, compressedTerm: true },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["requirement", "schedule", "subjective_vibe", "avoidance"],
+      negativeTerms: ["writing_heavy", "essays", "papers", "exam_heavy", "tests", "exams"],
+      warnings: ["writing_evidence_incomplete", "exam_evidence_incomplete"],
+      retrievalLanes: ["official_text", "requirement", "structured_section", "student_language_alias", "workload_evidence"],
+      relaxationSteps: ["strict", "evidence-backed-workload", "any-delivery", "adjacent-requirements"],
+      assumptions: ["online_preferred", "low_writing", "low_exams", "compressed_term", "requirement_match"]
+    },
+    category: "decision",
+    notes: "Over-constrained query used to verify recovery groups in pipeline tests"
+  },
+  {
+    id: 112,
+    query: "campus urbana movies",
+    expected_filters: {},
+    expected_soft_preferences: { topicExpansions: ["film cinema media documentary television pop culture visual culture"] },
+    expected_residual: "campus urbana movies",
+    category: "unsupported_language",
+    notes: "Unsupported campus-scope language remains searchable while the topic still expands"
   },
 ];

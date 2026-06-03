@@ -247,15 +247,15 @@ export function createDefaultRegistry(): AliasRegistry {
   // Time aliases
   registry.addAll([
     { kind: 'time', canonical: 'early', aliases: ['early morning', 'early'] },
-    { kind: 'time', canonical: 'morning', aliases: ['morning', 'before noon'] },
+    { kind: 'time', canonical: 'morning', aliases: ['morning', 'before noon', 'before lunch'] },
     { kind: 'time', canonical: 'midday', aliases: ['midday', 'mid day', 'around noon'] },
-    { kind: 'time', canonical: 'afternoon', aliases: ['afternoon', 'after noon'] },
+    { kind: 'time', canonical: 'afternoon', aliases: ['afternoon', 'after noon', 'after lunch'] },
     { kind: 'time', canonical: 'evening', aliases: ['evening', 'night', 'after 5'] },
   ]);
 
   // Difficulty aliases
   registry.addAll([
-    { kind: 'difficulty', canonical: 'easy', aliases: ['easy', 'simple', 'gpa booster', 'easy a', 'not hard'] },
+    { kind: 'difficulty', canonical: 'easy', aliases: ['easy', 'simple', 'chill', 'low workload', 'grade booster', 'gpa booster', 'easy a', 'not hard'] },
     { kind: 'difficulty', canonical: 'hard', aliases: ['hard', 'difficult', 'challenging', 'tough'] },
   ]);
 

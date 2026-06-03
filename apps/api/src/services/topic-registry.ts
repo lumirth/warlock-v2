@@ -61,6 +61,10 @@ export const TOPIC_GROUPS: TopicGroup[] = [
     aliases: ['ds', 'data sci', 'data science'],
   },
   {
+    expansion: 'film cinema media documentary television pop culture visual culture',
+    aliases: ['movie', 'movies', 'film', 'cinema', 'documentary', 'television', 'tv', 'pop culture', 'media studies', 'visual culture'],
+  },
+  {
     expansion: 'statistics',
     aliases: ['stats', 'statistics'],
   },

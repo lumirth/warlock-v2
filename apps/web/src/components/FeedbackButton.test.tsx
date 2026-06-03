@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../lib/api-client'
-import { TestMantineProvider } from '../test/TestMantineProvider'
+import { TestUiProvider } from '../test/TestUiProvider'
 import { FeedbackButton } from './FeedbackButton'
 
 vi.mock('../lib/api-client', () => ({
@@ -17,7 +17,7 @@ afterEach(() => {
 
 function renderFeedbackButton() {
   render(
-    <TestMantineProvider>
+    <TestUiProvider>
       <FeedbackButton
         buttonLabel="Results not right?"
         page="search"
@@ -25,7 +25,7 @@ function renderFeedbackButton() {
         issue="expected_different_results"
         context={{ query: 'professor fagen' }}
       />
-    </TestMantineProvider>
+    </TestUiProvider>
   )
 }
 

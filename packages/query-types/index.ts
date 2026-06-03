@@ -1,4 +1,20 @@
-export type QueryHintType = 'instructor' | 'gened' | 'subject' | 'credits' | 'term' | 'level' | 'levelBoost' | 'course_code' | 'crn' | 'days' | 'time' | 'difficulty' | 'online' | 'status' | 'negation' | 'partOfTerm';
+export type QueryHintType =
+  | "instructor"
+  | "gened"
+  | "subject"
+  | "credits"
+  | "term"
+  | "level"
+  | "levelBoost"
+  | "course_code"
+  | "crn"
+  | "days"
+  | "time"
+  | "difficulty"
+  | "online"
+  | "status"
+  | "negation"
+  | "partOfTerm";
 
 export interface QueryHint {
   type: QueryHintType;
@@ -21,20 +37,20 @@ export interface SearchFilters {
   number?: string;
   crn?: string;
   gened_code?: string;
-  gened_any?: string[];       // Course has ANY of these geneds
-  gened_all?: string[];       // Course has ALL of these geneds
+  gened_any?: string[]; // Course has ANY of these geneds
+  gened_all?: string[]; // Course has ALL of these geneds
 
   // Schedule filters
   days?: string;
-  time?: string;              // morning, afternoon, evening, early, midday
-  partOfTerm?: string;        // A, B, 1, etc.
+  time?: string; // morning, afternoon, evening, early, midday
+  partOfTerm?: string; // A, B, 1, etc.
 
   // Attribute filters
   level?: number;
   credits?: number;
   online?: boolean;
   status?: string;
-  difficulty?: 'easy' | 'hard';
+  difficulty?: "easy" | "hard";
 
   // Negations
   not?: {
@@ -54,6 +70,82 @@ export interface Ambiguity {
   alternatives: { type: string; value: string; label: string }[];
 }
 
+export type DecisionQueryType =
+  | "exact_course"
+  | "requirement"
+  | "schedule"
+  | "topic"
+  | "subjective_vibe"
+  | "avoidance"
+  | "eligibility"
+  | "degree_progress"
+  | "comparison"
+  | "help_or_how_to";
+
+export type RetrievalLane =
+  | "exact"
+  | "official_text"
+  | "requirement"
+  | "structured_section"
+  | "student_language_alias"
+  | "topic_semantic"
+  | "workload_evidence"
+  | "help_path";
+
+export type SearchPlanWarningKind =
+  | "student_profile_required"
+  | "workload_evidence_incomplete"
+  | "writing_evidence_incomplete"
+  | "exam_evidence_incomplete"
+  | "prereq_evidence_incomplete"
+  | "math_risk_inferred";
+
+export interface SearchPlanAssumption {
+  kind: string;
+  label: string;
+  confidence: number;
+  source: "rule" | "alias" | "fallback";
+}
+
+export interface SearchPlanWarning {
+  kind: SearchPlanWarningKind;
+  message: string;
+  confidence: number;
+}
+
+export interface SearchRelaxationStep {
+  id: string;
+  label: string;
+  relaxes: string[];
+  keeps: string[];
+}
+
+export interface SearchPlanRescue {
+  queryTypes: DecisionQueryType[];
+  negativeTerms: string[];
+  topicTerms: string[];
+  expandedTerms: string[];
+  assumptions: SearchPlanAssumption[];
+  warnings: SearchPlanWarning[];
+  retrievalLanes: RetrievalLane[];
+  relaxationPlan: SearchRelaxationStep[];
+  needsStudentProfile: boolean;
+  confidence: number;
+}
+
+export type SearchRecoveryGroup = {
+  id: string;
+  label: string;
+  description: string;
+  relaxes: string[];
+  keeps: string[];
+  queryPatch?: {
+    replaceQuery?: string;
+    removeText?: string;
+    appendText?: string;
+  };
+};
+
 export interface SearchPlan {
   filters: SearchFilters;
   softPreferences?: Record<string, unknown>;
@@ -61,15 +153,16 @@ export interface SearchPlan {
   semanticQuery: string;
   keywordQuery: string;
   ambiguities?: Ambiguity[];
+  rescue?: SearchPlanRescue;
 }
 
-export type SearchIntent = 'introductory_gateway';
+export type SearchIntent = "introductory_gateway" | "query_rescue";
 
 // === NEW TYPES FOR UNIFIED QUERY SYSTEM ===
 
 // Hint metadata with source tracking
 export interface HintMetadata {
-  source: 'regex' | 'alias' | 'nlp';
+  source: "regex" | "alias" | "nlp" | "manual";
   span?: [number, number];
   confidence: number;
   raw: string;
@@ -78,27 +171,33 @@ export interface HintMetadata {
 // Rich hint structure
 export interface Hint {
   type: HintType;
-  value: string | number | boolean | NegationValue | CourseCodeValue | TermValue;
+  value:
+    | string
+    | number
+    | boolean
+    | NegationValue
+    | CourseCodeValue
+    | TermValue;
   metadata: HintMetadata;
 }
 
 export type HintType =
-  | 'courseCode'
-  | 'crn'
-  | 'subject'
-  | 'instructor'
-  | 'days'
-  | 'time'
-  | 'level'
-  | 'levelBoost'
-  | 'credits'
-  | 'online'
-  | 'status'
-  | 'difficulty'
-  | 'gened'
-  | 'term'
-  | 'partOfTerm'
-  | 'negation';
+  | "courseCode"
+  | "crn"
+  | "subject"
+  | "instructor"
+  | "days"
+  | "time"
+  | "level"
+  | "levelBoost"
+  | "credits"
+  | "online"
+  | "status"
+  | "difficulty"
+  | "gened"
+  | "term"
+  | "partOfTerm"
+  | "negation";
 
 export interface NegationValue {
   target: HintType;
@@ -118,7 +217,7 @@ export interface TermValue {
 // Suggestion for ambiguous terms
 export interface Suggestion {
   text: string;
-  action: 'add_filter' | 'remove_filter' | 'change_filter';
+  action: "add_filter" | "remove_filter" | "change_filter";
   filter?: Partial<SearchFilters>;
 }
 
@@ -174,25 +273,35 @@ export type CourseSectionDto = {
 };
 
 export type MatchEvidenceKind =
-  | 'course_code'
-  | 'subject'
-  | 'number'
-  | 'crn'
-  | 'title'
-  | 'gened'
-  | 'schedule'
-  | 'delivery'
-  | 'instructor'
-  | 'topic'
-  | 'semantic'
-  | 'keyword'
-  | 'difficulty'
-  | 'quality'
-  | 'term';
+  | "course_code"
+  | "subject"
+  | "number"
+  | "crn"
+  | "title"
+  | "gened"
+  | "schedule"
+  | "delivery"
+  | "instructor"
+  | "alias"
+  | "workload"
+  | "topic"
+  | "semantic"
+  | "keyword"
+  | "difficulty"
+  | "quality"
+  | "term";
 
-export type MatchEvidenceSource = 'filter' | 'query' | 'keyword' | 'semantic' | 'metadata' | 'term';
+export type MatchEvidenceSource =
+  | "filter"
+  | "query"
+  | "keyword"
+  | "semantic"
+  | "alias"
+  | "signal"
+  | "metadata"
+  | "term";
 
-export type MatchEvidenceWeight = 'hard' | 'soft' | 'rank';
+export type MatchEvidenceWeight = "hard" | "soft" | "rank";
 
 export type MatchEvidence = {
   kind: MatchEvidenceKind;
@@ -202,7 +311,7 @@ export type MatchEvidence = {
   weight: MatchEvidenceWeight;
 };
 
-export type ResultWarningKind = 'historical' | 'cached' | 'stale' | 'partial';
+export type ResultWarningKind = "historical" | "cached" | "stale" | "partial";
 
 export type ResultWarning = {
   kind: ResultWarningKind;
@@ -213,6 +322,17 @@ export type SectionMatchDto = {
   crn: string;
   sectionNumber: string;
   evidence: MatchEvidence[];
+};
+
+export type ResultExplanation = {
+  whyMatched: string[];
+  watchOut: string[];
+  matchedChips: string[];
+  confidence: {
+    score: number;
+    label: "high" | "medium" | "low" | "uncertain";
+    reasons: string[];
+  };
 };
 
 export type CourseDto = {
@@ -245,6 +365,7 @@ export type CourseDto = {
   _fetched_at?: number;
   _term_status?: string;
   match_evidence?: MatchEvidence[];
+  explanation?: ResultExplanation;
   warnings?: ResultWarning[];
   section_matches?: SectionMatchDto[];
 };
@@ -268,6 +389,7 @@ export type SearchMetaDto = {
     tierReached: number;
     constraintsRelaxed: string[];
     originalResultCount: number;
+    recoveryGroups?: SearchRecoveryGroup[];
   };
   term?: {
     activeTermId: string | null;
@@ -290,11 +412,15 @@ export type SearchResponseDto = {
   };
 };
 
-export type SearchChipSource = 'natural_language' | 'advanced_control' | 'ambiguity' | 'manual_override';
+export type SearchChipSource =
+  | "natural_language"
+  | "advanced_control"
+  | "ambiguity"
+  | "manual_override";
 
 export type SearchChipDto = {
   id: string;
-  type: HintType | 'semantic' | 'score' | 'unknown';
+  type: HintType | "semantic" | "score" | "assumption" | "unknown";
   label: string;
   value: string;
   source: SearchChipSource;
@@ -331,7 +457,7 @@ export type AdvancedSearchStateDto = {
   time?: string;
   online?: boolean;
   status?: string;
-  difficulty?: 'easy' | 'hard';
+  difficulty?: "easy" | "hard";
 };
 
 export type SearchUiPlanDto = {
@@ -341,27 +467,27 @@ export type SearchUiPlanDto = {
 };
 
 export type FeedbackKind =
-  | 'search_results'
-  | 'course_result'
-  | 'score'
-  | 'external_link'
-  | 'data_freshness'
-  | 'copy_confusion'
-  | 'other';
+  | "search_results"
+  | "course_result"
+  | "score"
+  | "external_link"
+  | "data_freshness"
+  | "copy_confusion"
+  | "other";
 
 export type FeedbackIssue =
-  | 'expected_different_results'
-  | 'missing_course'
-  | 'wrong_score'
-  | 'broken_link'
-  | 'stale_data'
-  | 'confusing_copy'
-  | 'other';
+  | "expected_different_results"
+  | "missing_course"
+  | "wrong_score"
+  | "broken_link"
+  | "stale_data"
+  | "confusing_copy"
+  | "other";
 
 export type FeedbackSubmitDto = {
   kind: FeedbackKind;
   issue: FeedbackIssue;
-  page: 'search' | 'course';
+  page: "search" | "course";
   query?: string;
   courseId?: string;
   subject?: string;
@@ -370,7 +496,7 @@ export type FeedbackSubmitDto = {
   year?: number;
   crn?: string;
   instructorName?: string;
-  scoreField?: 'quality' | 'difficulty' | 'gpa' | 'rmp';
+  scoreField?: "quality" | "difficulty" | "gpa" | "rmp";
   expected?: string;
   message?: string;
   anonymousSessionId?: string;
@@ -379,13 +505,13 @@ export type FeedbackSubmitDto = {
 
 export type FeedbackResponseDto = {
   id: string;
-  status: 'accepted';
+  status: "accepted";
   received_at: number;
 };
 
-export const COURSE_EXPLORER_BASE_URL = 'https://courses.illinois.edu';
-export const RATE_MY_PROFESSORS_BASE_URL = 'https://www.ratemyprofessors.com';
-export const UIUC_RMP_SCHOOL_ID = '1112';
+export const COURSE_EXPLORER_BASE_URL = "https://courses.illinois.edu";
+export const RATE_MY_PROFESSORS_BASE_URL = "https://www.ratemyprofessors.com";
+export const UIUC_RMP_SCHOOL_ID = "1112";
 
 export type CourseExplorerUrlInput = {
   year: number;
@@ -394,7 +520,9 @@ export type CourseExplorerUrlInput = {
   number: string;
 };
 
-export function buildCourseExplorerCourseUrl(input: CourseExplorerUrlInput): string {
+export function buildCourseExplorerCourseUrl(
+  input: CourseExplorerUrlInput,
+): string {
   const year = String(input.year);
   const term = input.term.toLowerCase();
   const subject = input.subject.toUpperCase();
@@ -403,11 +531,15 @@ export function buildCourseExplorerCourseUrl(input: CourseExplorerUrlInput): str
   return `${COURSE_EXPLORER_BASE_URL}/schedule/${encodeURIComponent(year)}/${encodeURIComponent(term)}/${encodeURIComponent(subject)}/${encodeURIComponent(number)}`;
 }
 
-export function buildCourseExplorerSectionUrl(input: CourseExplorerUrlInput & { crn: string }): string {
+export function buildCourseExplorerSectionUrl(
+  input: CourseExplorerUrlInput & { crn: string },
+): string {
   return buildCourseExplorerCourseUrl(input);
 }
 
-export function buildRmpProfessorUrl(rmpId: string | null | undefined): string | null {
+export function buildRmpProfessorUrl(
+  rmpId: string | null | undefined,
+): string | null {
   if (!rmpId || !/^[0-9]+$/.test(rmpId)) {
     return null;
   }
@@ -415,7 +547,9 @@ export function buildRmpProfessorUrl(rmpId: string | null | undefined): string |
   return `${RATE_MY_PROFESSORS_BASE_URL}/professor/${encodeURIComponent(rmpId)}`;
 }
 
-export function buildRmpSearchUrl(instructorName: string | null | undefined): string | null {
+export function buildRmpSearchUrl(
+  instructorName: string | null | undefined,
+): string | null {
   const normalized = instructorName?.trim();
   if (!normalized) {
     return null;

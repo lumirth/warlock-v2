@@ -148,12 +148,12 @@ describe('SearchPipeline Tiered Logic Integration', () => {
 
     const result = await pipeline.search(query);
 
-    expect(topicRegistry.expandTopics).toHaveBeenCalledWith('ai classes');
+    expect(topicRegistry.expandTopics).toHaveBeenCalledWith('ai');
     expect(search.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
     expect(vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3]).toMatchObject({
       filters: { difficulty: 'easy' },
-      semanticQuery: 'ai classes artificial intelligence',
-      keywordQuery: 'ai classes artificial intelligence',
+      semanticQuery: 'ai artificial intelligence',
+      keywordQuery: 'ai artificial intelligence',
       softPreferences: { topicExpansions: ['artificial intelligence'] },
     });
     expect(result.results).toHaveLength(1);

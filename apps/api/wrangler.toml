@@ -40,6 +40,11 @@ binding = "GPA_CACHE"
 id = "d7e1138ab1344bd2b102ed3502eb0b9f"
 preview_id = "d6493db5a2db45ca8568c9d220a8e2b6"
 
+[[kv_namespaces]]
+binding = "SEARCH_CACHE"
+id = "d7e1138ab1344bd2b102ed3502eb0b9f"
+preview_id = "d6493db5a2db45ca8568c9d220a8e2b6"
+
 [[ratelimits]]
 name = "SEARCH_RATE_LIMITER"
 namespace_id = "26060101"
@@ -94,6 +99,10 @@ database_id = "76913703-61a0-4b9e-b703-a697135beaf1"
 
 [[env.staging.kv_namespaces]]
 binding = "GPA_CACHE"
+id = "ad02afba85fb40aa9c7d2abceb15d896"
+
+[[env.staging.kv_namespaces]]
+binding = "SEARCH_CACHE"
 id = "ad02afba85fb40aa9c7d2abceb15d896"
 
 [[env.staging.ratelimits]]
