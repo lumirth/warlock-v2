@@ -169,3 +169,20 @@ Second design-review live QA:
 - Mobile result cards: long course title wrapped cleanly, relevance moved under the title, metadata wrapped without orphaned separators, and metrics stayed readable in a two-column flow.
 - Mobile course page: score panel, full-width score feedback action, description, and sections heading stacked cleanly with no page-level horizontal overflow observed.
 - Course detail error state for a mock-only result (`CS 124`) remained direct and readable.
+
+Fixed-viewport redesign audit artifacts:
+
+- `artifacts/browser-qa/2026-06-03-redesign/cdp-desktop-search-advanced.png`
+- `artifacts/browser-qa/2026-06-03-redesign/cdp-mobile-search-advanced-top.png`
+- `artifacts/browser-qa/2026-06-03-redesign/cdp-mobile-search-advanced-actions.png`
+- `artifacts/browser-qa/2026-06-03-redesign/cdp-mobile-result-card.png`
+- `artifacts/browser-qa/2026-06-03-redesign/cdp-desktop-course-detail.png`
+- `artifacts/browser-qa/2026-06-03-redesign/cdp-mobile-course-detail.png`
+
+Fixed-viewport redesign audit notes:
+
+- Headless Chrome CDP exercised the real Vite app against the local mock API, not static screenshots.
+- Desktop advanced search kept the search task, interpreted chips, grouped filters, disabled reset/apply row, and first result card visible in one 1280 x 900 viewport.
+- Mobile advanced action row stayed within a 390 x 844 viewport with full-width paired controls and readable helper text.
+- Mobile result cards used course title, relevance, term/credits/instructor/GenEd, metrics, description, and match evidence in that order with no visible horizontal overflow.
+- Desktop and mobile course detail preserved the intended decision order: identity, scores, feedback, description, and sections.
