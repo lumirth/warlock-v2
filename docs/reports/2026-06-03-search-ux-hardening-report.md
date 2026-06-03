@@ -153,7 +153,8 @@ Second design-review pass after concept-image rejection:
 - Replaced the flat 12-field advanced grid with responsive controls: one column on mobile, two on tablet, four per group on desktop.
 - Changed advanced controls to safer inputs where appropriate: selects for term, time, delivery, status, and workload; uppercase normalization for subject, GenEd, and meeting days; numeric input modes for course number, year, and credits.
 - Added explicit `aria-expanded` / `aria-controls` wiring to the Advanced search trigger.
-- Added a clear advanced-form action row with `Clear fields` and `Apply filters`; on mobile the actions become full-width paired controls.
+- Added an advanced-form action row with `Reset fields` and `Apply filters`; on mobile the actions become full-width paired controls.
+- Disabled advanced Apply until controls differ from the interpreted query, so parsed filters are reset through the form and removed through their chips.
 - Reworked result-card score display from inline muted phrases into a compact metric definition list for Quality, Workload, Instructor, and Avg GPA.
 - Reworked result-card heading layout so relevance sits beside the title on desktop and stacks beneath it on mobile.
 - Kept historical cards as subdued functional links with a visible `Historical term` status near the term label.
