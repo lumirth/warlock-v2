@@ -290,8 +290,8 @@ export function buildFilterClauses(
   if (filters.gened_any?.length) {
     joinsSet.add('JOIN course_gened cg ON cg.course_id = c.id');
     const placeholders = filters.gened_any.map(() => '?').join(',');
-    where.push(`cg.category_id IN (${placeholders})`);
-    params.push(...filters.gened_any);
+    where.push(`(cg.category_id IN (${placeholders}) OR cg.attribute_code IN (${placeholders}))`);
+    params.push(...filters.gened_any, ...filters.gened_any);
   }
 
   // GenEd filter (all) - requires GROUP BY + HAVING
@@ -687,15 +687,20 @@ export async function requirementLaneSearch(
 
   const filterResults = buildFilterClauses(plan.filters);
   const { joins, where, params, groupBy, having, havingParams } = filterResults;
+  const effectiveJoins = [...joins];
 
-  if (where.length === 0 && joins.length === 0) {
+  if (!hasRequirementFilter && hasRequirementIntent) {
+    effectiveJoins.push('JOIN course_gened cg_requirement ON cg_requirement.course_id = c.id');
+  }
+
+  if (where.length === 0 && effectiveJoins.length === 0) {
     return [];
   }
 
   const sql = `
     SELECT DISTINCT c.id
     FROM courses c
-    ${joins.join(' ')}
+    ${effectiveJoins.join(' ')}
     ${where.length > 0 ? 'WHERE ' + where.join(' AND ') : ''}
     ${groupBy ? 'GROUP BY ' + groupBy : ''}
     ${having ? 'HAVING ' + having : ''}

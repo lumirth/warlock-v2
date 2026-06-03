@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { buildFilterClauses, TIME_RANGES, DIFFICULTY_THRESHOLDS } from '../search.js';
-import type { SearchFilters } from '@uiuc-course-search/query-types';
+import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
+import { buildFilterClauses, requirementLaneSearch, TIME_RANGES, DIFFICULTY_THRESHOLDS } from '../search.js';
+import type { SearchFilters, SearchPlan } from '@uiuc-course-search/query-types';
 
 describe('buildFilterClauses', () => {
   describe('days filter', () => {
@@ -114,9 +115,9 @@ describe('buildFilterClauses', () => {
     it('generates SQL for gened_any', () => {
       const filters: SearchFilters = { gened_any: ['HUM', 'US'] };
       const result = buildFilterClauses(filters);
-      expect(result.where.some(w => w.includes('cg.category_id IN'))).toBe(true);
-      expect(result.params).toContain('HUM');
-      expect(result.params).toContain('US');
+      expect(result.where.some(w => w.includes('cg.category_id IN') && w.includes('cg.attribute_code IN'))).toBe(true);
+      expect(result.params.filter(param => param === 'HUM')).toHaveLength(2);
+      expect(result.params.filter(param => param === 'US')).toHaveLength(2);
     });
   });
 
@@ -166,5 +167,43 @@ describe('TIME_RANGES', () => {
 
   it('has correct range for evening', () => {
     expect(TIME_RANGES.evening).toEqual({ start: '17:00' });
+  });
+});
+
+describe('requirementLaneSearch', () => {
+  it('requires a GenEd mapping for generic requirement intent instead of relabeling other filters', async () => {
+    let capturedSql = '';
+    const db = {
+      prepare(sql: string): D1PreparedStatement {
+        capturedSql = sql;
+        return {
+          bind: () => ({
+            all: async () => ({ results: [] }),
+          }),
+        } as unknown as D1PreparedStatement;
+      },
+    } as unknown as D1Database;
+    const plan: SearchPlan = {
+      filters: { subject: 'CS', difficulty: 'easy' },
+      keywordQuery: '',
+      semanticQuery: '',
+      rescue: {
+        queryTypes: ['requirement', 'subjective_vibe'],
+        negativeTerms: [],
+        topicTerms: [],
+        expandedTerms: [],
+        assumptions: [],
+        warnings: [],
+        retrievalLanes: ['requirement'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.74,
+      },
+    };
+
+    await requirementLaneSearch(db, plan);
+
+    expect(capturedSql).toContain('JOIN course_gened cg_requirement');
+    expect(capturedSql).toContain('c.subject = ?');
   });
 });

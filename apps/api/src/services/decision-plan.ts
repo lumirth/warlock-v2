@@ -7,6 +7,7 @@ import type {
   SearchPlanWarningKind,
   SearchRelaxationStep,
 } from '@uiuc-course-search/query-types';
+import { GENERIC_GENED_CODES } from './gened-codes.js';
 
 type RescueRule = {
   queryTypes: DecisionQueryType[];
@@ -121,6 +122,11 @@ const REQUIREMENT_PATTERNS = [
   /\btwo\s+requirements?\b/i,
 ];
 
+const GENERIC_GENED_PATTERNS = [
+  /\bgen\s*-?\s*ed\b/i,
+  /\bgened\b/i,
+];
+
 const STUDENT_PROFILE_PATTERNS = [
   /\bcounts?\s+for\b/i,
   /\bcounts?\s+for\s+something\b/i,
@@ -191,6 +197,10 @@ export function applyDecisionSearchRescue(
 
   if ((plan.filters.subject && plan.filters.number) || plan.filters.crn) {
     queryTypes.add('exact_course');
+  }
+
+  if (hasGenericGenedIntent(rawQuery) && !hasGenedFilter(plan)) {
+    plan.filters.gened_any = [...GENERIC_GENED_CODES];
   }
 
   if (hasRequirementIntent(plan, rawQuery)) {
@@ -350,8 +360,16 @@ export function syncDecisionSearchExpansions(plan: SearchPlan, expansions: strin
 }
 
 function hasRequirementIntent(plan: SearchPlan, rawQuery: string): boolean {
-  return Boolean(plan.filters.gened_code || plan.filters.gened_any?.length || plan.filters.gened_all?.length)
+  return hasGenedFilter(plan)
     || REQUIREMENT_PATTERNS.some(pattern => pattern.test(rawQuery));
+}
+
+function hasGenedFilter(plan: SearchPlan): boolean {
+  return Boolean(plan.filters.gened_code || plan.filters.gened_any?.length || plan.filters.gened_all?.length);
+}
+
+function hasGenericGenedIntent(rawQuery: string): boolean {
+  return GENERIC_GENED_PATTERNS.some(pattern => pattern.test(rawQuery));
 }
 
 function hasScheduleIntent(plan: SearchPlan, rawQuery: string): boolean {

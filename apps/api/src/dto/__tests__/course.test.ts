@@ -153,6 +153,59 @@ describe('search result DTO evidence', () => {
     expect(dto.explanation?.confidence.label).toBe('medium');
   });
 
+  it('labels generic GenEd filters as Any GenEd in result evidence', () => {
+    const dto = searchResultToCourseDto(searchResult({ laneMatches: ['requirement'] }), {
+      rawQuery: 'easy cs gened',
+      hints: [],
+      plan: {
+        filters: {
+          subject: 'CS',
+          difficulty: 'easy',
+          gened_any: ['HUM', 'NAT', 'SBS', 'CS', 'QR', 'QR1', 'QR2', 'NW', 'US', 'WCC', 'ACP'],
+        },
+        keywordQuery: '',
+        semanticQuery: '',
+      },
+    });
+
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any GenEd: QR']));
+    expect(dto.match_evidence?.find(item => item.kind === 'gened')).toMatchObject({
+      label: 'Any GenEd',
+      value: 'QR',
+      weight: 'hard',
+    });
+  });
+
+  it('does not claim requirement evidence for unmapped courses', () => {
+    const dto = searchResultToCourseDto(searchResult({
+      course: { ...course, gened: null },
+      laneMatches: ['requirement'],
+    }), {
+      rawQuery: 'counts for something',
+      hints: [],
+      plan: {
+        filters: {},
+        keywordQuery: '',
+        semanticQuery: '',
+        rescue: {
+          queryTypes: ['requirement'],
+          negativeTerms: [],
+          topicTerms: [],
+          expandedTerms: [],
+          assumptions: [],
+          warnings: [],
+          retrievalLanes: ['requirement'],
+          relaxationPlan: [],
+          needsStudentProfile: false,
+          confidence: 0.74,
+        },
+      },
+    });
+
+    expect(dto.match_evidence?.map(item => item.label)).not.toContain('Requirement lane match');
+    expect(dto.match_evidence?.some(item => item.kind === 'gened')).toBe(false);
+  });
+
   it('keeps warning construction narrow and non-secret', () => {
     expect(buildResultWarnings(searchResult())).toEqual([]);
     expect(buildResultWarnings(searchResult({ historical: true }))[0].message).toBe('Historical term result');

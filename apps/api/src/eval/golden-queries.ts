@@ -858,7 +858,11 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 102,
     query: "easy online gen ed",
-    expected_filters: { difficulty: "easy", online: true },
+    expected_filters: {
+      difficulty: "easy",
+      online: true,
+      gened_any: ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"]
+    },
     expected_residual: "",
     expected_rescue: {
       queryTypes: ["requirement", "schedule", "subjective_vibe"],
@@ -871,6 +875,24 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   },
   {
     id: 103,
+    query: "easy cs gened",
+    expected_filters: {
+      subject: "CS",
+      difficulty: "easy",
+      gened_any: ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"]
+    },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["requirement", "subjective_vibe"],
+      warnings: ["workload_evidence_incomplete"],
+      retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
+      assumptions: ["low_workload", "requirement_match"]
+    },
+    category: "decision",
+    notes: "Generic gened intent should become an explicit Any GenEd constraint instead of a hidden requirement-lane boost"
+  },
+  {
+    id: 104,
     query: "class about movies no essays",
     expected_filters: {},
     expected_soft_preferences: { lowWriting: 0.9, topicExpansions: ["film cinema media documentary television pop culture visual culture"] },
@@ -886,7 +908,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "decision"
   },
   {
-    id: 104,
+    id: 105,
     query: "not math but counts for science",
     expected_filters: {},
     expected_residual: "science",
@@ -901,7 +923,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "decision"
   },
   {
-    id: 105,
+    id: 106,
     query: "chill 3 credit class after 2pm",
     expected_filters: { difficulty: "easy", credits: 3 },
     expected_soft_preferences: { lowWorkload: 0.84, startAfterMinutes: 840 },
@@ -915,7 +937,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "decision"
   },
   {
-    id: 106,
+    id: 107,
     query: "does this count for humanities",
     expected_filters: { gened_code: "HUM" },
     expected_residual: "",
@@ -929,7 +951,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "decision"
   },
   {
-    id: 107,
+    id: 108,
     query: "psych but less bio",
     expected_filters: { subject: "PSYC" },
     expected_soft_preferences: { lowBiology: 0.72 },
@@ -943,7 +965,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "decision"
   },
   {
-    id: 108,
+    id: 109,
     query: "no prereq writing-light class",
     expected_filters: {},
     expected_soft_preferences: { noListedPrereq: true, lowWriting: 0.9 },
@@ -958,7 +980,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "decision"
   },
   {
-    id: 109,
+    id: 110,
     query: "easy US minority no tests",
     expected_filters: { difficulty: "easy", gened_code: "US" },
     expected_residual: "",
@@ -972,7 +994,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "decision"
   },
   {
-    id: 110,
+    id: 111,
     query: "online 8 week class that counts",
     expected_filters: { online: true },
     expected_soft_preferences: { compressedTerm: true },
@@ -988,7 +1010,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     category: "decision"
   },
   {
-    id: 111,
+    id: 112,
     query: "online us minority no exams no essays 8 week",
     expected_filters: { online: true, gened_code: "US" },
     expected_soft_preferences: { lowWriting: 0.9, lowExams: 0.88, compressedTerm: true },
@@ -1005,7 +1027,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     notes: "Over-constrained query used to verify recovery groups in pipeline tests"
   },
   {
-    id: 112,
+    id: 113,
     query: "campus urbana movies",
     expected_filters: {},
     expected_soft_preferences: { topicExpansions: ["film cinema media documentary television pop culture visual culture"] },

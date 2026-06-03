@@ -121,6 +121,7 @@ describe('buildSearchUiPlan', () => {
         assumptions: [
           { kind: 'schedule_fit', label: 'Schedule or delivery fit matters', confidence: 0.78, source: 'rule' },
           { kind: 'online_preferred', label: 'Online preferred', confidence: 0.86, source: 'rule' },
+          { kind: 'low_workload', label: 'Low workload preferred', confidence: 0.82, source: 'rule' },
           { kind: 'low_writing', label: 'Low writing preferred', confidence: 0.82, source: 'rule' },
         ],
         warnings: [],
@@ -133,7 +134,72 @@ describe('buildSearchUiPlan', () => {
 
     expect(plan.chips).toEqual([
       expect.objectContaining({ type: 'online', label: 'Online', queryPatch: { removeText: 'online' } }),
+      expect.objectContaining({ type: 'assumption', label: 'Low workload preferred', queryPatch: { removeText: 'easy' } }),
       expect.objectContaining({ type: 'assumption', label: 'Low writing preferred', queryPatch: { removeText: 'no essays' } }),
     ]);
+  });
+
+  it('hides low-workload assumptions already represented by an easy workload chip', () => {
+    const plan = buildSearchUiPlan([{
+      type: 'difficulty',
+      value: 'easy',
+      metadata: { source: 'alias', confidence: 0.9, raw: 'easy' },
+    }], {
+      filters: { difficulty: 'easy' },
+      keywordQuery: '',
+      semanticQuery: '',
+      rescue: {
+        queryTypes: ['subjective_vibe'],
+        negativeTerms: [],
+        topicTerms: [],
+        expandedTerms: [],
+        assumptions: [
+          { kind: 'low_workload', label: 'Low workload preferred', confidence: 0.82, source: 'rule' },
+        ],
+        warnings: [],
+        retrievalLanes: ['student_language_alias', 'workload_evidence'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.74,
+      },
+    }, '');
+
+    expect(plan.chips).toEqual([
+      expect.objectContaining({ type: 'difficulty', label: 'Easy workload', queryPatch: { removeText: 'easy' } }),
+    ]);
+  });
+
+  it('shows a concrete Any GenEd chip for generic gened intent without polluting advanced state', () => {
+    const plan = buildSearchUiPlan([], {
+      filters: {
+        gened_any: ['HUM', 'NAT', 'SBS', 'CS', 'QR', 'QR1', 'QR2', 'NW', 'US', 'WCC', 'ACP'],
+      },
+      keywordQuery: '',
+      semanticQuery: '',
+      rescue: {
+        queryTypes: ['requirement'],
+        negativeTerms: [],
+        topicTerms: [],
+        expandedTerms: [],
+        assumptions: [
+          { kind: 'requirement_match', label: 'Requirement match matters', confidence: 0.78, source: 'rule' },
+        ],
+        warnings: [],
+        retrievalLanes: ['official_text', 'requirement'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.74,
+      },
+    }, '');
+
+    expect(plan.chips).toEqual([
+      expect.objectContaining({
+        id: 'gened-any',
+        type: 'gened',
+        label: 'Any GenEd',
+        filter: expect.objectContaining({ gened_any: expect.arrayContaining(['HUM', 'US', 'ACP']) }),
+      }),
+    ]);
+    expect(plan.advanced.gened).toBeUndefined();
   });
 });

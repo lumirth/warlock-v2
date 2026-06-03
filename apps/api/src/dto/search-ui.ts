@@ -11,6 +11,7 @@ import type {
   SearchUiPlanDto,
   TermValue,
 } from '@uiuc-course-search/query-types';
+import { GENERIC_GENED_CODES, isGenericAnyGenedFilter } from '../services/gened-codes.js';
 
 export function buildSearchUiPlan(hints: Hint[], plan: SearchPlan, residual: string): SearchUiPlanDto {
   return {
@@ -34,6 +35,24 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
       removeText: removeTextForHint(hint, residual),
     },
   }));
+
+  if (shouldShowGenericGenedChip(hints, plan.filters)) {
+    chips.push({
+      id: 'gened-any',
+      type: 'gened',
+      label: 'Any GenEd',
+      value: 'any',
+      source: 'natural_language',
+      removable: true,
+      editable: false,
+      filter: {
+        gened_any: [...GENERIC_GENED_CODES],
+      },
+      queryPatch: {
+        removeText: 'gened',
+      },
+    });
+  }
 
   if (residual) {
     chips.push({
@@ -80,6 +99,10 @@ function shouldHideAssumptionChip(kind: string, hints: Hint[], filters: SearchFi
     return true;
   }
 
+  if (kind === 'low_workload') {
+    return filters.difficulty === 'easy' || hints.some(hint => hint.type === 'difficulty' && hint.value === 'easy');
+  }
+
   if (kind === 'online_preferred') {
     return filters.online !== undefined || hints.some(hint => hint.type === 'online');
   }
@@ -89,6 +112,12 @@ function shouldHideAssumptionChip(kind: string, hints: Hint[], filters: SearchFi
   }
 
   return false;
+}
+
+function shouldShowGenericGenedChip(hints: Hint[], filters: SearchFilters): boolean {
+  return isGenericAnyGenedFilter(filters.gened_any)
+    && !filters.gened_code
+    && !hints.some(hint => hint.type === 'gened');
 }
 
 function textToRemoveForAssumption(kind: string, residual: string): string | undefined {
@@ -110,7 +139,7 @@ function buildAdvancedState(hints: Hint[], filters: SearchFilters, residual: str
     instructor: instructorHint ? formatDisplayHintValue(instructorHint, residual) : undefined,
     term: filters.term,
     year: filters.year,
-    gened: filters.gened_code ?? filters.gened_any?.[0] ?? filters.gened_all?.[0],
+    gened: filters.gened_code ?? (isGenericAnyGenedFilter(filters.gened_any) ? undefined : filters.gened_any?.[0]) ?? filters.gened_all?.[0],
     credits: filters.credits,
     days: filters.days,
     time: filters.time,

@@ -296,6 +296,18 @@ function removeTextFromQuery(source: string, textToRemove: string): string {
     .trim()
 }
 
+function removeChipFromQuery(source: string, chip: SearchChipDto): string {
+  if (chip.id === 'gened-any') {
+    return source
+      .trim()
+      .replace(/\b(?:gen\s*-?\s*ed|gened)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  return removeTextFromQuery(source, chip.queryPatch?.removeText || chip.value)
+}
+
 function getChipClass(chip: SearchChipDto): string {
   return cn(
     chip.type === 'instructor' &&
@@ -644,10 +656,9 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
       return
     }
 
-    const removeText = chip.queryPatch?.removeText || chip.value
-    const nextQuery = removeTextFromQuery(
+    const nextQuery = removeChipFromQuery(
       activeSearchText || meta?.query.raw || query,
-      removeText
+      chip
     )
     if (nextQuery) {
       void runSearch(nextQuery, {

@@ -21,6 +21,7 @@ import {
   buildRmpSearchUrl,
 } from '@uiuc-course-search/query-types';
 import type { SearchResult } from '../services/search.js';
+import { isGenericAnyGenedFilter } from '../services/gened-codes.js';
 
 type CourseSource = Pick<
   Course,
@@ -273,14 +274,15 @@ export function buildMatchEvidence(
     ...(filters.gened_all ?? []),
   ].filter((value): value is string => Boolean(value));
   if (genedFilters.length > 0) {
+    const isGenericGened = isGenericAnyGenedFilter(filters.gened_any) && !filters.gened_code && !filters.gened_all?.length;
     addEvidence(
       evidence,
       seen,
       'gened',
-      `GenEd ${genedFilters.join(', ')}`,
+      isGenericGened ? 'Any GenEd' : `GenEd ${genedFilters.join(', ')}`,
       'filter',
       'hard',
-      course.gened ?? genedFilters.join(',')
+      course.gened ?? (isGenericGened ? 'mapped requirement' : genedFilters.join(','))
     );
   } else if (hasHint(context.hints, 'gened') && course.gened) {
     addEvidence(evidence, seen, 'gened', `GenEd ${course.gened}`, 'query', 'soft', course.gened);
@@ -333,8 +335,8 @@ export function buildMatchEvidence(
     addEvidence(evidence, seen, 'workload', 'Workload evidence match', 'signal', 'soft', claims);
   }
 
-  if (result.laneMatches?.includes('requirement')) {
-    addEvidence(evidence, seen, 'gened', 'Requirement lane match', 'filter', 'soft', course.gened ?? undefined);
+  if (result.laneMatches?.includes('requirement') && course.gened) {
+    addEvidence(evidence, seen, 'gened', `GenEd ${course.gened}`, 'filter', 'soft', course.gened);
   }
 
   if (result.laneMatches?.includes('structured_section')) {

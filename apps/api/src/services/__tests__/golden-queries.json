@@ -59,10 +59,14 @@
         { "type": "difficulty", "value": "easy" },
         { "type": "online", "value": true }
       ],
-      "filters": { "difficulty": "easy", "online": true },
+      "filters": {
+        "difficulty": "easy",
+        "online": true,
+        "gened_any": ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"]
+      },
       "residual": ""
     },
-    "note": "gen ed is now removed as a stop phrase"
+    "note": "generic gen ed applies the Any GenEd constraint"
   },
   {
     "input": "400 level CS",
