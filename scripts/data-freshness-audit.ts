@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 type Args = {
   input?: string;
+  retentionInput?: string;
   output?: string;
   minHistoricalTerms: number;
   requireRmp: boolean;
@@ -21,7 +22,13 @@ export type FreshnessAuditCheck = {
 export type FreshnessAuditReport = {
   generated_at: string;
   source: string;
+  retention_source: string | null;
   checks: FreshnessAuditCheck[];
+};
+
+type RetentionAuditPlan = {
+  retainedTermIds: string[];
+  droppedTermIds: string[];
 };
 
 const DEFAULT_MIN_HISTORICAL_TERMS = 1;
@@ -36,6 +43,7 @@ function usage(): string {
     '',
     'Options:',
     `  --min-historical-terms <n>  Required historical term count. Default: ${DEFAULT_MIN_HISTORICAL_TERMS}`,
+    '  --retention-input <path>    Term retention JSON from npm run data:term-retention.',
     '  --no-require-rmp            Do not fail when RMP sync state is absent or stale.',
   ].join('\n');
 }
@@ -52,6 +60,9 @@ function parseArgs(argv: string[]): Args {
 
     if (arg === '--input' && next) {
       args.input = next;
+      index += 1;
+    } else if (arg === '--retention-input' && next) {
+      args.retentionInput = next;
       index += 1;
     } else if (arg === '--output' && next) {
       args.output = next;
@@ -109,9 +120,42 @@ function positiveNumber(value: unknown): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
+function truncateList(values: string[]): string {
+  if (values.length <= 8) return values.join(', ');
+  return `${values.slice(0, 8).join(', ')}, and ${values.length - 8} more`;
+}
+
+function retainedTermIds(retention: JsonRecord | null): string[] {
+  if (!retention) return [];
+  const values = Array.isArray(retention.retained_term_ids)
+    ? retention.retained_term_ids
+    : Array.isArray(retention.terms)
+      ? retention.terms
+        .map(asRecord)
+        .filter((item): item is JsonRecord => item !== null)
+        .filter(item => item.retention_decision === 'retain')
+        .map(item => item.term_id)
+      : [];
+  return values.filter((item): item is string => typeof item === 'string');
+}
+
+function droppedTermIds(retention: JsonRecord | null): string[] {
+  if (!retention) return [];
+  const values = Array.isArray(retention.dropped_term_ids)
+    ? retention.dropped_term_ids
+    : Array.isArray(retention.terms)
+      ? retention.terms
+        .map(asRecord)
+        .filter((item): item is JsonRecord => item !== null)
+        .filter(item => item.retention_decision === 'drop')
+        .map(item => item.term_id)
+      : [];
+  return values.filter((item): item is string => typeof item === 'string');
+}
+
 export function auditFreshnessStatus(
   status: JsonRecord,
-  options: { minHistoricalTerms?: number; requireRmp?: boolean } = {}
+  options: { minHistoricalTerms?: number; requireRmp?: boolean; retentionPlan?: RetentionAuditPlan | null } = {}
 ): FreshnessAuditCheck[] {
   const minHistoricalTerms = options.minHistoricalTerms ?? DEFAULT_MIN_HISTORICAL_TERMS;
   const requireRmp = options.requireRmp ?? true;
@@ -151,6 +195,31 @@ export function auditFreshnessStatus(
     ));
   }
 
+  if (options.retentionPlan) {
+    const retainedMissing = options.retentionPlan.retainedTermIds.filter(id => !termStateById(status, id));
+    const retainedWithoutFullCounts = options.retentionPlan.retainedTermIds.filter(id => {
+      const state = termStateById(status, id);
+      return !state || !positiveNumber(state.courses_count) || !positiveNumber(state.sections_count);
+    });
+    const droppedStillPresent = options.retentionPlan.droppedTermIds.filter(id => termStateById(status, id));
+
+    checks.push(check(
+      'retained corpus term coverage',
+      options.retentionPlan.retainedTermIds.length > 0 && retainedMissing.length === 0,
+      retainedMissing.length ? truncateList(retainedMissing) : `${options.retentionPlan.retainedTermIds.length} retained term(s)`
+    ));
+    checks.push(check(
+      'retained corpus full-detail counts',
+      retainedWithoutFullCounts.length === 0,
+      retainedWithoutFullCounts.length ? truncateList(retainedWithoutFullCounts) : 'all retained terms have course and section counts'
+    ));
+    checks.push(check(
+      'dropped term absence',
+      droppedStillPresent.length === 0,
+      droppedStillPresent.length ? truncateList(droppedStillPresent) : `${options.retentionPlan.droppedTermIds.length} dropped term(s) absent`
+    ));
+  }
+
   if (requireRmp) {
     checks.push(check('rmp sync state fresh', Boolean(rmpState) && !staleSyncStateIds.includes('rmp'), rmpState ? String(rmpState.last_status ?? 'unknown') : 'missing'));
   }
@@ -165,6 +234,7 @@ export function formatFreshnessAuditReport(report: FreshnessAuditReport): string
     '',
     `Generated at: ${report.generated_at}`,
     `Source: ${report.source}`,
+    `Retention source: ${report.retention_source ?? 'not provided'}`,
     `Total checks: ${report.checks.length}`,
     `Passing checks: ${report.checks.length - failed.length}`,
     `Failed checks: ${failed.length}`,
@@ -214,15 +284,37 @@ async function loadStatus(args: Args): Promise<{ source: string; status: JsonRec
   return { source: url.toString(), status: record };
 }
 
+async function loadRetentionPlan(input?: string): Promise<{ source: string | null; plan: RetentionAuditPlan | null }> {
+  if (!input) return { source: null, plan: null };
+
+  const body = await readFile(input, 'utf8');
+  const parsed = JSON.parse(body) as unknown;
+  const record = asRecord(parsed);
+  if (!record) {
+    throw new Error('--retention-input must contain a JSON object from npm run data:term-retention');
+  }
+
+  return {
+    source: input,
+    plan: {
+      retainedTermIds: retainedTermIds(record),
+      droppedTermIds: droppedTermIds(record),
+    },
+  };
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const { source, status } = await loadStatus(args);
+  const retention = await loadRetentionPlan(args.retentionInput);
   const report: FreshnessAuditReport = {
     generated_at: new Date().toISOString(),
     source,
+    retention_source: retention.source,
     checks: auditFreshnessStatus(status, {
       minHistoricalTerms: args.minHistoricalTerms,
       requireRmp: args.requireRmp,
+      retentionPlan: retention.plan,
     }),
   };
   const body = `${JSON.stringify(report, null, 2)}\n`;

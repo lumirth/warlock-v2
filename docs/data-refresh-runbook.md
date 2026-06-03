@@ -46,7 +46,31 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync/s
 npm run data:freshness:audit -- --input artifacts/sync-status.json --output artifacts/data-freshness-audit.json --min-historical-terms 1
 ```
 
-For production-grade historical coverage, raise `--min-historical-terms` to the expected term count for the supported backfill window. The audit fails on stale terms, stale GPA/RMP sync state, missing current-term coverage, and missing course/section counts for the current term.
+The main searchable corpus is rolling and full-detail. Do not keep old course-only shells in D1. If a term is retained, it must have courses, sections, meetings, instructors, and searchable index state. If storage pressure requires a tradeoff, drop the oldest terms completely and keep the retained terms trustworthy.
+
+Generate a retention plan before broad backfill or prune work:
+
+```bash
+npm run data:term-retention -- \
+  --from-year 2004 \
+  --to-year 2027 \
+  --status-input artifacts/sync-status.json \
+  --target-size-mb 250 \
+  --output artifacts/term-retention-plan.json
+```
+
+The retention planner pins active and registrable terms, then walks backward from the newest terms while giving fall/spring enough priority to outrank adjacent winter/summer terms when the budget is tight. The sibling SQL artifact deletes dropped terms completely from term-local course tables and includes verification queries. Before executing that SQL remotely, create and restore-verify a D1 Time Travel backup.
+
+After pruning, run the freshness audit against the retention plan:
+
+```bash
+npm run data:freshness:audit -- \
+  --input artifacts/sync-status.json \
+  --retention-input artifacts/term-retention-plan.json \
+  --output artifacts/data-freshness-audit.json
+```
+
+The audit fails on stale terms, stale GPA/RMP sync state, missing current-term coverage, missing course/section counts, retained terms without full-detail counts, or dropped terms that still appear in `term_state`.
 
 Generate the expected term coverage and concrete backfill command list from Course Explorer term discovery:
 
@@ -55,10 +79,11 @@ npm run data:term-coverage -- \
   --from-year 2004 \
   --to-year 2027 \
   --status-input artifacts/sync-status.json \
+  --retention-input artifacts/term-retention-plan.json \
   --output artifacts/term-coverage-plan.json
 ```
 
-The coverage plan exits non-zero while discovered terms are missing, stale, missing counts, or while an upstream term-list year fails. That is intentional: the plan is an operator gate, not a best-effort report.
+The coverage plan exits non-zero while retained terms are missing, stale, missing counts, or while an upstream term-list year fails. That is intentional: the plan is an operator gate, not a best-effort report. Dropped terms are out of scope for backfill and should not appear in search after pruning.
 
 Run the plan through the backup-gated multi-term orchestrator when multiple terms need work:
 

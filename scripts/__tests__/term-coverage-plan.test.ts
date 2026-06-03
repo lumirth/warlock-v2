@@ -32,6 +32,7 @@ describe('term coverage plan', () => {
       '--to-year', '2027',
       '--frontend-base', 'https://courses.example.test',
       '--status-input', 'artifacts/sync-status.json',
+      '--retention-input', 'artifacts/term-retention-plan.json',
       '--output', 'artifacts/term-coverage.json',
       '--current-year', '2026',
       '--current-term', 'summer',
@@ -40,6 +41,7 @@ describe('term coverage plan', () => {
       toYear: 2027,
       frontendBase: 'https://courses.example.test',
       statusInput: 'artifacts/sync-status.json',
+      retentionInput: 'artifacts/term-retention-plan.json',
       output: 'artifacts/term-coverage.json',
       currentYear: 2026,
       currentTerm: 'summer',
@@ -203,6 +205,48 @@ describe('term coverage plan', () => {
       needs_backfill: true,
       reason: 'term_state records 1 subjects but 3 subjects have complete sync states',
     });
+  });
+
+  it('scopes coverage and backfill commands to retained terms when a retention plan is provided', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ Fall: 'fall' }))
+      .mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }));
+    const status = {
+      termStates: [
+        {
+          term_id: '2026-spring',
+          year: 2026,
+          term: 'spring',
+          status: 'active',
+          courses_count: 1200,
+          sections_count: 5000,
+          last_synced: 1780000000,
+        },
+      ],
+      freshness: { staleTermIds: [] },
+    };
+
+    const report = await buildTermCoverageReport(args({
+      retentionInput: 'artifacts/term-retention-plan.json',
+    }), {
+      fetcher,
+      status,
+      statusSource: 'sync-status.json',
+      retention: { retained_term_ids: ['2026-spring', '2026-fall'] },
+      retentionSource: 'artifacts/term-retention-plan.json',
+    });
+
+    expect(report.counts).toMatchObject({
+      available_terms: 3,
+      retained_terms: 2,
+      dropped_terms: 1,
+      terms_needing_backfill: 1,
+    });
+    expect(report.terms.map(term => term.term_id)).toEqual(['2026-spring', '2026-fall']);
+    expect(report.backfill_commands).toEqual([
+      expect.stringContaining('--year 2026 --term fall --status active'),
+    ]);
+    expect(report.freshness_audit_command).toContain('--retention-input artifacts/term-retention-plan.json');
   });
 
   it('formats a readable markdown coverage report', async () => {

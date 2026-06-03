@@ -110,14 +110,61 @@ describe('data freshness audit', () => {
     const report: FreshnessAuditReport = {
       generated_at: '2026-06-02T12:00:00.000Z',
       source: 'fixture',
+      retention_source: null,
       checks: auditFreshnessStatus(status(), { minHistoricalTerms: 10 }),
     };
 
     expect(formatFreshnessAuditReport(report)).toContain('PASS current term present');
   });
 
+  it('checks retained full-detail coverage and dropped term absence from a retention plan', () => {
+    const checks = auditFreshnessStatus(status({
+      termStates: [
+        {
+          term_id: '2026-spring',
+          year: 2026,
+          term: 'spring',
+          status: 'active',
+          courses_count: 4494,
+          sections_count: 11960,
+        },
+        {
+          term_id: '2026-fall',
+          year: 2026,
+          term: 'fall',
+          status: 'registrable',
+          courses_count: 4400,
+          sections_count: 11000,
+        },
+        {
+          term_id: '2004-spring',
+          year: 2004,
+          term: 'spring',
+          status: 'historical',
+          courses_count: 10,
+          sections_count: 20,
+        },
+      ],
+    }), {
+      retentionPlan: {
+        retainedTermIds: ['2026-spring', '2026-fall', '2025-fall'],
+        droppedTermIds: ['2004-spring'],
+      },
+    });
+
+    expect(checks.filter(check => !check.ok).map(check => check.name)).toEqual([
+      'retained corpus term coverage',
+      'retained corpus full-detail counts',
+      'dropped term absence',
+    ]);
+  });
+
   it('writes JSON and markdown reports from the CLI', () => {
     const inputFile = makeTempFile('sync-status.json', JSON.stringify(status()));
+    const retentionFile = makeTempFile('retention.json', JSON.stringify({
+      retained_term_ids: ['2026-spring', '2026-fall'],
+      dropped_term_ids: ['2004-spring'],
+    }));
     const outputFile = join(tempRoot!, 'audit.json');
 
     const result = spawnSync('npx', [
@@ -129,6 +176,8 @@ describe('data freshness audit', () => {
       outputFile,
       '--min-historical-terms',
       '10',
+      '--retention-input',
+      retentionFile,
     ], {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -136,6 +185,7 @@ describe('data freshness audit', () => {
 
     expect(result.status).toBe(0);
     const report = JSON.parse(readFileSync(outputFile, 'utf8')) as FreshnessAuditReport;
+    expect(report.retention_source).toBe(retentionFile);
     expect(report.checks.every(check => check.ok)).toBe(true);
     expect(readFileSync(outputFile.replace(/\.json$/i, '.md'), 'utf8')).toContain('Data Freshness Audit');
   });

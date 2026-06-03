@@ -27,6 +27,7 @@
     "eval:smoke": "tsx scripts/eval-smoke.ts",
     "feedback:triage": "tsx scripts/feedback-corpus-candidates.ts",
     "data:freshness:audit": "tsx scripts/data-freshness-audit.ts",
+    "data:term-retention": "tsx scripts/term-retention-plan.ts",
     "data:backfill:term": "tsx scripts/term-backfill.ts",
     "data:term-coverage": "tsx scripts/term-coverage-plan.ts",
     "data:backfill:coverage": "tsx scripts/term-coverage-backfill.ts",

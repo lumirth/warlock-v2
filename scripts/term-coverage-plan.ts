@@ -23,6 +23,7 @@ export type TermCoverageArgs = {
   toYear: number;
   frontendBase: string;
   statusInput?: string;
+  retentionInput?: string;
   output?: string;
   currentYear?: number;
   currentTerm?: Term;
@@ -54,8 +55,11 @@ export type TermCoverageReport = {
   current_year: number;
   current_term: Term;
   status_source: string | null;
+  retention_source: string | null;
   counts: {
     available_terms: number;
+    retained_terms: number;
+    dropped_terms: number;
     present_terms: number;
     missing_terms: number;
     stale_terms: number;
@@ -135,6 +139,20 @@ function statusSyncStates(status: JsonRecord | null): JsonRecord[] {
   return Array.isArray(status?.syncStates)
     ? status.syncStates.map(asRecord).filter((item): item is JsonRecord => item !== null)
     : [];
+}
+
+function retainedTermIds(retention: JsonRecord | null): Set<string> | null {
+  if (!retention) return null;
+  const values = Array.isArray(retention.retained_term_ids)
+    ? retention.retained_term_ids
+    : Array.isArray(retention.terms)
+      ? retention.terms
+        .map(asRecord)
+        .filter((item): item is JsonRecord => item !== null)
+        .filter(item => item.retention_decision === 'retain')
+        .map(item => item.term_id)
+      : [];
+  return new Set(values.filter((item): item is string => typeof item === 'string'));
 }
 
 function staleTermIds(status: JsonRecord | null): Set<string> {
@@ -246,6 +264,9 @@ export function parseTermCoverageArgs(argv: string[]): TermCoverageArgs {
     } else if (arg === '--status-input' && next) {
       args.statusInput = next;
       index += 1;
+    } else if (arg === '--retention-input' && next) {
+      args.retentionInput = next;
+      index += 1;
     } else if (arg === '--output' && next) {
       args.output = next;
       index += 1;
@@ -311,12 +332,26 @@ async function loadStatus(input?: string): Promise<{ source: string | null; stat
   return { source: input, status: record };
 }
 
+async function loadRetention(input?: string): Promise<{ source: string | null; retainedIds: Set<string> | null }> {
+  if (!input) return { source: null, retainedIds: null };
+
+  const body = await readFile(input, 'utf8');
+  const parsed = JSON.parse(body) as unknown;
+  const record = asRecord(parsed);
+  if (!record) {
+    throw new Error('--retention-input must contain a JSON object from npm run data:term-retention');
+  }
+  return { source: input, retainedIds: retainedTermIds(record) };
+}
+
 export async function buildTermCoverageReport(
   args: TermCoverageArgs,
   options: {
     fetcher?: Fetcher;
     status?: JsonRecord | null;
     statusSource?: string | null;
+    retention?: JsonRecord | null;
+    retentionSource?: string | null;
     now?: Date;
   } = {}
 ): Promise<TermCoverageReport> {
@@ -325,7 +360,17 @@ export async function buildTermCoverageReport(
   const statusResult = options.status === undefined
     ? await loadStatus(args.statusInput)
     : { status: options.status, source: options.statusSource ?? args.statusInput ?? null };
+  const retentionResult = options.retention === undefined
+    ? await loadRetention(args.retentionInput)
+    : {
+      source: options.retentionSource ?? args.retentionInput ?? null,
+      retainedIds: retainedTermIds(options.retention),
+    };
   const discovered = await discoverAvailableTerms(args, options.fetcher);
+  const retainedDiscoveredTerms = retentionResult.retainedIds
+    ? discovered.terms.filter(term => retentionResult.retainedIds?.has(term.term_id))
+    : discovered.terms;
+  const droppedDiscoveredTerms = discovered.terms.length - retainedDiscoveredTerms.length;
   const storedByTermId = new Map<string, JsonRecord>();
   const syncStates = statusSyncStates(statusResult.status);
 
@@ -335,7 +380,7 @@ export async function buildTermCoverageReport(
   }
 
   const stale = staleTermIds(statusResult.status);
-  const terms = discovered.terms.map(term => buildRow(
+  const terms = retainedDiscoveredTerms.map(term => buildRow(
     term,
     storedByTermId.get(term.term_id),
     completedSubjectSyncCount(syncStates, term.term_id),
@@ -354,8 +399,11 @@ export async function buildTermCoverageReport(
     current_year: currentYear,
     current_term: currentTerm,
     status_source: statusResult.source,
+    retention_source: retentionResult.source,
     counts: {
-      available_terms: terms.length,
+      available_terms: discovered.terms.length,
+      retained_terms: terms.length,
+      dropped_terms: droppedDiscoveredTerms,
       present_terms: terms.filter(term => term.present).length,
       missing_terms: terms.filter(term => !term.present).length,
       stale_terms: terms.filter(term => term.stale).length,
@@ -365,7 +413,9 @@ export async function buildTermCoverageReport(
     terms,
     warnings: discovered.warnings,
     backfill_commands: needingBackfill.map(backfillCommand),
-    freshness_audit_command: `npm run data:freshness:audit -- --input artifacts/sync-status.json --min-historical-terms ${expectedHistoricalTerms}`,
+    freshness_audit_command: retentionResult.source
+      ? `npm run data:freshness:audit -- --input artifacts/sync-status.json --retention-input ${retentionResult.source}`
+      : `npm run data:freshness:audit -- --input artifacts/sync-status.json --min-historical-terms ${expectedHistoricalTerms}`,
   };
 }
 
@@ -378,10 +428,13 @@ export function formatTermCoverageReport(report: TermCoverageReport): string {
     `Year range: ${report.from_year}-${report.to_year}`,
     `Current term reference: ${report.current_year} ${report.current_term}`,
     `Status source: ${report.status_source ?? 'not provided'}`,
+    `Retention source: ${report.retention_source ?? 'not provided'}`,
     '',
     '## Counts',
     '',
     `- Available terms: ${report.counts.available_terms}`,
+    `- Retained terms: ${report.counts.retained_terms}`,
+    `- Dropped terms: ${report.counts.dropped_terms}`,
     `- Present terms: ${report.counts.present_terms}`,
     `- Missing terms: ${report.counts.missing_terms}`,
     `- Stale terms: ${report.counts.stale_terms}`,
