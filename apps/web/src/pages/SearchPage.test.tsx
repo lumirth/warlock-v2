@@ -221,10 +221,13 @@ describe('SearchPage request state', () => {
     setQuery('cs 225')
     fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
 
-    const card = await screen.findByRole('link', { name: /CS 225: Data Structures Spring 2026 Historical/i })
+    const card = await screen.findByRole('link', { name: /CS 225: Data Structures Spring 2026 Historical term/i })
     expect(card).toHaveAttribute('data-historical', 'true')
-    expect(card).toHaveStyle({ opacity: '0.78' })
-    expect(screen.getByText('Historical')).toBeInTheDocument()
+    expect(card).toHaveStyle({
+      opacity: '0.72',
+      filter: 'grayscale(0.25)',
+    })
+    expect(screen.getByText('Historical term')).toBeInTheDocument()
   })
 
   it('lets users remove interpreted search chips and reruns the edited query', async () => {
@@ -355,7 +358,7 @@ describe('SearchPage request state', () => {
         ...searchResponse([]),
         meta: {
           ...searchResponse([]).meta,
-          query: { raw: 'intro to CS', residual: '' },
+          query: { raw: 'intro to CS', residual: 'intro to' },
           ui: {
             chips: [{
               id: 'subject-0',
@@ -392,6 +395,51 @@ describe('SearchPage request state', () => {
       }))
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue('')
+  })
+
+  it('keeps meaningful residual text when advanced filters replace parsed query filters', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'CS algorithms', residual: 'algorithms' },
+          ui: {
+            chips: [{
+              id: 'subject-0',
+              type: 'subject',
+              label: 'Subject CS',
+              value: 'CS',
+              source: 'natural_language',
+              removable: true,
+              editable: true,
+              queryPatch: { removeText: 'CS' },
+            }],
+            advanced: { subject: 'CS' },
+            ambiguityActions: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce(searchResponse([]))
+
+    renderSearchPage()
+
+    setQuery('CS algorithms')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    await screen.findByText('Subject CS')
+
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'PHIL' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith('subject:PHIL algorithms', expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        limit: 20,
+        offset: 0,
+      }))
+    })
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('algorithms')
   })
 
   it('loads more from the refined query without changing the visible search text', async () => {

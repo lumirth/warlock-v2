@@ -31,6 +31,26 @@ const ADVANCED_SEARCH_KEYS: (keyof AdvancedSearchStateDto)[] = [
   'difficulty',
 ]
 
+const WEAK_RESIDUAL_TERMS = new Set([
+  'a',
+  'an',
+  'and',
+  'by',
+  'class',
+  'classes',
+  'course',
+  'courses',
+  'find',
+  'for',
+  'in',
+  'intro',
+  'introduction',
+  'of',
+  'search',
+  'the',
+  'to',
+])
+
 function getEvidenceColor(evidence: MatchEvidence): string {
   if (evidence.weight === 'hard') return 'blue'
   if (evidence.weight === 'rank') return evidence.kind === 'semantic' ? 'violet' : 'gray'
@@ -178,6 +198,16 @@ function advancedFiltersContradictQuery(previous: AdvancedSearchStateDto, next: 
   })
 }
 
+function meaningfulResidualQuery(residual: string): string {
+  const trimmedResidual = residual.trim()
+  const meaningfulTokens = trimmedResidual
+    .toLowerCase()
+    .split(/[^a-z0-9+#]+/)
+    .filter((token) => token && !WEAK_RESIDUAL_TERMS.has(token))
+
+  return meaningfulTokens.length > 0 ? trimmedResidual : ''
+}
+
 export function SearchPage() {
   const [query, setQuery] = useState('')
   const [activeSearchText, setActiveSearchText] = useState('')
@@ -266,7 +296,7 @@ export function SearchPage() {
     const previousAdvanced = meta?.ui?.advanced || {}
     const changed = advancedFiltersChanged(previousAdvanced, advancedDraft)
     const contradictsQuery = advancedFiltersContradictQuery(previousAdvanced, advancedDraft)
-    const freeTextQuery = contradictsQuery ? (meta?.query.residual || '').trim() : query.trim()
+    const freeTextQuery = contradictsQuery ? meaningfulResidualQuery(meta?.query.residual || '') : query.trim()
     const nextQuery = changed
       ? buildAdvancedQuery(advancedDraft, freeTextQuery)
       : activeSearchText || query
@@ -533,8 +563,10 @@ export function SearchPage() {
                     color: 'inherit',
                     cursor: 'pointer',
                     backgroundColor: r._historical ? 'var(--mantine-color-gray-0)' : undefined,
-                    borderColor: r._historical ? 'var(--mantine-color-gray-3)' : undefined,
-                    opacity: r._historical ? 0.78 : 1,
+                    borderColor: r._historical ? 'var(--mantine-color-gray-4)' : undefined,
+                    boxShadow: r._historical ? 'none' : undefined,
+                    opacity: r._historical ? 0.72 : 1,
+                    filter: r._historical ? 'grayscale(0.25)' : undefined,
                   }}
                   shadow="sm"
                 >
@@ -542,12 +574,12 @@ export function SearchPage() {
                     <Box style={{ minWidth: 0, flex: '1 1 18rem' }}>
                       <Text fw={700} c={r._historical ? 'dimmed' : undefined}>{r.subject} {r.number}: {r.title}</Text>
                       <Group gap="xs" mt={4}>
-                        <Text size="xs" c={r._historical ? 'gray.7' : 'dimmed'}>
+                        <Text size="xs" fw={r._historical ? 600 : undefined} c={r._historical ? 'gray.7' : 'dimmed'}>
                           {formatTermLabel(r.term, r.year)}
                         </Text>
                         {r._historical && (
-                          <Badge color="gray" variant="filled" size="xs">
-                            Historical
+                          <Badge color="gray" variant="filled" size="xs" tt="none">
+                            Historical term
                           </Badge>
                         )}
                         <Text size="xs" c={r._historical ? 'gray.7' : 'dimmed'}>
