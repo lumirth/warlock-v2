@@ -53,6 +53,8 @@ type SuggestedGoldQuery = {
 
 export type FeedbackCorpusCandidate = {
   id: string;
+  feedbackIds: string[];
+  duplicateCount: number;
   target: PromotionTarget;
   priority: CandidatePriority;
   status: 'needs_review';
@@ -141,9 +143,9 @@ export function parseFeedbackExport(text: string): FeedbackExportRow[] {
 }
 
 export function buildFeedbackCandidateReport(rows: FeedbackExportRow[], source: string, now = new Date()): FeedbackCandidateReport {
-  const candidates = rows
+  const candidates = dedupeCandidates(rows
     .map((row, index) => buildCandidate(row, index))
-    .filter((candidate): candidate is FeedbackCorpusCandidate => candidate !== null);
+    .filter((candidate): candidate is FeedbackCorpusCandidate => candidate !== null));
 
   return {
     generated_at: now.toISOString(),
@@ -171,6 +173,8 @@ function buildCandidate(row: FeedbackExportRow, index: number): FeedbackCorpusCa
   });
   const candidate: FeedbackCorpusCandidate = {
     id: normalized.id || `feedback-row-${index + 1}`,
+    feedbackIds: [normalized.id || `feedback-row-${index + 1}`],
+    duplicateCount: 1,
     target,
     priority: getPriority(normalized, target),
     status: 'needs_review',
@@ -198,6 +202,51 @@ function buildCandidate(row: FeedbackExportRow, index: number): FeedbackCorpusCa
   }
 
   return candidate;
+}
+
+function dedupeCandidates(candidates: FeedbackCorpusCandidate[]): FeedbackCorpusCandidate[] {
+  const byKey = new Map<string, FeedbackCorpusCandidate>();
+
+  for (const candidate of candidates) {
+    const key = dedupeKey(candidate);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, candidate);
+      continue;
+    }
+
+    existing.duplicateCount += candidate.duplicateCount;
+    existing.feedbackIds.push(...candidate.feedbackIds);
+    if (!existing.message && candidate.message) existing.message = candidate.message;
+    if (!existing.expected && candidate.expected) existing.expected = candidate.expected;
+    if (!existing.createdAt || (candidate.createdAt && candidate.createdAt > existing.createdAt)) {
+      existing.createdAt = candidate.createdAt;
+    }
+  }
+
+  return Array.from(byKey.values());
+}
+
+function dedupeKey(candidate: FeedbackCorpusCandidate): string {
+  return [
+    candidate.target,
+    candidate.kind,
+    candidate.issue,
+    normalizeKeyPart(candidate.query),
+    normalizeKeyPart(candidate.expected),
+    normalizeKeyPart(candidate.courseId),
+    normalizeKeyPart(candidate.subject),
+    normalizeKeyPart(candidate.number),
+    normalizeKeyPart(candidate.term),
+    String(candidate.year ?? ''),
+    normalizeKeyPart(candidate.crn),
+    normalizeKeyPart(candidate.instructorName),
+    normalizeKeyPart(candidate.scoreField),
+  ].join('|');
+}
+
+function normalizeKeyPart(value: string | undefined): string {
+  return value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? '';
 }
 
 function extractRows(value: unknown): FeedbackExportRow[] {

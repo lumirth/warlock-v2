@@ -95,6 +95,42 @@ describe('feedback corpus candidates', () => {
     expect(report.candidates[0].reviewChecklist.join(' ')).toContain('score inputs');
   });
 
+  it('groups duplicate feedback rows into one review candidate with source ids', () => {
+    const report = buildFeedbackCandidateReport([
+      {
+        id: 'feedback-1',
+        kind: 'search_results',
+        issue: 'expected_different_results',
+        page: 'search',
+        query: 'professor fagen algorithms',
+        expected: 'CS courses taught by Wade Fagen-Ulmschneider',
+        instructor_name: 'Fagen-Ulmschneider, W',
+        created_at: 1780370000,
+      },
+      {
+        id: 'feedback-2',
+        kind: 'search_results',
+        issue: 'expected_different_results',
+        page: 'search',
+        query: ' professor   fagen algorithms ',
+        expected: 'CS courses taught by Wade Fagen-Ulmschneider',
+        instructor_name: 'Fagen-Ulmschneider, W',
+        created_at: 1780370100,
+      },
+    ], 'inline', new Date('2026-06-02T06:00:00Z'));
+
+    expect(report.row_count).toBe(2);
+    expect(report.candidate_count).toBe(1);
+    expect(report.candidates[0]).toMatchObject({
+      id: 'feedback-1',
+      feedbackIds: ['feedback-1', 'feedback-2'],
+      duplicateCount: 2,
+      createdAt: 1780370100,
+      query: 'professor fagen algorithms',
+      target: 'search_eval',
+    });
+  });
+
   it('supports newline-delimited JSON and skips unknown feedback shapes', () => {
     const rows = parseFeedbackExport([
       '{"id":"link-1","kind":"external_link","issue":"broken_link","page":"course","subject":"MATH","number":"241"}',

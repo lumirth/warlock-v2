@@ -6,7 +6,23 @@ This project is pre-alpha and greenfield. User feedback is not a parking lot; it
 
 Feedback is stored in `feedback_events` through `POST /api/feedback`. The table intentionally keeps anonymous context only: query, course identifiers, score field, expected outcome, free-text note, page, issue, and metadata.
 
-Export recent feedback from staging or production with a restorable D1 backup already verified if the same session will make destructive database changes:
+Export recent feedback from staging or production with a restorable D1 backup already verified if the same session will make destructive database changes.
+
+Preferred one-step export plus candidate generation:
+
+```sh
+npm run feedback:export -- --database course-search-db-staging --limit 200
+```
+
+This writes timestamped raw feedback and candidate files under `artifacts/feedback/`. The command is read-only and uses Wrangler `d1 execute --remote --json`; it does not print or require secret values.
+
+For a raw export only:
+
+```sh
+npm run feedback:export -- --database course-search-db-staging --limit 200 --no-candidates
+```
+
+Manual export remains available when you already have a Wrangler output file:
 
 ```sh
 wrangler d1 execute course-search-db-staging --remote --json --command "SELECT * FROM feedback_events ORDER BY created_at DESC LIMIT 200" > artifacts/feedback-events.json
@@ -20,7 +36,7 @@ npm run feedback:triage -- --input artifacts/feedback-events.json --output artif
 
 The input can be a JSON array, Wrangler D1 JSON with `results`, or NDJSON rows.
 
-The report includes `suggestedFailureClasses` for search-related candidates. These are review hints tied to the eval corpus coverage gate, not automatic promotions.
+The report groups duplicate candidate rows by target, issue, query, course fields, instructor, score field, and expected outcome. Use `duplicateCount` to see repeated reports and `feedbackIds` to trace the source rows. The report also includes `suggestedFailureClasses` for search-related candidates. These are review hints tied to the eval corpus coverage gate, not automatic promotions.
 
 ## Promotion Standard
 

@@ -37,7 +37,7 @@ The pass is complete only when every item below has concrete evidence in the fin
 | Comprehensive query/eval corpus | Typed corpus files, generated official subject-name aliases, typo-tolerant subject cases, grouped topic synonym/acronym cases, eval runner assertions, CI/local `npm run eval:smoke` output |
 | Instructor/professor search | Extractor/resolver tests, corpus cases, API integration tests, Browser QA queries |
 | Low-friction feedback | Migration/schema, API route, frontend UI, triage/report docs, feedback tests |
-| Feedback-to-eval path | Feedback triage docs/script or admin route, corpus promotion workflow, tests |
+| Feedback-to-eval path | Feedback triage docs/script or admin route, duplicate-grouped export/candidate workflow, corpus promotion workflow, tests |
 | Editable badges/search chips | Shared query-plan state, SearchPage controls, frontend state tests, Browser QA |
 | Clickable "maybe you meant" alternatives | API ambiguity DTOs, SearchPage buttons, URL/state round-trip tests |
 | Advanced search mode | Public controls for term, subject, GenEd, schedule, credits, online/status, instructor, difficulty/quality; typed free text remains separate from structured filters, and contradictory filter edits clear stale structured words from the search box |
