@@ -142,6 +142,17 @@ describe('SearchPage request state', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('does not render an empty table before the first search when table view is remembered', () => {
+    window.localStorage.setItem('uiuc-course-search.result-view', 'table')
+
+    renderSearchPage()
+
+    expect(
+      screen.getByText(/search uiuc courses the way you'd describe them/i)
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
   it('keeps the active request abortable after an older aborted request settles', async () => {
     const first = deferred<SearchResponseDto>()
     const second = deferred<SearchResponseDto>()
@@ -540,6 +551,178 @@ describe('SearchPage request state', () => {
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
       'CS gened'
     )
+  })
+
+  it('keeps accepted ambiguity actions as the canonical request during sort changes', async () => {
+    const culturalStudiesResponse = deferred<SearchResponseDto>()
+    const sortedResponse = deferred<SearchResponseDto>()
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({
+            id: 'CS-100-2026-spring',
+            number: '100',
+            title: 'Freshman Orientation',
+          }),
+        ]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'CS', residual: '' },
+          ui: {
+            chips: [
+              {
+                id: 'subject-0',
+                type: 'subject',
+                label: 'Subject CS',
+                value: 'CS',
+                source: 'natural_language',
+                removable: true,
+                editable: true,
+                filter: { subject: 'CS' },
+                queryPatch: { removeText: 'CS' },
+              },
+            ],
+            advanced: { subject: 'CS' },
+            ambiguityActions: [
+              {
+                id: '0-0-gened-CS',
+                term: 'CS',
+                label: 'Cultural Studies',
+                filter: { gened_code: 'CS' },
+                queryPatch: { replaceQuery: 'gened:CS' },
+              },
+            ],
+          },
+        },
+      })
+      .mockImplementationOnce(() => culturalStudiesResponse.promise)
+      .mockImplementationOnce(() => sortedResponse.promise)
+
+    renderSearchPage()
+
+    setQuery('CS')
+    submitSearch()
+
+    await screen.findByRole('button', { name: /use cultural studies/i })
+    fireEvent.click(
+      screen.getByRole('button', { name: /use cultural studies/i })
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: /use cultural studies/i })
+      ).not.toBeInTheDocument()
+    })
+    expect(api.search).toHaveBeenLastCalledWith(
+      '',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        limit: 20,
+        offset: 0,
+        filters: { gened: 'CS' },
+      })
+    )
+
+    await act(async () => {
+      culturalStudiesResponse.resolve({
+        ...searchResponse([
+          course({
+            id: 'ANTH-103-2026-spring',
+            subject: 'ANTH',
+            number: '103',
+            title: 'Anthropology in a Changing World',
+            gened: 'CS',
+          }),
+        ]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: '', residual: '' },
+          ui: {
+            chips: [
+              {
+                id: 'gened-0',
+                type: 'gened',
+                label: 'GenEd CS',
+                value: 'CS',
+                source: 'natural_language',
+                removable: true,
+                editable: true,
+                filter: { gened_code: 'CS' },
+                queryPatch: { removeText: 'CS' },
+              },
+            ],
+            advanced: { gened: 'CS' },
+            ambiguityActions: [],
+          },
+        },
+      })
+      await culturalStudiesResponse.promise
+    })
+
+    await screen.findByText(/ANTH 103: Anthropology in a Changing World/i)
+    expect(
+      screen.queryByRole('button', { name: /use cultural studies/i })
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /sort by avg gpa, descending/i })
+    )
+
+    expect(api.search).toHaveBeenLastCalledWith(
+      '',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        limit: 20,
+        offset: 0,
+        filters: { gened: 'CS' },
+        sort: { field: 'gpa', direction: 'desc' },
+      })
+    )
+    expect(screen.queryByLabelText('Searching courses')).not.toBeInTheDocument()
+    expect(screen.getByText(/ANTH 103/i)).toBeInTheDocument()
+    expect(screen.getByText(/updating results/i)).toBeInTheDocument()
+
+    await act(async () => {
+      sortedResponse.resolve({
+        ...searchResponse([
+          course({
+            id: 'AFST-222-2026-spring',
+            subject: 'AFST',
+            number: '222',
+            title: 'Introduction to Modern Africa',
+            gened: 'CS',
+            avg_gpa: 3.76,
+          }),
+        ]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: '', residual: '' },
+          appliedSort: { field: 'gpa', direction: 'desc' },
+          ui: {
+            chips: [
+              {
+                id: 'gened-0',
+                type: 'gened',
+                label: 'GenEd CS',
+                value: 'CS',
+                source: 'natural_language',
+                removable: true,
+                editable: true,
+                filter: { gened_code: 'CS' },
+                queryPatch: { removeText: 'CS' },
+              },
+            ],
+            advanced: { gened: 'CS' },
+            ambiguityActions: [],
+          },
+        },
+      })
+      await sortedResponse.promise
+    })
+
+    await screen.findByText('AFST 222')
+    expect(screen.getByText('Introduction to Modern Africa')).toBeInTheDocument()
   })
 
   it('switches ambiguity actions by clearing the competing subject or GenEd filter', async () => {

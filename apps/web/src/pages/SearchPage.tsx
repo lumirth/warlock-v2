@@ -93,6 +93,7 @@ type SearchOptions = {
   syncInput?: boolean
   filters?: AdvancedSearchStateDto
   sort?: SearchSort
+  preserveResults?: boolean
 }
 type Tone = 'success' | 'warning' | 'destructive' | 'muted'
 type ResultViewMode = 'cards' | 'table'
@@ -738,6 +739,7 @@ function ResultsToolbar({
   showingResultsLabel,
   sort,
   resultViewMode,
+  isRefreshing,
   onSortFieldChange,
   onDirectionToggle,
   onViewChange,
@@ -745,6 +747,7 @@ function ResultsToolbar({
   showingResultsLabel: string
   sort: SearchSort
   resultViewMode: ResultViewMode
+  isRefreshing: boolean
   onSortFieldChange: (field: SortField) => void
   onDirectionToggle: () => void
   onViewChange: (view: ResultViewMode) => void
@@ -754,6 +757,16 @@ function ResultsToolbar({
       <p className="text-muted-foreground text-xs tabular-nums">
         {showingResultsLabel}
       </p>
+      {isRefreshing && (
+        <span
+          role="status"
+          aria-live="polite"
+          className="text-muted-foreground flex items-center gap-1 text-xs"
+        >
+          <Spinner aria-hidden />
+          Updating results
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground text-xs">Sort</span>
         <Field className="w-40">
@@ -983,6 +996,7 @@ function CourseResultsTable({
 
 export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   const [query, setQuery] = useState('')
+  const [inputDirty, setInputDirty] = useState(false)
   const [activeSearchText, setActiveSearchText] = useState('')
   const [activeAdvancedFilters, setActiveAdvancedFilters] =
     useState<AdvancedSearchStateDto>({})
@@ -1000,6 +1014,17 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   )
 
   const searchController = useRef<AbortController | null>(null)
+
+  const hasActiveStructuredFilters = hasAdvancedFilterValue(
+    activeAdvancedFilters
+  )
+  const hasActiveRequest =
+    activeSearchText.trim().length > 0 ||
+    hasActiveStructuredFilters ||
+    meta !== null ||
+    loading ||
+    loadingMore
+  const activeRequestQuery = hasActiveRequest ? activeSearchText : query.trim()
 
   useEffect(() => {
     window.localStorage.setItem(RESULT_VIEW_STORAGE_KEY, resultViewMode)
@@ -1020,6 +1045,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
     if (!normalizedQuery && !hasRequestFilters) return
     const offset = options.offset ?? 0
     const append = options.append === true && offset > 0
+    const preserveResults = options.preserveResults === true && !append
 
     if (searchController.current) {
       searchController.current.abort()
@@ -1030,13 +1056,14 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
     if (options.syncInput !== false) {
       setQuery(normalizedQuery)
     }
+    if (!append) setInputDirty(false)
     if (!append) {
       setActiveSearchText(normalizedQuery)
       setActiveAdvancedFilters(requestFilters)
     }
     setLoading(!append)
     setLoadingMore(append)
-    if (!append) {
+    if (!append && !preserveResults) {
       setMeta(null)
       setResults([])
       setPagination(null)
@@ -1088,7 +1115,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
     )
     if (nextAdvancedFilters) {
       setAdvancedDraft(nextAdvancedFilters)
-      void runSearch(query.trim(), {
+      void runSearch(activeRequestQuery, {
         syncInput: false,
         filters: nextAdvancedFilters,
       })
@@ -1096,7 +1123,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
     }
 
     const nextQuery = removeChipFromQuery(
-      activeSearchText || meta?.query.raw || query,
+      activeRequestQuery || meta?.query.raw || query,
       chip
     )
     if (nextQuery) {
@@ -1151,14 +1178,16 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
       previousAdvanced,
       advancedDraft
     )
-    const freeTextQuery = contradictsQuery
-      ? meaningfulResidualQuery(meta?.query.residual || '')
-      : query.trim()
+    const freeTextQuery = inputDirty
+      ? query.trim()
+      : contradictsQuery
+        ? meaningfulResidualQuery(meta?.query.residual || '')
+        : activeRequestQuery
     const nextFilters = cleanAdvancedFilters(advancedDraft)
-    const nextQuery = changed ? freeTextQuery : activeSearchText || query
+    const nextQuery = changed ? freeTextQuery : activeRequestQuery
 
     if (!nextQuery.trim() && !hasAdvancedFilterValue(nextFilters)) return
-    if (contradictsQuery) {
+    if (contradictsQuery && !inputDirty) {
       setQuery(freeTextQuery)
     }
 
@@ -1176,7 +1205,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
     const nextOffset =
       pagination.nextOffset ?? pagination.offset + pagination.limit
 
-    void runSearch(activeSearchText || query, {
+    void runSearch(activeRequestQuery, {
       offset: nextOffset,
       append: true,
       syncInput: false,
@@ -1188,10 +1217,11 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   const applySort = (nextSort: SearchSort) => {
     const normalizedSort = normalizeSearchSort(nextSort)
     setSort(normalizedSort)
-    void runSearch(activeSearchText || query, {
+    void runSearch(activeRequestQuery, {
       syncInput: false,
       filters: activeAdvancedFilters,
       sort: normalizedSort,
+      preserveResults: true,
     })
   }
 
@@ -1234,7 +1264,10 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   const hasAdvancedDraftChanges = meta
     ? advancedFiltersChanged(meta.ui?.advanced || {}, advancedDraft)
     : hasAdvancedFilterValue(advancedDraft)
-  const showFirstRunExamples = !meta && !loading && !activeSearchText && !error
+  const showFirstRunExamples =
+    !meta && !loading && !hasActiveRequest && !error
+  const isRefreshingResults = loading && (meta !== null || results.length > 0)
+  const showInitialSkeleton = loading && !isRefreshingResults
 
   return (
     <PageContainer className="py-4 sm:py-6">
@@ -1254,7 +1287,10 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                 autoComplete="off"
                 placeholder="Search by course, topic, professor, requirement, or time"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value)
+                  setInputDirty(true)
+                }}
               />
             </InputGroup>
           </Field>
@@ -1616,7 +1652,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                   resultCount: results.length,
                   hasMore: pagination?.hasMore === true,
                   typedQuery: query.trim() || null,
-                  effectiveQuery: activeSearchText || meta.query.raw,
+                  effectiveQuery: activeRequestQuery || null,
                 },
               }}
             />
@@ -1624,7 +1660,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
         )}
 
         <div aria-busy={loading} className="flex flex-col gap-3">
-          {loading ? (
+          {!meta && !loading ? null : showInitialSkeleton ? (
             <div
               role="status"
               aria-live="polite"
@@ -1681,6 +1717,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                     showingResultsLabel={showingResultsLabel}
                     sort={sort}
                     resultViewMode={resultViewMode}
+                    isRefreshing={isRefreshingResults}
                     onSortFieldChange={handleSortFieldChange}
                     onDirectionToggle={toggleSortDirection}
                     onViewChange={setResultViewMode}

@@ -71,7 +71,7 @@ This is where the warmth is rationed, per the governing principle.
 - Advanced search is a structured refinement surface that sends structured filter constraints, **not** a rewrite of the visible search text.
 - Result cards are functional links with plain metadata and minimal state. One way of explaining a match per card, not two.
 - Badges are reserved for functional tokens (removable filters, historical status).
-- Scores appear as readable word-label metrics with semantic tone, never decorative charts or borrowed letter grades. Quality is rendered identically on cards and the scorecard.
+- Scores appear as readable word-label metrics with semantic tone, never decorative charts or borrowed letter grades. Quality is rendered identically on cards, tables, and the scorecard. The quality vocabulary is exactly **Excellent / Good / Fair / Low**. Use **Low**, not "Limited"; "Limited" sounds like evidence coverage rather than course quality.
 - Section tables stay table-like: text-first, horizontally scrollable, linked to official sources.
 
 ## Layout
