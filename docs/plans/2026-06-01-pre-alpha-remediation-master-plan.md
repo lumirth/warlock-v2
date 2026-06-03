@@ -1144,7 +1144,7 @@ Course detail is a core workflow. Section tables need to be readable on mobile.
 
 ## Preferred Fix
 
-Wrap the table in Mantine `ScrollArea` or a simple horizontal overflow container:
+Wrap the table in a simple horizontal overflow container:
 
 - Keep table semantics.
 - Allow horizontal scroll.

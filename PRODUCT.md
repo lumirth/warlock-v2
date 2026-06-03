@@ -26,7 +26,7 @@ Do not make the interface look like a generic AI dashboard, a decorative SaaS la
 - Preserve student language over implementation language.
 - Treat active/registrable offerings as primary and historical offerings as clearly secondary.
 - Keep richer quality, GPA, rating, and section data visible without turning it into decoration.
-- Prefer consistent Mantine product surfaces over bespoke one-off styling.
+- Prefer consistent shadcn/ui product surfaces over bespoke one-off styling.
 
 ## Accessibility & Inclusion
 

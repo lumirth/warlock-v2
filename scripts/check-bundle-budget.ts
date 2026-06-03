@@ -15,7 +15,7 @@ const DIST_DIR = 'apps/web/dist';
 const ASSETS_DIR = join(DIST_DIR, 'assets');
 
 const BUDGETS = {
-  // Raw size is a bundle hygiene guard. Keep enough headroom for the Mantine theme system while
+  // Raw size is a bundle hygiene guard. Keep enough headroom for the shadcn/Radix surface while
   // holding gzip budgets as the user-facing delivery guardrails.
   jsBytes: 445 * 1024,
   jsGzipBytes: 140 * 1024,
