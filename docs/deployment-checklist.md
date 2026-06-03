@@ -131,3 +131,6 @@ As of 2026-06-03, Wrangler OAuth is authenticated locally; do not commit token c
 - Abuse Control Thresholds: `/api/search*` and `/api/feedback` at 120 requests/min/IP; `/api/course/*` at 240 requests/min/IP.
 - Latest live freshness audit: `artifacts/live/data-freshness-audit-2026-06-03-rmp-enrichment.md`, 15/15 passing.
 - Latest D1 destructive-action backup evidence: `artifacts/d1-backups/20260603T002001Z-pre-retention-prune/evidence.md`, `D1 Restore Verified: yes`.
+- Latest staging smoke evidence: `artifacts/staging-smoke-report.md`, 10/10 passing after the 2026-06-03 staging auth rotation.
+- Latest staging eval evidence: `docs/reports/2026-06-03-cloudflare-preflight-report.md`, 100/100 passing.
+- Latest Cloudflare preflight evidence: `docs/reports/2026-06-03-cloudflare-preflight-report.md`, 32/32 passing with staging env vars populated.
