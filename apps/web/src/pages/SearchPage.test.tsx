@@ -468,6 +468,46 @@ describe('SearchPage request state', () => {
     expect(screen.getByLabelText(/course search query/i)).toHaveValue('algorithms')
   })
 
+  it('keeps advanced apply disabled until filters differ from the interpreted query', async () => {
+    vi.mocked(api.search).mockResolvedValueOnce({
+      ...searchResponse([]),
+      meta: {
+        ...searchResponse([]).meta,
+        query: { raw: 'intro to CS', residual: 'intro to' },
+        ui: {
+          chips: [{
+            id: 'subject-0',
+            type: 'subject',
+            label: 'Subject CS',
+            value: 'CS',
+            source: 'natural_language',
+            removable: true,
+            editable: true,
+            queryPatch: { removeText: 'CS' },
+          }],
+          advanced: { subject: 'CS' },
+          ambiguityActions: [],
+        },
+      },
+    })
+
+    renderSearchPage()
+
+    setQuery('intro to CS')
+    submitSearch()
+    await screen.findByText('Subject CS')
+
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+    expect(screen.getByRole('button', { name: /apply filters/i })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'PHIL' } })
+    expect(screen.getByRole('button', { name: /apply filters/i })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /reset fields/i }))
+    expect(screen.getByLabelText('Subject')).toHaveValue('CS')
+    expect(screen.getByRole('button', { name: /apply filters/i })).toBeDisabled()
+  })
+
   it('loads more from the refined query without changing the visible search text', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({

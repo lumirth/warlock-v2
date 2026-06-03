@@ -338,8 +338,8 @@ export function SearchPage() {
     void runSearch(nextQuery, { syncInput: false })
   }
 
-  const clearAdvancedDraft = () => {
-    setAdvancedDraft({})
+  const resetAdvancedDraft = () => {
+    setAdvancedDraft(meta?.ui?.advanced || {})
   }
 
   const loadMoreResults = () => {
@@ -362,7 +362,9 @@ export function SearchPage() {
   const showingResultsLabel = pagination?.total !== undefined && pagination.total > results.length
     ? `Showing ${results.length.toLocaleString()} of ${pagination.total.toLocaleString()}`
     : `Showing ${results.length.toLocaleString()}`
-  const hasDraftFilters = hasAdvancedFilterValue(advancedDraft)
+  const hasAdvancedDraftChanges = meta
+    ? advancedFiltersChanged(meta.ui?.advanced || {}, advancedDraft)
+    : hasAdvancedFilterValue(advancedDraft)
 
   return (
     <Container size="xl" py={{ base: 'sm', sm: 'lg' }} className="search-page-container">
@@ -610,10 +612,10 @@ export function SearchPage() {
                 <Group justify="space-between" align="center" mt="md" className="advanced-search-actions">
                   <Text size="xs" c="dimmed">Filters apply to the current search text.</Text>
                   <Group gap="xs" justify="flex-end">
-                    <Button size="xs" variant="default" disabled={!hasDraftFilters} onClick={clearAdvancedDraft}>
-                      Clear fields
+                    <Button size="xs" variant="default" disabled={!hasAdvancedDraftChanges} onClick={resetAdvancedDraft}>
+                      Reset fields
                     </Button>
-                    <Button size="xs" onClick={applyAdvancedSearch}>Apply filters</Button>
+                    <Button size="xs" disabled={!hasAdvancedDraftChanges} onClick={applyAdvancedSearch}>Apply filters</Button>
                   </Group>
                 </Group>
               </Box>
