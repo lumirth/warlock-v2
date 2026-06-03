@@ -102,9 +102,9 @@ export const shadcnTheme: MantineThemeOverride = createTheme({
   primaryShade: { light: 5, dark: 6 },
   autoContrast: true,
   luminanceThreshold: 0.3,
-  fontFamily: 'Geist, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  fontFamily: 'Geist, sans-serif',
   headings: {
-    fontFamily: 'Geist, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: 'Geist, sans-serif',
     sizes: {
       h1: { fontSize: rem('36px'), lineHeight: rem('44px'), fontWeight: '600' },
       h2: { fontSize: rem('30px'), lineHeight: rem('38px'), fontWeight: '600' },
@@ -113,11 +113,11 @@ export const shadcnTheme: MantineThemeOverride = createTheme({
     },
   },
   radius: {
-    xs: rem('3px'),
-    sm: rem('6px'),
-    md: rem('8px'),
-    lg: rem('12px'),
-    xl: rem('16px'),
+    xs: rem('2px'),
+    sm: rem('4px'),
+    md: rem('6px'),
+    lg: rem('8px'),
+    xl: rem('10px'),
   },
   defaultRadius: 'sm',
   spacing: {
@@ -153,10 +153,10 @@ export const shadcnTheme: MantineThemeOverride = createTheme({
   shadows: {
     xs: '0 1px 2px rgba(28, 25, 23, 0.05)',
     sm: '0 2px 8px rgba(28, 25, 23, 0.07)',
-    md: '0 8px 18px rgba(28, 25, 23, 0.08)',
-    lg: '0 14px 30px rgba(28, 25, 23, 0.1)',
-    xl: '0 20px 45px rgba(28, 25, 23, 0.12)',
-    xxl: '0 28px 70px rgba(28, 25, 23, 0.18)',
+    md: '0 2px 8px rgba(28, 25, 23, 0.08)',
+    lg: '0 2px 8px rgba(28, 25, 23, 0.09)',
+    xl: '0 2px 8px rgba(28, 25, 23, 0.1)',
+    xxl: '0 2px 8px rgba(28, 25, 23, 0.1)',
   },
   cursorType: 'pointer',
   other: {
@@ -258,7 +258,7 @@ export const shadcnTheme: MantineThemeOverride = createTheme({
       defaultProps: {
         p: 'md',
         radius: 'md',
-        shadow: 'xs',
+        shadow: 'none',
         withBorder: true,
       },
     }),

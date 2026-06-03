@@ -108,3 +108,63 @@ Focused frontend coverage:
 - Search submits through the form with no standalone Search button.
 - Search/course/feedback/accessibility tests render through the production Mantine theme provider.
 - Browser QA covered desktop search, result refinement, advanced panel expansion, and the course sections table scroll cue against the local mock API.
+
+Uncodexify / product-design pass:
+
+- Added root `PRODUCT.md` and `DESIGN.md` so future UI work has a durable student-utility contract.
+- Added `.impeccable/live/config.json` for future in-browser variant work against the Vite shell without first-run setup.
+- Removed the pseudo-hero headline and supporting marketing copy from the search page; the app header now carries identity and the page starts with the actual search task.
+- Tightened radius and shadow tokens again: product surfaces cap at compact radii and all theme shadows are limited to small, non-dramatic elevation.
+- Removed the glassy header blur, hover lift transform, and gradient scroll cue.
+- Replaced result-card score and evidence pill clusters with plain metadata rows while keeping removable interpreted-query chips functional.
+- Replaced the course score donut and score badges with a compact text metric list.
+- Replaced section-table status and rating badges with text-first table values.
+- Added a favicon using the existing course-search logo, eliminating the browser-visible missing-favicon console error.
+- Tightened the mobile app header so `UIUC Course Search` stays on one line, and removed separator glyphs that could wrap as orphaned punctuation on mobile result cards.
+
+Uncodexify browser QA artifacts:
+
+- `artifacts/browser-qa/2026-06-03-uncodexify-ui/01-desktop-empty-search.png`
+- `artifacts/browser-qa/2026-06-03-uncodexify-ui/02-desktop-intro-results.png`
+- `artifacts/browser-qa/2026-06-03-uncodexify-ui/03-desktop-load-more.png`
+- `artifacts/browser-qa/2026-06-03-uncodexify-ui/04-desktop-course-page.png`
+- `artifacts/browser-qa/2026-06-03-uncodexify-ui/05-mobile-search-results.png`
+- `artifacts/browser-qa/2026-06-03-uncodexify-ui/06-mobile-course-page.png`
+- `artifacts/browser-qa/2026-06-03-uncodexify-ui/qa-results.json`
+
+Uncodexify browser QA observed results:
+
+- Desktop and mobile QA used the local mock API at `http://127.0.0.1:8787` and Vite at `http://127.0.0.1:5173`.
+- Desktop empty search, desktop intro search results, desktop load-more, desktop course detail, mobile search results, and mobile course detail were screenshot-tested in headless Chrome through the DevTools protocol.
+- Console issues: 0.
+- Network issues: 0.
+- Search input colors: white background with `rgb(12, 10, 9)` text, avoiding the previous black-on-orange concern.
+- Pseudo-hero text present: false.
+- Ring progress / donut score UI present: false.
+- Header title lines on mobile search: 1.
+- Orphaned metadata separators on mobile search: false.
+- Mobile course page exposed course scores, Course Explorer, and sections; page-level horizontal overflow: false.
+
+Second design-review pass after concept-image rejection:
+
+- Discarded the generated-image direction after review. The redesign work now follows the product contract in `PRODUCT.md` / `DESIGN.md` and live UI inspection rather than image-derived styling.
+- Changed the search app container and header from the old cramped custom `lg` width to the app's `xl` product width while keeping search results constrained to a readable 60rem measure.
+- Reworked advanced search into grouped fieldsets: Course, Term and meeting, and Preferences.
+- Replaced the flat 12-field advanced grid with responsive controls: one column on mobile, two on tablet, four per group on desktop.
+- Changed advanced controls to safer inputs where appropriate: selects for term, time, delivery, status, and workload; uppercase normalization for subject, GenEd, and meeting days; numeric input modes for course number, year, and credits.
+- Added explicit `aria-expanded` / `aria-controls` wiring to the Advanced search trigger.
+- Added a clear advanced-form action row with `Clear fields` and `Apply filters`; on mobile the actions become full-width paired controls.
+- Reworked result-card score display from inline muted phrases into a compact metric definition list for Quality, Workload, Instructor, and Avg GPA.
+- Reworked result-card heading layout so relevance sits beside the title on desktop and stacks beneath it on mobile.
+- Kept historical cards as subdued functional links with a visible `Historical term` status near the term label.
+- Added card skeletons that match result shape instead of a lone centered spinner.
+- Made course-page score feedback a real full-width sidebar action with a bordered secondary-button treatment.
+
+Second design-review live QA:
+
+- Desktop search results: result cards scanned as course records; metric strip was readable without badge noise; feedback stayed secondary.
+- Desktop advanced search: grouped fields fit above first results with action row visible in a common browser viewport.
+- Mobile advanced search: fields stacked cleanly, labels stayed readable, and action buttons were fully visible with no horizontal squeeze.
+- Mobile result cards: long course title wrapped cleanly, relevance moved under the title, metadata wrapped without orphaned separators, and metrics stayed readable in a two-column flow.
+- Mobile course page: score panel, full-width score feedback action, description, and sections heading stacked cleanly with no page-level horizontal overflow observed.
+- Course detail error state for a mock-only result (`CS 124`) remained direct and readable.

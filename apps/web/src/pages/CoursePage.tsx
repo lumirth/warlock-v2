@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { Box, Container, Title, Text, Button, Loader, Flex, Grid, Stack, Badge, Group, Paper, Alert, ScrollArea } from '@mantine/core'
+import { Box, Container, Title, Text, Button, Loader, Flex, Grid, Stack, Group, Paper, Alert, ScrollArea } from '@mantine/core'
 import { IconAlertCircle, IconExternalLink } from '@tabler/icons-react'
 import { Scorecard } from '../components/Scorecard'
 import { SectionsTable } from '../components/SectionsTable'
@@ -48,7 +48,7 @@ export function CoursePage() {
 
   if (loading) {
     return (
-      <Container size="lg" py="xl">
+      <Container size="xl" py="xl">
         <Flex justify="center" align="center" mih="50vh" role="status" aria-live="polite" aria-label="Loading course">
           <Loader size="lg" aria-hidden />
         </Flex>
@@ -58,8 +58,8 @@ export function CoursePage() {
 
   if (error || !course) {
     return (
-      <Container size="lg" py="xl">
-        <Button component={Link} to="/" variant="subtle" mb="md">← Back to Search</Button>
+      <Container size="xl" py="xl">
+        <Button component={Link} to="/" variant="subtle" mb="md">Back to search</Button>
         <Alert role="alert" variant="light" color="red" title="Error loading course" icon={<IconAlertCircle />}>
           {error || 'Course not found'}
         </Alert>
@@ -70,14 +70,13 @@ export function CoursePage() {
   return (
     <Container size="xl" py="xl">
       <Button component={Link} to="/" variant="subtle" mb="md">
-        ← Back to Search
+        Back to search
       </Button>
 
-      {/* Header Section */}
       <Stack gap="xs" mb="xl">
         <Group align="center">
-          <Title order={1} fz={34}>{course.subject} {course.number}: {course.title}</Title>
-          {course.gened && <Badge size="lg" variant="light" color="orange">{course.gened}</Badge>}
+          <Title order={1} fz={30}>{course.subject} {course.number}: {course.title}</Title>
+          {course.gened && <Text size="sm" fw={600} c="dimmed">{course.gened}</Text>}
           {course.course_explorer_url && (
             <Button
               component="a"
@@ -93,15 +92,14 @@ export function CoursePage() {
           )}
         </Group>
         <Text size="lg" c="dimmed">
-          {course.credit_hours} Credit Hours • {course.term} {course.year}
-          {course.primary_instructor && ` • ${course.primary_instructor}`}
+          {course.credit_hours} credit hours / {course.term} {course.year}
+          {course.primary_instructor && ` / ${course.primary_instructor}`}
         </Text>
       </Stack>
 
       <Grid gutter="xl">
-        {/* Left Column: Stats & Viz */}
         <Grid.Col span={{ base: 12, md: 4 }}>
-          <Stack gap="md">
+          <Stack gap="sm" className="course-sidebar">
             <Scorecard
               qualityScore={course.quality_score}
               difficultyScore={course.difficulty_score}
@@ -109,44 +107,45 @@ export function CoursePage() {
               gpaSampleSize={course.gpa_sample_size}
               primaryInstructorRmp={course.primary_instructor_rmp}
             />
-            <FeedbackButton
-              buttonLabel="Score feedback"
-              page="course"
-              kind="score"
-              issue="wrong_score"
-              context={{
-                courseId: course.id,
-                subject: course.subject,
-                number: course.number,
-                term: course.term,
-                year: course.year,
-                metadata: {
-                  qualityScore: course.quality_score,
-                  difficultyScore: course.difficulty_score,
-                  avgGpa: course.avg_gpa,
-                  primaryInstructorRmp: course.primary_instructor_rmp,
-                },
-              }}
-            />
+            <Box className="course-feedback-action">
+              <FeedbackButton
+                buttonLabel="Score feedback"
+                page="course"
+                kind="score"
+                issue="wrong_score"
+                fullWidth
+                buttonVariant="default"
+                context={{
+                  courseId: course.id,
+                  subject: course.subject,
+                  number: course.number,
+                  term: course.term,
+                  year: course.year,
+                  metadata: {
+                    qualityScore: course.quality_score,
+                    difficultyScore: course.difficulty_score,
+                    avgGpa: course.avg_gpa,
+                    primaryInstructorRmp: course.primary_instructor_rmp,
+                  },
+                }}
+              />
+            </Box>
           </Stack>
         </Grid.Col>
 
-        {/* Right Column: Details & Sections */}
         <Grid.Col span={{ base: 12, md: 8 }}>
           <Stack gap="xl">
-            {/* Description */}
             <Paper p="md" withBorder bg="stone.0">
               <Title order={2} size="h4" mb="xs">Description</Title>
               <Text lh={1.6}>{course.description}</Text>
             </Paper>
 
-            {/* Sections Table */}
             <div>
-              <Title order={2} size="h3" mb="md">Sections & Instructors</Title>
+              <Title order={2} size="h3" mb="md">Sections and instructors</Title>
               <Paper
                 withBorder
                 radius="md"
-                shadow="sm"
+                shadow="none"
                 className="sections-table-shell"
                 style={{ position: 'relative', overflow: 'hidden' }}
               >

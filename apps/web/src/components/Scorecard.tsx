@@ -1,4 +1,4 @@
-import { Badge, Paper, Group, Stack, Text, Title, RingProgress } from '@mantine/core'
+import { Paper, Group, Stack, Text } from '@mantine/core'
 import { getLetterGrade, getGradeColor } from '../utils/grading'
 import { DIFFICULTY } from '../config/constants'
 
@@ -38,54 +38,42 @@ export function Scorecard({
     : 'teal'
 
   return (
-    <Paper withBorder p="md" radius="md" shadow="xs">
-      <Group justify="space-between" align="center">
-        <Stack gap={0}>
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-            Overall Quality
-          </Text>
-          <Title order={2} fz={42} c={color === 'gray' ? 'dimmed' : color}>
-            {grade}
-          </Title>
-        </Stack>
+    <Paper withBorder p="md" radius="md" shadow="none">
+      <Stack gap="sm">
+        <Text fw={600}>Course scores</Text>
 
-        <RingProgress
-          size={80}
-          thickness={8}
-          roundCaps
-          sections={[{ value: hasDifficulty ? difficultyScore : 0, color: difficultyColor }]}
-          label={
-            <Text c={difficultyColor} fw={700} ta="center" size="xs">
-              {difficultyLabel}
-            </Text>
-          }
-          aria-label={`Difficulty: ${difficultyLabel}`}
-        />
-      </Group>
-
-      <Group gap="xs" mt="md">
-         <Text size="xs" c="dimmed">
-             {typeof qualityScore === 'number'
-                ? `Based on composite quality score of ${qualityScore.toFixed(1)}`
-                : 'Insufficient data for quality score'}
-         </Text>
-      </Group>
-
-      {(hasPrimaryRating || hasAvgGpa) && (
-        <Group gap="xs" mt="sm">
+        <Stack gap={6}>
+          <Group justify="space-between" gap="md">
+            <Text size="sm" c="dimmed">Quality</Text>
+            <Text size="sm" fw={600} c={color === 'gray' ? 'dimmed' : color}>{grade}</Text>
+          </Group>
+          <Group justify="space-between" gap="md">
+            <Text size="sm" c="dimmed">Workload</Text>
+            <Text size="sm" fw={600} c={difficultyColor === 'gray' ? 'dimmed' : difficultyColor}>{difficultyLabel}</Text>
+          </Group>
           {hasPrimaryRating && (
-            <Badge variant="light" color={primaryInstructorRmp >= 3.5 ? 'green' : 'orange'} tt="none">
-              Rating {primaryInstructorRmp.toFixed(1)}
-            </Badge>
+            <Group justify="space-between" gap="md">
+              <Text size="sm" c="dimmed">Instructor rating</Text>
+              <Text size="sm" fw={600}>Rating {primaryInstructorRmp.toFixed(1)}</Text>
+            </Group>
           )}
           {hasAvgGpa && (
-            <Badge variant="light" color="stone" tt="none">
-              Avg GPA {avgGpa.toFixed(2)}
-              {typeof gpaSampleSize === 'number' ? ` from ${gpaSampleSize.toLocaleString()} records` : ''}
-            </Badge>
+            <Group justify="space-between" gap="md" align="flex-start">
+              <Text size="sm" c="dimmed">Average GPA</Text>
+              <Text size="sm" fw={600} ta="right">
+                Avg GPA {avgGpa.toFixed(2)}
+                {typeof gpaSampleSize === 'number' ? ` from ${gpaSampleSize.toLocaleString()} records` : ''}
+              </Text>
+            </Group>
           )}
-        </Group>
-      )}
+        </Stack>
+
+        <Text size="xs" c="dimmed">
+          {typeof qualityScore === 'number'
+            ? `Based on composite quality score of ${qualityScore.toFixed(1)}`
+            : 'Insufficient data for quality score'}
+        </Text>
+      </Stack>
     </Paper>
   )
 }

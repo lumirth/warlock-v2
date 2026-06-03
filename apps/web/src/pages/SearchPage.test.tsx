@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CourseDto, SearchResponseDto } from '@uiuc-course-search/query-types'
@@ -80,7 +80,7 @@ function renderSearchPage() {
 }
 
 function setQuery(value: string) {
-  fireEvent.change(screen.getByPlaceholderText(/easy cs gened/i), {
+  fireEvent.change(screen.getByLabelText(/course search query/i), {
     target: { value },
   })
 }
@@ -219,12 +219,17 @@ describe('SearchPage request state', () => {
     setQuery('cs 225')
     submitSearch()
 
-    await screen.findByText(/CS 225: Data Structures/i)
-    expect(screen.getByText('Quality B+')).toBeInTheDocument()
-    expect(screen.getByText('Easy workload')).toBeInTheDocument()
-    expect(screen.getByText('Instructor rating 4.8')).toBeInTheDocument()
-    expect(screen.getByText('Avg GPA 3.62')).toBeInTheDocument()
-    expect(screen.getByTitle('Based on 820 GPA records')).toBeInTheDocument()
+    const title = await screen.findByText(/CS 225: Data Structures/i)
+    const card = title.closest('a')
+    expect(within(card!).getByText('Quality')).toBeInTheDocument()
+    expect(within(card!).getByText('B+')).toBeInTheDocument()
+    expect(within(card!).getByText('Workload')).toBeInTheDocument()
+    expect(within(card!).getByText('Easy')).toBeInTheDocument()
+    expect(within(card!).getByText('Instructor')).toBeInTheDocument()
+    expect(within(card!).getByText('4.8')).toBeInTheDocument()
+    expect(within(card!).getByText('Avg GPA')).toBeInTheDocument()
+    expect(within(card!).getByText('3.62')).toBeInTheDocument()
+    expect(within(card!).getByTitle('Based on 820 GPA records')).toBeInTheDocument()
   })
 
   it('de-emphasizes historical result cards and places the status next to the term', async () => {
@@ -243,13 +248,12 @@ describe('SearchPage request state', () => {
     setQuery('cs 225')
     submitSearch()
 
-    const card = await screen.findByRole('link', { name: /CS 225: Data Structures Spring 2026 Historical term/i })
+    const title = await screen.findByText(/CS 225: Data Structures/i)
+    const card = title.closest('a')
     expect(card).toHaveAttribute('data-historical', 'true')
-    expect(card).toHaveStyle({
-      opacity: '0.84',
-      filter: 'grayscale(0.16)',
-    })
-    expect(screen.getByText('Historical term')).toBeInTheDocument()
+    expect(card).toHaveClass('course-result-card--historical')
+    expect(within(card!).getByText('Spring 2026')).toBeInTheDocument()
+    expect(within(card!).getByText('Historical term')).toBeInTheDocument()
   })
 
   it('lets users remove interpreted search chips and reruns the edited query', async () => {

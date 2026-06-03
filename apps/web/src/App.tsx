@@ -13,7 +13,7 @@ function App() {
       padding="md"
     >
       <AppShell.Header>
-        <Container size="lg" h="100%">
+        <Container size="xl" h="100%">
           <Group h="100%" wrap="nowrap">
             <Link
               to="/"
@@ -26,7 +26,12 @@ function App() {
                 aria-hidden
                 style={{ width: 36, height: 36, flex: '0 0 auto' }}
               />
-              <Title order={3} style={{ color: 'inherit', textDecoration: 'none', minWidth: 0 }}>
+              <Title
+                order={3}
+                fz={{ base: 18, sm: 24 }}
+                lh={{ base: '22px', sm: '32px' }}
+                style={{ color: 'inherit', textDecoration: 'none', minWidth: 0, whiteSpace: 'nowrap' }}
+              >
                 UIUC Course Search
               </Title>
             </Link>

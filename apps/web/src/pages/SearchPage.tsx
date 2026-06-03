@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { ActionIcon, Alert, Box, Button, Card, Collapse, Container, Flex, Group, Loader, Paper, Select, SimpleGrid, Stack, Text, TextInput, Title, Badge } from '@mantine/core'
+import { useRef, useState } from 'react'
+import { ActionIcon, Alert, Box, Button, Card, Collapse, Container, Flex, Group, Loader, Paper, Select, SimpleGrid, Skeleton, Stack, Text, TextInput, Badge } from '@mantine/core'
 import { IconAdjustments, IconAlertCircle, IconSearch, IconX } from '@tabler/icons-react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
@@ -14,6 +14,11 @@ type SearchOptions = {
   offset?: number
   append?: boolean
   syncInput?: boolean
+}
+type CourseResultMetric = {
+  label: string
+  value: string
+  title?: string
 }
 
 const ADVANCED_SEARCH_KEYS: (keyof AdvancedSearchStateDto)[] = [
@@ -51,22 +56,10 @@ const WEAK_RESIDUAL_TERMS = new Set([
   'to',
 ])
 
-function getEvidenceColor(evidence: MatchEvidence): string {
-  if (evidence.weight === 'hard') return 'orange'
-  if (evidence.kind === 'instructor') return 'orange'
-  return 'stone'
-}
-
 function getDifficultyLabel(score: number): string {
   if (score > DIFFICULTY.HARD) return 'Hard'
   if (score > DIFFICULTY.MODERATE) return 'Moderate'
   return 'Easy'
-}
-
-function getDifficultyColor(score: number): string {
-  if (score > DIFFICULTY.HARD) return 'red'
-  if (score > DIFFICULTY.MODERATE) return 'yellow'
-  return 'green'
 }
 
 function getRelevanceLabel(score: number): string {
@@ -75,49 +68,73 @@ function getRelevanceLabel(score: number): string {
   return 'Possible match'
 }
 
-function renderScoreBadges(course: CourseDto) {
+function getCourseKey(course: CourseDto): string {
+  return course.id || `${course.subject}-${course.number}-${course.term}-${course.year}`
+}
+
+function getCoursePath(course: CourseDto): string {
+  return `/course/${course.subject}/${course.number}?term=${course.term}&year=${course.year}`
+}
+
+function renderScoreSummary(course: CourseDto) {
   const qualityScore = course.quality_score
   const difficultyScore = course.difficulty_score
   const primaryInstructorRmp = course.primary_instructor_rmp
   const avgGpa = course.avg_gpa
+  const stats: CourseResultMetric[] = []
 
-  const hasQuality = typeof qualityScore === 'number'
-  const hasDifficulty = typeof difficultyScore === 'number'
-  const hasRating = typeof primaryInstructorRmp === 'number'
-  const hasGpa = typeof avgGpa === 'number'
+  if (typeof qualityScore === 'number') {
+    stats.push({ label: 'Quality', value: getLetterGrade(qualityScore) })
+  }
+  if (typeof difficultyScore === 'number') {
+    stats.push({ label: 'Workload', value: getDifficultyLabel(difficultyScore) })
+  }
+  if (typeof primaryInstructorRmp === 'number') {
+    stats.push({ label: 'Instructor', value: primaryInstructorRmp.toFixed(1) })
+  }
+  if (typeof avgGpa === 'number') {
+    stats.push({
+      label: 'Avg GPA',
+      value: avgGpa.toFixed(2),
+      title: typeof course.gpa_sample_size === 'number'
+        ? `Based on ${course.gpa_sample_size.toLocaleString()} GPA records`
+        : undefined,
+    })
+  }
 
-  if (!hasQuality && !hasDifficulty && !hasRating && !hasGpa) {
+  if (stats.length === 0) {
     return null
   }
 
   return (
-    <Group gap={4} mt={6}>
-      {hasQuality && (
-        <Badge size="xs" variant="light" color="stone" tt="none">
-          Quality {getLetterGrade(qualityScore)}
-        </Badge>
-      )}
-      {hasDifficulty && (
-        <Badge size="xs" variant="light" color={getDifficultyColor(difficultyScore)} tt="none">
-          {getDifficultyLabel(difficultyScore)} workload
-        </Badge>
-      )}
-      {hasRating && (
-        <Badge size="xs" variant="light" color={primaryInstructorRmp >= 3.5 ? 'green' : 'orange'} tt="none">
-          Instructor rating {primaryInstructorRmp.toFixed(1)}
-        </Badge>
-      )}
-      {hasGpa && (
-        <Badge
-          size="xs"
-          variant="light"
-          color="stone"
-          tt="none"
-          title={typeof course.gpa_sample_size === 'number' ? `Based on ${course.gpa_sample_size.toLocaleString()} GPA records` : undefined}
-        >
-          Avg GPA {avgGpa.toFixed(2)}
-        </Badge>
-      )}
+    <Box component="dl" className="course-result-metrics" mt="sm">
+      {stats.map((stat) => (
+        <Box key={stat.label} className="course-result-metric" title={stat.title}>
+          <Text component="dt" size="xs" c="dimmed" className="course-result-metric-label">
+            {stat.label}
+          </Text>
+          <Text component="dd" size="sm" fw={600} className="course-result-metric-value">
+            {stat.value}
+          </Text>
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+function renderMatchEvidence(evidence: MatchEvidence[] | undefined) {
+  const labels = evidence?.slice(0, 5).map((item) => item.label).filter(Boolean) ?? []
+
+  if (labels.length === 0) {
+    return null
+  }
+
+  return (
+    <Group gap="xs" mt={6} aria-label="Match evidence">
+      <Text size="xs" c="dimmed">Matched</Text>
+      {labels.map((label, index) => (
+        <Text key={`${label}-${index}`} size="xs" c="dimmed">{label}</Text>
+      ))}
     </Group>
   )
 }
@@ -189,6 +206,10 @@ function advancedFiltersChanged(previous: AdvancedSearchStateDto, next: Advanced
   return ADVANCED_SEARCH_KEYS.some((key) => !advancedValuesEqual(previous[key], next[key]))
 }
 
+function hasAdvancedFilterValue(state: AdvancedSearchStateDto): boolean {
+  return ADVANCED_SEARCH_KEYS.some((key) => Boolean(normalizeAdvancedValue(state[key])))
+}
+
 function advancedFiltersContradictQuery(previous: AdvancedSearchStateDto, next: AdvancedSearchStateDto): boolean {
   return ADVANCED_SEARCH_KEYS.some((key) => {
     const previousValue = normalizeAdvancedValue(previous[key])
@@ -222,6 +243,13 @@ export function SearchPage() {
 
   // Ref to hold the current AbortController
   const searchController = useRef<AbortController | null>(null)
+
+  const updateAdvancedDraft = <Key extends keyof AdvancedSearchStateDto>(
+    key: Key,
+    value: AdvancedSearchStateDto[Key]
+  ) => {
+    setAdvancedDraft((state) => ({ ...state, [key]: value }))
+  }
 
   const runSearch = async (searchText: string, options: SearchOptions = {}) => {
     const normalizedQuery = searchText.trim()
@@ -258,7 +286,8 @@ export function SearchPage() {
         limit: SEARCH_PAGE_SIZE,
         offset,
       })
-      setResults((currentResults) => append ? [...currentResults, ...(data.results || [])] : data.results || [])
+      const nextResults = data.results || []
+      setResults((currentResults) => append ? [...currentResults, ...nextResults] : nextResults)
       setMeta(data.meta || null)
       setPagination(data.pagination || null)
       setAdvancedDraft(data.meta?.ui?.advanced || {})
@@ -309,6 +338,10 @@ export function SearchPage() {
     void runSearch(nextQuery, { syncInput: false })
   }
 
+  const clearAdvancedDraft = () => {
+    setAdvancedDraft({})
+  }
+
   const loadMoreResults = () => {
     if (!pagination?.hasMore) {
       return
@@ -323,334 +356,389 @@ export function SearchPage() {
     handleSearch()
   }
 
+  const resultCountLabel = pagination?.total !== undefined
+    ? `${pagination.total.toLocaleString()} ${pagination.total === 1 ? 'result' : 'results'}`
+    : `${results.length.toLocaleString()} ${results.length === 1 ? 'result' : 'results'}`
+  const showingResultsLabel = pagination?.total !== undefined && pagination.total > results.length
+    ? `Showing ${results.length.toLocaleString()} of ${pagination.total.toLocaleString()}`
+    : `Showing ${results.length.toLocaleString()}`
+  const hasDraftFilters = hasAdvancedFilterValue(advancedDraft)
+
   return (
-    <Container size="lg" py="xl">
-      <Stack align="center" mb="xl">
-        <Title order={1}>UIUC Smart Course Search</Title>
-        <Text c="dimmed">Find courses by difficulty, GenEd, time, and more.</Text>
-      </Stack>
-
-      <Box component="form" role="search" mb="md" autoComplete="off" onSubmit={handleSearchSubmit}>
-        <TextInput
-          aria-label="Course search query"
-          autoComplete="off"
-          placeholder="e.g., easy cs gened, MWF morning 3 credits"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          leftSection={<IconSearch size={16} />}
-          radius="md"
-          size="lg"
-        />
-      </Box>
-
-      {/* Error Message */}
-      {error && (
-        <Alert role="alert" variant="light" color="red" title="Search failed" icon={<IconAlertCircle />} mb="md">
-          {error}
-        </Alert>
-      )}
-
-      {meta && (
-        <Paper p="md" withBorder bg="stone.0" mb="md" className="search-refinement-panel">
-          <Group justify="space-between" align="center" mb="xs">
-            <Text size="sm" fw={600}>Refine results</Text>
-            <Button
-              size="xs"
-              variant="outline"
-              leftSection={<IconAdjustments size={14} />}
-              onClick={() => setAdvancedOpen((value) => !value)}
-            >
-              Advanced search
-            </Button>
-          </Group>
-
-          {meta.ui?.chips.length ? (
-            <Group gap="xs">
-              {meta.ui.chips.map((chip) => (
-                <Badge
-                  key={chip.id}
-                  color={getChipColor(chip)}
-                  variant={chip.type === 'semantic' ? 'outline' : 'light'}
-                  tt="none"
-                  rightSection={chip.removable ? (
-                    <ActionIcon
-                      aria-label={`Remove ${chip.label}`}
-                      size="xs"
-                      variant="transparent"
-                      color="gray"
-                      onClick={(event) => {
-                        event.preventDefault()
-                        removeChip(chip)
-                      }}
-                    >
-                      <IconX size={10} />
-                    </ActionIcon>
-                  ) : undefined}
-                >
-                  {chip.label}
-                </Badge>
-              ))}
-            </Group>
-          ) : (
-            <Text size="sm" c="dimmed">Searching by topic.</Text>
-          )}
-
-          {meta.ui?.ambiguityActions.length ? (
-            <Stack gap={4} mt="sm">
-              <Text size="xs" c="dimmed">Another interpretation is available:</Text>
-              <Group gap="xs">
-                {meta.ui.ambiguityActions.map((action) => (
-                  <Button
-                    key={action.id}
-                    size="xs"
-                    variant="light"
-                    onClick={() => applyAmbiguityAction(action)}
-                  >
-                    Use {action.label}
-                  </Button>
-                ))}
-              </Group>
-            </Stack>
-          ) : null}
-
-          <Collapse in={advancedOpen} transitionDuration={0}>
-            <Box
-              mt="md"
-              pt="md"
-              style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}
-            >
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xs">
-                <TextInput
-                  label="Subject"
-                  autoComplete="off"
-                  placeholder="CS"
-                  value={advancedDraft.subject ?? ''}
-                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, subject: event.currentTarget.value || undefined }))}
-                />
-                <TextInput
-                  label="Course number"
-                  autoComplete="off"
-                  placeholder="225"
-                  value={advancedDraft.number ?? ''}
-                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, number: event.currentTarget.value || undefined }))}
-                />
-                <TextInput
-                  label="Instructor"
-                  autoComplete="off"
-                  placeholder="Fagen"
-                  value={advancedDraft.instructor ?? ''}
-                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, instructor: event.currentTarget.value || undefined }))}
-                />
-                <TextInput
-                  label="GenEd"
-                  autoComplete="off"
-                  placeholder="HUM"
-                  value={advancedDraft.gened ?? ''}
-                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, gened: event.currentTarget.value || undefined }))}
-                />
-                <TextInput
-                  label="Term"
-                  autoComplete="off"
-                  placeholder="spring"
-                  value={advancedDraft.term ?? ''}
-                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, term: event.currentTarget.value || undefined }))}
-                />
-                <TextInput
-                  label="Year"
-                  autoComplete="off"
-                  placeholder="2026"
-                  value={advancedDraft.year?.toString() ?? ''}
-                  onChange={(event) => {
-                    const year = parseInt(event.currentTarget.value, 10)
-                    setAdvancedDraft((state) => ({ ...state, year: Number.isNaN(year) ? undefined : year }))
-                  }}
-                />
-                <TextInput
-                  label="Credits"
-                  autoComplete="off"
-                  placeholder="3"
-                  value={advancedDraft.credits?.toString() ?? ''}
-                  onChange={(event) => {
-                    const credits = parseInt(event.currentTarget.value, 10)
-                    setAdvancedDraft((state) => ({ ...state, credits: Number.isNaN(credits) ? undefined : credits }))
-                  }}
-                />
-                <TextInput
-                  label="Days"
-                  autoComplete="off"
-                  placeholder="MWF"
-                  value={advancedDraft.days ?? ''}
-                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, days: event.currentTarget.value || undefined }))}
-                />
-                <TextInput
-                  label="Time"
-                  autoComplete="off"
-                  placeholder="morning"
-                  value={advancedDraft.time ?? ''}
-                  onChange={(event) => setAdvancedDraft((state) => ({ ...state, time: event.currentTarget.value || undefined }))}
-                />
-                <Select
-                  label="Delivery"
-                  placeholder="Any"
-                  value={advancedDraft.online === undefined ? null : String(advancedDraft.online)}
-                  data={[
-                    { value: 'true', label: 'Online' },
-                    { value: 'false', label: 'In person' },
-                  ]}
-                  clearable
-                  onChange={(value) => setAdvancedDraft((state) => ({ ...state, online: value === null ? undefined : value === 'true' }))}
-                />
-                <Select
-                  label="Status"
-                  placeholder="Any"
-                  value={advancedDraft.status ?? null}
-                  data={[
-                    { value: 'open', label: 'Open' },
-                    { value: 'closed', label: 'Closed' },
-                  ]}
-                  clearable
-                  onChange={(value) => setAdvancedDraft((state) => ({ ...state, status: value ?? undefined }))}
-                />
-                <Select
-                  label="Workload"
-                  placeholder="Any"
-                  value={advancedDraft.difficulty ?? null}
-                  data={[
-                    { value: 'easy', label: 'Easier' },
-                    { value: 'hard', label: 'Harder' },
-                  ]}
-                  clearable
-                  onChange={(value) => setAdvancedDraft((state) => ({ ...state, difficulty: value === 'easy' || value === 'hard' ? value : undefined }))}
-                />
-              </SimpleGrid>
-              <Group justify="flex-end" mt="sm">
-                <Button size="xs" onClick={applyAdvancedSearch}>Apply filters</Button>
-              </Group>
-            </Box>
-          </Collapse>
-        </Paper>
-      )}
-
-      {meta && (
-        <Box mb="md">
-          <FeedbackButton
-            buttonLabel="Results not right?"
-            page="search"
-            kind="search_results"
-            issue="expected_different_results"
-            context={{
-              query: meta.query.raw,
-              metadata: {
-                resultCount: results.length,
-                hasMore: pagination?.hasMore === true,
-                typedQuery: query.trim() || null,
-                effectiveQuery: activeSearchText || meta.query.raw,
-              },
-            }}
+    <Container size="xl" py={{ base: 'sm', sm: 'lg' }} className="search-page-container">
+      <Box className="search-page-shell">
+        <Box component="form" role="search" className="search-form" autoComplete="off" onSubmit={handleSearchSubmit}>
+          <TextInput
+            aria-label="Course search query"
+            autoComplete="off"
+            placeholder="Search by course, topic, professor, requirement, or time"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            leftSection={<IconSearch size={16} />}
+            radius="sm"
+            size="md"
           />
         </Box>
-      )}
 
-      <Box aria-busy={loading}>
-        {loading ? (
-          <Flex justify="center" py="xl" role="status" aria-live="polite" aria-label="Searching courses">
-            <Loader aria-hidden />
-          </Flex>
-        ) : (
-          results.length === 0 && meta ? (
-            <Text c="dimmed" ta="center" py="xl" role="status">No courses found matching your criteria.</Text>
-          ) : (
-            <Stack gap="md">
-              {results.map((r) => (
-                <Card
-                  key={r.id || `${r.subject}-${r.number}-${r.term}-${r.year}`}
-                  withBorder
-                  padding="md"
-                  component={Link}
-                  to={`/course/${r.subject}/${r.number}?term=${r.term}&year=${r.year}`}
-                  className={r._historical ? 'course-result-card course-result-card--historical' : 'course-result-card'}
-                  data-historical={r._historical ? 'true' : undefined}
-                  style={{
-                    textDecoration: 'none',
-                    color: 'inherit',
-                    cursor: 'pointer',
-                    backgroundColor: r._historical ? 'var(--mantine-color-stone-0)' : 'var(--mantine-color-white)',
-                    borderColor: r._historical ? 'var(--mantine-color-stone-3)' : undefined,
-                    opacity: r._historical ? 0.84 : 1,
-                    filter: r._historical ? 'grayscale(0.16)' : undefined,
-                  }}
-                  shadow="xs"
-                >
-                  <Flex justify="space-between" align="flex-start" gap="sm" wrap="wrap">
-                    <Box style={{ minWidth: 0, flex: '1 1 18rem' }}>
-                      <Text fw={700} c={r._historical ? 'dimmed' : undefined}>{r.subject} {r.number}: {r.title}</Text>
-                      <Group gap="xs" mt={4}>
-                        <Text size="xs" fw={r._historical ? 600 : undefined} c={r._historical ? 'gray.7' : 'dimmed'}>
-                          {formatTermLabel(r.term, r.year)}
-                        </Text>
-                        {r._historical && (
-                          <Badge color="gray" variant="filled" size="xs" tt="none">
-                            Historical term
-                          </Badge>
-                        )}
-                        <Text size="xs" c={r._historical ? 'gray.7' : 'dimmed'}>
-                          {r.credit_hours} credits
-                        </Text>
-                        {r.primary_instructor && (
-                          <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-gray-3)', paddingLeft: '8px' }}>
-                            {r.primary_instructor}
-                          </Text>
-                        )}
-                        {r.gened && <Badge variant="outline" size="xs">{r.gened}</Badge>}
-                      </Group>
-                      {r.match_evidence && r.match_evidence.length > 0 && (
-                        <Group gap={4} mt={6}>
-                          {r.match_evidence.slice(0, 5).map((evidence) => (
-                            <Badge
-                              key={`${evidence.kind}-${evidence.label}`}
-                              size="xs"
-                              variant={evidence.weight === 'hard' ? 'filled' : 'light'}
-                              color={getEvidenceColor(evidence)}
-                              tt="none"
-                              title={evidence.label}
-                            >
-                              {evidence.label}
-                            </Badge>
-                          ))}
-                        </Group>
-                      )}
-                      {renderScoreBadges(r)}
-                    </Box>
-                    {typeof r._score === 'number' && (
-                      <Badge
-                        variant={r._historical ? 'outline' : 'light'}
-                        color={r._historical ? 'gray' : undefined}
-                        style={{ flexShrink: 0 }}
+        {error && (
+          <Alert role="alert" variant="light" color="red" title="Search failed" icon={<IconAlertCircle />} mb="md">
+            {error}
+          </Alert>
+        )}
+
+        {meta && (
+          <Paper p="md" withBorder mb="md" className="search-refinement-panel">
+            <Group justify="space-between" align="center" gap="xs" mb="xs">
+              <Box>
+                <Text size="sm" fw={600}>Refine results</Text>
+                <Text size="xs" c="dimmed">{resultCountLabel}</Text>
+              </Box>
+              <Button
+                size="xs"
+                variant="outline"
+                leftSection={<IconAdjustments size={14} />}
+                aria-expanded={advancedOpen}
+                aria-controls="advanced-search-panel"
+                onClick={() => setAdvancedOpen((value) => !value)}
+              >
+                Advanced search
+              </Button>
+            </Group>
+
+            {meta.ui?.chips.length ? (
+              <Group gap="xs">
+                {meta.ui.chips.map((chip) => (
+                  <Badge
+                    key={chip.id}
+                    color={getChipColor(chip)}
+                    variant={chip.type === 'semantic' ? 'outline' : 'light'}
+                    tt="none"
+                    rightSection={chip.removable ? (
+                      <ActionIcon
+                        aria-label={`Remove ${chip.label}`}
+                        size="xs"
+                        variant="transparent"
+                        color="gray"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          removeChip(chip)
+                        }}
                       >
-                        {getRelevanceLabel(r._score)}
-                      </Badge>
-                    )}
-                  </Flex>
-                  <Text size="sm" mt="xs" lineClamp={3} c={r._historical ? 'gray.6' : 'dimmed'}>
-                    {r.description}
-                  </Text>
+                        <IconX size={10} />
+                      </ActionIcon>
+                    ) : undefined}
+                  >
+                    {chip.label}
+                  </Badge>
+                ))}
+              </Group>
+            ) : (
+              <Text size="sm" c="dimmed">Searching by topic.</Text>
+            )}
+
+            {meta.ui?.ambiguityActions.length ? (
+              <Stack gap={4} mt="sm">
+                <Text size="xs" c="dimmed">Another interpretation is available:</Text>
+                <Group gap="xs">
+                  {meta.ui.ambiguityActions.map((action) => (
+                    <Button
+                      key={action.id}
+                      size="xs"
+                      variant="light"
+                      onClick={() => applyAmbiguityAction(action)}
+                    >
+                      Use {action.label}
+                    </Button>
+                  ))}
+                </Group>
+              </Stack>
+            ) : null}
+
+            <Collapse in={advancedOpen} transitionDuration={0}>
+              <Box id="advanced-search-panel" className="advanced-search-panel">
+                <Stack gap="md">
+                  <Box component="fieldset" className="advanced-filter-group">
+                    <Text component="legend" size="xs" fw={600} className="advanced-filter-legend">
+                      Course
+                    </Text>
+                    <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="xs">
+                      <TextInput
+                        label="Subject"
+                        autoComplete="off"
+                        autoCapitalize="characters"
+                        maxLength={8}
+                        placeholder="CS"
+                        value={advancedDraft.subject ?? ''}
+                        onChange={(event) => updateAdvancedDraft('subject', event.currentTarget.value.toUpperCase() || undefined)}
+                      />
+                      <TextInput
+                        label="Course number"
+                        autoComplete="off"
+                        inputMode="numeric"
+                        maxLength={4}
+                        placeholder="225"
+                        value={advancedDraft.number ?? ''}
+                        onChange={(event) => updateAdvancedDraft('number', event.currentTarget.value || undefined)}
+                      />
+                      <TextInput
+                        label="Instructor"
+                        autoComplete="off"
+                        placeholder="Fagen"
+                        value={advancedDraft.instructor ?? ''}
+                        onChange={(event) => updateAdvancedDraft('instructor', event.currentTarget.value || undefined)}
+                      />
+                      <TextInput
+                        label="GenEd"
+                        autoComplete="off"
+                        autoCapitalize="characters"
+                        maxLength={6}
+                        placeholder="HUM"
+                        value={advancedDraft.gened ?? ''}
+                        onChange={(event) => updateAdvancedDraft('gened', event.currentTarget.value.toUpperCase() || undefined)}
+                      />
+                    </SimpleGrid>
+                  </Box>
+
+                  <Box component="fieldset" className="advanced-filter-group">
+                    <Text component="legend" size="xs" fw={600} className="advanced-filter-legend">
+                      Term and meeting
+                    </Text>
+                    <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="xs">
+                      <Select
+                        label="Term"
+                        placeholder="Any term"
+                        value={advancedDraft.term ?? null}
+                        data={[
+                          { value: 'spring', label: 'Spring' },
+                          { value: 'summer', label: 'Summer' },
+                          { value: 'fall', label: 'Fall' },
+                          { value: 'winter', label: 'Winter' },
+                        ]}
+                        clearable
+                        onChange={(value) => updateAdvancedDraft('term', value ?? undefined)}
+                      />
+                      <TextInput
+                        label="Year"
+                        autoComplete="off"
+                        inputMode="numeric"
+                        maxLength={4}
+                        placeholder="2026"
+                        value={advancedDraft.year?.toString() ?? ''}
+                        onChange={(event) => {
+                          const year = parseInt(event.currentTarget.value, 10)
+                          updateAdvancedDraft('year', Number.isNaN(year) ? undefined : year)
+                        }}
+                      />
+                      <TextInput
+                        label="Days"
+                        autoComplete="off"
+                        autoCapitalize="characters"
+                        maxLength={7}
+                        placeholder="MWF"
+                        value={advancedDraft.days ?? ''}
+                        onChange={(event) => updateAdvancedDraft('days', event.currentTarget.value.toUpperCase() || undefined)}
+                      />
+                      <Select
+                        label="Time"
+                        placeholder="Any time"
+                        value={advancedDraft.time ?? null}
+                        data={[
+                          { value: 'morning', label: 'Morning' },
+                          { value: 'afternoon', label: 'Afternoon' },
+                          { value: 'evening', label: 'Evening' },
+                        ]}
+                        clearable
+                        onChange={(value) => updateAdvancedDraft('time', value ?? undefined)}
+                      />
+                    </SimpleGrid>
+                  </Box>
+
+                  <Box component="fieldset" className="advanced-filter-group">
+                    <Text component="legend" size="xs" fw={600} className="advanced-filter-legend">
+                      Preferences
+                    </Text>
+                    <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="xs">
+                      <TextInput
+                        label="Credits"
+                        autoComplete="off"
+                        inputMode="numeric"
+                        maxLength={2}
+                        placeholder="3"
+                        value={advancedDraft.credits?.toString() ?? ''}
+                        onChange={(event) => {
+                          const credits = parseInt(event.currentTarget.value, 10)
+                          updateAdvancedDraft('credits', Number.isNaN(credits) ? undefined : credits)
+                        }}
+                      />
+                      <Select
+                        label="Delivery"
+                        placeholder="Any delivery"
+                        value={advancedDraft.online === undefined ? null : String(advancedDraft.online)}
+                        data={[
+                          { value: 'true', label: 'Online' },
+                          { value: 'false', label: 'In person' },
+                        ]}
+                        clearable
+                        onChange={(value) => updateAdvancedDraft('online', value === null ? undefined : value === 'true')}
+                      />
+                      <Select
+                        label="Status"
+                        placeholder="Any status"
+                        value={advancedDraft.status ?? null}
+                        data={[
+                          { value: 'open', label: 'Open' },
+                          { value: 'closed', label: 'Closed' },
+                        ]}
+                        clearable
+                        onChange={(value) => updateAdvancedDraft('status', value ?? undefined)}
+                      />
+                      <Select
+                        label="Workload"
+                        placeholder="Any workload"
+                        value={advancedDraft.difficulty ?? null}
+                        data={[
+                          { value: 'easy', label: 'Easier' },
+                          { value: 'hard', label: 'Harder' },
+                        ]}
+                        clearable
+                        onChange={(value) => updateAdvancedDraft('difficulty', value === 'easy' || value === 'hard' ? value : undefined)}
+                      />
+                    </SimpleGrid>
+                  </Box>
+                </Stack>
+
+                <Group justify="space-between" align="center" mt="md" className="advanced-search-actions">
+                  <Text size="xs" c="dimmed">Filters apply to the current search text.</Text>
+                  <Group gap="xs" justify="flex-end">
+                    <Button size="xs" variant="default" disabled={!hasDraftFilters} onClick={clearAdvancedDraft}>
+                      Clear fields
+                    </Button>
+                    <Button size="xs" onClick={applyAdvancedSearch}>Apply filters</Button>
+                  </Group>
+                </Group>
+              </Box>
+            </Collapse>
+          </Paper>
+        )}
+
+        {meta && (
+          <Box mb="md" className="search-feedback-row">
+            <FeedbackButton
+              buttonLabel="Results not right?"
+              page="search"
+              kind="search_results"
+              issue="expected_different_results"
+              context={{
+                query: meta.query.raw,
+                metadata: {
+                  resultCount: results.length,
+                  hasMore: pagination?.hasMore === true,
+                  typedQuery: query.trim() || null,
+                  effectiveQuery: activeSearchText || meta.query.raw,
+                },
+              }}
+            />
+          </Box>
+        )}
+
+        <Box aria-busy={loading} className="search-results-region">
+          {loading ? (
+            <Stack gap="sm" role="status" aria-live="polite" aria-label="Searching courses">
+              {[0, 1, 2].map((index) => (
+                <Card key={index} withBorder padding="md" shadow="none" className="course-result-card course-result-card--skeleton">
+                  <Skeleton height={18} width="45%" radius="xs" />
+                  <Skeleton height={12} width="70%" mt="sm" radius="xs" />
+                  <Skeleton height={12} width="58%" mt="xs" radius="xs" />
+                  <Skeleton height={42} mt="md" radius="xs" />
                 </Card>
               ))}
-              {pagination?.hasMore && (
-                <Group justify="center" mt="sm">
-                  <Button
-                    variant="light"
-                    onClick={loadMoreResults}
-                    loading={loadingMore}
-                    disabled={loadingMore}
-                  >
-                    Show more results
-                  </Button>
-                </Group>
-              )}
+              <Loader aria-hidden size="xs" className="search-loading-dot" />
             </Stack>
+          ) : (
+            results.length === 0 && meta ? (
+              <Text c="dimmed" ta="center" py="xl" role="status">No courses found matching your criteria.</Text>
+            ) : (
+              <Stack gap="sm">
+                {meta && (
+                  <Group justify="space-between" align="flex-end" gap="xs" className="search-results-summary">
+                    <Box>
+                      <Text fw={600}>Results for {meta.query.raw}</Text>
+                      <Text size="xs" c="dimmed">{showingResultsLabel}</Text>
+                    </Box>
+                  </Group>
+                )}
+                {results.map((r) => {
+                  const isHistorical = r._historical === true
+
+                  return (
+                    <Card
+                      key={getCourseKey(r)}
+                      withBorder
+                      padding="md"
+                      component={Link}
+                      to={getCoursePath(r)}
+                      className={isHistorical ? 'course-result-card course-result-card--historical' : 'course-result-card'}
+                      data-historical={isHistorical ? 'true' : undefined}
+                      shadow="none"
+                    >
+                      <Flex justify="space-between" align="flex-start" gap="sm" wrap="wrap">
+                        <Box className="course-result-body">
+                          <Box className="course-result-heading">
+                            <Text fw={700} c={isHistorical ? 'dimmed' : undefined} className="course-result-title">
+                              {r.subject} {r.number}: {r.title}
+                            </Text>
+                            {typeof r._score === 'number' && (
+                              <Text size="xs" c="dimmed" fw={600} className="course-result-relevance">
+                                {getRelevanceLabel(r._score)}
+                              </Text>
+                            )}
+                          </Box>
+                          <Group gap="xs" mt={4} className="course-result-meta-row">
+                            <Text size="xs" fw={isHistorical ? 600 : undefined} c={isHistorical ? 'gray.7' : 'dimmed'}>
+                              {formatTermLabel(r.term, r.year)}
+                            </Text>
+                            {isHistorical && (
+                              <Badge color="gray" variant="outline" size="xs" tt="none">
+                                Historical term
+                              </Badge>
+                            )}
+                            <Text size="xs" c={isHistorical ? 'gray.7' : 'dimmed'}>
+                              {r.credit_hours} credits
+                            </Text>
+                            {r.primary_instructor && (
+                              <Text size="xs" c="dimmed" className="course-result-meta-separated">
+                                {r.primary_instructor}
+                              </Text>
+                            )}
+                            {r.gened && <Text size="xs" c="dimmed">GenEd {r.gened}</Text>}
+                          </Group>
+                          {renderScoreSummary(r)}
+                          <Text size="sm" mt="xs" lineClamp={3} c={isHistorical ? 'gray.6' : 'dimmed'} className="course-result-description">
+                            {r.description}
+                          </Text>
+                          {renderMatchEvidence(r.match_evidence)}
+                        </Box>
+                      </Flex>
+                    </Card>
+                  )
+                })}
+                {pagination?.hasMore && (
+                  <Group justify="center" mt="sm">
+                    <Button
+                      variant="light"
+                      onClick={loadMoreResults}
+                      loading={loadingMore}
+                      disabled={loadingMore}
+                    >
+                      Show more results
+                    </Button>
+                  </Group>
+                )}
+              </Stack>
+            )
           )
-        )}
+          }
+        </Box>
       </Box>
     </Container>
   )

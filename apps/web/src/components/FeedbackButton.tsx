@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Button, Group, Paper, Stack, Text, TextInput, Textarea } from '@mantine/core'
+import { Alert, Button, Group, Paper, Stack, Text, TextInput, Textarea, type ButtonProps } from '@mantine/core'
 import { IconCheck, IconMessageCircle, IconX } from '@tabler/icons-react'
 import type { FeedbackIssue, FeedbackKind, FeedbackSubmitDto } from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
@@ -14,6 +14,8 @@ interface FeedbackButtonProps {
   context?: FeedbackContext
   expectedPlaceholder?: string
   messagePlaceholder?: string
+  fullWidth?: boolean
+  buttonVariant?: ButtonProps['variant']
 }
 
 export function FeedbackButton({
@@ -24,6 +26,8 @@ export function FeedbackButton({
   context = {},
   expectedPlaceholder = 'What did you expect instead?',
   messagePlaceholder = 'Anything else we should know?',
+  fullWidth = false,
+  buttonVariant = 'subtle',
 }: FeedbackButtonProps) {
   const [open, setOpen] = useState(false)
   const [expected, setExpected] = useState('')
@@ -57,18 +61,19 @@ export function FeedbackButton({
 
   if (success) {
     return (
-      <Alert color="teal" variant="light" icon={<IconCheck size={16} />} py="xs">
+      <Alert color="teal" variant="light" icon={<IconCheck size={16} />} py="xs" w={fullWidth ? '100%' : undefined}>
         Feedback received.
       </Alert>
     )
   }
 
   return (
-    <Stack gap="xs">
+    <Stack gap="xs" w={fullWidth ? '100%' : undefined}>
       {!open && (
         <Button
-          variant="subtle"
+          variant={buttonVariant}
           size="xs"
+          fullWidth={fullWidth}
           leftSection={<IconMessageCircle size={14} />}
           onClick={() => setOpen(true)}
         >

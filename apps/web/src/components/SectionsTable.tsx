@@ -1,4 +1,4 @@
-import { Table, Badge, Text, Group, Stack, Anchor } from '@mantine/core'
+import { Table, Text, Group, Stack, Anchor } from '@mantine/core'
 import {
   buildRmpProfessorUrl,
   buildRmpSearchUrl,
@@ -126,9 +126,9 @@ export function SectionsTable({ sections, instructorLinks, courseExplorerUrl }: 
         </Table.Td>
         <Table.Td>
           {typeof displayedRating === 'number' ? (
-            <Badge size="xs" color={displayedRating > RMP_THRESHOLDS.GOOD ? 'green' : 'orange'}>
+            <Text size="sm" fw={600} c={displayedRating > RMP_THRESHOLDS.GOOD ? 'green.7' : 'orange.7'}>
               {displayedRating.toFixed(1)} ★
-            </Badge>
+            </Text>
           ) : (
             <Text size="xs" c="dimmed">-</Text>
           )}
@@ -155,15 +155,13 @@ export function SectionsTable({ sections, instructorLinks, courseExplorerUrl }: 
           <Text size="sm">{section.location || 'TBA'}</Text>
         </Table.Td>
         <Table.Td style={{ width: '7.5rem', whiteSpace: 'nowrap' }}>
-          <Badge
-              size="sm"
-              variant="light"
-              color={section.status.toLowerCase().includes('open') ? 'green' : 'red'}
-              style={{ maxWidth: 'none' }}
-              tt="none"
+          <Text
+            size="sm"
+            fw={600}
+            c={section.status.toLowerCase().includes('open') ? 'green.7' : 'red.7'}
           >
-              {section.status}
-          </Badge>
+            {section.status}
+          </Text>
         </Table.Td>
         <Table.Td>
           {(section.course_explorer_url ?? courseExplorerUrl) ? (
