@@ -532,20 +532,20 @@ Some verification may require native Mac UI or user-visible application state th
 ## Staging And Cloudflare
 
 - [x] Add executable Cloudflare staging preflight gate that rejects placeholder resource IDs and missing evidence.
-- [ ] Blocked: configure staging Worker and Pages targets after Cloudflare auth exists in this checkout.
-- [ ] Blocked: configure staging D1, KV, Vectorize, AI, and service bindings after Cloudflare auth exists in this checkout.
-- [ ] Blocked: configure `ADMIN_TOKEN`, `INTERNAL_TOKEN`, and `RMP_AUTH_TOKEN` for staging after Cloudflare auth exists in this checkout.
-- [ ] Blocked: deploy API and web to staging after Cloudflare auth exists in this checkout.
-- [ ] Blocked: run staging auth smoke tests after staging deployment exists.
-- [ ] Blocked: run staging search/course smoke tests after staging deployment exists.
-- [ ] Blocked: configure and verify public WAF/rate limits after Cloudflare auth exists in this checkout.
+- [x] Configure staging Worker and Pages targets after Cloudflare auth exists in this checkout. Evidence: `docs/reports/2026-06-01-stabilization-report.md` records `uiuc-course-search-staging`, `https://uiuc-course-search-staging.lumirth.workers.dev`, `https://staging.uiuc-course-search-web.pages.dev`, Pages project `uiuc-course-search-web`, and branch `staging`.
+- [x] Configure staging D1, KV, Vectorize, AI, and service bindings after Cloudflare auth exists in this checkout. Evidence: `apps/api/wrangler.toml` `[env.staging]` contains real D1/KV/Vectorize/AI/service/rate-limit bindings, and `npm run cloudflare:preflight` validates those binding shapes.
+- [x] Configure `ADMIN_TOKEN`, `INTERNAL_TOKEN`, and `RMP_AUTH_TOKEN` for staging after Cloudflare auth exists in this checkout. Evidence: `docs/reports/2026-06-01-completion-audit.md` records the secret names were set with Wrangler without printing values; live staging smokes use token boundaries.
+- [x] Deploy API and web to staging after Cloudflare auth exists in this checkout. Evidence: `docs/reports/2026-06-01-stabilization-report.md` records API deploy version `253a0efa-ba4b-40b5-93a2-22e0547a4a6d`; the current API checkpoint later deployed version `333fc846-4e86-4e25-a180-5f35253a2316`.
+- [x] Run staging auth smoke tests after staging deployment exists. Evidence: `docs/reports/2026-06-01-completion-audit.md` records `npm run test:staging` passing admin/internal token-boundary checks, and CI/local route auth tests cover the same route classes.
+- [x] Run staging search/course smoke tests after staging deployment exists. Evidence: `docs/reports/2026-06-02-search-product-stabilization-report.md` records 10/10 live staging smoke checks, including public search/course/feedback, and `docs/reports/2026-06-03-pagination-enrichment-hotfix-report.md` records deep pagination live smokes.
+- [x] Configure and verify public WAF/rate limits after Cloudflare auth exists in this checkout. Evidence: `docs/reports/2026-06-02-search-product-stabilization-report.md` records Worker Rate Limiting namespaces `SEARCH_RATE_LIMITER=26060111` and `COURSE_RATE_LIMITER=26060112`, routes, actions, and thresholds.
 
 ## Data Safety
 
 - [x] Add executable D1 backup/restore evidence preflight with script tests.
-- [ ] Blocked: create remote D1 backup/export after Cloudflare auth exists in this checkout.
-- [ ] Blocked: restore backup to non-production D1 after Cloudflare auth exists in this checkout.
-- [ ] Blocked: verify restored schema and data after Cloudflare auth exists in this checkout.
+- [x] Create remote D1 backup/export after Cloudflare auth exists in this checkout. Evidence: `docs/reports/2026-06-01-stabilization-report.md` records D1 Time Travel backup ref `20260601T193901Z`; `docs/reports/2026-06-03-rolling-retention-staging-report.md` records pre-prune backup ref `20260603T002001Z`.
+- [x] Restore backup to non-production D1 after Cloudflare auth exists in this checkout. Evidence: `docs/reports/2026-06-01-stabilization-report.md` and `artifacts/d1-backups/20260603T002001Z-pre-retention-prune/evidence.md` record Cloudflare D1 Time Travel restore targets.
+- [x] Verify restored schema and data after Cloudflare auth exists in this checkout. Evidence: D1 restore markers record `D1 Restore Verified: yes`, and the retention report records post-restore/prune verification for dropped-term absence, retained-term counts, and orphan checks.
 - [x] Document backup and restore commands.
 - [x] Add destructive-operation preflight.
 
@@ -568,7 +568,7 @@ Some verification may require native Mac UI or user-visible application state th
 ## Docs And Release
 
 - [x] Update README.
-- [ ] Blocked: update deployment checklist with real staging evidence after Cloudflare auth and staging deployment exist.
+- [x] Update deployment checklist with real staging evidence after Cloudflare auth and staging deployment exist. Evidence: `docs/deployment-checklist.md`, `docs/cloudflare-hardening-runbook.md`, `docs/reports/2026-06-01-stabilization-report.md`, and `docs/reports/2026-06-02-search-product-stabilization-report.md` now carry the concrete staging URL, Pages project/branch, rate-limit, and D1 backup/restore requirements/evidence.
 - [x] Add pre-alpha release checklist.
 - [x] Add rollback checklist.
 - [x] Add final stabilization report.

@@ -115,4 +115,19 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync/s
 
 The response must include `freshness.currentTermPresent`, `freshness.activeTermIds`, `freshness.upcomingTermIds`, `freshness.historicalTermCount`, `freshness.staleTermIds`, and `freshness.staleSyncStateIds`. Follow `docs/data-refresh-runbook.md` when any required source is stale.
 
-Cloudflare auth status on 2026-06-01: Wrangler OAuth is authenticated locally; do not commit token cache files or secret values.
+## Current Staging Evidence
+
+As of 2026-06-03, Wrangler OAuth is authenticated locally; do not commit token cache files or secret values.
+
+- Staging API URL: `https://uiuc-course-search-staging.lumirth.workers.dev`
+- Staging Web URL: `https://staging.uiuc-course-search-web.pages.dev`
+- Pages Project: `uiuc-course-search-web`
+- Pages Branch: `staging`
+- Worker: `uiuc-course-search-staging`
+- Latest verified API deploy version: `333fc846-4e86-4e25-a180-5f35253a2316`
+- Staging D1: `course-search-db-staging`
+- Rate-Limit Namespace IDs: `SEARCH_RATE_LIMITER=26060111`, `COURSE_RATE_LIMITER=26060112`
+- Abuse Control Routes: `/api/search*`, `/api/course/*`; `/api/feedback` uses the search limiter class.
+- Abuse Control Thresholds: `/api/search*` and `/api/feedback` at 120 requests/min/IP; `/api/course/*` at 240 requests/min/IP.
+- Latest live freshness audit: `artifacts/live/data-freshness-audit-2026-06-03-rmp-enrichment.md`, 15/15 passing.
+- Latest D1 destructive-action backup evidence: `artifacts/d1-backups/20260603T002001Z-pre-retention-prune/evidence.md`, `D1 Restore Verified: yes`.
