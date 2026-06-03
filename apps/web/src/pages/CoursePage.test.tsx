@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CourseDto } from '@uiuc-course-search/query-types'
@@ -124,17 +124,21 @@ describe('CoursePage request state', () => {
 
     renderCoursePage('/course/CS/225?term=spring&year=2026')
 
-    await screen.findByText('B+')
-    expect(screen.getByText('Easy')).toBeInTheDocument()
-    expect(screen.getByText('Rating 4.8')).toBeInTheDocument()
-    expect(screen.getByText('Avg GPA 3.62 from 820 records')).toBeInTheDocument()
+    const scorecard = (await screen.findByText('Course scores')).closest('div')
+    expect(within(scorecard!).getByText('B+')).toBeInTheDocument()
+    expect(within(scorecard!).getByText('Easy')).toBeInTheDocument()
+    expect(within(scorecard!).getByText('4.8')).toBeInTheDocument()
+    expect(within(scorecard!).getByText('3.62')).toBeInTheDocument()
+    expect(within(scorecard!).getByText('820 records')).toBeInTheDocument()
+    expect(screen.queryByText('Rating 4.8')).not.toBeInTheDocument()
+    expect(screen.queryByText('Avg GPA 3.62 from 820 records')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Lovelace, A' })).toHaveAttribute(
       'href',
       'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A'
     )
     expect(screen.getByText('4.8 ★')).toBeInTheDocument()
-    expect(screen.getByText('3.62')).toBeInTheDocument()
-    expect(screen.getByText('820 records')).toBeInTheDocument()
+    expect(screen.getAllByText('3.62').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('820 records').length).toBeGreaterThanOrEqual(2)
   })
 
   it('renders official Course Explorer links and public instructor link fallbacks', async () => {

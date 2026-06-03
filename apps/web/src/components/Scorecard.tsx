@@ -54,16 +54,18 @@ export function Scorecard({
           {hasPrimaryRating && (
             <Group justify="space-between" gap="md">
               <Text size="sm" c="dimmed">Instructor rating</Text>
-              <Text size="sm" fw={600}>Rating {primaryInstructorRmp.toFixed(1)}</Text>
+              <Text size="sm" fw={600}>{primaryInstructorRmp.toFixed(1)}</Text>
             </Group>
           )}
           {hasAvgGpa && (
             <Group justify="space-between" gap="md" align="flex-start">
               <Text size="sm" c="dimmed">Average GPA</Text>
-              <Text size="sm" fw={600} ta="right">
-                Avg GPA {avgGpa.toFixed(2)}
-                {typeof gpaSampleSize === 'number' ? ` from ${gpaSampleSize.toLocaleString()} records` : ''}
-              </Text>
+              <Stack gap={0} align="flex-end">
+                <Text size="sm" fw={600} ta="right">{avgGpa.toFixed(2)}</Text>
+                {typeof gpaSampleSize === 'number' && (
+                  <Text size="xs" c="dimmed" ta="right">{gpaSampleSize.toLocaleString()} records</Text>
+                )}
+              </Stack>
             </Group>
           )}
         </Stack>
