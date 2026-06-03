@@ -46,7 +46,7 @@ describe('FeedbackButton', () => {
     fireEvent.change(screen.getByLabelText(/feedback note/i), {
       target: { value: 'The professor name should be enough.' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /^send$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^send feedback$/i }))
 
     expect(await screen.findByText(/feedback received/i)).toBeInTheDocument()
     expect(api.submitFeedback).toHaveBeenCalledWith({
@@ -57,5 +57,20 @@ describe('FeedbackButton', () => {
       expected: 'courses taught by Wade Fagen-Ulmschneider',
       message: 'The professor name should be enough.',
     })
+  })
+
+  it('uses calm recovery copy when feedback submission fails', async () => {
+    vi.mocked(api.submitFeedback).mockRejectedValueOnce(
+      new Error('Internal server error')
+    )
+
+    renderFeedbackButton()
+
+    fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^send feedback$/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/That feedback did not go through/i)
+    expect(alert).not.toHaveTextContent(/Internal server error/i)
   })
 })

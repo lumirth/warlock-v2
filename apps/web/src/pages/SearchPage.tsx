@@ -543,7 +543,7 @@ function AdvancedSelectField({
   )
 }
 
-export function SearchPage() {
+export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   const [query, setQuery] = useState('')
   const [activeSearchText, setActiveSearchText] = useState('')
   const [activeAdvancedFilters, setActiveAdvancedFilters] =
@@ -612,7 +612,7 @@ export function SearchPage() {
       setAdvancedDraft(data.meta?.ui?.advanced || {})
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
-      setError(err instanceof Error ? err.message : 'An unknown error occurred')
+      setError('Give it another moment, or try a broader search.')
     } finally {
       if (searchController.current === controller) {
         setLoading(false)
@@ -745,7 +745,7 @@ export function SearchPage() {
 
   return (
     <PageContainer className="py-4 sm:py-6">
-      <h1 className="sr-only">UIUC Course Search</h1>
+      {includeH1 && <h1 className="sr-only">UIUC Course Search</h1>}
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <form role="search" autoComplete="off" onSubmit={handleSearchSubmit}>
           <Field>
@@ -770,8 +770,7 @@ export function SearchPage() {
         {showFirstRunExamples && (
           <div className="flex flex-col gap-2">
             <p className="text-muted-foreground text-sm">
-              Try a course code, instructor, requirement, or plain-language
-              constraint.
+              Search UIUC courses the way you'd describe them.
             </p>
             <div className="flex flex-wrap gap-2">
               {FIRST_RUN_EXAMPLE_QUERIES.map((exampleQuery) => (
@@ -792,7 +791,7 @@ export function SearchPage() {
         {error && (
           <Alert variant="destructive">
             <AlertCircleIcon aria-hidden />
-            <AlertTitle>Search failed</AlertTitle>
+            <AlertTitle>That search did not go through</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -838,7 +837,7 @@ export function SearchPage() {
                           aria-label={`Remove ${chip.label}`}
                           size="icon-xs"
                           variant="ghost"
-                          className="-mr-1 size-4 rounded-full p-0"
+                          className="-mr-1 size-4 rounded-[var(--radius-sm)] p-0"
                           onClick={(event) => {
                             event.preventDefault()
                             removeChip(chip)
@@ -1130,12 +1129,9 @@ export function SearchPage() {
                 <EmptyMedia variant="icon">
                   <SearchIcon aria-hidden />
                 </EmptyMedia>
-                <EmptyTitle>
-                  No courses found matching your criteria.
-                </EmptyTitle>
+                <EmptyTitle>Nothing matched that search.</EmptyTitle>
                 <EmptyDescription>
-                  Remove a chip or broaden the search text to recover from an
-                  over-constrained query.
+                  Try removing a filter or using a broader phrase.
                 </EmptyDescription>
               </EmptyHeader>
               {meta.ui?.chips?.length ? (

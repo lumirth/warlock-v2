@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { Link } from 'react-router-dom'
-import { Code2Icon, HomeIcon } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { Code2Icon, HomeIcon, MoonIcon, SunIcon } from 'lucide-react'
 import courseSearchLogo from './assets/course-search-logo.png'
 import { SearchPage } from './pages/SearchPage'
 import { CoursePage } from './pages/CoursePage'
@@ -10,9 +11,41 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
 import { PageContainer } from '@/components/PageContainer'
 
+type ThemeMode = 'light' | 'dark'
+
+const THEME_STORAGE_KEY = 'uiuc-course-search-theme'
+
+function getInitialTheme(): ThemeMode {
+  if (typeof window === 'undefined') return 'light'
+
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+  if (storedTheme === 'light' || storedTheme === 'dark') {
+    return storedTheme
+  }
+
+  if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    return 'dark'
+  }
+
+  return 'light'
+}
+
 function App() {
+  const location = useLocation()
+  const isSearchPage = location.pathname === '/'
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme)
+  const nextThemeMode = themeMode === 'dark' ? 'light' : 'dark'
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.toggle('dark', themeMode === 'dark')
+    root.style.colorScheme = themeMode
+    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
+  }, [themeMode])
+
   return (
     <div className="bg-background text-foreground min-h-screen">
       <header className="bg-card sticky top-0 border-b">
@@ -27,11 +60,35 @@ function App() {
               aria-hidden
               className="size-9 shrink-0"
             />
-            <span className="truncate text-lg leading-6 font-semibold sm:text-2xl">
-              UIUC Course Search
-            </span>
+            {isSearchPage ? (
+              <h1 className="truncate text-lg leading-6 font-semibold sm:text-2xl">
+                UIUC Course Search
+              </h1>
+            ) : (
+              <span className="truncate text-lg leading-6 font-semibold sm:text-2xl">
+                UIUC Course Search
+              </span>
+            )}
           </Link>
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Switch to ${nextThemeMode} mode`}
+                  onClick={() => setThemeMode(nextThemeMode)}
+                >
+                  {themeMode === 'dark' ? (
+                    <SunIcon aria-hidden />
+                  ) : (
+                    <MoonIcon aria-hidden />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Switch to {nextThemeMode} mode</TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
@@ -70,7 +127,7 @@ function App() {
 
       <main>
         <Routes>
-          <Route path="/" element={<SearchPage />} />
+          <Route path="/" element={<SearchPage includeH1={false} />} />
           <Route path="/course/:subject/:number" element={<CoursePage />} />
         </Routes>
       </main>

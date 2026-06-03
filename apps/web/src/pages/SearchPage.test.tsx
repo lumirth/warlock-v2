@@ -123,7 +123,7 @@ describe('SearchPage request state', () => {
       screen.getByRole('heading', { level: 1, name: /uiuc course search/i })
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/try a course code, instructor, requirement/i)
+      screen.getByText(/search uiuc courses the way you'd describe them/i)
     ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'CS 225' }))
@@ -137,7 +137,7 @@ describe('SearchPage request state', () => {
       })
     )
     expect(
-      screen.queryByText(/try a course code, instructor, requirement/i)
+      screen.queryByText(/search uiuc courses the way you'd describe them/i)
     ).not.toBeInTheDocument()
   })
 
@@ -231,7 +231,9 @@ describe('SearchPage request state', () => {
     submitSearch()
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(/Search failed/i)
+    expect(alert).toHaveTextContent(/That search did not go through/i)
+    expect(alert).toHaveTextContent(/Give it another moment/i)
+    expect(alert).not.toHaveTextContent(/Search failed/i)
     await waitFor(() => {
       expect(
         screen.queryByText(/CS 225: Data Structures/i)

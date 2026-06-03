@@ -43,7 +43,9 @@ export function CoursePage() {
         setCourse(data)
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return
-        setError(err instanceof Error ? err.message : 'Failed to load course')
+        setError(
+          'Give it another moment, or return to search and try the course again.'
+        )
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false)
@@ -90,8 +92,11 @@ export function CoursePage() {
         </Button>
         <Alert variant="destructive">
           <AlertCircleIcon aria-hidden />
-          <AlertTitle>Error loading course</AlertTitle>
-          <AlertDescription>{error || 'Course not found'}</AlertDescription>
+          <AlertTitle>That course did not load</AlertTitle>
+          <AlertDescription>
+            {error ||
+              'Return to search and try the course again with a broader term.'}
+          </AlertDescription>
         </Alert>
       </PageContainer>
     )

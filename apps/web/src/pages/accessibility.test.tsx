@@ -7,6 +7,7 @@ import { api } from '../lib/api-client'
 import { TestUiProvider } from '../test/TestUiProvider'
 import { SearchPage } from './SearchPage'
 import { CoursePage } from './CoursePage'
+import App from '../App'
 
 vi.mock('../lib/api-client', () => ({
   api: {
@@ -53,6 +54,18 @@ afterEach(() => {
 })
 
 describe('page accessibility', () => {
+  it('keeps the app shell free of automated accessibility violations', async () => {
+    const { container } = render(
+      <TestUiProvider>
+        <RouterProvider
+          router={createMemoryRouter([{ path: '*', element: <App /> }])}
+        />
+      </TestUiProvider>
+    )
+
+    await expectNoA11yViolations(container)
+  })
+
   it('keeps the search page free of automated accessibility violations', async () => {
     const { container } = render(
       <TestUiProvider>

@@ -68,10 +68,8 @@ export function FeedbackButton({
       setSuccess(true)
       setExpected('')
       setMessage('')
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : 'Feedback could not be sent'
-      )
+    } catch {
+      setError('That feedback did not go through. Give it another moment.')
     } finally {
       setSubmitting(false)
     }
@@ -151,7 +149,7 @@ export function FeedbackButton({
                   ) : (
                     <SendIcon data-icon="inline-start" aria-hidden />
                   )}
-                  Send
+                  Send feedback
                 </Button>
               </div>
             </FieldGroup>

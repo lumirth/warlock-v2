@@ -112,7 +112,9 @@ describe('CoursePage request state', () => {
     renderCoursePage('/course/CS/225?term=fall&year=2026')
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(/Course API unavailable/i)
+    expect(alert).toHaveTextContent(/That course did not load/i)
+    expect(alert).toHaveTextContent(/Give it another moment/i)
+    expect(alert).not.toHaveTextContent(/Course API unavailable/i)
     expect(consoleError).not.toHaveBeenCalled()
     consoleError.mockRestore()
   })
