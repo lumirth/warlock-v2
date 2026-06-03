@@ -17,8 +17,8 @@ This project is pre-alpha, has no users, and has no compatibility obligations. D
 - Active/current/upcoming course sync: every scheduled course-sync pass for terms classified as active.
 - GPA resume: every 5 minutes while a GPA sync is incomplete.
 - GPA reset: weekly.
-- RMP sync dispatch: weekly when `RMP_AUTH_TOKEN` is configured.
-- Course score and instructor-link enrichment: after GPA completion and explicit admin enrichment triggers.
+- RMP sync: weekly when `RMP_AUTH_TOKEN` is configured.
+- Course score and instructor-link enrichment: automatically after GPA completion, after weekly RMP completion, and after explicit admin source/enrichment triggers.
 
 ## Freshness Evidence
 
@@ -145,20 +145,20 @@ Use `--max-pages 1` for a bounded smoke page or `--start-offset <n>` to resume f
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-gpa"
 ```
 
-5. If RMP is stale and `RMP_AUTH_TOKEN` is configured, dispatch RMP sync:
+5. If RMP is stale and `RMP_AUTH_TOKEN` is configured, dispatch RMP sync. The admin RMP sync waits for RMP batches to write to D1 and then rebuilds active/registrable instructor links and public quality/workload scores:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-rmp"
 ```
 
-6. After GPA or rating updates, run enrichment:
+6. After manual GPA updates or broad term backfills, run enrichment:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/enrich-gpa"
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/enrich-scoring"
 ```
 
-Run this after broad term backfills too. `enrich-gpa` propagates course-level GPA aggregates across every retained term, and `enrich-scoring` rebuilds instructor GPA/RMP links for every active or registrable term before recomputing public quality/workload scores.
+`enrich-gpa` propagates course-level GPA aggregates across every retained term, and `enrich-scoring` rebuilds instructor GPA/RMP links for every active or registrable term before recomputing public quality/workload scores.
 
 ## Backup Rule
 

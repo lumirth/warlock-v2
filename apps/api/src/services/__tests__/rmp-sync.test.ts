@@ -91,7 +91,7 @@ describe('coordinateRmpSync', () => {
       etag: 'expired-cursor',
     };
     const { db, stateWrites } = createDb(previous);
-    const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 202 })) };
+    const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 200 })) };
     mockRmpResponse('new-cursor');
 
     const result = await coordinateRmpSync(db as unknown as D1Database, selfBinding as unknown as Fetcher, {
@@ -117,7 +117,7 @@ describe('coordinateRmpSync', () => {
 
   it('records resumable sync_state checkpoints while dispatching pages', async () => {
     const { db, stateWrites } = createDb();
-    const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 202 })) };
+    const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 200 })) };
     mockRmpResponse('cursor-1');
 
     const result = await coordinateRmpSync(db as unknown as D1Database, selfBinding as unknown as Fetcher, {
@@ -151,7 +151,7 @@ describe('coordinateRmpSync', () => {
       etag: 'stored-cursor',
     };
     const { db, stateWrites } = createDb(previous);
-    const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 202 })) };
+    const selfBinding = { fetch: vi.fn(async () => new Response(null, { status: 200 })) };
     mockRmpResponse('new-cursor');
 
     const result = await coordinateRmpSync(db as unknown as D1Database, selfBinding as unknown as Fetcher, {

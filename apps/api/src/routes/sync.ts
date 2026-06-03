@@ -188,7 +188,8 @@ syncRoutes.post('/admin/sync-rmp', async (c) => {
       rmpAuthToken: c.env.RMP_AUTH_TOKEN,
       internalToken: c.env.INTERNAL_TOKEN,
     });
-    return c.json(result);
+    const enrichment = await coordinateEnrichment(c.env.DB, c.env.SELF, c.env.INTERNAL_TOKEN);
+    return c.json({ ...result, enrichment });
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }
@@ -204,15 +205,9 @@ syncRoutes.post('/internal/sync-rmp-batch', async (c) => {
       return c.json({ error: 'No teachers provided' }, 400);
     }
 
-    c.executionCtx.waitUntil((async () => {
-      try {
-        await processRmpBatch(c.env.DB, teachers);
-      } catch (err) {
-        logger.error('internal.rmpBatch.backgroundFailed', { runId, teacherCount: teachers.length, ...errorFields(err) });
-      }
-    })());
+    await processRmpBatch(c.env.DB, teachers);
 
-    return c.json({ status: 'processing', message: 'Batch accepted', count: teachers.length }, 202);
+    return c.json({ status: 'complete', message: 'Batch processed', count: teachers.length });
   } catch (error) {
     logger.error('internal.rmpBatch.failed', { runId, ...errorFields(error) });
     return c.json({ error: String(error) }, 500);

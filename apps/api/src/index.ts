@@ -132,11 +132,14 @@ export default {
       ctx.waitUntil((async () => {
         try {
           logger.info('cron.weekly.rmp.start', { runId });
-          await coordinateRmpSync(env.DB, env.SELF, {
+          const rmpResult = await coordinateRmpSync(env.DB, env.SELF, {
             rmpAuthToken: env.RMP_AUTH_TOKEN,
             internalToken: env.INTERNAL_TOKEN,
           });
-          logger.info('cron.weekly.rmp.dispatched', { runId });
+          logger.info('cron.weekly.rmp.complete', { runId, ...rmpResult });
+          logger.info('cron.weekly.rmp.enrichment.start', { runId });
+          const enrichment = await coordinateEnrichment(env.DB, env.SELF, env.INTERNAL_TOKEN);
+          logger.info('cron.weekly.rmp.enrichment.complete', { runId, ...enrichment });
         } catch (err) {
           logger.error('cron.weekly.rmp.failed', { runId, ...errorFields(err) });
         }
