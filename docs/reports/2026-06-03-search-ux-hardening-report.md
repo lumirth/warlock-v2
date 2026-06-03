@@ -186,3 +186,28 @@ Fixed-viewport redesign audit notes:
 - Mobile advanced action row stayed within a 390 x 844 viewport with full-width paired controls and readable helper text.
 - Mobile result cards used course title, relevance, term/credits/instructor/GenEd, metrics, description, and match evidence in that order with no visible horizontal overflow.
 - Desktop and mobile course detail preserved the intended decision order: identity, scores, feedback, description, and sections.
+
+Final staging deployment verification:
+
+- Web staging alias: `https://staging.uiuc-course-search-web.pages.dev`
+- Pages deployment URL: `https://e057dbba.uiuc-course-search-web.pages.dev`
+- Verification date: 2026-06-03
+
+Final staging artifacts:
+
+- `artifacts/browser-qa/2026-06-03-staging-redesign-final/01-staging-home-desktop.png`
+- `artifacts/browser-qa/2026-06-03-staging-redesign-final/02-staging-desktop-search-advanced.png`
+- `artifacts/browser-qa/2026-06-03-staging-redesign-final/03-staging-mobile-search-advanced-top.png`
+- `artifacts/browser-qa/2026-06-03-staging-redesign-final/04-staging-mobile-search-actions.png`
+- `artifacts/browser-qa/2026-06-03-staging-redesign-final/05-staging-mobile-result-card.png`
+- `artifacts/browser-qa/2026-06-03-staging-redesign-final/06-staging-desktop-course-detail.png`
+- `artifacts/browser-qa/2026-06-03-staging-redesign-final/07-staging-mobile-course-detail.png`
+- `artifacts/browser-qa/2026-06-03-staging-redesign-final/staging-redesign-results.json`
+
+Final staging observed results:
+
+- Deployed search for `intro to CS` returned 20 visible result cards out of 21 total.
+- Deployed advanced search panel was visible; unchanged `Reset fields` and `Apply filters` controls were disabled.
+- Deployed mobile search and course detail reported no page-level horizontal overflow.
+- Deployed course detail for `CS 225` exposed `Course scores`, `Score feedback`, and `Sections`.
+- Captured console/log issues: 0.
