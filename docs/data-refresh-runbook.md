@@ -48,6 +48,8 @@ npm run data:freshness:audit -- --input artifacts/sync-status.json --output arti
 
 The main searchable corpus is rolling and full-detail. Full searchable history back through 2004 is no longer a requirement for D1. Do not keep old course-only shells in D1. If a term is retained, it must have courses, sections, meetings, instructors, and searchable index state. If storage pressure requires a tradeoff, drop the oldest terms completely and keep the retained terms trustworthy.
 
+The `--from-year 2004` examples below are discovery horizons for databases that may already contain old terms. They let the retention planner identify old candidates to drop cleanly. They are not a requirement to backfill or preserve every term since 2004. The retained term IDs in the generated retention plan are the source of truth for what must remain searchable and fully detailed.
+
 Generate a retention plan before broad backfill or prune work:
 
 ```bash
@@ -84,6 +86,7 @@ npm run data:term-coverage -- \
 ```
 
 The coverage plan exits non-zero while retained terms are missing, stale, missing counts, or while an upstream term-list year fails. That is intentional: the plan is an operator gate, not a best-effort report. Dropped terms are out of scope for backfill and should not appear in search after pruning.
+When `--retention-input` is provided, the coverage plan only emits backfill commands for retained terms. A wide `--from-year` still scans old terms so the dropped-term accounting stays explicit, but it must not be interpreted as a full-history backfill target.
 
 Run the plan through the backup-gated multi-term orchestrator when multiple terms need work:
 
@@ -120,7 +123,7 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admi
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-active"
 ```
 
-3. If a current, upcoming, or historical term needs a complete subject-by-subject backfill, use the paginated backfill runner after creating and restore-verifying a D1 Time Travel backup:
+3. If a retained current, upcoming, or historical term needs a complete subject-by-subject backfill, use the paginated backfill runner after creating and restore-verifying a D1 Time Travel backup:
 
 ```bash
 npm run data:backfill:term -- \
@@ -167,6 +170,6 @@ The final stabilization report must include:
 
 - The `/admin/sync/status` JSON summary for staging.
 - Evidence that current and upcoming terms are present.
-- Historical term count and any intentional remaining gaps.
+- Retained historical term count and dropped-term absence evidence from the retention-scoped audit.
 - GPA/RMP freshness status.
 - D1 backup/restore evidence before destructive data changes.
