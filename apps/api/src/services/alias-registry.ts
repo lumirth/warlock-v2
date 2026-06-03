@@ -27,6 +27,10 @@ interface TokenSpan {
   end: number;
 }
 
+type AliasCandidate = AliasMatch & {
+  length: number;
+};
+
 export class AliasRegistry {
   private entries: AliasEntry[] = [];
 
@@ -46,20 +50,42 @@ export class AliasRegistry {
     // Check for cues in the text
     const hasCue = GENED_CUES.some(cue => normalized.includes(cue));
 
-    // Sort entries by longest alias first
-    const sortedEntries = [...this.entries].sort((a, b) => {
-      const aMax = Math.max(...a.aliases.map(al => al.length));
-      const bMax = Math.max(...b.aliases.map(al => al.length));
-      return bMax - aMax;
-    });
+    const candidates = this.findAliasCandidates(text, normalized, hasCue);
 
-    for (const entry of sortedEntries) {
-      // Skip gened entries that require cue if no cue present
+    for (const candidate of candidates) {
+      if (isConsumed(candidate.span[0], candidate.span[1], consumed)) {
+        continue;
+      }
+
+      matches.push({
+        kind: candidate.kind,
+        canonical: candidate.canonical,
+        span: candidate.span,
+        confidence: candidate.confidence,
+        raw: candidate.raw,
+      });
+
+      for (let i = candidate.span[0]; i < candidate.span[1]; i++) {
+        consumed.add(i);
+      }
+    }
+
+    const sortedEntries = this.sortedEntries();
+    const fuzzySubjectMatches = this.matchFuzzySubjects(text, sortedEntries, consumed);
+    matches.push(...fuzzySubjectMatches);
+
+    return matches;
+  }
+
+  private findAliasCandidates(text: string, normalized: string, hasCue: boolean): AliasCandidate[] {
+    const candidates: AliasCandidate[] = [];
+
+    for (const entry of this.sortedEntries()) {
       if (entry.requiresCue && !hasCue) {
         continue;
       }
 
-      for (const alias of entry.aliases.sort((a, b) => b.length - a.length)) {
+      for (const alias of [...entry.aliases].sort((a, b) => b.length - a.length)) {
         const aliasLower = alias.toLowerCase();
         let searchStart = 0;
 
@@ -67,35 +93,16 @@ export class AliasRegistry {
           const index = normalized.indexOf(aliasLower, searchStart);
           if (index === -1) break;
 
-          // Check if this span is already consumed
-          let isConsumed = false;
-          for (let i = index; i < index + aliasLower.length; i++) {
-            if (consumed.has(i)) {
-              isConsumed = true;
-              break;
-            }
-          }
-
-          if (!isConsumed) {
-            // Check word boundaries
-            const before = index === 0 || /\s/.test(normalized[index - 1]);
-            const after = index + aliasLower.length === normalized.length ||
-              /\s/.test(normalized[index + aliasLower.length]);
-
-            if (before && after) {
-              matches.push({
-                kind: entry.kind,
-                canonical: entry.canonical,
-                span: [index, index + aliasLower.length],
-                confidence: 0.9,
-                raw: text.slice(index, index + aliasLower.length),
-              });
-
-              // Mark this span as consumed
-              for (let i = index; i < index + aliasLower.length; i++) {
-                consumed.add(i);
-              }
-            }
+          const end = index + aliasLower.length;
+          if (hasWordBoundary(normalized, index, end)) {
+            candidates.push({
+              kind: entry.kind,
+              canonical: entry.canonical,
+              span: [index, end],
+              confidence: 0.9,
+              raw: text.slice(index, end),
+              length: aliasLower.length,
+            });
           }
 
           searchStart = index + 1;
@@ -103,10 +110,19 @@ export class AliasRegistry {
       }
     }
 
-    const fuzzySubjectMatches = this.matchFuzzySubjects(text, sortedEntries, consumed);
-    matches.push(...fuzzySubjectMatches);
+    return candidates.sort((a, b) => {
+      if (b.length !== a.length) return b.length - a.length;
+      if (a.span[0] !== b.span[0]) return a.span[0] - b.span[0];
+      return kindPriority(b.kind) - kindPriority(a.kind);
+    });
+  }
 
-    return matches;
+  private sortedEntries(): AliasEntry[] {
+    return [...this.entries].sort((a, b) => {
+      const aMax = Math.max(...a.aliases.map(al => al.length));
+      const bMax = Math.max(...b.aliases.map(al => al.length));
+      return bMax - aMax;
+    });
   }
 
   private matchFuzzySubjects(text: string, sortedEntries: AliasEntry[], consumed: Set<number>): AliasMatch[] {
@@ -153,6 +169,23 @@ export class AliasRegistry {
 
     return matches;
   }
+}
+
+function hasWordBoundary(text: string, start: number, end: number): boolean {
+  const before = start === 0 || isBoundaryCharacter(text[start - 1]);
+  const after = end === text.length || isBoundaryCharacter(text[end]);
+
+  return before && after;
+}
+
+function isBoundaryCharacter(character: string): boolean {
+  return !/[a-z0-9]/i.test(character);
+}
+
+function kindPriority(kind: AliasKind): number {
+  if (kind === 'gened') return 3;
+  if (kind === 'subject') return 2;
+  return 1;
 }
 
 function tokenize(text: string): TokenSpan[] {
@@ -296,6 +329,7 @@ export function createDefaultRegistry(): AliasRegistry {
   registry.addAll([
     { kind: 'gened', canonical: 'HUM', aliases: ['humanities', 'humanities and the arts', 'arts'], requiresCue: true },
     { kind: 'gened', canonical: 'NAT', aliases: ['natural sciences', 'nat sci', 'science'], requiresCue: true },
+    { kind: 'gened', canonical: 'PS', aliases: ['physical sciences', 'physical'], requiresCue: true },
     { kind: 'gened', canonical: 'SBS', aliases: ['social sciences', 'behavioral sciences', 'social and behavioral'], requiresCue: true },
     { kind: 'gened', canonical: 'CS', aliases: ['cultural studies'], requiresCue: true },
     { kind: 'gened', canonical: 'QR', aliases: ['quantitative reasoning', 'quantitative', 'quant'], requiresCue: true },
@@ -309,6 +343,7 @@ export function createDefaultRegistry(): AliasRegistry {
   registry.addAll([
     { kind: 'gened', canonical: 'HUM', aliases: ['hum', 'humanities', 'humanities and the arts'] },
     { kind: 'gened', canonical: 'NAT', aliases: ['nat', 'nat sci', 'natural sciences'] },
+    { kind: 'gened', canonical: 'PS', aliases: ['ps gened', 'ps gen ed', 'physical sciences'] },
     { kind: 'gened', canonical: 'SBS', aliases: ['sbs', 'social sciences', 'behavioral sciences', 'social and behavioral'] },
     { kind: 'gened', canonical: 'CS', aliases: ['cs gened', 'cs gen ed', 'cultural studies'] }, // "cultural studies" is specific enough
     { kind: 'gened', canonical: 'QR', aliases: ['qr', 'quantitative reasoning'] },

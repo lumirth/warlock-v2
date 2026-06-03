@@ -26,8 +26,8 @@ export const TIME_RANGES: Record<string, { start?: string; end?: string }> = {
 };
 
 export const DIFFICULTY_THRESHOLDS = {
-  easy: { min_quality: 70, max_difficulty: 30 }, // High Quality (>70), Low Difficulty (<30)
-  hard: { max_quality: 40, min_difficulty: 70 }, // Low Quality (<40), High Difficulty (>70)
+  easy: { max_difficulty: 30 }, // Low workload, independent of composite quality.
+  hard: { min_difficulty: 70 }, // High workload, independent of composite quality.
 };
 
 const INTRODUCTORY_GATEWAY_NUMBERS: Record<string, string[]> = {
@@ -371,16 +371,6 @@ export function buildFilterClauses(
   if (filters.difficulty) {
     const thresholds = DIFFICULTY_THRESHOLDS[filters.difficulty];
 
-    if ('min_quality' in thresholds) {
-      // (Quality Score >= X) OR (Quality Score IS NULL AND Legacy GPA >= 3.5)
-      where.push('(c.quality_score >= ? OR (c.quality_score IS NULL AND c.avg_gpa >= 3.5))');
-      params.push(thresholds.min_quality);
-    }
-    if ('max_quality' in thresholds) {
-      // (Quality Score <= X) OR (Quality Score IS NULL AND Legacy GPA <= 3.0)
-      where.push('(c.quality_score <= ? OR (c.quality_score IS NULL AND c.avg_gpa <= 3.0))');
-      params.push(thresholds.max_quality);
-    }
     if ('min_difficulty' in thresholds) {
       // (Difficulty Score >= X) OR (Difficulty Score IS NULL AND Legacy GPA <= 3.0)
       // Note: Low GPA = High Difficulty

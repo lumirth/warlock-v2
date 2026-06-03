@@ -430,6 +430,7 @@ describe('SearchPage request state', () => {
     setQuery('CS gened')
     submitSearch()
 
+    expect(await screen.findByText(/did you mean a different interpretation/i)).toBeInTheDocument()
     await screen.findByRole('button', { name: /use cultural studies/i })
     fireEvent.click(
       screen.getByRole('button', { name: /use cultural studies/i })
@@ -449,6 +450,53 @@ describe('SearchPage request state', () => {
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
       'CS gened'
     )
+  })
+
+  it('switches ambiguity actions by clearing the competing subject or GenEd filter', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'easy cs', residual: '' },
+          ui: {
+            chips: [],
+            advanced: { gened: 'CS', difficulty: 'easy' },
+            ambiguityActions: [
+              {
+                id: '0-0-subject-CS',
+                term: 'cs',
+                label: 'Computer Science',
+                filter: { subject: 'CS' },
+                queryPatch: { replaceQuery: 'subject:CS' },
+              },
+            ],
+          },
+        },
+      })
+      .mockResolvedValueOnce(searchResponse([]))
+
+    renderSearchPage()
+
+    setQuery('easy cs')
+    submitSearch()
+
+    await screen.findByRole('button', { name: /use computer science/i })
+    fireEvent.click(
+      screen.getByRole('button', { name: /use computer science/i })
+    )
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith(
+        '',
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          limit: 20,
+          offset: 0,
+          filters: { subject: 'CS', difficulty: 'easy' },
+        })
+      )
+    })
   })
 
   it('sends advanced controls as structured filters while preserving free-text terms', async () => {

@@ -15,16 +15,30 @@ function plan(overrides: Partial<SearchPlan> = {}): SearchPlan {
 describe('applyDecisionSearchRescue', () => {
   it('turns generic gened language into an explicit any-GenEd constraint', () => {
     const searchPlan = plan({
-      filters: { subject: 'CS', difficulty: 'easy' },
+      filters: { difficulty: 'easy' },
     });
 
     applyDecisionSearchRescue(searchPlan, 'easy cs gened', '');
 
     expect(searchPlan.filters).toMatchObject({
-      subject: 'CS',
       difficulty: 'easy',
       gened_any: [...GENERIC_GENED_CODES],
     });
+    expect(searchPlan.rescue?.queryTypes).toEqual(expect.arrayContaining(['requirement', 'subjective_vibe']));
+  });
+
+  it('does not broaden a specific GenEd bucket into generic any-GenEd', () => {
+    const searchPlan = plan({
+      filters: { gened_code: 'CS', difficulty: 'easy' },
+    });
+
+    applyDecisionSearchRescue(searchPlan, 'easy cs gened', '');
+
+    expect(searchPlan.filters).toMatchObject({
+      gened_code: 'CS',
+      difficulty: 'easy',
+    });
+    expect(searchPlan.filters.gened_any).toBeUndefined();
     expect(searchPlan.rescue?.queryTypes).toEqual(expect.arrayContaining(['requirement', 'subjective_vibe']));
   });
 

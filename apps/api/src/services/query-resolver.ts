@@ -45,6 +45,8 @@ for (const [code, synonyms] of Object.entries(GENED_SYNONYMS)) {
 // Subject codes that conflict with GenEd codes
 const SUBJECT_GENED_CONFLICTS = new Set(['CS', 'PS']);
 
+type InterpretationType = 'subject' | 'gened';
+
 type InstructorResolution = {
   ids: number[];
   residualText?: string;
@@ -61,7 +63,7 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
   for (const hint of extracted.hints) {
     switch (hint.type) {
       case 'course_code':
-        await resolveCourseCode(db, hint, plan, extracted.rawQuery);
+        await resolveCourseCode(db, hint, plan);
         break;
 
       case 'instructor': {
@@ -84,7 +86,7 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         const subjectValue = String(hint.value);
         const validSubj = await validateSubject(db, subjectValue);
         if (validSubj) {
-          plan.filters.subject = validSubj;
+          await resolveSubjectHint(db, hint, validSubj, plan, extracted.rawQuery);
         } else {
           plan.keywordQuery = (plan.keywordQuery + " " + subjectValue).trim();
           plan.semanticQuery = (plan.semanticQuery + " " + subjectValue).trim();
@@ -205,8 +207,7 @@ export function parseTermValue(value: string): { term: string; year: number } | 
 async function resolveCourseCode(
   db: D1Database,
   hint: QueryHint,
-  plan: SearchPlan,
-  rawQuery: string
+  plan: SearchPlan
 ): Promise<void> {
   const subject = hint.metadata?.subject;
   const number = hint.metadata?.number;
@@ -220,24 +221,6 @@ async function resolveCourseCode(
     plan.filters.subject = validSubject;
     plan.filters.number = number;
 
-    // Check for subject/gened conflict
-    if (SUBJECT_GENED_CONFLICTS.has(validSubject)) {
-      // Check context for disambiguation
-      const genedKeywords = /gened|gen ed|requirement|fulfill/i;
-      if (!genedKeywords.test(rawQuery)) {
-        // Subject wins, but note the ambiguity
-        const genedCode = GENED_LOOKUP[validSubject.toLowerCase()];
-        if (genedCode) {
-          plan.ambiguities = plan.ambiguities || [];
-          plan.ambiguities.push({
-            term: validSubject,
-            chosen: { type: 'subject', value: validSubject, label: await getSubjectName(db, validSubject) },
-            alternatives: [{ type: 'gened', value: genedCode, label: getGenedLabel(genedCode) }]
-          });
-        }
-      }
-    }
-
     // Clear residual since we've fully resolved this
     const rawValue = String(hint.value);
     plan.semanticQuery = plan.semanticQuery.replace(rawValue, '').trim();
@@ -248,6 +231,164 @@ async function resolveCourseCode(
     plan.semanticQuery = (rawValue + " " + plan.semanticQuery).trim();
     plan.keywordQuery = (rawValue + " " + plan.keywordQuery).trim();
   }
+}
+
+async function resolveSubjectHint(
+  db: D1Database,
+  hint: QueryHint,
+  subject: string,
+  plan: SearchPlan,
+  rawQuery: string
+): Promise<void> {
+  if (!SUBJECT_GENED_CONFLICTS.has(subject)) {
+    plan.filters.subject = subject;
+    return;
+  }
+
+  const genedCode = GENED_LOOKUP[subject.toLowerCase()];
+  if (!genedCode) {
+    plan.filters.subject = subject;
+    return;
+  }
+
+  const decision = chooseSubjectOrGenedInterpretation({
+    subject,
+    hint,
+    rawQuery,
+  });
+
+  if (decision.preferred === 'gened') {
+    delete plan.filters.subject;
+    plan.filters.gened_code = genedCode;
+    await addSubjectGenedAmbiguity(db, plan, {
+      term: String(hint.metadata?.raw ?? hint.value),
+      chosen: 'gened',
+      subject,
+      genedCode,
+    });
+    return;
+  }
+
+  plan.filters.subject = subject;
+  if (decision.showAlternative) {
+    await addSubjectGenedAmbiguity(db, plan, {
+      term: String(hint.metadata?.raw ?? hint.value),
+      chosen: 'subject',
+      subject,
+      genedCode,
+    });
+  }
+}
+
+function chooseSubjectOrGenedInterpretation(context: {
+  subject: string;
+  hint: QueryHint;
+  rawQuery: string;
+}): { preferred: InterpretationType; showAlternative: boolean } {
+  const raw = context.rawQuery;
+  const hintRaw = String(context.hint.metadata?.raw ?? context.hint.value);
+
+  if (hasExplicitSubjectField(context.subject, raw)) {
+    return { preferred: 'subject', showAlternative: false };
+  }
+
+  if (hasExplicitSubjectPhrase(context.subject, hintRaw, raw)) {
+    return { preferred: 'subject', showAlternative: false };
+  }
+
+  const genedScore = interpretationScore([
+    [mentionsGenedCode(context.subject, raw), 5],
+    [hasRequirementCue(raw), 3],
+    [hasStudentShoppingCue(raw), 2],
+  ]);
+
+  const subjectScore = interpretationScore([
+    [hasSubjectBrowseCue(raw) && !hasStudentShoppingCue(raw), 3],
+    [isBareUppercaseSubjectCode(context.subject, raw), 1],
+  ]);
+
+  if (genedScore > subjectScore) {
+    return { preferred: 'gened', showAlternative: true };
+  }
+
+  return {
+    preferred: 'subject',
+    showAlternative: genedScore > 0 || isShortAmbiguousCode(hintRaw),
+  };
+}
+
+function interpretationScore(signals: Array<[boolean, number]>): number {
+  return signals.reduce((score, [enabled, value]) => score + (enabled ? value : 0), 0);
+}
+
+function hasExplicitSubjectField(subject: string, rawQuery: string): boolean {
+  return new RegExp(`\\bsubject\\s*:\\s*${escapeRegex(subject)}\\b`, 'i').test(rawQuery);
+}
+
+function hasExplicitSubjectPhrase(subject: string, hintRaw: string, rawQuery: string): boolean {
+  if (subject === 'CS') {
+    return /\b(?:computer\s+science|comp\s+sci)\b/i.test(hintRaw)
+      || /\b(?:computer\s+science|comp\s+sci)\b/i.test(rawQuery);
+  }
+
+  if (subject === 'PS') {
+    return /\bpolitical\s+science\b/i.test(hintRaw)
+      || /\bpolitical\s+science\b/i.test(rawQuery);
+  }
+
+  return false;
+}
+
+function mentionsGenedCode(subject: string, rawQuery: string): boolean {
+  return new RegExp(`\\b${escapeRegex(subject)}\\s+gen\\s*-?\\s*ed\\b`, 'i').test(rawQuery)
+    || new RegExp(`\\bgen\\s*-?\\s*ed\\s+${escapeRegex(subject)}\\b`, 'i').test(rawQuery);
+}
+
+function hasRequirementCue(rawQuery: string): boolean {
+  return /\b(?:gened|gen\s*-?\s*ed|requirements?|fulfills?|counts?|category|bucket)\b/i.test(rawQuery);
+}
+
+function hasStudentShoppingCue(rawQuery: string): boolean {
+  return /\b(?:easy|chill|gpa\s+booster|grade\s+booster|easy\s+a|low\s+workload)\b/i.test(rawQuery);
+}
+
+function hasSubjectBrowseCue(rawQuery: string): boolean {
+  return /\b(?:courses?|classes?|department|major|minor|subject)\b/i.test(rawQuery);
+}
+
+function isBareUppercaseSubjectCode(subject: string, rawQuery: string): boolean {
+  return new RegExp(`^\\s*${escapeRegex(subject)}\\s*$`).test(rawQuery);
+}
+
+function isShortAmbiguousCode(value: string): boolean {
+  return /^[a-z]{2,4}$/i.test(value.trim());
+}
+
+async function addSubjectGenedAmbiguity(
+  db: D1Database,
+  plan: SearchPlan,
+  context: {
+    term: string;
+    chosen: InterpretationType;
+    subject: string;
+    genedCode: string;
+  }
+): Promise<void> {
+  const subjectLabel = await getSubjectName(db, context.subject);
+  const genedLabel = getGenedLabel(context.genedCode);
+  const chosen = context.chosen === 'subject'
+    ? { type: 'subject', value: context.subject, label: subjectLabel }
+    : { type: 'gened', value: context.genedCode, label: genedLabel };
+  const alternative = context.chosen === 'subject'
+    ? { type: 'gened', value: context.genedCode, label: genedLabel }
+    : { type: 'subject', value: context.subject, label: subjectLabel };
+
+  plan.ambiguities = plan.ambiguities || [];
+  plan.ambiguities.push({
+    term: context.term,
+    chosen,
+    alternatives: [alternative],
+  });
 }
 
 export async function validateSubject(db: D1Database, subject: string): Promise<string | null> {
@@ -320,6 +461,10 @@ function isFuzzySubjectCodeCandidate(normalized: string): boolean {
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, match => `\\${match}`);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function getSubjectName(db: D1Database, code: string): Promise<string> {

@@ -671,8 +671,20 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   const applyAmbiguityAction = (action: SearchAmbiguityActionDto) => {
     const actionFilters = advancedStateFromFilter(action.filter)
     if (hasAdvancedFilterValue(actionFilters)) {
-      const nextFilters = cleanAdvancedFilters({
+      const baseFilters = cleanAdvancedFilters({
         ...activeAdvancedFilters,
+        ...(meta?.ui?.advanced || {}),
+      })
+      if (action.filter.gened_code) {
+        delete baseFilters.subject
+        delete baseFilters.number
+      }
+      if (action.filter.subject) {
+        delete baseFilters.gened
+      }
+
+      const nextFilters = cleanAdvancedFilters({
+        ...baseFilters,
         ...actionFilters,
       })
       setAdvancedDraft(nextFilters)
@@ -869,7 +881,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
               {meta.ui?.ambiguityActions?.length ? (
                 <div className="flex flex-col gap-2">
                   <p className="text-muted-foreground text-xs">
-                    Another interpretation is available:
+                    Did you mean a different interpretation?
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {meta.ui.ambiguityActions.map((action) => (

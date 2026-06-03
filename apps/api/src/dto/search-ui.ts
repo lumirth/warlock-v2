@@ -25,12 +25,12 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
   const chips = hints.map((hint, index): SearchChipDto => ({
     id: `${hint.type}-${index}`,
     type: hint.type,
-    label: formatHintLabel(hint, residual),
-    value: formatDisplayHintValue(hint, residual),
+    label: formatResolvedHintLabel(hint, plan, residual),
+    value: formatResolvedHintValue(hint, plan, residual),
     source: 'natural_language',
     removable: true,
     editable: isEditableHint(hint),
-    filter: filterFromHint(hint),
+    filter: resolvedFilterFromHint(hint, plan),
     queryPatch: {
       removeText: removeTextForHint(hint, residual),
     },
@@ -237,6 +237,22 @@ function formatHintLabel(hint: Hint, residual = ''): string {
   }
 }
 
+function formatResolvedHintLabel(hint: Hint, plan: SearchPlan, residual = ''): string {
+  if (isSubjectHintResolvedAsGened(hint, plan)) {
+    return `GenEd ${formatHintValue(hint.value)}`;
+  }
+
+  return formatHintLabel(hint, residual);
+}
+
+function formatResolvedHintValue(hint: Hint, plan: SearchPlan, residual: string): string {
+  if (isSubjectHintResolvedAsGened(hint, plan)) {
+    return formatHintValue(hint.value).toUpperCase();
+  }
+
+  return formatDisplayHintValue(hint, residual);
+}
+
 function formatDisplayHintValue(hint: Hint, residual: string): string {
   const value = formatHintValue(hint.value);
   if (hint.type !== 'instructor') {
@@ -324,6 +340,20 @@ function filterFromHint(hint: Hint): Partial<SearchFilters> {
     default:
       return {};
   }
+}
+
+function resolvedFilterFromHint(hint: Hint, plan: SearchPlan): Partial<SearchFilters> {
+  if (isSubjectHintResolvedAsGened(hint, plan)) {
+    return { gened_code: formatHintValue(hint.value).toUpperCase() };
+  }
+
+  return filterFromHint(hint);
+}
+
+function isSubjectHintResolvedAsGened(hint: Hint, plan: SearchPlan): boolean {
+  return hint.type === 'subject'
+    && !plan.filters.subject
+    && plan.filters.gened_code === formatHintValue(hint.value).toUpperCase();
 }
 
 function isEditableHint(hint: Hint): boolean {

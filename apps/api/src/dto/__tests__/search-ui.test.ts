@@ -69,6 +69,38 @@ describe('buildSearchUiPlan', () => {
     }]);
   });
 
+  it('renders subject shorthand as a GenEd chip when the resolver chose the requirement meaning', () => {
+    const hints: Hint[] = [
+      {
+        type: 'difficulty',
+        value: 'easy',
+        metadata: { source: 'alias', confidence: 0.9, raw: 'easy' },
+      },
+      {
+        type: 'subject',
+        value: 'CS',
+        metadata: { source: 'regex', confidence: 0.6, raw: 'cs' },
+      },
+    ];
+    const plan: SearchPlan = {
+      filters: { difficulty: 'easy', gened_code: 'CS' },
+      keywordQuery: '',
+      semanticQuery: '',
+      ambiguities: [{
+        term: 'cs',
+        chosen: { type: 'gened', value: 'CS', label: 'Cultural Studies' },
+        alternatives: [{ type: 'subject', value: 'CS', label: 'Computer Science' }],
+      }],
+    };
+
+    const ui = buildSearchUiPlan(hints, plan, '');
+
+    expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'GenEd CS']);
+    expect(ui.chips[1].filter).toEqual({ gened_code: 'CS' });
+    expect(ui.advanced.gened).toBe('CS');
+    expect(ui.advanced.subject).toBeUndefined();
+  });
+
   it('does not show restored topic words inside instructor chips', () => {
     const plan = buildSearchUiPlan([{
       type: 'instructor',

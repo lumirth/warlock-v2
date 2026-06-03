@@ -75,6 +75,33 @@ and degree-progress intent, but they do not become `Any GenEd` unless the user
 actually asks for GenEd. Personal degree progress requires student-profile or
 degree-audit context.
 
+## Context-Aware Ambiguity Routing
+
+Some campus terms have two legitimate meanings. The chip row should show the
+meaning the resolver chose, not the first raw extraction hint.
+
+The resolver uses this priority order:
+
+- Exact structured course codes are unambiguous: `CS 225` means the Computer
+  Science course.
+- Explicit field syntax or full department names are user control:
+  `subject:CS` and `computer science` mean the Computer Science subject.
+- Explicit requirement phrases win the requirement bucket: `cs gened`,
+  `gened cs`, and `cultural studies` mean the Cultural Studies GenEd bucket.
+- Broad requirement-shopping language such as `easy`, `chill`,
+  `grade booster`, or `low workload` biases overloaded short codes toward
+  requirement shopping. `easy cs` therefore defaults to Cultural Studies, with
+  Computer Science offered as a correction.
+- Avoidance constraints alone do not flip an overloaded code. `no exams CS`
+  still means the Computer Science subject because exam avoidance can apply to
+  a department search.
+- Plain department browsing language such as `CS courses`, `CS classes`, or
+  `CS department` stays on the subject meaning, with Cultural Studies available
+  as a correction when useful.
+
+The same model applies to other overloaded codes, for example `PS` as Political
+Science subject versus Physical Sciences GenEd.
+
 ## Result Evidence
 
 Result evidence must describe facts, not planner mechanics.

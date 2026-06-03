@@ -170,6 +170,28 @@ describe('AliasRegistry', () => {
         expect.objectContaining({ kind: 'gened', canonical: 'HUM' })
       );
     });
+
+    it('matches the longer CS GenEd phrase before the shorter CS subject code', () => {
+      const matches = registry.match('easy cs gened');
+
+      expect(matches).toContainEqual(
+        expect.objectContaining({ kind: 'gened', canonical: 'CS', raw: 'cs gened' })
+      );
+      expect(matches).not.toContainEqual(
+        expect.objectContaining({ kind: 'subject', canonical: 'CS' })
+      );
+    });
+
+    it('handles PS as Physical Sciences when explicit GenEd language is present', () => {
+      const matches = registry.match('easy ps gened');
+
+      expect(matches).toContainEqual(
+        expect.objectContaining({ kind: 'gened', canonical: 'PS', raw: 'ps gened' })
+      );
+      expect(matches).not.toContainEqual(
+        expect.objectContaining({ kind: 'subject', canonical: 'PS' })
+      );
+    });
   });
 
   describe('longest match first', () => {

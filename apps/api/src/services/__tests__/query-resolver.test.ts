@@ -12,6 +12,18 @@ const mockDb = {
   }))
 };
 
+function mockSubjectLookup(subject: string, name: string) {
+  const mockStmt = {
+    bind: vi.fn().mockReturnThis(),
+    first: vi.fn()
+      .mockResolvedValueOnce({ id: subject })
+      .mockResolvedValueOnce({ name }),
+    all: vi.fn().mockResolvedValue({ results: [] })
+  };
+  mockDb.prepare.mockReturnValue(mockStmt);
+  return mockStmt;
+}
+
 describe('resolveQuery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,6 +53,7 @@ describe('resolveQuery', () => {
 
       expect(plan.filters.subject).toBe('CS');
       expect(plan.filters.number).toBe('225');
+      expect(plan.ambiguities).toBeUndefined();
     });
 
     it('validates subject exists in database', async () => {
@@ -185,6 +198,147 @@ describe('resolveQuery', () => {
       // For now, we expect it to map 'humanities' to a known code or keep it
       expect(plan.filters.gened_code).toBeDefined();
       expect(plan.semanticQuery).toBe('easy');
+    });
+  });
+
+  describe('context-aware subject and GenEd ambiguity', () => {
+    it('keeps exact CS course-code lookups unambiguous', async () => {
+      mockSubjectLookup('CS', 'Computer Science');
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'CS 225',
+        hints: [{
+          type: 'course_code',
+          value: 'CS 225',
+          confidence: 0.95,
+          metadata: { subject: 'CS', number: '225', raw: 'CS 225' }
+        }],
+        residual: ''
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters).toMatchObject({ subject: 'CS', number: '225' });
+      expect(plan.ambiguities).toBeUndefined();
+    });
+
+    it('defaults easy CS shorthand to Cultural Studies GenEd with Computer Science as the alternate', async () => {
+      mockSubjectLookup('CS', 'Computer Science');
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'easy cs',
+        hints: [{
+          type: 'subject',
+          value: 'CS',
+          confidence: 0.6,
+          metadata: { raw: 'cs', source: 'regex' }
+        }],
+        residual: 'easy'
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.subject).toBeUndefined();
+      expect(plan.filters.gened_code).toBe('CS');
+      expect(plan.ambiguities).toEqual([{
+        term: 'cs',
+        chosen: { type: 'gened', value: 'CS', label: 'Cultural Studies' },
+        alternatives: [{ type: 'subject', value: 'CS', label: 'Computer Science' }],
+      }]);
+    });
+
+    it('keeps CS courses as Computer Science browsing while offering Cultural Studies as the alternate', async () => {
+      mockSubjectLookup('CS', 'Computer Science');
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'CS courses',
+        hints: [{
+          type: 'subject',
+          value: 'CS',
+          confidence: 0.6,
+          metadata: { raw: 'CS', source: 'regex' }
+        }],
+        residual: ''
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.subject).toBe('CS');
+      expect(plan.filters.gened_code).toBeUndefined();
+      expect(plan.ambiguities).toEqual([{
+        term: 'CS',
+        chosen: { type: 'subject', value: 'CS', label: 'Computer Science' },
+        alternatives: [{ type: 'gened', value: 'CS', label: 'Cultural Studies' }],
+      }]);
+    });
+
+    it('does not let avoidance-only language flip CS away from Computer Science', async () => {
+      mockSubjectLookup('CS', 'Computer Science');
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'no exams CS',
+        hints: [{
+          type: 'subject',
+          value: 'CS',
+          confidence: 0.6,
+          metadata: { raw: 'CS', source: 'regex' }
+        }],
+        residual: ''
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.subject).toBe('CS');
+      expect(plan.filters.gened_code).toBeUndefined();
+      expect(plan.ambiguities?.[0]).toMatchObject({
+        chosen: { type: 'subject', value: 'CS', label: 'Computer Science' },
+        alternatives: [{ type: 'gened', value: 'CS', label: 'Cultural Studies' }],
+      });
+    });
+
+    it('treats explicit Computer Science phrases as the subject without a correction prompt', async () => {
+      mockSubjectLookup('CS', 'Computer Science');
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'easy computer science',
+        hints: [{
+          type: 'subject',
+          value: 'CS',
+          confidence: 0.9,
+          metadata: { raw: 'computer science', source: 'alias' }
+        }],
+        residual: 'easy'
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.subject).toBe('CS');
+      expect(plan.filters.gened_code).toBeUndefined();
+      expect(plan.ambiguities).toBeUndefined();
+    });
+
+    it('uses the same policy for PS shorthand conflicts', async () => {
+      mockSubjectLookup('PS', 'Political Science');
+
+      const extracted: ExtractedQuery = {
+        rawQuery: 'easy ps',
+        hints: [{
+          type: 'subject',
+          value: 'PS',
+          confidence: 0.6,
+          metadata: { raw: 'ps', source: 'regex' }
+        }],
+        residual: 'easy'
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.subject).toBeUndefined();
+      expect(plan.filters.gened_code).toBe('PS');
+      expect(plan.ambiguities?.[0]).toMatchObject({
+        chosen: { type: 'gened', value: 'PS', label: 'Physical Sciences' },
+        alternatives: [{ type: 'subject', value: 'PS', label: 'Political Science' }],
+      });
     });
   });
 

@@ -877,9 +877,8 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     id: 103,
     query: "easy cs gened",
     expected_filters: {
-      subject: "CS",
       difficulty: "easy",
-      gened_any: ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"]
+      gened_code: "CS"
     },
     expected_residual: "",
     expected_rescue: {
@@ -889,7 +888,24 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
       assumptions: ["low_workload", "requirement_match"]
     },
     category: "decision",
-    notes: "Generic gened intent should become an explicit Any GenEd constraint instead of a hidden requirement-lane boost"
+    notes: "CS plus GenEd language should mean the Cultural Studies requirement, not the Computer Science subject"
+  },
+  {
+    id: 114,
+    query: "easy cs",
+    expected_filters: {
+      difficulty: "easy",
+      gened_code: "CS"
+    },
+    expected_residual: "",
+    expected_rescue: {
+      queryTypes: ["requirement", "subjective_vibe"],
+      warnings: ["workload_evidence_incomplete"],
+      retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
+      assumptions: ["low_workload", "requirement_match"]
+    },
+    category: "disambiguation",
+    notes: "Subjective shorthand defaults to Cultural Studies with Computer Science exposed as an alternate interpretation"
   },
   {
     id: 104,

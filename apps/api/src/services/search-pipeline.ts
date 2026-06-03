@@ -96,6 +96,10 @@ function toQueryHint(hint: Hint): QueryHint {
     confidence: hint.metadata.confidence,
     isExplicit:
       hint.metadata.source === "regex" || hint.metadata.source === "manual",
+    metadata: {
+      raw: hint.metadata.raw,
+      source: hint.metadata.source,
+    },
   };
 
   if (
@@ -105,6 +109,7 @@ function toQueryHint(hint: Hint): QueryHint {
     "subject" in hint.value
   ) {
     queryHint.metadata = {
+      ...queryHint.metadata,
       subject: hint.value.subject,
       number: hint.value.number,
     };
