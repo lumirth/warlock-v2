@@ -926,15 +926,22 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 105,
     query: "not math but counts for science",
-    expected_filters: {},
-    expected_residual: "science",
+    expected_filters: { gened_code: "NAT", not: { subjects: ["MATH"] } },
+    expected_soft_preferences: { lowMath: 0.86 },
+    expected_residual: "",
     expected_rescue: {
-      queryTypes: ["requirement", "topic", "avoidance", "subjective_vibe", "degree_progress"],
+      queryTypes: ["requirement", "avoidance", "subjective_vibe", "degree_progress"],
       negativeTerms: ["math_heavy", "calculus", "statistics", "formal_logic", "quantitative"],
       warnings: ["math_risk_inferred", "student_profile_required"],
-      retrievalLanes: ["official_text", "requirement", "student_language_alias", "topic_semantic", "workload_evidence"],
+      retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
       assumptions: ["low_math", "requirement_match"],
       needsStudentProfile: true
+    },
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { no_subjects: ["MATH"], level_lte: 400 },
+      max_graduate_top_k: 0
     },
     category: "decision"
   },
@@ -1050,5 +1057,118 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_residual: "campus urbana movies",
     category: "unsupported_language",
     notes: "Unsupported campus-scope language remains searchable while the topic still expands"
+  },
+  {
+    id: 115,
+    query: "easy science but no math",
+    expected_filters: { difficulty: "easy", gened_code: "NAT", not: { subjects: ["MATH"] } },
+    expected_soft_preferences: { lowMath: 0.86 },
+    expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { no_subjects: ["MATH"], level_lte: 400 },
+      max_graduate_top_k: 0
+    },
+    category: "decision",
+    notes: "General negation plus cue-less science requirement mapping"
+  },
+  {
+    id: 116,
+    query: "social science class",
+    expected_filters: { gened_code: "SBS" },
+    expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { gened: "SBS", level_lte: 400 }
+    },
+    category: "structured",
+    notes: "Cue-less social science should map to Social & Behavioral Sciences"
+  },
+  {
+    id: 117,
+    query: "diversity",
+    expected_filters: { gened_code: "CS" },
+    expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { gened: "CS", level_lte: 400 }
+    },
+    category: "structured",
+    notes: "Student diversity language maps to Cultural Studies until US/NW/WCC ingestion is complete"
+  },
+  {
+    id: 118,
+    query: "is cs 225 hard",
+    expected_filters: { subject: "CS", number: "225" },
+    expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 3,
+      must_include: [{ subject: "CS", number: "225", titleIncludes: "Data Structures" }]
+    },
+    category: "edge_case_punctuation",
+    notes: "Question-form difficulty words should not become a hard difficulty filter"
+  },
+  {
+    id: 119,
+    query: "what's an easy gen ed",
+    expected_filters: {
+      difficulty: "easy",
+      gened_any: ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"]
+    },
+    expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      max_graduate_top_k: 0
+    },
+    category: "edge_case_punctuation",
+    notes: "Apostrophes must not crash FTS or leak question words"
+  },
+  {
+    id: 120,
+    query: "orgo",
+    expected_filters: { subject: "CHEM" },
+    expected_residual: "organic",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      must_include: [{ subject: "CHEM", titleIncludes: "Organic" }],
+      all_top_k: { subjects: ["CHEM"] }
+    },
+    category: "semantic",
+    notes: "Maintained student shorthand should route to Chemistry plus organic topic text"
+  },
+  {
+    id: 121,
+    query: "diffeq",
+    expected_filters: { subject: "MATH" },
+    expected_residual: "differential equations",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      must_include: [{ subject: "MATH", titleIncludes: "Differential" }],
+      all_top_k: { subjects: ["MATH"] }
+    },
+    category: "semantic",
+    notes: "Maintained student shorthand should route to Math plus differential-equations topic text"
+  },
+  {
+    id: 122,
+    query: "physics for non majors",
+    expected_filters: { subject: "PHYS" },
+    expected_soft_preferences: { nonMajorFriendly: 0.72 },
+    expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      must_include: [{ subject: "PHYS", number: "100" }],
+      max_graduate_top_k: 1
+    },
+    category: "decision",
+    notes: "Soft non-major-friendly intent must affect ranking, not just plan decoration"
   },
 ];

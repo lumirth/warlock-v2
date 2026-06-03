@@ -96,13 +96,19 @@ function createEvalDb(): D1Database {
 
 function formatReport(results: EvalResult[]): string {
   const failures = results.filter(result => result.violations.length > 0);
+  const parseViolationCount = results.reduce((sum, result) => sum + result.parseViolations.length, 0);
+  const resultViolationCount = results.reduce((sum, result) => sum + result.resultViolations.length, 0);
   const lines = [
     '# Eval Smoke Report',
+    '',
+    'This smoke runner validates parse-layer expectations with a mock D1. Result-coherence expectations are enforced by the API eval runner against a real search endpoint.',
     '',
     `Total queries: ${results.length}`,
     `Passing queries: ${results.length - failures.length}`,
     `Failed queries: ${failures.length}`,
     `Violation count: ${results.reduce((sum, result) => sum + result.violations.length, 0)}`,
+    `Parse violation count: ${parseViolationCount}`,
+    `Result-coherence violation count: ${resultViolationCount}`,
     '',
     '## Query Results',
     '',
@@ -141,6 +147,8 @@ async function main(): Promise<void> {
       results: [],
       reciprocalRank: null,
       violations,
+      parseViolations: violations,
+      resultViolations: [],
       tierReached: null,
     });
   }

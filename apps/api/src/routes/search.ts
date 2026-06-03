@@ -12,9 +12,10 @@ import {
 import {
   DEFAULT_SEARCH_SCOPE,
   SEARCH_SCOPE_VALUES,
-  SEARCH_SORT_DEFAULT_DIRECTIONS,
-  SEARCH_SORT_FIELDS,
-  type SearchResponseDto,
+	  SEARCH_SORT_DEFAULT_DIRECTIONS,
+	  SEARCH_SORT_FIELDS,
+	  type CourseGenedDto,
+	  type SearchResponseDto,
   type SearchScope,
   type SearchSort,
 } from "@uiuc-course-search/query-types";
@@ -31,6 +32,7 @@ import { errorFields, logger } from "../observability/logger.js";
 
 const MAX_SEARCH_OFFSET = 1000;
 const MAX_SEARCH_FETCH_WINDOW = 1200;
+const SEARCH_DTO_BATCH_SIZE = 50;
 const TERM_VALUES = ["spring", "summer", "fall", "winter"] as const;
 const TIME_VALUES = [
   "early",
@@ -107,6 +109,49 @@ function parseLevelParam(raw?: string): number | undefined {
   return LEVEL_VALUES.includes(value as (typeof LEVEL_VALUES)[number])
     ? value
     : undefined;
+}
+
+async function loadSearchResultGeneds(
+  db: D1Database,
+  courseIds: string[],
+): Promise<Map<string, CourseGenedDto[]>> {
+  const genedsByCourseId = new Map<string, CourseGenedDto[]>();
+  const uniqueIds = [...new Set(courseIds)].filter(Boolean);
+
+  for (let index = 0; index < uniqueIds.length; index += SEARCH_DTO_BATCH_SIZE) {
+    const batch = uniqueIds.slice(index, index + SEARCH_DTO_BATCH_SIZE);
+    const placeholders = batch.map(() => "?").join(",");
+    const result = await db
+      .prepare(
+        `
+        SELECT course_id, category_id, category_name, attribute_code, attribute_name
+        FROM course_gened
+        WHERE course_id IN (${placeholders})
+        ORDER BY category_id, attribute_code
+        `,
+      )
+      .bind(...batch)
+      .all<{
+        course_id: string;
+        category_id: string;
+        category_name: string | null;
+        attribute_code: string | null;
+        attribute_name: string | null;
+      }>();
+
+    for (const row of result.results) {
+      const geneds = genedsByCourseId.get(row.course_id) ?? [];
+      geneds.push({
+        categoryId: row.category_id,
+        categoryName: row.category_name,
+        attributeCode: row.attribute_code,
+        attributeName: row.attribute_name,
+      });
+      genedsByCourseId.set(row.course_id, geneds);
+    }
+  }
+
+  return genedsByCourseId;
 }
 
 // Hybrid search endpoint (combines semantic + keyword with RRF)
@@ -221,6 +266,18 @@ searchRoutes.get("/api/search", async (c) => {
     overrides.time = parsedTime.value;
   }
 
+  const partOfTerm = c.req.query("partOfTerm") ?? c.req.query("part_of_term") ?? c.req.query("pot");
+  if (partOfTerm) {
+    const normalizedPartOfTerm = partOfTerm.trim().toUpperCase();
+    if (!/^[A-Z0-9]$/.test(normalizedPartOfTerm)) {
+      return c.json(
+        { error: "partOfTerm must be a single Course Explorer part-of-term code like 1, A, or B" },
+        400,
+      );
+    }
+    overrides.partOfTerm = normalizedPartOfTerm;
+  }
+
   const online = c.req.query("online");
   if (online) {
     const parsedOnline = parseBooleanParam(online, "online");
@@ -286,6 +343,10 @@ searchRoutes.get("/api/search", async (c) => {
     );
     const pageResults = result.results.slice(offset, offset + limit);
     const hasMore = result.results.length > offset + limit;
+    const genedsByCourseId = await loadSearchResultGeneds(
+      c.env.DB,
+      pageResults.map((searchResult) => searchResult.course.id),
+    );
 
     const ui = buildSearchUiPlan(
       result.meta.extraction.hints,
@@ -299,10 +360,11 @@ searchRoutes.get("/api/search", async (c) => {
     const response: SearchResponseDto = {
       results: pageResults.map((searchResult) =>
         searchResultToCourseDto(searchResult, {
-          plan: result.meta.plan,
-          rawQuery: result.meta.query.raw,
-          hints: result.meta.extraction.hints,
-        }),
+            plan: result.meta.plan,
+            rawQuery: result.meta.query.raw,
+            hints: result.meta.extraction.hints,
+            geneds: genedsByCourseId.get(searchResult.course.id) ?? [],
+          }),
       ),
       meta: {
         ...result.meta,

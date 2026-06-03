@@ -24,6 +24,7 @@ import {
   getWorkloadTierLabel,
   type AdvancedSearchStateDto,
   type CourseDto,
+  type CourseGenedDto,
   type MatchEvidence,
   type SearchAmbiguityActionDto,
   type SearchChipDto,
@@ -126,6 +127,7 @@ const ADVANCED_SEARCH_KEYS: (keyof AdvancedSearchStateDto)[] = [
   'credits',
   'days',
   'time',
+  'partOfTerm',
   'online',
   'status',
   'difficulty',
@@ -148,6 +150,12 @@ const TIME_OPTIONS: SelectOption[] = [
   { value: 'morning', label: 'Morning' },
   { value: 'afternoon', label: 'Afternoon' },
   { value: 'evening', label: 'Evening' },
+]
+
+const PART_OF_TERM_OPTIONS: SelectOption[] = [
+  { value: '1', label: 'Full term' },
+  { value: 'A', label: 'First half' },
+  { value: 'B', label: 'Second half' },
 ]
 
 const DELIVERY_OPTIONS: SelectOption[] = [
@@ -386,6 +394,20 @@ function formatTermLabel(term: string, year: number): string {
   return `${term.charAt(0).toUpperCase()}${term.slice(1).toLowerCase()} ${year}`
 }
 
+function genedLabel(gened: CourseGenedDto): string {
+  const category = gened.categoryName ?? gened.categoryId
+  if (gened.attributeName) return `${category}: ${gened.attributeName}`
+  if (gened.attributeCode) return `${category}: ${gened.attributeCode}`
+  return category
+}
+
+function courseGenedLabels(course: CourseDto): string[] {
+  if (course.geneds.length > 0) {
+    return course.geneds.map(genedLabel)
+  }
+  return course.gened ? [`GenEd ${course.gened}`] : []
+}
+
 function readStoredResultViewMode(): ResultViewMode {
   if (typeof window === 'undefined') return 'cards'
 
@@ -500,6 +522,9 @@ function cleanAdvancedFilters(
   if (typeof state.credits === 'number') next.credits = state.credits
   if (state.days?.trim()) next.days = state.days.trim().toUpperCase()
   if (state.time?.trim()) next.time = state.time.trim().toLowerCase()
+  if (state.partOfTerm?.trim()) {
+    next.partOfTerm = state.partOfTerm.trim().toUpperCase()
+  }
   if (state.online !== undefined) next.online = state.online
   if (state.status?.trim()) next.status = state.status.trim().toLowerCase()
   if (state.difficulty === 'easy' || state.difficulty === 'hard') {
@@ -532,6 +557,7 @@ function advancedStateFromFilter(
     credits: filter.credits,
     days: filter.days,
     time: filter.time,
+    partOfTerm: filter.partOfTerm,
     online: filter.online,
     status: filter.status,
     difficulty: filter.difficulty,
@@ -582,6 +608,10 @@ function advancedFiltersForChipRemoval(
   }
   if (filter?.time && next.time === filter.time) {
     delete next.time
+    changed = true
+  }
+  if (filter?.partOfTerm && next.partOfTerm === filter.partOfTerm) {
+    delete next.partOfTerm
     changed = true
   }
   if (filter?.online !== undefined && next.online === filter.online) {
@@ -1483,7 +1513,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                       <FieldLegend variant="label">
                         Term and meeting
                       </FieldLegend>
-                      <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                         <AdvancedSelectField
                           id="advanced-term"
                           label="Term"
@@ -1530,6 +1560,16 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                           options={TIME_OPTIONS}
                           onChange={(value) =>
                             updateAdvancedDraft('time', value)
+                          }
+                        />
+                        <AdvancedSelectField
+                          id="advanced-part-of-term"
+                          label="Part of term"
+                          placeholder="Any part"
+                          value={advancedDraft.partOfTerm}
+                          options={PART_OF_TERM_OPTIONS}
+                          onChange={(value) =>
+                            updateAdvancedDraft('partOfTerm', value)
                           }
                         />
                       </FieldGroup>
@@ -1785,9 +1825,9 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                                   {course.primary_instructor}
                                 </span>
                               )}
-                              {course.gened && (
-                                <span>GenEd {course.gened}</span>
-                              )}
+	                              {courseGenedLabels(course).map((label) => (
+	                                <span key={label}>{label}</span>
+	                              ))}
                             </div>
                             {renderScoreSummary(course)}
                             <p

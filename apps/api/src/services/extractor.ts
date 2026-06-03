@@ -28,7 +28,17 @@ const STOP_PHRASES = [
   'section', 'sections',
   'class', 'classes',
   'course', 'courses',
-  'only', 'booster'
+  'only', 'booster',
+  'count', 'counts',
+  'week', 'weeks',
+  'what should i take',
+  'what can i take',
+  'what is', "what's", 'whats',
+  'which is', 'which are',
+  'how is', 'how are',
+  'is', 'are', 'was', 'were',
+  'and', 'but', 'or',
+  'that', 'for', 'with', 'without', 'no', 'not', 'avoid', 'avoiding',
 ];
 
 const STOP_PHRASES_REGEX = new RegExp(`\\b(${STOP_PHRASES.join('|')})\\b`, 'gi');
@@ -43,22 +53,114 @@ function removeStopPhrases(text: string): string {
 // Cache the registry for performance
 const ALIAS_REGISTRY = createDefaultRegistry();
 
+const NEGATION_TARGET_STOP_WORDS = new Set([
+  'and',
+  'but',
+  'or',
+  'then',
+  'with',
+  'for',
+  'that',
+  'which',
+  'who',
+  'what',
+  'class',
+  'classes',
+  'course',
+  'courses',
+  'gen',
+  'gened',
+  'ed',
+  'requirement',
+  'requirements',
+]);
+
+const NEGATED_SUBJECT_ALIASES: Record<string, string> = {
+  math: 'MATH',
+  mathematics: 'MATH',
+  calculus: 'MATH',
+  stats: 'STAT',
+  stat: 'STAT',
+  statistics: 'STAT',
+  'computer science': 'CS',
+  'comp sci': 'CS',
+  compsci: 'CS',
+  chem: 'CHEM',
+  chemistry: 'CHEM',
+  orgo: 'CHEM',
+  ochem: 'CHEM',
+  biology: 'MCB',
+  bio: 'MCB',
+  physics: 'PHYS',
+};
+
+const WORKLOAD_NEGATION_TERMS = new Set([
+  'essay',
+  'essays',
+  'paper',
+  'papers',
+  'writing',
+  'writing heavy',
+  'writing-heavy',
+  'reading',
+  'reading heavy',
+  'reading-heavy',
+  'exam',
+  'exams',
+  'test',
+  'tests',
+  'lab',
+  'labs',
+  'coding',
+  'programming',
+  'group project',
+  'group projects',
+]);
+
+const STUDENT_SHORTHAND_RULES: Array<{
+  pattern: RegExp;
+  subject: string;
+  expansion: string;
+  confidence: number;
+}> = [
+  { pattern: /\b(?:orgo|ochem|organic\s+chem(?:istry)?)\b/gi, subject: 'CHEM', expansion: 'organic chemistry', confidence: 0.86 },
+  { pattern: /\b(?:diff\s*eq|diffeq|differential\s+equations?)\b/gi, subject: 'MATH', expansion: 'differential equations', confidence: 0.84 },
+  { pattern: /\b(?:compsci|comp\s+sci)\b/gi, subject: 'CS', expansion: 'computer science', confidence: 0.9 },
+  { pattern: /\bmacroecon(?:omics)?\b/gi, subject: 'ECON', expansion: 'macroeconomics', confidence: 0.84 },
+  { pattern: /\bmicroecon(?:omics)?\b/gi, subject: 'ECON', expansion: 'microeconomics', confidence: 0.84 },
+];
+
+const CONTEXTUAL_GENED_RULES: Array<{
+  code: string;
+  pattern: RegExp;
+  confidence: number;
+}> = [
+  { code: 'SBS', pattern: /\b(?:social\s+(?:and\s+behavioral\s+)?sciences?|behavioral\s+sciences?|social\s+science\s+(?:class|course|requirement|gen\s*-?\s*ed|gened))\b/gi, confidence: 0.86 },
+  { code: 'NAT', pattern: /\b(?:natural\s+sciences?|nat\s+sci|science\s+(?:class|course|requirement|gen\s*-?\s*ed|gened)|(?:easy|chill|need|counts?\s+for|fulfills?)\s+science)\b/gi, confidence: 0.84 },
+  { code: 'ACP', pattern: /\b(?:advanced\s+composition|adv\s+comp|writing\s+(?:requirement|intensive|gen\s*-?\s*ed|gened))\b/gi, confidence: 0.86 },
+  { code: 'CS', pattern: /\b(?:cultural\s+studies|diversity|race\s+and\s+ethnicity|race|ethnicity|other\s+cultures|culture\s+class|cultural\s+requirement)\b/gi, confidence: 0.78 },
+];
+
 /**
  * Extract structured hints from natural language text.
  * Multi-pass extraction to ensure order independence.
  */
 export function extract(text: string): ExtractionResult {
   const hints: Hint[] = [];
-  let residual = text;
+  let residual = text.replace(/[’]/g, "'");
 
   // Pass 1: Negations & Strict Entities (Course Codes, CRNs)
   // We extract negations early so they can capture terms before they are removed by aliases
   residual = extractNegations(residual, hints);
   residual = extractCourseCodesAndCrns(residual, hints);
+  residual = extractQuestionScaffolding(residual);
+  residual = extractStudentShorthand(residual, hints);
 
   // Pass 1.5: Term extraction (Spring 2026, etc.)
   residual = extractTerms(residual, hints);
   residual = extractPartOfTerm(residual, hints);
+  residual = maskCompressedTermPhrases(residual);
+  residual = extractContextualGeneds(residual, hints);
 
   // Pass 2: Attributes and Aliases (Level, Credits, Days, Time, etc.)
   residual = extractAttributesAndAliases(residual, hints);
@@ -96,9 +198,7 @@ function maskRange(text: string, start: number, length: number): string {
 function extractNegations(text: string, hints: Hint[]): string {
   let residual = text;
   const negationPatterns = [
-    /\bno\s+(\w+)\b/gi,
-    /\bnot\s+(\w+)\b/gi,
-    /\bavoid\s+(\w+)\b/gi,
+    /\b(?:no|not|without|avoid|avoiding|isn['’]?t|arent|aren['’]?t|doesnt|doesn['’]?t)\s+([a-z0-9+#-]+(?:\s+(?!and\b|but\b|or\b|then\b|with\b|for\b|that\b|which\b|who\b|what\b|no\b|not\b|without\b|avoid\b|avoiding\b|\d+\b)[a-z0-9+#-]+){0,3})\b/gi,
   ];
 
   for (const pattern of negationPatterns) {
@@ -107,26 +207,30 @@ function extractNegations(text: string, hints: Hint[]): string {
     const patternCopy = new RegExp(pattern.source, pattern.flags);
     
     while ((match = patternCopy.exec(residual)) !== null) {
-      const target = match[1].toLowerCase();
-      const negationType = guessNegationType(target);
-      if (!negationType) {
+      const classified = classifyNegationTarget(match[1]);
+      if (!classified) {
+        matches.push({ index: match.index, length: match[0].length });
         continue;
       }
 
-      if (negationType === 'online') {
+      const { negation } = classified;
+      const targetStartInMatch = match[0].lastIndexOf(match[1]);
+      const consumedMatchLength = targetStartInMatch + classified.consumedLength;
+      const rawNegationText = match[0].slice(0, consumedMatchLength).trim();
+      if (negation.target === 'online') {
         hints.push({
           type: 'online',
           value: false,
-          metadata: createMetadata('nlp', match[0], 0.75),
+          metadata: createMetadata('nlp', rawNegationText, 0.75),
         });
       } else {
         hints.push({
           type: 'negation',
-          value: { target: negationType, value: target },
-          metadata: createMetadata('nlp', match[0], 0.75),
+          value: negation,
+          metadata: createMetadata('nlp', rawNegationText, 0.75),
         });
       }
-      matches.push({ index: match.index, length: match[0].length });
+      matches.push({ index: match.index, length: consumedMatchLength });
     }
     
     // Apply matches in reverse order to keep indices valid
@@ -135,6 +239,186 @@ function extractNegations(text: string, hints: Hint[]): string {
     }
   }
   return residual;
+}
+
+function normalizeNegationTarget(raw: string): string {
+  const tokens = raw
+    .toLowerCase()
+    .replace(/[-_]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const kept: string[] = [];
+  for (const token of tokens) {
+    if (NEGATION_TARGET_STOP_WORDS.has(token)) {
+      break;
+    }
+    kept.push(token);
+  }
+
+  return kept.join(' ').trim();
+}
+
+function classifyNegationTarget(raw: string): {
+  negation: { target: HintType | 'keyword' | 'workload'; value: string };
+  consumedLength: number;
+} | null {
+  const timeMatch = matchLeadingRawTarget(raw, ['morning', 'afternoon', 'evening', 'early', 'night']);
+  if (timeMatch) {
+    return {
+      negation: { target: 'time', value: normalizeNegationTarget(timeMatch.value) },
+      consumedLength: timeMatch.length,
+    };
+  }
+
+  const dayMatch = matchLeadingRawTarget(raw, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'mwf', 'tr']);
+  if (dayMatch) {
+    return {
+      negation: { target: 'days', value: normalizeNegationTarget(dayMatch.value) },
+      consumedLength: dayMatch.length,
+    };
+  }
+
+  const onlineMatch = matchLeadingRawTarget(raw, ['online', 'remote', 'virtual', 'asynchronous', 'async']);
+  if (onlineMatch) {
+    return {
+      negation: { target: 'online', value: normalizeNegationTarget(onlineMatch.value) },
+      consumedLength: onlineMatch.length,
+    };
+  }
+
+  const workloadMatch = matchLeadingRawTarget(raw, [...WORKLOAD_NEGATION_TERMS].sort((a, b) => b.length - a.length));
+  if (workloadMatch) {
+    return {
+      negation: { target: 'workload', value: normalizeNegationTarget(workloadMatch.value) },
+      consumedLength: workloadMatch.length,
+    };
+  }
+
+  const subjectTerms = Object.keys(NEGATED_SUBJECT_ALIASES).sort((a, b) => b.length - a.length);
+  const subjectMatch = matchLeadingRawTarget(raw, subjectTerms);
+  if (subjectMatch) {
+    return {
+      negation: {
+        target: 'subject',
+        value: NEGATED_SUBJECT_ALIASES[normalizeNegationTarget(subjectMatch.value)] ?? normalizeNegationTarget(subjectMatch.value),
+      },
+      consumedLength: subjectMatch.length,
+    };
+  }
+
+  const target = normalizeNegationTarget(raw);
+  if (!target) {
+    return null;
+  }
+
+  return {
+    negation: { target: 'keyword', value: target },
+    consumedLength: raw.length,
+  };
+}
+
+function matchLeadingRawTarget(raw: string, terms: string[]): { value: string; length: number } | null {
+  for (const term of terms) {
+    const source = escapeRegExp(term).replace(/\\ /g, '\\s+').replace(/\\-/g, '[-\\s]+');
+    const pattern = new RegExp(`^\\s*(${source})(?=\\b|\\s|$)`, 'i');
+    const match = pattern.exec(raw);
+    if (match) {
+      return { value: match[1], length: match[0].length };
+    }
+  }
+  return null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractQuestionScaffolding(text: string): string {
+  const hasDifficultyQuestion =
+    /\b(?:is|are|was|were)\b.+\b(?:hard|easy|difficult|challenging|tough)\b/i.test(text)
+    || /\bhow\s+(?:hard|easy|difficult|challenging|tough)\s+(?:is|are|was|were)\b/i.test(text);
+
+  if (!hasDifficultyQuestion) {
+    return text;
+  }
+
+  return text
+    .replace(/\bhow\s+(?:hard|easy|difficult|challenging|tough)\s+(?:is|are|was|were)\b/gi, ' ')
+    .replace(/\b(?:is|are|was|were)\b/gi, ' ')
+    .replace(/\b(?:hard|easy|difficult|challenging|tough)\b/gi, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function extractStudentShorthand(text: string, hints: Hint[]): string {
+  let residual = text;
+
+  for (const rule of STUDENT_SHORTHAND_RULES) {
+    const matches: { index: number; length: number; raw: string }[] = [];
+    const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
+    let match;
+    while ((match = pattern.exec(residual)) !== null) {
+      hints.push({
+        type: 'subject',
+        value: rule.subject,
+        metadata: createMetadata('alias', match[0], rule.confidence),
+      });
+      matches.push({ index: match.index, length: match[0].length, raw: match[0] });
+    }
+
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const item = matches[i];
+      residual =
+        residual.slice(0, item.index) +
+        rule.expansion.padEnd(item.length, ' ') +
+        residual.slice(item.index + item.length);
+    }
+  }
+
+  return residual;
+}
+
+function extractContextualGeneds(text: string, hints: Hint[]): string {
+  let residual = text;
+
+  for (const rule of CONTEXTUAL_GENED_RULES) {
+    const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
+    const matches: { index: number; length: number }[] = [];
+    let match;
+    while ((match = pattern.exec(residual)) !== null) {
+      if (rule.code === 'NAT' && isProtectedScienceSubjectPhrase(residual, match.index, match[0].length)) {
+        continue;
+      }
+
+      hints.push({
+        type: 'gened',
+        value: rule.code,
+        metadata: createMetadata('nlp', match[0], rule.confidence),
+      });
+      if (rule.code === 'NAT' && /\b(?:easy|chill)\b/i.test(match[0])) {
+        hints.push({
+          type: 'difficulty',
+          value: 'easy',
+          metadata: createMetadata('nlp', match[0], 0.82),
+        });
+      }
+      matches.push({ index: match.index, length: match[0].length });
+    }
+
+    for (let i = matches.length - 1; i >= 0; i--) {
+      residual = maskRange(residual, matches[i].index, matches[i].length);
+    }
+  }
+
+  return residual;
+}
+
+function isProtectedScienceSubjectPhrase(text: string, start: number, length: number): boolean {
+  const window = text
+    .slice(Math.max(0, start - 16), Math.min(text.length, start + length + 16))
+    .toLowerCase();
+
+  return /\b(?:computer|political|data|information|materials?|library|crop|animal|food)\s+science\b/.test(window);
 }
 
 function extractCourseCodesAndCrns(text: string, hints: Hint[]): string {
@@ -265,6 +549,10 @@ function extractPartOfTerm(text: string, hints: Hint[]): string {
   }
 
   return residual;
+}
+
+function maskCompressedTermPhrases(text: string): string {
+  return text.replace(/\b(?:8|eight)\s*-?\s*weeks?\b/gi, match => ' '.repeat(match.length));
 }
 
 function extractAttributesAndAliases(text: string, hints: Hint[]): string {
@@ -522,17 +810,6 @@ function looksLikeInstructorName(value: string): boolean {
   }
 
   return tokens.every(token => token.length > 1 && !INSTRUCTOR_STOP_WORDS.has(token));
-}
-
-function guessNegationType(word: string): HintType | null {
-  const timeWords = ['morning', 'afternoon', 'evening', 'early', 'night'];
-  const daysWords = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'mwf', 'tr'];
-  const onlineWords = ['online', 'remote', 'virtual'];
-
-  if (timeWords.includes(word)) return 'time';
-  if (daysWords.includes(word)) return 'days';
-  if (onlineWords.includes(word)) return 'online';
-  return null;
 }
 
 function createMetadata(source: 'regex' | 'alias' | 'nlp', raw: string, confidence: number): HintMetadata {

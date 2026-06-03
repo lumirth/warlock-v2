@@ -31,10 +31,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import { parseSubjectCascadeXmlFromString, type ParsedSubjectCascade } from '../apps/api/src/cisapi/parser.ts';
 
 // Inline makeCourseId to avoid D1 type issues
-function makeCourseId(subject: string, number: string, year: number, term: string): string {
+export function makeCourseId(subject: string, number: string, year: number, term: string): string {
   return `${subject}-${number}-${year}-${term}`;
 }
 
@@ -708,7 +709,7 @@ async function getSubjects(year: number, term: string): Promise<string[]> {
   }
 }
 
-function escapeSQL(str: string | null): string {
+export function escapeSQL(str: string | null): string {
   if (str === null) return 'NULL';
   // Escape single quotes and replace newlines/carriage returns with space
   // Also handle backslashes to avoid escape sequence issues
@@ -718,6 +719,27 @@ function escapeSQL(str: string | null): string {
     .replace(/\r?\n/g, ' ')
     .replace(/\r/g, ' ')
   }'`;
+}
+
+export type HistoricalGenEdCategoryForSql = {
+  categoryId: string;
+  categoryName: string | null;
+  attributeCode: string | null;
+  attributeName: string | null;
+};
+
+export function courseGenedSqlStatements(
+  courseId: string,
+  genEdCategories: HistoricalGenEdCategoryForSql[],
+): string[] {
+  return genEdCategories.flatMap(ge => {
+    const statements: string[] = [];
+    if (ge.attributeCode === null) {
+      statements.push(`DELETE FROM course_gened WHERE course_id = ${escapeSQL(courseId)} AND category_id = ${escapeSQL(ge.categoryId)} AND attribute_code IS NULL;`);
+    }
+    statements.push(`INSERT OR REPLACE INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES (${escapeSQL(courseId)}, ${escapeSQL(ge.categoryId)}, ${escapeSQL(ge.categoryName)}, ${escapeSQL(ge.attributeCode)}, ${escapeSQL(ge.attributeName)});`);
+    return statements;
+  });
 }
 
 function printSummary(args: Args, startTime: Date): void {
@@ -919,9 +941,7 @@ async function main() {
             sqlStatements.push(`INSERT OR REPLACE INTO courses (id, subject, number, title, description, credit_hours, gened, subject_id, course_info, degree_attributes, class_schedule_info, date_range_text, registration_notes, approval_code, year, term, primary_instructor, last_synced) VALUES (${escapeSQL(course.id)}, ${escapeSQL(course.subject)}, ${escapeSQL(course.number)}, ${escapeSQL(course.title)}, ${escapeSQL(course.description)}, ${course.credit_hours ?? 'NULL'}, ${escapeSQL(course.gened)}, ${escapeSQL(course.subject_id)}, ${escapeSQL(course.course_info)}, ${escapeSQL(course.degree_attributes)}, ${escapeSQL(course.class_schedule_info)}, ${escapeSQL(course.date_range_text)}, ${escapeSQL(course.registration_notes)}, ${escapeSQL(course.approval_code)}, ${course.year}, ${escapeSQL(course.term)}, ${escapeSQL(course.primary_instructor)}, ${now});`);
 
             // 3. Course GenEds
-            for (const ge of genEdCategories) {
-              sqlStatements.push(`INSERT OR REPLACE INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES (${escapeSQL(course.id)}, ${escapeSQL(ge.categoryId)}, ${escapeSQL(ge.categoryName)}, ${escapeSQL(ge.attributeCode)}, ${escapeSQL(ge.attributeName)});`);
-            }
+            sqlStatements.push(...courseGenedSqlStatements(course.id, genEdCategories));
 
             for (const { section, meetings } of sections) {
               // 4. Section
@@ -1039,7 +1059,9 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  writeLog(`\n[FATAL ERROR] ${error}`);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(error => {
+    writeLog(`\n[FATAL ERROR] ${error}`);
+    process.exit(1);
+  });
+}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseSubjectCascadeXmlFromString } from '../../apps/api/src/cisapi/parser.js';
+import { courseGenedSqlStatements, escapeSQL, makeCourseId } from '../historical-sync.js';
 
 // Real XML sample from ~/cisapp (trimmed to 1 course with 2 sections)
 const REAL_CS_CASCADE_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -82,11 +83,6 @@ www.cs.illinois.edu</collegeDepartmentDescription>
   </cascadingCourses>
 </ns2:subject>`;
 
-// Inline the transform and SQL generation functions from historical-sync.ts
-function makeCourseId(subject: string, number: string, year: number, term: string): string {
-  return `${subject}-${number}-${year}-${term}`;
-}
-
 function makeTermId(year: number, term: string): string {
   return `${year}-${term}`;
 }
@@ -100,16 +96,6 @@ function formatInstructorName(inst: { firstName: string; lastName: string }): st
     return `${inst.lastName}, ${inst.firstName.charAt(0)}`;
   }
   return inst.lastName;
-}
-
-function escapeSQL(str: string | null): string {
-  if (str === null) return 'NULL';
-  return `'${str
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "''")
-    .replace(/\r?\n/g, ' ')
-    .replace(/\r/g, ' ')
-  }'`;
 }
 
 describe('Historical Sync SQL Generation', () => {
@@ -244,6 +230,21 @@ describe('Historical Sync SQL Generation', () => {
     expect(sql).toContain("'CS-101-2026-spring'");
     expect(sql).toContain("'QR1'");
     expect(sql).toContain("'Quantitative Reasoning I'");
+  });
+
+  it('pre-cleans nullable GenEd attribute rows before historical SQL insert', () => {
+    const courseId = makeCourseId('CLCV', '100', 2026, 'spring');
+    const sql = courseGenedSqlStatements(courseId, [{
+      categoryId: 'HUM',
+      categoryName: 'Humanities - Lit Arts',
+      attributeCode: null,
+      attributeName: null,
+    }]);
+
+    expect(sql).toEqual([
+      "DELETE FROM course_gened WHERE course_id = 'CLCV-100-2026-spring' AND category_id = 'HUM' AND attribute_code IS NULL;",
+      "INSERT OR REPLACE INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES ('CLCV-100-2026-spring', 'HUM', 'Humanities - Lit Arts', NULL, NULL);",
+    ]);
   });
 
   it('handles special characters in SQL escaping', async () => {

@@ -8,6 +8,8 @@ export function generateReport(metrics: EvalMetrics, label: string = 'Current'):
   lines.push(`Passing Queries: ${metrics.passingQueries}`);
   lines.push(`Failed Queries: ${metrics.failedQueries}`);
   lines.push(`Violation Count: ${metrics.violationCount}`);
+  lines.push(`Parse Violations: ${metrics.parseViolationCount} across ${metrics.parseFailedQueries} queries`);
+  lines.push(`Result-Coherence Violations: ${metrics.resultViolationCount} across ${metrics.resultFailedQueries} queries`);
   lines.push(`Missing Expected Top Results: ${metrics.missingExpectedTopCount}`);
   lines.push(`MRR@10: ${(metrics.mrr10 * 100).toFixed(1)}%`);
   lines.push(`Top-1 Accuracy: ${(metrics.top1Accuracy * 100).toFixed(1)}%`);

@@ -242,10 +242,15 @@ describe('extract', () => {
       expect(timeHints).toHaveLength(0);
     });
 
-    it('leaves unsupported negations in residual text', () => {
+    it('extracts workload negations instead of searching them as positive text', () => {
       const result = extract('no exams');
-      expect(result.hints.find(h => h.type === 'negation')).toBeUndefined();
-      expect(result.residual).toBe('no exams');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'negation',
+          value: expect.objectContaining({ target: 'workload', value: 'exams' }),
+        })
+      );
+      expect(result.residual).toBe('');
     });
 
     it('extracts not online as an in-person constraint', () => {
@@ -257,6 +262,67 @@ describe('extract', () => {
         })
       );
       expect(result.residual).toBe('');
+    });
+
+    it('does not turn negated subjects into positive subject hints', () => {
+      const result = extract('easy science but no math');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'negation',
+          value: expect.objectContaining({ target: 'subject', value: 'MATH' }),
+        })
+      );
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'gened', value: 'NAT' })
+      );
+      expect(result.hints).not.toContainEqual(
+        expect.objectContaining({ type: 'subject', value: 'MATH' })
+      );
+    });
+
+    it('keeps connector text after a negation available for requirement parsing', () => {
+      const result = extract('not math but counts for science');
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({
+          type: 'negation',
+          value: expect.objectContaining({ target: 'subject', value: 'MATH' }),
+        })
+      );
+      expect(result.hints).toContainEqual(
+        expect.objectContaining({ type: 'gened', value: 'NAT' })
+      );
+    });
+
+    it('recognizes contextual gen-ed language without stealing protected science subjects', () => {
+      expect(extract('social science class').hints).toContainEqual(
+        expect.objectContaining({ type: 'gened', value: 'SBS' })
+      );
+      expect(extract('diversity').hints).toContainEqual(
+        expect.objectContaining({ type: 'gened', value: 'CS' })
+      );
+      expect(extract('computer science class').hints).toContainEqual(
+        expect.objectContaining({ type: 'subject', value: 'CS' })
+      );
+      expect(extract('computer science class').hints).not.toContainEqual(
+        expect.objectContaining({ type: 'gened', value: 'NAT' })
+      );
+    });
+
+    it('normalizes maintained student shorthand into subject plus topic language', () => {
+      const orgo = extract('how hard is orgo');
+      expect(orgo.hints).toContainEqual(
+        expect.objectContaining({ type: 'subject', value: 'CHEM' })
+      );
+      expect(orgo.hints).not.toContainEqual(
+        expect.objectContaining({ type: 'difficulty', value: 'hard' })
+      );
+      expect(orgo.residual).toContain('organic');
+
+      const diffeq = extract('diffeq');
+      expect(diffeq.hints).toContainEqual(
+        expect.objectContaining({ type: 'subject', value: 'MATH' })
+      );
+      expect(diffeq.residual).toContain('differential');
     });
   });
 

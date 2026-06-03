@@ -461,6 +461,40 @@ export function buildFilterClauses(
       )`);
       params.push(...filters.not.instructor_ids);
     }
+
+    if (filters.not.subjects?.length) {
+      const subjects = [...new Set(filters.not.subjects.map(subject => subject.toUpperCase()))];
+      const placeholders = subjects.map(() => '?').join(',');
+      where.push(`c.subject NOT IN (${placeholders})`);
+      params.push(...subjects);
+    }
+
+    if (filters.not.geneds?.length) {
+      const geneds = [...new Set(filters.not.geneds.map(gened => gened.toUpperCase()))];
+      const placeholders = geneds.map(() => '?').join(',');
+      where.push(`NOT EXISTS (
+        SELECT 1 FROM course_gened cg_neg
+        WHERE cg_neg.course_id = c.id
+          AND (cg_neg.category_id IN (${placeholders}) OR cg_neg.attribute_code IN (${placeholders}))
+      )`);
+      params.push(...geneds, ...geneds);
+    }
+
+    if (filters.not.keywords?.length) {
+      for (const keyword of filters.not.keywords) {
+        const normalized = keyword.toLowerCase().trim();
+        if (!normalized) continue;
+        const likeValue = `%${normalized}%`;
+        where.push(`LOWER(
+          COALESCE(c.subject, '') || ' ' ||
+          COALESCE(c.title, '') || ' ' ||
+          COALESCE(c.description, '') || ' ' ||
+          COALESCE(c.course_info, '') || ' ' ||
+          COALESCE(c.degree_attributes, '')
+        ) NOT LIKE ?`);
+        params.push(likeValue);
+      }
+    }
   }
 
   return {
@@ -521,10 +555,10 @@ export function sanitizeFtsQuery(query: string): string {
     sanitized = sanitized.replace(/"/g, ' ');
   }
 
-  // Replace special chars that might break FTS5
-  // We keep alphanumeric, spaces, and double quotes (if they were balanced)
-  // Single quotes are also kept as they are usually fine for tokenizer
-  sanitized = sanitized.replace(/[^\w\s"']/g, ' ');
+  // Replace punctuation that might break FTS5. Apostrophes are not worth keeping:
+  // contractions like "what's" should never be able to produce a MATCH syntax error.
+  sanitized = sanitized.replace(/['’]/g, ' ');
+  sanitized = sanitized.replace(/[^\w\s"]/g, ' ');
 
   // Collapse whitespace
   return sanitized.replace(/\s+/g, ' ').trim();
@@ -1189,16 +1223,30 @@ function matchesRequestedRequirement(course: Course, filters: SearchFilters): bo
 
 function workloadUsefulnessAdjustment(result: SearchResult, plan: SearchPlan): number {
   const soft = plan.softPreferences ?? {};
-  if (!soft.lowWorkload && !soft.lowWriting && !soft.lowReading && !soft.lowExams && plan.filters.difficulty !== 'easy') {
+  const hasEasyIntent = Boolean(
+    soft.lowWorkload
+    || soft.lowWriting
+    || soft.lowReading
+    || soft.lowExams
+    || soft.nonMajorFriendly
+    || plan.filters.difficulty === 'easy'
+  );
+
+  if (!hasEasyIntent) {
     return 0;
   }
 
   let adjustment = 0;
   const { course } = result;
+  const level = catalogLevel(course.number);
   if (typeof course.quality_score === 'number' && course.quality_score >= 70) adjustment += 0.25;
   if (typeof course.difficulty_score === 'number' && course.difficulty_score <= 35) adjustment += 0.3;
   if (typeof course.avg_gpa === 'number' && course.avg_gpa >= 3.5) adjustment += 0.2;
-  if (catalogLevel(course.number) === 100) adjustment += 0.1;
+  if (level === 100) adjustment += 0.55;
+  if (level === 200) adjustment += 0.35;
+  if (level === 300) adjustment += 0.05;
+  if (level === 400) adjustment -= 0.35;
+  if (level !== null && level >= 500) adjustment -= 1.25;
   if (result.laneMatches?.includes('workload_evidence')) adjustment += 0.3;
 
   return adjustment;
@@ -1217,10 +1265,14 @@ function eligibilityAdjustment(course: Course, plan: SearchPlan): number {
 }
 
 function negativePreferencePenalty(course: Course, plan: SearchPlan): number {
-  const negativeTerms = new Set(plan.rescue?.negativeTerms ?? []);
+  const negativeTerms = new Set([
+    ...(plan.rescue?.negativeTerms ?? []),
+    ...(plan.filters.not?.keywords ?? []),
+  ]);
+  const excludedSubjects = new Set((plan.filters.not?.subjects ?? []).map(subject => subject.toUpperCase()));
   let penalty = 0;
 
-  if (negativeTerms.has('math_heavy')) {
+  if (negativeTerms.has('math_heavy') || plan.softPreferences?.lowMath || excludedSubjects.has('MATH') || excludedSubjects.has('STAT')) {
     const text = `${course.subject} ${course.title ?? ''} ${course.description ?? ''} ${course.gened ?? ''}`.toLowerCase();
     if (/\b(qr|quantitative|calculus|statistics|statistical|programming|formal logic)\b/.test(text)) {
       penalty -= 0.7;
@@ -1230,20 +1282,34 @@ function negativePreferencePenalty(course: Course, plan: SearchPlan): number {
     }
   }
 
-  if (negativeTerms.has('writing_heavy')) {
+  if (negativeTerms.has('writing_heavy') || negativeTerms.has('writing') || negativeTerms.has('essay') || negativeTerms.has('essays') || plan.softPreferences?.lowWriting) {
     const text = `${course.title ?? ''} ${course.description ?? ''} ${course.gened ?? ''}`.toLowerCase();
     if (/\b(advanced composition|writing intensive|essay|papers?)\b/.test(text)) {
       penalty -= 0.55;
     }
   }
 
-  if (negativeTerms.has('biology_heavy')) {
+  if (negativeTerms.has('biology_heavy') || excludedSubjects.has('MCB') || excludedSubjects.has('IB')) {
     const text = `${course.subject} ${course.title ?? ''} ${course.description ?? ''}`.toLowerCase();
     if (/\b(bio|biology|biological|molecular|cellular|anatomy|physiology)\b/.test(text)) {
       penalty -= 0.45;
     }
     if (['IB', 'MCB'].includes(course.subject.toUpperCase())) {
       penalty -= 0.35;
+    }
+  }
+
+  if (negativeTerms.has('lab') || negativeTerms.has('labs')) {
+    const text = `${course.title ?? ''} ${course.description ?? ''} ${course.course_info ?? ''}`.toLowerCase();
+    if (/\b(lab|laboratory)\b/.test(text)) {
+      penalty -= 0.45;
+    }
+  }
+
+  if (negativeTerms.has('coding') || negativeTerms.has('programming')) {
+    const text = `${course.subject} ${course.title ?? ''} ${course.description ?? ''}`.toLowerCase();
+    if (/\b(coding|programming|programs?|software|computer science)\b/.test(text) || course.subject === 'CS') {
+      penalty -= 0.55;
     }
   }
 
@@ -1297,7 +1363,15 @@ async function fetchCoursesById(db: D1Database, courseIds: string[]): Promise<Ma
   for (const batch of chunkValues(courseIds, D1_ID_BATCH_SIZE)) {
     const placeholders = batch.map(() => '?').join(',');
     const result = await db.prepare(`
-      SELECT * FROM courses WHERE id IN (${placeholders})
+      SELECT
+        c.*,
+        g.median_gpa as median_gpa
+      FROM courses c
+      LEFT JOIN gpa_stats g
+        ON g.subject = c.subject
+        AND g.number = c.number
+        AND g.instructor IS NULL
+      WHERE c.id IN (${placeholders})
     `).bind(...batch).all<Course>();
 
     for (const course of result.results) {

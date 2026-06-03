@@ -1,7 +1,9 @@
-import type { Course, Section } from '../db/index.js';
+import type { Course, Meeting, Section } from '../db/index.js';
 import type {
+  CourseSectionMeetingDto,
   CourseExplorerUrlInput,
   CourseDto,
+  CourseGenedDto,
   CourseSectionDto,
   Hint,
   InstructorLinkDto,
@@ -40,7 +42,17 @@ type CourseSource = Pick<
   | 'primary_instructor_rmp'
   | 'quality_score'
   | 'difficulty_score'
->;
+> & {
+  median_gpa?: number | null;
+} & Partial<Pick<
+  Course,
+  | 'course_info'
+  | 'degree_attributes'
+  | 'class_schedule_info'
+  | 'date_range_text'
+  | 'registration_notes'
+  | 'approval_code'
+>>;
 
 type InstructorLinkRow = Partial<{
   instructor_name: string | null;
@@ -48,17 +60,24 @@ type InstructorLinkRow = Partial<{
   rmp_difficulty: number | null;
   rmp_id: string | null;
   avg_gpa: number | null;
+  median_gpa: number | null;
   gpa_sample_size: number | null;
   num_ratings: number | null;
+  would_take_again_pct: number | null;
+  top_tags: string | string[] | null;
+  department: string | null;
 }>;
 
 type SectionWithStats = Section & {
   instructor_stats?: InstructorLinkDto[] | null;
+  meetings?: SectionMeetingWithStats[] | null;
 };
 
 export type CourseDtoOptions = {
   sections?: CourseSectionDto[];
   instructorLinks?: Record<string, InstructorLinkDto>;
+  geneds?: CourseGenedDto[];
+  medianGpa?: number | null;
   score?: number;
   semanticRank?: number;
   keywordRank?: number;
@@ -73,6 +92,11 @@ export type CourseDtoOptions = {
   explanation?: ResultExplanation;
   warnings?: ResultWarning[];
   sectionMatches?: SectionMatchDto[];
+};
+
+type SectionMeetingWithStats = Meeting & {
+  instructor_names?: string | null;
+  instructor_stats?: InstructorLinkDto[] | null;
 };
 
 function validRmpMetric(value: number | null | undefined, numRatings?: number | null): number | null {
@@ -96,6 +120,7 @@ export type SearchResultEvidenceContext = {
   plan: SearchPlan;
   rawQuery: string;
   hints?: Hint[];
+  geneds?: CourseGenedDto[];
 };
 
 export function toInstructorLinkDto(row: InstructorLinkRow | null | undefined): InstructorLinkDto {
@@ -109,8 +134,12 @@ export function toInstructorLinkDto(row: InstructorLinkRow | null | undefined): 
     rmp_url: buildRmpProfessorUrl(row?.rmp_id),
     rmp_search_url: buildRmpSearchUrl(instructorName),
     avg_gpa: row?.avg_gpa ?? null,
+    median_gpa: row?.median_gpa ?? null,
     gpa_sample_size: row?.gpa_sample_size ?? null,
     num_ratings: row?.num_ratings ?? null,
+    would_take_again_pct: row?.would_take_again_pct ?? null,
+    top_tags: normalizeTopTags(row?.top_tags),
+    department: row?.department ?? null,
   };
 }
 
@@ -137,7 +166,40 @@ export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto 
     instructorRmp: validRmpMetric(section.instructor_rmp),
     instructorGpa: section.instructor_gpa ?? null,
     instructorStats: section.instructor_stats ?? [],
+    sectionTitle: section.section_title ?? null,
+    statusCode: section.status_code ?? null,
+    sectionStatusCode: section.section_status_code ?? null,
+    sectionText: section.section_text ?? null,
+    sectionNotes: section.section_notes ?? null,
+    cappArea: section.capp_area ?? null,
+    dateRangeText: section.date_range_text ?? null,
+    partOfTerm: section.part_of_term ?? null,
+    startDate: section.start_date ?? null,
+    endDate: section.end_date ?? null,
+    creditHours: section.credit_hours ?? null,
+    meetings: (section.meetings ?? []).map(toCourseSectionMeetingDto),
     course_explorer_url: buildSectionCourseExplorerUrl(section),
+  };
+}
+
+function toCourseSectionMeetingDto(meeting: SectionMeetingWithStats): CourseSectionMeetingDto {
+  const instructorNames = meeting.instructor_names
+    ? meeting.instructor_names.split(';').map(name => name.trim()).filter(Boolean)
+    : (meeting.instructor_stats ?? [])
+      .map(stat => stat.instructor_name)
+      .filter((name): name is string => Boolean(name));
+
+  return {
+    typeCode: meeting.type_code ?? null,
+    typeName: meeting.type_name ?? null,
+    days: meeting.days ?? null,
+    startTime: meeting.start_time ?? null,
+    endTime: meeting.end_time ?? null,
+    buildingName: meeting.building_name ?? null,
+    roomNumber: meeting.room_number ?? null,
+    dateRangeText: meeting.date_range_text ?? null,
+    instructorNames,
+    instructors: meeting.instructor_stats ?? [],
   };
 }
 
@@ -155,9 +217,17 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     primary_instructor: course.primary_instructor ?? null,
     primary_instructor_rmp: validRmpMetric(course.primary_instructor_rmp),
     avg_gpa: course.avg_gpa ?? null,
+    median_gpa: options.medianGpa ?? course.median_gpa ?? null,
     gpa_sample_size: course.gpa_sample_size ?? null,
     quality_score: course.quality_score ?? null,
     difficulty_score: course.difficulty_score ?? null,
+    course_info: course.course_info ?? null,
+    degree_attributes: course.degree_attributes ?? null,
+    class_schedule_info: course.class_schedule_info ?? null,
+    date_range_text: course.date_range_text ?? null,
+    registration_notes: course.registration_notes ?? null,
+    approval_code: course.approval_code ?? null,
+    geneds: options.geneds ?? [],
     instructor_links: options.instructorLinks ?? {},
     course_explorer_url: buildCourseExplorerCourseUrl(course),
     sections: options.sections,
@@ -176,6 +246,31 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     warnings: options.warnings,
     section_matches: options.sectionMatches,
   };
+}
+
+function normalizeTopTags(value: string | string[] | null | undefined): string[] | null {
+  if (Array.isArray(value)) {
+    const tags = value.map(tag => tag.trim()).filter(Boolean);
+    return tags.length > 0 ? tags : null;
+  }
+
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      const tags = parsed.map(item => String(item).trim()).filter(Boolean);
+      return tags.length > 0 ? tags : null;
+    }
+  } catch {
+    // Fall back to delimiter parsing below.
+  }
+
+  const tags = value
+    .split(/[,;|]/)
+    .map(tag => tag.trim())
+    .filter(Boolean);
+  return tags.length > 0 ? tags : null;
 }
 
 function parseCourseId(value: string): CourseExplorerUrlInput | null {
@@ -465,6 +560,7 @@ export function searchResultToCourseDto(result: SearchResult, context?: SearchRe
     semanticRank: result.semanticRank,
     keywordRank: result.keywordRank,
     historical: result.historical,
+    geneds: context?.geneds,
     matchEvidence,
     explanation: context && matchEvidence ? buildResultExplanation(result, context, matchEvidence, warnings) : undefined,
     warnings,

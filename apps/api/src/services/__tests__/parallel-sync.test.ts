@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { pruneStaleCourseGeneds, pruneStaleSubjectRows, syncSubjects } from '../parallel-sync.js';
 import { browserFetch } from '../../http/browser-fetch.js';
+import { insertCourseGened } from '../../db/index.js';
 import type { D1Database } from '@cloudflare/workers-types';
 
 vi.mock('../../http/browser-fetch.js', () => ({
@@ -126,6 +127,43 @@ describe('syncSubjects', () => {
 
     expect(bindCalls).toEqual([
       ['CS-225-2026-spring', 'QR', '1QR2', 'ACP', ''],
+    ]);
+  });
+
+  it('pre-cleans nullable GenEd attribute rows before direct insert', async () => {
+    const calls: unknown[][] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn((...args: unknown[]) => ({
+          run: vi.fn(async () => {
+            calls.push([sql.replace(/\s+/g, ' ').trim(), ...args]);
+            return {};
+          }),
+        })),
+      })),
+    };
+
+    await insertCourseGened(db as unknown as D1Database, {
+      course_id: 'CLCV-100-2026-spring',
+      category_id: 'HUM',
+      category_name: 'Humanities - Lit Arts',
+      attribute_code: null,
+      attribute_name: null,
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toEqual([
+      expect.stringContaining('DELETE FROM course_gened'),
+      'CLCV-100-2026-spring',
+      'HUM',
+    ]);
+    expect(calls[1]).toEqual([
+      expect.stringContaining('INSERT INTO course_gened'),
+      'CLCV-100-2026-spring',
+      'HUM',
+      'Humanities - Lit Arts',
+      null,
+      null,
     ]);
   });
 });

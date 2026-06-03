@@ -17,7 +17,7 @@ function makeEvidenceFile(contents: string): string {
 }
 
 function runPreflight(args: string[]): ReturnType<typeof spawnSync> {
-  return spawnSync('npx', ['tsx', 'scripts/d1-backup-preflight.ts', ...args], {
+  return spawnSync(process.execPath, ['--import', 'tsx', 'scripts/d1-backup-preflight.ts', ...args], {
     cwd: repoRoot,
     encoding: 'utf8',
   });

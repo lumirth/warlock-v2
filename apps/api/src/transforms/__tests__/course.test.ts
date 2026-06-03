@@ -155,6 +155,73 @@ describe('fromSubjectCascade', () => {
     expect(result.coursesWithSections[0].course.primary_instructor).toBe('Fagen, W');
   });
 
+  it('keeps gen-ed categories even when the source has no sub-attributes', () => {
+    const parsed: ParsedSubjectCascade = {
+      ...sampleParsed,
+      courses: [
+        {
+          ...sampleParsed.courses[0],
+          genEdCategories: [
+            {
+              id: 'HUM',
+              name: 'Humanities - Lit Arts',
+              attributes: []
+            }
+          ]
+        }
+      ]
+    };
+
+    const result = fromSubjectCascade(parsed, 2026, 'spring');
+
+    expect(result.coursesWithSections[0].genEdCategories).toEqual([
+      {
+        categoryId: 'HUM',
+        categoryName: 'Humanities - Lit Arts',
+        attributeCode: null,
+        attributeName: null
+      }
+    ]);
+  });
+
+  it('keeps cultural-studies sub-attributes such as Western and Non-Western', () => {
+    const parsed: ParsedSubjectCascade = {
+      ...sampleParsed,
+      courses: [
+        {
+          ...sampleParsed.courses[0],
+          genEdCategories: [
+            {
+              id: 'CS',
+              name: 'Cultural Studies',
+              attributes: [
+                { code: 'WCC', name: 'Western/Comparative Cultures' },
+                { code: 'NW', name: 'Non-Western Cultures' }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+
+    const result = fromSubjectCascade(parsed, 2026, 'spring');
+
+    expect(result.coursesWithSections[0].genEdCategories).toEqual([
+      {
+        categoryId: 'CS',
+        categoryName: 'Cultural Studies',
+        attributeCode: 'WCC',
+        attributeName: 'Western/Comparative Cultures'
+      },
+      {
+        categoryId: 'CS',
+        categoryName: 'Cultural Studies',
+        attributeCode: 'NW',
+        attributeName: 'Non-Western Cultures'
+      }
+    ]);
+  });
+
   it('collects multiple unique instructors separated by "; "', () => {
     const multiInstructorParsed: ParsedSubjectCascade = {
       ...sampleParsed,

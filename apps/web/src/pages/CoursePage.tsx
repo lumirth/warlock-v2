@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { AlertCircleIcon, ExternalLinkIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,7 +11,27 @@ import { Scorecard } from '../components/Scorecard'
 import { SectionsTable } from '../components/SectionsTable'
 import { FeedbackButton } from '../components/FeedbackButton'
 import { api } from '../lib/api-client'
-import type { CourseDto } from '@uiuc-course-search/query-types'
+import type { CourseDto, CourseGenedDto } from '@uiuc-course-search/query-types'
+
+function genedLabel(gened: CourseGenedDto): string {
+  const category = gened.categoryName ?? gened.categoryId
+  if (gened.attributeName) return `${category}: ${gened.attributeName}`
+  if (gened.attributeCode) return `${category}: ${gened.attributeCode}`
+  return category
+}
+
+function detailRows(course: CourseDto): Array<{ label: string; value: string }> {
+  return [
+    { label: 'Course information', value: course.course_info },
+    { label: 'Degree attributes', value: course.degree_attributes },
+    { label: 'Schedule information', value: course.class_schedule_info },
+    { label: 'Date range', value: course.date_range_text },
+    { label: 'Registration notes', value: course.registration_notes },
+    { label: 'Approval code', value: course.approval_code },
+  ].filter((item): item is { label: string; value: string } =>
+    Boolean(item.value)
+  )
+}
 
 export function CoursePage() {
   const { subject, number } = useParams()
@@ -102,6 +123,14 @@ export function CoursePage() {
     )
   }
 
+  const details = detailRows(course)
+  const genedBadges =
+    course.geneds.length > 0
+      ? course.geneds.map(genedLabel)
+      : course.gened
+        ? [course.gened]
+        : []
+
   return (
     <PageContainer className="py-8">
       <Button asChild variant="ghost" className="mb-4">
@@ -113,11 +142,11 @@ export function CoursePage() {
           <h1 className="text-3xl leading-tight font-semibold">
             {course.subject} {course.number}: {course.title}
           </h1>
-          {course.gened && (
-            <span className="text-muted-foreground text-sm font-semibold">
-              {course.gened}
-            </span>
-          )}
+          {genedBadges.map((label) => (
+            <Badge key={label} variant="outline">
+              {label}
+            </Badge>
+          ))}
           {course.course_explorer_url && (
             <Button asChild variant="outline" size="xs">
               <a
@@ -144,6 +173,7 @@ export function CoursePage() {
               qualityScore={course.quality_score}
               difficultyScore={course.difficulty_score}
               avgGpa={course.avg_gpa}
+              medianGpa={course.median_gpa}
               gpaSampleSize={course.gpa_sample_size}
               primaryInstructorRmp={course.primary_instructor_rmp}
             />
@@ -182,6 +212,28 @@ export function CoursePage() {
               <p className="leading-7">{course.description}</p>
             </CardContent>
           </Card>
+
+          {details.length > 0 && (
+            <Card>
+              <CardHeader>
+                <h2 className="text-xl leading-snug font-semibold">
+                  Registration details
+                </h2>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-4 lg:grid-cols-2">
+                  {details.map((item) => (
+                    <div key={item.label} className="flex flex-col gap-1">
+                      <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                        {item.label}
+                      </dt>
+                      <dd className="text-sm leading-6">{item.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardContent>
+            </Card>
+          )}
 
           <section className="flex min-w-0 flex-col gap-3">
             <h2 className="text-xl font-semibold">Sections and instructors</h2>

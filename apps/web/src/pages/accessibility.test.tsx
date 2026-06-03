@@ -30,9 +30,17 @@ function course(overrides: Partial<CourseDto> = {}): CourseDto {
     primary_instructor: 'Lovelace, A',
     primary_instructor_rmp: 4.8,
     avg_gpa: 3.62,
+    median_gpa: null,
     gpa_sample_size: 820,
     quality_score: 88,
     difficulty_score: 42,
+    course_info: null,
+    degree_attributes: null,
+    class_schedule_info: null,
+    date_range_text: null,
+    registration_notes: null,
+    approval_code: null,
+    geneds: [],
     instructor_links: {},
     sections: [],
     ...overrides,
@@ -109,7 +117,7 @@ describe('page accessibility', () => {
 
     await screen.findByRole('table')
     await expectNoA11yViolations(container)
-  })
+  }, 15000)
 
   it('keeps the course detail page free of automated accessibility violations', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(course())

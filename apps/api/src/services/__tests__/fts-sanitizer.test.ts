@@ -33,6 +33,11 @@ describe('sanitizeFtsQuery', () => {
     expect(sanitizeFtsQuery('word   word')).toBe('word word');
   });
 
+  it('removes apostrophes so contractions cannot break FTS5', () => {
+    expect(sanitizeFtsQuery("what's an easy gen ed")).toBe('what s an easy gen ed');
+    expect(sanitizeFtsQuery("isn’t writing-heavy")).toBe('isn t writing heavy');
+  });
+
   it('handles leading and trailing whitespace', () => {
     expect(sanitizeFtsQuery('  word  ')).toBe('word');
   });

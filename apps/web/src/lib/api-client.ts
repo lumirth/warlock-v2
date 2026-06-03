@@ -121,6 +121,7 @@ function appendSearchFilters(
     params.set('credits', filters.credits.toString())
   if (filters.days) params.set('days', filters.days)
   if (filters.time) params.set('time', filters.time)
+  if (filters.partOfTerm) params.set('partOfTerm', filters.partOfTerm)
   if (filters.online !== undefined) params.set('online', String(filters.online))
   if (filters.status) params.set('status', filters.status)
   if (filters.difficulty) params.set('difficulty', filters.difficulty)

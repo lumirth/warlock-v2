@@ -150,6 +150,27 @@ describe('buildFilterClauses', () => {
       expect(result.where.some(w => w.includes('NOT EXISTS') && w.includes('m2.days LIKE ?'))).toBe(true);
       expect(result.params).toContain('%F%');
     });
+
+    it('excludes negated subjects without requiring a positive subject filter', () => {
+      const filters: SearchFilters = { not: { subjects: ['MATH', 'STAT'] } };
+      const result = buildFilterClauses(filters);
+      expect(result.where).toContain('c.subject NOT IN (?,?)');
+      expect(result.params).toEqual(['MATH', 'STAT']);
+    });
+
+    it('excludes negated gen-ed attributes through course_gened', () => {
+      const filters: SearchFilters = { not: { geneds: ['QR'] } };
+      const result = buildFilterClauses(filters);
+      expect(result.where.some(w => w.includes('course_gened cg_neg'))).toBe(true);
+      expect(result.params.filter(param => param === 'QR')).toHaveLength(2);
+    });
+
+    it('keeps workload keyword negations as exclusion predicates', () => {
+      const filters: SearchFilters = { not: { keywords: ['lab'] } };
+      const result = buildFilterClauses(filters);
+      expect(result.where.some(w => w.includes('NOT LIKE ?'))).toBe(true);
+      expect(result.params).toContain('%lab%');
+    });
   });
 });
 

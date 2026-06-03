@@ -10,8 +10,15 @@ export interface SectionWithDetails {
 export interface CourseWithSections {
   course: Omit<Course, 'created_at' | 'updated_at'>;
   sections: SectionWithDetails[];
-  genEdCategories: { categoryId: string; categoryName: string; attributeCode: string; attributeName: string }[];
+  genEdCategories: TransformedGenEdCategory[];
 }
+
+type TransformedGenEdCategory = {
+  categoryId: string;
+  categoryName: string;
+  attributeCode: string | null;
+  attributeName: string | null;
+};
 
 export interface TransformResult {
   subject: Subject;
@@ -82,14 +89,23 @@ export function fromSubjectCascade(
       : Array.from(allInstructors);
 
     // Flatten GenEd categories
-    const genEdCategories = c.genEdCategories.flatMap(cat =>
-      cat.attributes.map(attr => ({
+    const genEdCategories: TransformedGenEdCategory[] = c.genEdCategories.flatMap<TransformedGenEdCategory>(cat => {
+      if (cat.attributes.length === 0) {
+        return [{
+          categoryId: cat.id,
+          categoryName: cat.name,
+          attributeCode: null,
+          attributeName: null,
+        }];
+      }
+
+      return cat.attributes.map(attr => ({
         categoryId: cat.id,
         categoryName: cat.name,
         attributeCode: attr.code,
-        attributeName: attr.name
-      }))
-    );
+        attributeName: attr.name,
+      }));
+    });
 
     return {
       course: {

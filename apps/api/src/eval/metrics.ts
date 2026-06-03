@@ -32,7 +32,11 @@ export function calculateMetrics(results: EvalResult[]): EvalMetrics {
   const zeroResults = results.filter(r => r.results.length === 0);
   const zeroResultRate = totalQueries > 0 ? zeroResults.length / totalQueries : 0;
   const violationCount = results.reduce((sum, result) => sum + result.violations.length, 0);
+  const parseViolationCount = results.reduce((sum, result) => sum + result.parseViolations.length, 0);
+  const resultViolationCount = results.reduce((sum, result) => sum + result.resultViolations.length, 0);
   const failedQueries = results.filter(result => result.violations.length > 0).length;
+  const parseFailedQueries = results.filter(result => result.parseViolations.length > 0).length;
+  const resultFailedQueries = results.filter(result => result.resultViolations.length > 0).length;
   const passingQueries = totalQueries - failedQueries;
   const missingExpectedTopCount = results.filter(result =>
     (result.query.expected_top1 || result.query.expected_top1_title)
@@ -67,6 +71,10 @@ export function calculateMetrics(results: EvalResult[]): EvalMetrics {
     passingQueries,
     failedQueries,
     violationCount,
+    parseViolationCount,
+    resultViolationCount,
+    parseFailedQueries,
+    resultFailedQueries,
     missingExpectedTopCount,
     mrr10,
     top1Accuracy,

@@ -27,6 +27,7 @@ import { errorFields, logger } from "../observability/logger.js";
 import {
   DEFAULT_SEARCH_SCOPE,
   DEFAULT_SEARCH_SORT,
+  SEARCH_SORT_FIELDS,
   SEARCH_SORT_DEFAULT_DIRECTIONS,
   getQualityTierRank,
   getWorkloadTierRank,
@@ -160,6 +161,11 @@ function parseBoolean(value: string): boolean | undefined {
 }
 
 function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
+  if (filter.negated) {
+    applyStructuredNegation(filter.field, filter.value, plan);
+    return;
+  }
+
   switch (filter.field) {
     case "subject":
       plan.filters.subject = filter.value.toUpperCase();
@@ -217,6 +223,12 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
 
 function applyNegationToken(token: string, plan: SearchPlan): void {
   const normalized = token.toLowerCase();
+  const fieldMatch = /^(subject|gened|keyword|workload):(.+)$/.exec(normalized);
+  if (fieldMatch) {
+    applyStructuredNegation(fieldMatch[1], fieldMatch[2], plan);
+    return;
+  }
+
   const timeWords = new Set([
     "early",
     "morning",
@@ -259,6 +271,52 @@ function applyNegationToken(token: string, plan: SearchPlan): void {
   if (["online", "remote", "virtual"].includes(normalized)) {
     plan.filters.online = false;
   }
+}
+
+function applyStructuredNegation(field: string, value: string, plan: SearchPlan): void {
+  const normalized = value.trim();
+  if (!normalized) return;
+
+  plan.filters.not = plan.filters.not || {};
+
+  if (field === "subject") {
+    plan.filters.not.subjects = plan.filters.not.subjects || [];
+    plan.filters.not.subjects.push(normalized.toUpperCase());
+    applyNegativeSoftPreference(normalized, plan);
+    return;
+  }
+
+  if (field === "gened") {
+    plan.filters.not.geneds = plan.filters.not.geneds || [];
+    plan.filters.not.geneds.push(normalized.toUpperCase());
+    return;
+  }
+
+  if (field === "keyword" || field === "workload") {
+    plan.filters.not.keywords = plan.filters.not.keywords || [];
+    plan.filters.not.keywords.push(normalized);
+    applyNegativeSoftPreference(normalized, plan);
+  }
+}
+
+function applyNegativeSoftPreference(value: string, plan: SearchPlan): void {
+  const normalized = value.toLowerCase();
+  const softPreferences = { ...(plan.softPreferences ?? {}) };
+
+  if (/\b(math|calculus|stat|statistics|coding|programming|cs)\b/.test(normalized)) {
+    softPreferences.lowMath = 0.84;
+  }
+  if (/\b(essay|paper|writing|writing heavy|writing-heavy)\b/.test(normalized)) {
+    softPreferences.lowWriting = 0.84;
+  }
+  if (/\b(reading|reading heavy|reading-heavy)\b/.test(normalized)) {
+    softPreferences.lowReading = 0.78;
+  }
+  if (/\b(exam|test|quiz|midterm|final)\b/.test(normalized)) {
+    softPreferences.lowExams = 0.78;
+  }
+
+  plan.softPreferences = softPreferences;
 }
 
 function removeIntroductoryScaffolding(query: string): string {
@@ -315,12 +373,90 @@ function applyTopicExpansion(plan: SearchPlan): string[] {
   return expansions;
 }
 
+function applySortIntent(plan: SearchPlan, rawQuery: string): void {
+  const normalized = rawQuery.toLowerCase();
+  let inferredSort: SearchSort | null = null;
+
+  if (/\b(?:highest|best|top)\s+(?:avg\s+)?gpa\b|\b(?:avg\s+)?gpa\s+(?:highest|best|top)\b/.test(normalized)) {
+    inferredSort = { field: "gpa", direction: "desc" };
+  } else if (/\b(?:best|top|highest\s+rated)\s+(?:professors?|instructors?)\b|\b(?:professor|instructor)\s+rating\b/.test(normalized)) {
+    inferredSort = { field: "instructor_rating", direction: "desc" };
+  } else if (/\b(?:easiest|least\s+(?:work|workload)|lowest\s+workload)\b/.test(normalized)) {
+    inferredSort = { field: "workload", direction: "asc" };
+    plan.filters.difficulty = plan.filters.difficulty ?? "easy";
+    plan.softPreferences = {
+      ...(plan.softPreferences ?? {}),
+      lowWorkload: 0.86,
+    };
+  } else if (/\b(?:hardest|most\s+difficult|highest\s+workload)\b/.test(normalized)) {
+    inferredSort = { field: "workload", direction: "desc" };
+    plan.filters.difficulty = plan.filters.difficulty ?? "hard";
+  }
+
+  if (!inferredSort) {
+    return;
+  }
+
+  plan.softPreferences = {
+    ...(plan.softPreferences ?? {}),
+    inferredSort,
+  };
+  plan.keywordQuery = removeSortScaffolding(plan.keywordQuery);
+  plan.semanticQuery = removeSortScaffolding(plan.semanticQuery);
+}
+
+function removeSortScaffolding(query: string): string {
+  return query
+    .replace(/\b(?:highest|best|top)\s+(?:avg\s+)?gpa\b/gi, " ")
+    .replace(/\b(?:avg\s+)?gpa\s+(?:highest|best|top)\b/gi, " ")
+    .replace(/\b(?:best|top|highest\s+rated)\s+(?:professors?|instructors?)\b/gi, " ")
+    .replace(/\b(?:professor|instructor)\s+rating\b/gi, " ")
+    .replace(/\b(?:easiest|least\s+(?:work|workload)|lowest\s+workload)\b/gi, " ")
+    .replace(/\b(?:hardest|most\s+difficult|highest\s+workload)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function controlsWithPlanInferredSort(
+  controls: AppliedSearchControls,
+  plan: SearchPlan,
+): AppliedSearchControls {
+  if (controls.sort.field !== "relevance") {
+    return controls;
+  }
+
+  const inferred = plan.softPreferences?.inferredSort;
+  if (!isSearchSort(inferred)) {
+    return controls;
+  }
+
+  return {
+    ...controls,
+    sort: inferred,
+  };
+}
+
+function isSearchSort(value: unknown): value is SearchSort {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as SearchSort;
+  return (
+    SEARCH_SORT_FIELDS.includes(candidate.field) &&
+    (candidate.direction === "asc" || candidate.direction === "desc")
+  );
+}
+
 const MIN_INTRODUCTORY_GATEWAY_CANDIDATES = 40;
+const MIN_ATTRIBUTE_SORT_CANDIDATES = 200;
 
 export function searchCandidateLimit(
   plan: SearchPlan,
   requestedLimit: number,
+  controls: AppliedSearchControls = DEFAULT_SEARCH_CONTROLS,
 ): number {
+  if (controls.sort.field !== "relevance") {
+    return Math.max(requestedLimit, MIN_ATTRIBUTE_SORT_CANDIDATES);
+  }
+
   const hasIntroductoryGatewayIntent =
     plan.intents?.includes("introductory_gateway") ||
     plan.softPreferences?.introductoryIntent === "gateway";
@@ -647,6 +783,8 @@ export async function createSearchPlan(
   const rescueResult = applyDecisionSearchRescue(plan, query, queryResidual);
   queryResidual = rescueResult.queryResidual;
 
+  applySortIntent(plan, query);
+
   const topicExpansions = applyTopicExpansion(plan);
   syncDecisionSearchExpansions(plan, topicExpansions);
 
@@ -724,13 +862,14 @@ export class SearchPipeline {
     }
     const extractionEndTime = performance.now();
     const { extraction, queryResidual, plan } = planning;
+    const effectiveControls = controlsWithPlanInferredSort(controls, plan);
 
     const searchStartTime = performance.now();
     let results: SearchResult[];
     let tierReached: number;
     const constraintsRelaxed: string[] = [];
     let originalResultCount: number;
-    const candidateLimit = searchCandidateLimit(plan, limit);
+    const candidateLimit = searchCandidateLimit(plan, limit, effectiveControls);
 
     // Tier 1: Navigational (Exact course code or CRN)
     const isNavigational = !!(
@@ -792,7 +931,7 @@ export class SearchPipeline {
         }
       }
     }
-    results = applySearchControls(results, controls).slice(0, limit);
+    results = applySearchControls(results, effectiveControls).slice(0, limit);
     const recoveryGroups = buildRecoveryGroups(plan, query, results.length);
     const searchEndTime = performance.now();
     const totalEndTime = performance.now();
@@ -819,8 +958,8 @@ export class SearchPipeline {
           originalResultCount,
           recoveryGroups,
         },
-        appliedSort: controls.sort,
-        appliedScope: controls.scope,
+        appliedSort: effectiveControls.sort,
+        appliedScope: effectiveControls.scope,
       },
     };
 
@@ -831,7 +970,7 @@ export class SearchPipeline {
         limit,
         result,
         overrides,
-        controls,
+        effectiveControls,
       ),
       _waitUntil,
       "search.cache.result_put_failed",

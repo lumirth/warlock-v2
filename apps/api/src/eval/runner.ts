@@ -26,7 +26,7 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
       // Progress indicator
       const status = result.violations.length > 0 ? 'FAIL' : 'PASS';
       const rankStatus = (query.expected_top1 || query.expected_top1_title) ? ` (RR: ${result.reciprocalRank?.toFixed(2)})` : '';
-      console.log(`${status} [${query.id}] "${query.query}" - ${result.results.length} results, ${result.violations.length} violations${rankStatus}`);
+      console.log(`${status} [${query.id}] "${query.query}" - ${result.results.length} results, ${result.parseViolations.length} parse violations, ${result.resultViolations.length} result violations${rankStatus}`);
       for (const violation of result.violations) {
         console.log(`  - ${violation}`);
       }
@@ -40,6 +40,8 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
         results: [],
         reciprocalRank: 0,
         violations: [`Fetch error: ${error}`],
+        parseViolations: [`Fetch error: ${error}`],
+        resultViolations: [],
         tierReached: null
       });
     }

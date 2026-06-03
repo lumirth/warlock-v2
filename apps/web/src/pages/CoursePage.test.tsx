@@ -1,5 +1,6 @@
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -32,9 +33,17 @@ function course(overrides: Partial<CourseDto> = {}): CourseDto {
     primary_instructor: null,
     primary_instructor_rmp: null,
     avg_gpa: null,
+    median_gpa: null,
     gpa_sample_size: null,
     quality_score: null,
     difficulty_score: null,
+    course_info: null,
+    degree_attributes: null,
+    class_schedule_info: null,
+    date_range_text: null,
+    registration_notes: null,
+    approval_code: null,
+    geneds: [],
     instructor_links: {},
     sections: [],
     ...overrides,
@@ -148,8 +157,37 @@ describe('CoursePage request state', () => {
                 rmp_difficulty: 3.1,
                 rmp_id: 'ada',
                 avg_gpa: 3.62,
+                median_gpa: null,
                 gpa_sample_size: 820,
                 num_ratings: 140,
+                would_take_again_pct: null,
+                top_tags: null,
+                department: null,
+              },
+            ],
+            sectionTitle: null,
+            statusCode: null,
+            sectionStatusCode: null,
+            sectionText: null,
+            sectionNotes: null,
+            cappArea: null,
+            dateRangeText: null,
+            partOfTerm: null,
+            startDate: null,
+            endDate: null,
+            creditHours: null,
+            meetings: [
+              {
+                typeCode: 'LCD',
+                typeName: 'Lecture-Discussion',
+                days: 'MWF',
+                startTime: '09:00',
+                endTime: '09:50',
+                buildingName: 'Siebel Center for Computer Science',
+                roomNumber: '1404',
+                dateRangeText: 'Jan 20, 2026 - May 6, 2026',
+                instructorNames: ['Lovelace, A'],
+                instructors: [],
               },
             ],
           },
@@ -182,9 +220,13 @@ describe('CoursePage request state', () => {
       'href',
       'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A'
     )
-    expect(screen.getByText('4.8 ★')).toBeInTheDocument()
-    expect(screen.getAllByText('3.62').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getAllByText('820 records').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText(/4\.8 rating/)).toBeInTheDocument()
+    expect(screen.getByText(/3\.62 avg GPA/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show details for CRN 12345' }))
+    expect(screen.getByText('Meeting details')).toBeInTheDocument()
+    expect(screen.getByText('Lecture-Discussion')).toBeInTheDocument()
+    expect(screen.getByText('Siebel Center for Computer Science 1404')).toBeInTheDocument()
   })
 
   it('uses a course score sidebar at laptop widths, not only extra-wide screens', async () => {
@@ -237,10 +279,26 @@ describe('CoursePage request state', () => {
                 rmp_difficulty: 3.4,
                 rmp_id: '85515',
                 avg_gpa: 3.45,
+                median_gpa: null,
                 gpa_sample_size: 1200,
                 num_ratings: 180,
+                would_take_again_pct: null,
+                top_tags: null,
+                department: null,
               },
             ],
+            sectionTitle: null,
+            statusCode: null,
+            sectionStatusCode: null,
+            sectionText: null,
+            sectionNotes: null,
+            cappArea: null,
+            dateRangeText: null,
+            partOfTerm: null,
+            startDate: null,
+            endDate: null,
+            creditHours: null,
+            meetings: [],
           },
         ],
       })

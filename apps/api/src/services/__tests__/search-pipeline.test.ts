@@ -204,6 +204,44 @@ describe("SearchPipeline", () => {
     ).toBe(5);
   });
 
+  it("infers attribute sort intent from superlative queries and widens candidates", async () => {
+    const query = "highest gpa classes";
+    vi.mocked(extractor.extractQuery).mockReturnValue({
+      hints: [],
+      residual: "highest gpa",
+    });
+    vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
+      filters: {},
+      semanticQuery: "highest gpa",
+      keywordQuery: "highest gpa",
+    });
+    vi.mocked(search.sanitizeFtsQuery).mockImplementation(
+      (queryText) => queryText,
+    );
+    vi.mocked(search.hybridSearchWithTermRanking).mockResolvedValue([
+      { course: mockCourse({ id: "LOW", avg_gpa: 3.1 }), score: 2 },
+      { course: mockCourse({ id: "HIGH", avg_gpa: 3.9 }), score: 1 },
+    ]);
+
+    const result = await pipeline.search(query, 1);
+
+    expect(search.hybridSearchWithTermRanking).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        keywordQuery: "",
+        semanticQuery: "",
+        softPreferences: expect.objectContaining({
+          inferredSort: { field: "gpa", direction: "desc" },
+        }),
+      }),
+      200,
+    );
+    expect(result.meta.appliedSort).toEqual({ field: "gpa", direction: "desc" });
+    expect(result.results[0].course.id).toBe("HIGH");
+  });
+
   it("applies topic expansions to the initial search plan", async () => {
     const query = "ml courses";
     const mockExtracted: ExtractionResult = { hints: [], residual: "ml" };

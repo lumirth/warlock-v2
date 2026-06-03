@@ -1,4 +1,4 @@
-import type { GoldQuery, EvalResult } from './types.js';
+import type { GoldQuery, EvalResult, ResultSelector } from './types.js';
 import type { SearchPlanRescue } from '@uiuc-course-search/query-types';
 
 export interface ApiSearchResult {
@@ -8,6 +8,12 @@ export interface ApiSearchResult {
   number: string;
   avg_gpa?: number;
   gened?: string | null;
+  geneds?: Array<{
+    categoryId?: string;
+    category_id?: string;
+    attributeCode?: string | null;
+    attribute_code?: string | null;
+  }>;
   _score?: number;
 }
 
@@ -173,6 +179,119 @@ export function checkInvariants(query: GoldQuery, results: ApiSearchResult[]): s
   return violations;
 }
 
+function resultLevel(result: ApiSearchResult): number | null {
+  const parsed = parseInt(result.number.charAt(0), 10);
+  return Number.isFinite(parsed) ? parsed * 100 : null;
+}
+
+function resultHasGened(result: ApiSearchResult, gened: string): boolean {
+  if (result.gened === gened) return true;
+  return (result.geneds ?? []).some(entry =>
+    entry.categoryId === gened
+    || entry.category_id === gened
+    || entry.attributeCode === gened
+    || entry.attribute_code === gened
+  );
+}
+
+function selectorMatches(selector: ResultSelector, result: ApiSearchResult): boolean {
+  if (selector.id && selector.id !== result.id) return false;
+  if (selector.subject && selector.subject !== result.subject) return false;
+  if (selector.number && selector.number !== result.number) return false;
+  if (
+    selector.titleIncludes
+    && !result.title.toLowerCase().includes(selector.titleIncludes.toLowerCase())
+  ) {
+    return false;
+  }
+  if (selector.gened && !resultHasGened(result, selector.gened)) return false;
+
+  const level = resultLevel(result);
+  if (selector.level_gte !== undefined && (level === null || level < selector.level_gte)) return false;
+  if (selector.level_lte !== undefined && (level === null || level > selector.level_lte)) return false;
+
+  return true;
+}
+
+function describeSelector(selector: ResultSelector): string {
+  return Object.entries(selector)
+    .map(([key, value]) => `${key}=${formatValue(value)}`)
+    .join(', ');
+}
+
+export function checkResultCoherence(query: GoldQuery, results: ApiSearchResult[]): string[] {
+  const expected = query.expected_results;
+  if (!expected) return [];
+
+  const violations: string[] = [];
+  const topK = Math.min(expected.top_k ?? 10, results.length);
+  const topResults = results.slice(0, topK);
+
+  if (expected.non_empty && results.length === 0) {
+    violations.push('results expected to be non-empty');
+  }
+
+  for (const selector of expected.must_include ?? []) {
+    if (!topResults.some(result => selectorMatches(selector, result))) {
+      violations.push(`top ${expected.top_k ?? 10} expected to include ${describeSelector(selector)}`);
+    }
+  }
+
+  for (const selector of expected.must_exclude ?? []) {
+    const badResult = topResults.find(result => selectorMatches(selector, result));
+    if (badResult) {
+      violations.push(`top ${expected.top_k ?? 10} must exclude ${describeSelector(selector)}, got ${badResult.id}`);
+    }
+  }
+
+  if (expected.all_top_k?.subjects?.length) {
+    const allowed = new Set(expected.all_top_k.subjects);
+    for (const result of topResults) {
+      if (!allowed.has(result.subject)) {
+        violations.push(`Result ${result.id} subject=${result.subject}, expected one of ${Array.from(allowed).join(', ')}`);
+      }
+    }
+  }
+
+  if (expected.all_top_k?.no_subjects?.length) {
+    const forbidden = new Set(expected.all_top_k.no_subjects);
+    for (const result of topResults) {
+      if (forbidden.has(result.subject)) {
+        violations.push(`Result ${result.id} has forbidden subject=${result.subject}`);
+      }
+    }
+  }
+
+  if (expected.all_top_k?.gened) {
+    for (const result of topResults) {
+      if (!resultHasGened(result, expected.all_top_k.gened)) {
+        violations.push(`Result ${result.id} gened=${result.gened}, expected ${expected.all_top_k.gened}`);
+      }
+    }
+  }
+
+  if (expected.all_top_k?.level_gte !== undefined || expected.all_top_k?.level_lte !== undefined) {
+    for (const result of topResults) {
+      const level = resultLevel(result);
+      if (expected.all_top_k.level_gte !== undefined && (level === null || level < expected.all_top_k.level_gte)) {
+        violations.push(`Result ${result.id} is level ${level}, expected >= ${expected.all_top_k.level_gte}`);
+      }
+      if (expected.all_top_k.level_lte !== undefined && (level === null || level > expected.all_top_k.level_lte)) {
+        violations.push(`Result ${result.id} is level ${level}, expected <= ${expected.all_top_k.level_lte}`);
+      }
+    }
+  }
+
+  if (expected.max_graduate_top_k !== undefined) {
+    const graduateCount = topResults.filter(result => (resultLevel(result) ?? 0) >= 500).length;
+    if (graduateCount > expected.max_graduate_top_k) {
+      violations.push(`top ${expected.top_k ?? 10} has ${graduateCount} graduate-level results, expected <= ${expected.max_graduate_top_k}`);
+    }
+  }
+
+  return violations;
+}
+
 export function calculateReciprocalRank(query: GoldQuery, results: ApiSearchResult[]): number | null {
   if (!query.expected_top1 && !query.expected_top1_title) {
     return null;
@@ -200,23 +319,27 @@ export function calculateReciprocalRank(query: GoldQuery, results: ApiSearchResu
 
 export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseForEval): EvalResult {
   const results = data.results;
-  const violations = [
+  const parseViolations = [
     ...checkExpectedObject('filters', query.expected_filters, data.meta.plan.filters),
     ...checkExpectedKeys('filters', query.expected_filter_keys, data.meta.plan.filters),
     ...checkExpectedObject('softPreferences', query.expected_soft_preferences, data.meta.plan.softPreferences),
     ...checkExpectedRescue(query, data.meta.plan.rescue),
     ...checkExpectedResidual(query, data.meta.query.residual),
-    ...checkInvariants(query, results),
   ];
-
+  const resultViolations = [
+    ...checkInvariants(query, results),
+    ...checkResultCoherence(query, results),
+  ];
   if (query.require_term_metadata && !data.meta.term) {
-    violations.push('term metadata is missing');
+    parseViolations.push('term metadata is missing');
   }
 
   const relaxed = data.meta.fallback?.constraintsRelaxed ?? [];
   if (!query.allow_fallback_relaxation && relaxed.length > 0) {
-    violations.push(`fallback relaxed hard constraints: ${relaxed.join(', ')}`);
+    parseViolations.push(`fallback relaxed hard constraints: ${relaxed.join(', ')}`);
   }
+
+  const violations = [...parseViolations, ...resultViolations];
 
   return {
     query,
@@ -225,6 +348,8 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
     results,
     reciprocalRank: calculateReciprocalRank(query, results),
     violations,
+    parseViolations,
+    resultViolations,
     tierReached: data.meta.fallback?.tierReached ?? null,
   };
 }

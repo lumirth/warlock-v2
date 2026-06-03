@@ -183,7 +183,7 @@ describe('hybridSearch', () => {
             qualityBindSizes.push(this.params.length);
             return { results: [] };
           }
-          if (sql.includes('SELECT * FROM courses WHERE id IN')) {
+          if (sql.includes('FROM courses c') && sql.includes('WHERE c.id IN')) {
             return {
               results: this.params.map(param => makeCourse(String(param))),
             };

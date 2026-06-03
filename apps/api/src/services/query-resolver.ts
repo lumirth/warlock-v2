@@ -45,6 +45,23 @@ for (const [code, synonyms] of Object.entries(GENED_SYNONYMS)) {
 // Subject codes that conflict with GenEd codes
 const SUBJECT_GENED_CONFLICTS = new Set(['CS', 'PS']);
 
+const FUZZY_SUBJECT_NAME_BLOCKLIST = new Set([
+  'science',
+  'sciences',
+  'natural science',
+  'natural sciences',
+  'social science',
+  'social sciences',
+  'behavioral science',
+  'behavioral sciences',
+  'writing',
+  'diversity',
+  'culture',
+  'cultural',
+  'race',
+  'ethnicity',
+]);
+
 type InterpretationType = 'subject' | 'gened';
 
 type InstructorResolution = {
@@ -173,6 +190,12 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
           } else if (negValue.target === 'days') {
             plan.filters.not.days = plan.filters.not.days || [];
             plan.filters.not.days.push(negValue.value);
+          } else if (negValue.target === 'subject') {
+            applyStructuredNegation('subject', negValue.value, plan);
+          } else if (negValue.target === 'gened') {
+            applyStructuredNegation('gened', negValue.value, plan);
+          } else if (negValue.target === 'keyword' || negValue.target === 'workload') {
+            applyStructuredNegation(negValue.target, negValue.value, plan);
           }
         }
         break;
@@ -186,6 +209,52 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
   }
 
   return plan;
+}
+
+function applyStructuredNegation(field: string, value: string, plan: SearchPlan): void {
+  const normalized = value.trim();
+  if (!normalized) return;
+
+  plan.filters.not = plan.filters.not || {};
+
+  if (field === 'subject') {
+    plan.filters.not.subjects = plan.filters.not.subjects || [];
+    plan.filters.not.subjects.push(normalized.toUpperCase());
+    applyNegativeSoftPreference(normalized, plan);
+    return;
+  }
+
+  if (field === 'gened') {
+    plan.filters.not.geneds = plan.filters.not.geneds || [];
+    plan.filters.not.geneds.push(normalized.toUpperCase());
+    return;
+  }
+
+  if (field === 'keyword' || field === 'workload') {
+    plan.filters.not.keywords = plan.filters.not.keywords || [];
+    plan.filters.not.keywords.push(normalized);
+    applyNegativeSoftPreference(normalized, plan);
+  }
+}
+
+function applyNegativeSoftPreference(value: string, plan: SearchPlan): void {
+  const normalized = value.toLowerCase();
+  const softPreferences = { ...(plan.softPreferences ?? {}) };
+
+  if (/\b(math|calculus|stat|statistics|coding|programming|cs)\b/.test(normalized)) {
+    softPreferences.lowMath = 0.84;
+  }
+  if (/\b(essay|paper|writing|writing heavy|writing-heavy)\b/.test(normalized)) {
+    softPreferences.lowWriting = 0.84;
+  }
+  if (/\b(reading|reading heavy|reading-heavy)\b/.test(normalized)) {
+    softPreferences.lowReading = 0.78;
+  }
+  if (/\b(exam|test|quiz|midterm|final)\b/.test(normalized)) {
+    softPreferences.lowExams = 0.78;
+  }
+
+  plan.softPreferences = softPreferences;
 }
 
 export function parseTermValue(value: string): { term: string; year: number } | null {
@@ -448,6 +517,10 @@ export async function validateSubject(db: D1Database, subject: string): Promise<
 
 function isFuzzySubjectNameCandidate(normalized: string): boolean {
   if (normalized.length <= 3 || normalized.length > 32) {
+    return false;
+  }
+
+  if (FUZZY_SUBJECT_NAME_BLOCKLIST.has(normalized)) {
     return false;
   }
 

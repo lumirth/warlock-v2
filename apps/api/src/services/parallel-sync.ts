@@ -133,6 +133,7 @@ async function saveSubjectData(
 
   const courseStatements: D1PreparedStatement[] = [];
   const genedStatements: D1PreparedStatement[] = [];
+  const genedNullAttributeCleanup: D1PreparedStatement[] = [];
   const sectionStatements: D1PreparedStatement[] = [];
   const meetingStatements: D1PreparedStatement[] = [];
   const instructorStatements: D1PreparedStatement[] = [];
@@ -147,6 +148,9 @@ async function saveSubjectData(
     courseStatements.push(prepareUpsertCourse(db, course));
 
     for (const cat of genEdCategories) {
+      if (cat.attributeCode === null) {
+        genedNullAttributeCleanup.push(preparePruneCourseGenedNullAttribute(db, course.id, cat.categoryId));
+      }
       genedStatements.push(prepareInsertCourseGened(db, {
         course_id: course.id,
         category_id: cat.categoryId,
@@ -212,6 +216,7 @@ async function saveSubjectData(
 
   // Order matters for FK constraints and linking logic
   await executeBatch(courseStatements);
+  await executeBatch(genedNullAttributeCleanup);
   await executeBatch(genedStatements);
   await executeBatch(genedCleanup.map(cleanup => preparePruneStaleCourseGeneds(db, cleanup)));
   await executeBatch(sectionStatements);
@@ -246,6 +251,19 @@ async function saveSubjectData(
   }
 
   return { coursesCount, sectionsCount };
+}
+
+function preparePruneCourseGenedNullAttribute(
+  db: D1Database,
+  courseId: string,
+  categoryId: string,
+): D1PreparedStatement {
+  return db.prepare(`
+    DELETE FROM course_gened
+    WHERE course_id = ?
+      AND category_id = ?
+      AND attribute_code IS NULL
+  `).bind(courseId, categoryId);
 }
 
 export async function pruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): Promise<void> {

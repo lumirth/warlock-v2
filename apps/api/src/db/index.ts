@@ -27,6 +27,7 @@ export interface Instructor {
   rmp_rating: number | null;
   rmp_difficulty: number | null;
   avg_gpa: number | null;
+  median_gpa?: number | null;
   gpa_sample_size: number | null;
 }
 
@@ -602,6 +603,14 @@ export async function insertCourseGened(
   db: D1Database,
   gened: Omit<CourseGened, 'id'>
 ): Promise<void> {
+  if (gened.attribute_code === null) {
+    await db.prepare(`
+      DELETE FROM course_gened
+      WHERE course_id = ?
+        AND category_id = ?
+        AND attribute_code IS NULL
+    `).bind(gened.course_id, gened.category_id).run();
+  }
   await prepareInsertCourseGened(db, gened).run();
 }
 

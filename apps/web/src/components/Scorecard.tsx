@@ -8,6 +8,7 @@ interface ScorecardProps {
   qualityScore: number | null
   difficultyScore: number | null
   avgGpa?: number | null
+  medianGpa?: number | null
   gpaSampleSize?: number | null
   primaryInstructorRmp?: number | null
 }
@@ -16,6 +17,7 @@ export function Scorecard({
   qualityScore,
   difficultyScore,
   avgGpa,
+  medianGpa,
   gpaSampleSize,
   primaryInstructorRmp,
 }: ScorecardProps) {
@@ -27,6 +29,7 @@ export function Scorecard({
   const hasDifficulty =
     difficultyScore !== null && difficultyScore !== undefined
   const hasAvgGpa = typeof avgGpa === 'number'
+  const hasMedianGpa = typeof medianGpa === 'number'
   const hasPrimaryRating = typeof primaryInstructorRmp === 'number'
 
   const difficultyLabel = !hasDifficulty
@@ -96,6 +99,14 @@ export function Scorecard({
                     {gpaSampleSize.toLocaleString()} records
                   </span>
                 )}
+              </dd>
+            </div>
+          )}
+          {hasMedianGpa && (
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground text-sm">Median GPA</dt>
+              <dd className="text-sm font-semibold">
+                {medianGpa.toFixed(2)}
               </dd>
             </div>
           )}

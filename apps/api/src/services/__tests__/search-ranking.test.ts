@@ -238,6 +238,44 @@ describe('decision-search usefulness reranking', () => {
     expect(reranked[0].course.id).toBe('FILM-120');
     expect(reranked[0].score).toBeGreaterThan(reranked[1].score);
   });
+
+  it('penalizes graduate seminars for easy/non-major-friendly workload intent', () => {
+    const results: SearchResult[] = [
+      {
+        course: course({
+          id: 'PHYS-595',
+          subject: 'PHYS',
+          number: '595',
+          title: 'Advanced Topics in Physics',
+          avg_gpa: 3.95,
+          difficulty_score: 20,
+        }),
+        score: 1.1,
+      },
+      {
+        course: course({
+          id: 'PHYS-100',
+          subject: 'PHYS',
+          number: '100',
+          title: 'Thinking About Physics',
+          avg_gpa: 3.45,
+          difficulty_score: 34,
+        }),
+        score: 0.6,
+        laneMatches: ['student_language_alias'],
+      },
+    ];
+
+    const reranked = applyUsefulnessRerank(results, {
+      filters: { subject: 'PHYS', difficulty: 'easy' },
+      semanticQuery: 'physics for non majors',
+      keywordQuery: 'physics for non majors',
+      softPreferences: { lowWorkload: 0.84, nonMajorFriendly: 0.72 },
+    });
+
+    expect(reranked[0].course.id).toBe('PHYS-100');
+    expect(reranked[0].score).toBeGreaterThan(reranked[1].score);
+  });
 });
 
 describe('term priority', () => {
@@ -290,7 +328,7 @@ describe('search SQL batching', () => {
               return { results: params.map(id => ({ id, quality_score: null })) };
             }
 
-            if (sql.includes('SELECT * FROM courses WHERE id IN')) {
+            if (sql.includes('FROM courses c') && sql.includes('WHERE c.id IN')) {
               return { results: params.map(id => courseById.get(String(id))).filter(Boolean) };
             }
 

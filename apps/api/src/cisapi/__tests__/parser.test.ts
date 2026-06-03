@@ -145,6 +145,40 @@ describe('parseSubjectCascadeXml', () => {
     expect(cs225?.genEdCategories[0].id).toBe('QR');
   });
 
+  it('parses cultural-studies genEd sub-attributes', async () => {
+    const result = await parseSubjectCascadeXml(createStream(`
+      <ns2:subject xmlns:ns2="http://example.com" id="CLCV" href="http://example.com">
+        <label>Classics</label>
+        <cascadingCourse id="CLCV 100" href="http://example.com">
+          <label>Classical Mythology</label>
+          <creditHours>3</creditHours>
+          <genEdCategories>
+            <genEdCategory id="CS">
+              <description>Cultural Studies</description>
+              <genEdAttributes>
+                <genEdAttribute code="WCC">Western/Comparative Cultures</genEdAttribute>
+              </genEdAttributes>
+            </genEdCategory>
+          </genEdCategories>
+        </cascadingCourse>
+      </ns2:subject>
+    `));
+    const clcv100 = result?.courses.find(c => c.id === '100');
+
+    expect(clcv100?.genEdCategories).toEqual([
+      {
+        id: 'CS',
+        name: 'Cultural Studies',
+        attributes: [
+          {
+            code: 'WCC',
+            name: 'Western/Comparative Cultures'
+          }
+        ]
+      }
+    ]);
+  });
+
   it('throws for invalid XML without subject id', async () => {
     await expect(parseSubjectCascadeXml(createStream('<invalid>xml</invalid>'))).rejects.toThrow('Invalid XML: missing subject id');
   });
