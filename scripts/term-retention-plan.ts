@@ -196,6 +196,13 @@ function sortRetentionCandidates(rows: TermRetentionRow[]): TermRetentionRow[] {
   });
 }
 
+function sortRetainedOutputRows(rows: TermRetentionRow[]): TermRetentionRow[] {
+  return [...rows].sort((left, right) => {
+    if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+    return sortRetentionCandidates([left, right])[0] === left ? -1 : 1;
+  });
+}
+
 function estimatedBytes(stored: JsonRecord | undefined): number {
   const courses = positiveOrFallback(numericOrNull(stored?.courses_count), FALLBACK_COURSES_PER_TERM);
   const sections = positiveOrFallback(numericOrNull(stored?.sections_count), FALLBACK_SECTIONS_PER_TERM);
@@ -517,7 +524,7 @@ export async function buildTermRetentionReport(
       estimated_dropped_bytes: droppedTerms.reduce((total, row) => total + row.estimated_bytes, 0),
     },
     terms,
-    retained_term_ids: sortRetentionCandidates(retainedTerms).map(row => row.term_id),
+    retained_term_ids: sortRetainedOutputRows(retainedTerms).map(row => row.term_id),
     dropped_term_ids: sortRetentionCandidates(droppedTerms).map(row => row.term_id),
     warnings,
     prune_sql: pruneSql,
@@ -525,7 +532,7 @@ export async function buildTermRetentionReport(
 }
 
 export function formatTermRetentionReport(report: TermRetentionReport): string {
-  const retained = report.terms.filter(row => row.retention_decision === 'retain');
+  const retained = sortRetainedOutputRows(report.terms.filter(row => row.retention_decision === 'retain'));
   const dropped = report.terms.filter(row => row.retention_decision === 'drop');
   const lines = [
     '# Term Retention Plan',

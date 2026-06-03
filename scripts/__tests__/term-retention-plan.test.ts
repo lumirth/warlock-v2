@@ -173,6 +173,34 @@ describe('term retention plan', () => {
     expect(report.dropped_term_ids).toEqual(['2026-spring', '2025-fall']);
   });
 
+  it('orders pinned registrable terms before retained historical terms in output artifacts', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({
+      Spring: 'spring',
+      Summer: 'summer',
+      Fall: 'fall',
+    }));
+
+    const report = await buildTermRetentionReport(args({
+      fromYear: 2026,
+      toYear: 2026,
+      maxRetainedTerms: 3,
+    }), {
+      fetcher,
+      status: {
+        termStates: [
+          termState('2026-spring'),
+          termState('2026-summer', 'registrable'),
+          termState('2026-fall', 'registrable'),
+        ],
+      },
+    });
+
+    expect(report.retained_term_ids).toEqual(['2026-fall', '2026-summer', '2026-spring']);
+    expect(formatTermRetentionReport(report).indexOf('2026-fall')).toBeLessThan(
+      formatTermRetentionReport(report).indexOf('2026-spring')
+    );
+  });
+
   it('generates prune SQL that deletes all term-local course data and verifies absence', () => {
     const rows: TermRetentionRow[] = [
       {

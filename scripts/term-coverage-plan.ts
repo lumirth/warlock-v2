@@ -141,7 +141,12 @@ function statusSyncStates(status: JsonRecord | null): JsonRecord[] {
     : [];
 }
 
-function retainedTermIds(retention: JsonRecord | null): Set<string> | null {
+type RetentionScope = {
+  retainedIds: Set<string>;
+  retainedOrder: string[];
+};
+
+function retainedTermScope(retention: JsonRecord | null): RetentionScope | null {
   if (!retention) return null;
   const values = Array.isArray(retention.retained_term_ids)
     ? retention.retained_term_ids
@@ -152,7 +157,11 @@ function retainedTermIds(retention: JsonRecord | null): Set<string> | null {
         .filter(item => item.retention_decision === 'retain')
         .map(item => item.term_id)
       : [];
-  return new Set(values.filter((item): item is string => typeof item === 'string'));
+  const retainedOrder = values.filter((item): item is string => typeof item === 'string');
+  return {
+    retainedIds: new Set(retainedOrder),
+    retainedOrder,
+  };
 }
 
 function staleTermIds(status: JsonRecord | null): Set<string> {
@@ -332,8 +341,8 @@ async function loadStatus(input?: string): Promise<{ source: string | null; stat
   return { source: input, status: record };
 }
 
-async function loadRetention(input?: string): Promise<{ source: string | null; retainedIds: Set<string> | null }> {
-  if (!input) return { source: null, retainedIds: null };
+async function loadRetention(input?: string): Promise<{ source: string | null; scope: RetentionScope | null }> {
+  if (!input) return { source: null, scope: null };
 
   const body = await readFile(input, 'utf8');
   const parsed = JSON.parse(body) as unknown;
@@ -341,7 +350,7 @@ async function loadRetention(input?: string): Promise<{ source: string | null; r
   if (!record) {
     throw new Error('--retention-input must contain a JSON object from npm run data:term-retention');
   }
-  return { source: input, retainedIds: retainedTermIds(record) };
+  return { source: input, scope: retainedTermScope(record) };
 }
 
 export async function buildTermCoverageReport(
@@ -364,11 +373,14 @@ export async function buildTermCoverageReport(
     ? await loadRetention(args.retentionInput)
     : {
       source: options.retentionSource ?? args.retentionInput ?? null,
-      retainedIds: retainedTermIds(options.retention),
+      scope: retainedTermScope(options.retention),
     };
   const discovered = await discoverAvailableTerms(args, options.fetcher);
-  const retainedDiscoveredTerms = retentionResult.retainedIds
-    ? discovered.terms.filter(term => retentionResult.retainedIds?.has(term.term_id))
+  const discoveredByTermId = new Map(discovered.terms.map(term => [term.term_id, term]));
+  const retainedDiscoveredTerms = retentionResult.scope
+    ? retentionResult.scope.retainedOrder
+      .map(termId => discoveredByTermId.get(termId))
+      .filter((term): term is AvailableTerm => term !== undefined)
     : discovered.terms;
   const droppedDiscoveredTerms = discovered.terms.length - retainedDiscoveredTerms.length;
   const storedByTermId = new Map<string, JsonRecord>();
