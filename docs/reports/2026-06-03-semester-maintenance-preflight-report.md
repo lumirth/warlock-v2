@@ -15,7 +15,7 @@ The command is read-only. It does not prune, backfill, or mutate D1. It writes a
 
 ## Local Verification
 
-- `npm run test:scripts`: 12 files, 79 tests passing.
+- `npm run test:scripts`: 12 files, 81 tests passing.
 - `npm run typecheck:scripts`: passing.
 
 ## Staging Evidence
@@ -80,6 +80,37 @@ Feedback candidates:
 - `professor fagen algorithms`: `search_eval`, high priority, 19 duplicate reports.
 - `CS 225`: `link_audit`, medium priority, 1 report.
 
+Feedback review outcome:
+
+- `professor fagen algorithms` is already promoted in `apps/api/src/eval/golden-queries.ts` as golden query `id: 71`, with `expected_filter_keys: ["instructor_ids"]` and `expected_residual: "algorithms"`. Staging eval passed 101/101 after this coverage.
+- `CS 225` link audit was promoted into `apps/web/src/pages/CoursePage.test.tsx`, which now verifies the visible `Course Explorer` link, section `CRN` official link, and direct public numeric Rate My Professors instructor link.
+- `docs/feedback-triage-resolutions.json` records both decisions, so recurring maintenance preflights do not keep reopening already-covered feedback.
+
+Ledger verification command:
+
+```bash
+STAGING_API_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev \
+STAGING_ADMIN_TOKEN=<local token file> \
+npm run data:semester:plan -- \
+  --from-year 2004 \
+  --to-year 2027 \
+  --target-size-mb 250 \
+  --max-retained-terms 18 \
+  --feedback-database course-search-db-staging \
+  --output-dir artifacts/semester-maintenance/20260603T-feedback-ledger-check
+```
+
+Ledger verification result:
+
+- Overall: ready.
+- Retained terms: 18.
+- Dropped terms: 61.
+- Coverage terms needing backfill: 0.
+- Freshness failed checks: 0.
+- Feedback rows exported: 22.
+- Feedback candidates needing review: 0.
+- Artifact bundle: `artifacts/semester-maintenance/20260603T-feedback-ledger-check`.
+
 Earlier preflight artifact `artifacts/semester-maintenance/20260603T030000Z-staging` exited non-zero before the backup-gated backfill/prune data phase. It found 24 retained terms, 55 dropped terms, six missing retained terms, and two freshness failures. That artifact is historical evidence for the work that was needed, not the current operator state.
 
 ## Decision
@@ -88,4 +119,4 @@ The 2004-to-present range is a discovery horizon, not a full-history requirement
 
 Current next action:
 
-- Review generated feedback candidates and promote accepted items into evals, score audits, link audits, or copy audits.
+- No operator action is required by this read-only maintenance plan.

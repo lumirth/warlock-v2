@@ -194,7 +194,7 @@ describe('semester maintenance plan', () => {
     expect(readFileSync(report.artifacts.summary, 'utf8')).toContain('Overall: ready');
   });
 
-  it('records feedback candidates when read-only feedback export is enabled', async () => {
+  it('does not raise next actions for feedback candidates already covered by the resolution ledger', async () => {
     const runner = vi.fn(async () => JSON.stringify([
       {
         results: [
@@ -218,9 +218,10 @@ describe('semester maintenance plan', () => {
 
     expect(runner).toHaveBeenCalledWith('npx', expect.arrayContaining(['wrangler', 'd1', 'execute', 'course-search-db-staging']));
     expect(report.counts.feedback_rows).toBe(1);
-    expect(report.counts.feedback_candidates).toBe(1);
-    expect(report.next_actions).toContain('Review generated feedback candidates and promote accepted items into evals, score audits, link audits, or copy audits.');
+    expect(report.counts.feedback_candidates).toBe(0);
+    expect(report.next_actions).not.toContain('Review generated feedback candidates and promote accepted items into evals, score audits, link audits, or copy audits.');
     expect(readFileSync(report.artifacts.feedbackCandidates!, 'utf8')).toContain('"candidate_count": 1');
+    expect(readFileSync(report.artifacts.feedbackCandidates!, 'utf8')).toContain('"needs_review_count": 0');
   });
 
   it('does not request prune backup work when dropped terms are already absent', async () => {

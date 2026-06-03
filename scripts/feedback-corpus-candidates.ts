@@ -6,6 +6,7 @@ import type { QueryFailureClass } from '../apps/api/src/eval/types.js';
 type Args = {
   input?: string;
   output?: string;
+  resolutions?: string;
 };
 
 type PromotionTarget =
@@ -17,6 +18,7 @@ type PromotionTarget =
   | 'manual_review';
 
 type CandidatePriority = 'high' | 'medium' | 'low';
+type CandidateStatus = 'needs_review' | 'covered' | 'promoted' | 'dismissed';
 
 export type FeedbackExportRow = {
   id?: string;
@@ -57,7 +59,7 @@ export type FeedbackCorpusCandidate = {
   duplicateCount: number;
   target: PromotionTarget;
   priority: CandidatePriority;
-  status: 'needs_review';
+  status: CandidateStatus;
   issue: FeedbackIssue;
   kind: FeedbackKind;
   query?: string;
@@ -76,6 +78,11 @@ export type FeedbackCorpusCandidate = {
   suggestedFailureClasses: QueryFailureClass[];
   suggestedGoldQuery?: SuggestedGoldQuery;
   reviewChecklist: string[];
+  resolution?: {
+    artifact: string;
+    notes: string;
+    reviewedAt?: string;
+  };
 };
 
 export type FeedbackCandidateReport = {
@@ -83,7 +90,28 @@ export type FeedbackCandidateReport = {
   source: string;
   row_count: number;
   candidate_count: number;
+  needs_review_count: number;
   candidates: FeedbackCorpusCandidate[];
+};
+
+export type FeedbackCandidateResolution = {
+  status: Exclude<CandidateStatus, 'needs_review'>;
+  artifact: string;
+  notes: string;
+  reviewedAt?: string;
+  target?: PromotionTarget;
+  kind?: FeedbackKind;
+  issue?: FeedbackIssue;
+  query?: string;
+  expected?: string;
+  courseId?: string;
+  subject?: string;
+  number?: string;
+  term?: string;
+  year?: number;
+  crn?: string;
+  instructorName?: string;
+  scoreField?: string;
 };
 
 const SEARCH_EVAL_ISSUES: ReadonlySet<FeedbackIssue> = new Set([
@@ -96,7 +124,7 @@ function usage(): string {
     'Feedback corpus candidate generator',
     '',
     'Usage:',
-    '  npm run feedback:triage -- --input <feedback-export.json|feedback-export.ndjson|-> [--output <path>]',
+    '  npm run feedback:triage -- --input <feedback-export.json|feedback-export.ndjson|-> [--output <path>] [--resolutions <path>]',
     '',
     'Input may be:',
     '  - a JSON array of feedback_events rows',
@@ -121,6 +149,9 @@ function parseArgs(argv: string[]): Args {
     } else if (arg === '--output' && next) {
       args.output = next;
       i += 1;
+    } else if (arg === '--resolutions' && next) {
+      args.resolutions = next;
+      i += 1;
     }
   }
 
@@ -142,18 +173,123 @@ export function parseFeedbackExport(text: string): FeedbackExportRow[] {
   }
 }
 
-export function buildFeedbackCandidateReport(rows: FeedbackExportRow[], source: string, now = new Date()): FeedbackCandidateReport {
-  const candidates = dedupeCandidates(rows
+export function parseFeedbackResolutionLedger(text: string): FeedbackCandidateResolution[] {
+  const parsed = JSON.parse(text) as unknown;
+  const rows = Array.isArray(parsed)
+    ? parsed
+    : isRecord(parsed) && Array.isArray(parsed.resolutions)
+      ? parsed.resolutions
+      : [];
+
+  return rows
+    .filter(isRecord)
+    .map(row => normalizeResolution(row))
+    .filter((resolution): resolution is FeedbackCandidateResolution => resolution !== null);
+}
+
+export function buildFeedbackCandidateReport(
+  rows: FeedbackExportRow[],
+  source: string,
+  now = new Date(),
+  resolutions: FeedbackCandidateResolution[] = []
+): FeedbackCandidateReport {
+  const candidates = applyResolutions(dedupeCandidates(rows
     .map((row, index) => buildCandidate(row, index))
-    .filter((candidate): candidate is FeedbackCorpusCandidate => candidate !== null));
+    .filter((candidate): candidate is FeedbackCorpusCandidate => candidate !== null)), resolutions);
 
   return {
     generated_at: now.toISOString(),
     source,
     row_count: rows.length,
     candidate_count: candidates.length,
+    needs_review_count: candidates.filter(candidate => candidate.status === 'needs_review').length,
     candidates,
   };
+}
+
+function normalizeResolution(row: Record<string, unknown>): FeedbackCandidateResolution | null {
+  const status = optionalString(row.status);
+  const artifact = optionalString(row.artifact);
+  const notes = optionalString(row.notes);
+  if (!isResolutionStatus(status) || !artifact || !notes) {
+    return null;
+  }
+
+  const target = optionalString(row.target);
+  const kind = optionalString(row.kind);
+  const issue = optionalString(row.issue);
+
+  return {
+    status,
+    artifact,
+    notes,
+    reviewedAt: optionalString(row.reviewedAt),
+    target: isPromotionTarget(target) ? target : undefined,
+    kind: kind && isKnownKind(kind) ? kind : undefined,
+    issue: issue && isKnownIssue(issue) ? issue : undefined,
+    query: optionalString(row.query),
+    expected: optionalString(row.expected),
+    courseId: optionalString(row.courseId) ?? optionalString(row.course_id),
+    subject: optionalString(row.subject)?.toUpperCase(),
+    number: optionalString(row.number),
+    term: optionalString(row.term)?.toLowerCase(),
+    year: optionalInteger(row.year),
+    crn: optionalString(row.crn),
+    instructorName: optionalString(row.instructorName) ?? optionalString(row.instructor_name),
+    scoreField: optionalString(row.scoreField) ?? optionalString(row.score_field),
+  };
+}
+
+function applyResolutions(
+  candidates: FeedbackCorpusCandidate[],
+  resolutions: FeedbackCandidateResolution[]
+): FeedbackCorpusCandidate[] {
+  if (resolutions.length === 0) return candidates;
+
+  return candidates.map(candidate => {
+    const resolution = resolutions.find(item => resolutionMatchesCandidate(item, candidate));
+    if (!resolution) return candidate;
+
+    return {
+      ...candidate,
+      status: resolution.status,
+      resolution: {
+        artifact: resolution.artifact,
+        notes: resolution.notes,
+        reviewedAt: resolution.reviewedAt,
+      },
+    };
+  });
+}
+
+function resolutionMatchesCandidate(
+  resolution: FeedbackCandidateResolution,
+  candidate: FeedbackCorpusCandidate
+): boolean {
+  const exactFields: (keyof FeedbackCandidateResolution & keyof FeedbackCorpusCandidate)[] = [
+    'target',
+    'kind',
+    'issue',
+    'query',
+    'expected',
+    'courseId',
+    'subject',
+    'number',
+    'term',
+    'crn',
+    'instructorName',
+    'scoreField',
+  ];
+
+  for (const field of exactFields) {
+    const expected = resolution[field];
+    if (expected === undefined) continue;
+    if (normalizeKeyPart(String(candidate[field] ?? '')) !== normalizeKeyPart(String(expected))) {
+      return false;
+    }
+  }
+
+  return resolution.year === undefined || candidate.year === resolution.year;
 }
 
 function buildCandidate(row: FeedbackExportRow, index: number): FeedbackCorpusCandidate | null {
@@ -555,6 +691,21 @@ function isKnownIssue(issue: string): issue is FeedbackIssue {
   ].includes(issue);
 }
 
+function isPromotionTarget(target: string | undefined): target is PromotionTarget {
+  return [
+    'search_eval',
+    'score_audit',
+    'link_audit',
+    'data_freshness_audit',
+    'copy_audit',
+    'manual_review',
+  ].includes(target ?? '');
+}
+
+function isResolutionStatus(status: string | undefined): status is FeedbackCandidateResolution['status'] {
+  return ['covered', 'promoted', 'dismissed'].includes(status ?? '');
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (!args.input) {
@@ -565,7 +716,10 @@ async function main(): Promise<void> {
   const source = args.input;
   const input = args.input === '-' ? await readStdin() : await readFile(args.input, 'utf8');
   const rows = parseFeedbackExport(input);
-  const report = buildFeedbackCandidateReport(rows, source);
+  const resolutions = args.resolutions
+    ? parseFeedbackResolutionLedger(await readFile(args.resolutions, 'utf8'))
+    : [];
+  const report = buildFeedbackCandidateReport(rows, source, new Date(), resolutions);
   const body = `${JSON.stringify(report, null, 2)}\n`;
 
   if (args.output) {

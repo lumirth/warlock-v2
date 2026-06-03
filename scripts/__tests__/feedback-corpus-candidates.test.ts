@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildFeedbackCandidateReport,
   parseFeedbackExport,
+  parseFeedbackResolutionLedger,
   type FeedbackCandidateReport,
 } from '../feedback-corpus-candidates.ts';
 
@@ -53,6 +54,7 @@ describe('feedback corpus candidates', () => {
       generated_at: '2026-06-02T06:00:00.000Z',
       row_count: 1,
       candidate_count: 1,
+      needs_review_count: 1,
     });
     expect(report.candidates[0]).toMatchObject({
       id: 'feedback-1',
@@ -66,6 +68,48 @@ describe('feedback corpus candidates', () => {
         query: 'professor fagen algorithms',
         expected_filter_keys: ['instructor_ids'],
         category: 'instructor',
+      },
+    });
+  });
+
+  it('applies reviewed resolutions without hiding the source candidate', () => {
+    const rows = parseFeedbackExport(JSON.stringify([{
+      id: 'feedback-1',
+      kind: 'search_results',
+      issue: 'expected_different_results',
+      page: 'search',
+      query: 'professor fagen algorithms',
+      expected: 'CS courses taught by Wade Fagen-Ulmschneider',
+      created_at: 1780370000,
+    }]));
+    const resolutions = parseFeedbackResolutionLedger(JSON.stringify({
+      resolutions: [{
+        status: 'covered',
+        target: 'search_eval',
+        kind: 'search_results',
+        issue: 'expected_different_results',
+        query: 'professor fagen algorithms',
+        artifact: 'apps/api/src/eval/golden-queries.ts#L579',
+        notes: 'Covered by a reviewed golden query.',
+        reviewedAt: '2026-06-03',
+      }],
+    }));
+
+    const report = buildFeedbackCandidateReport(
+      rows,
+      'wrangler.json',
+      new Date('2026-06-02T06:00:00Z'),
+      resolutions
+    );
+
+    expect(report.candidate_count).toBe(1);
+    expect(report.needs_review_count).toBe(0);
+    expect(report.candidates[0]).toMatchObject({
+      status: 'covered',
+      resolution: {
+        artifact: 'apps/api/src/eval/golden-queries.ts#L579',
+        notes: 'Covered by a reviewed golden query.',
+        reviewedAt: '2026-06-03',
       },
     });
   });

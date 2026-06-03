@@ -16,6 +16,8 @@ npm run feedback:export -- --database course-search-db-staging --limit 200
 
 This writes timestamped raw feedback and candidate files under `artifacts/feedback/`. The command is read-only and uses Wrangler `d1 execute --remote --json`; it does not print or require secret values.
 
+Reviewed candidate resolutions live in `docs/feedback-triage-resolutions.json`. `feedback:export` and the semester maintenance preflight apply that ledger by default, so already covered, promoted, or dismissed reports remain visible in candidate JSON but no longer count as unresolved `needs_review` work.
+
 Semester maintenance preflight also includes this export by default:
 
 ```sh
@@ -30,6 +32,12 @@ For a raw export only:
 npm run feedback:export -- --database course-search-db-staging --limit 200 --no-candidates
 ```
 
+To inspect unresolved status without applying the reviewed-resolution ledger:
+
+```sh
+npm run feedback:export -- --database course-search-db-staging --limit 200 --no-resolutions
+```
+
 Manual export remains available when you already have a Wrangler output file:
 
 ```sh
@@ -42,9 +50,15 @@ Generate review candidates:
 npm run feedback:triage -- --input artifacts/feedback-events.json --output artifacts/feedback-candidates.json
 ```
 
+Apply the reviewed-resolution ledger to a manual triage run:
+
+```sh
+npm run feedback:triage -- --input artifacts/feedback-events.json --output artifacts/feedback-candidates.json --resolutions docs/feedback-triage-resolutions.json
+```
+
 The input can be a JSON array, Wrangler D1 JSON with `results`, or NDJSON rows.
 
-The report groups duplicate candidate rows by target, issue, query, course fields, instructor, score field, and expected outcome. Use `duplicateCount` to see repeated reports and `feedbackIds` to trace the source rows. The report also includes `suggestedFailureClasses` for search-related candidates. These are review hints tied to the eval corpus coverage gate, not automatic promotions.
+The report groups duplicate candidate rows by target, issue, query, course fields, instructor, score field, and expected outcome. Use `duplicateCount` to see repeated reports and `feedbackIds` to trace the source rows. `candidate_count` is the total grouped candidate count. `needs_review_count` is the actionable count after the resolution ledger is applied, and this is the count used by semester maintenance next actions. The report also includes `suggestedFailureClasses` for search-related candidates. These are review hints tied to the eval corpus coverage gate, not automatic promotions.
 
 ## Promotion Standard
 
@@ -65,3 +79,5 @@ For `score_audit` candidates:
 - Add DTO/UI tests for valid score-report classes.
 
 For `link_audit`, `data_freshness_audit`, and `copy_audit` candidates, fix the product surface and add a test or Browser QA evidence when the report describes a stable workflow.
+
+After a candidate is reviewed, add a ledger row with `status` set to `covered`, `promoted`, or `dismissed`, plus the matching fields needed to identify the candidate and the artifact that proves the decision. Prefer matching on stable fields such as `target`, `kind`, `issue`, `query`, `subject`, `number`, `crn`, `instructorName`, and `scoreField`; avoid matching on free-text `expected` unless that text is intentionally stable.

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -31,6 +31,7 @@ describe('feedback export', () => {
     const args = parseArgs([]);
     const command = buildFeedbackExportCommand(args);
 
+    expect(args.resolutions).toBe('docs/feedback-triage-resolutions.json');
     expect(command.command).toBe('npx');
     expect(command.args.slice(0, 5)).toEqual([
       'wrangler',
@@ -102,6 +103,7 @@ describe('feedback export', () => {
       source: 'test-export',
       row_count: 1,
       candidate_count: 1,
+      needs_review_count: 1,
       candidates: [{
         id: 'feedback-1',
         target: 'search_eval',
@@ -111,6 +113,59 @@ describe('feedback export', () => {
           query: 'intro to philosophy',
           expected_filters: { subject: 'PHIL' },
           category: 'structured',
+        },
+      }],
+    });
+  });
+
+  it('applies feedback resolutions when writing candidate artifacts', async () => {
+    const paths: FeedbackExportPaths = {
+      exportPath: tempPath('feedback.json'),
+      candidatesPath: tempPath('feedback-candidates.json'),
+    };
+    const resolutionsPath = tempPath('resolutions.json');
+    writeFileSync(resolutionsPath, JSON.stringify({
+      resolutions: [{
+        status: 'promoted',
+        target: 'link_audit',
+        kind: 'external_link',
+        issue: 'broken_link',
+        query: 'CS 225',
+        subject: 'CS',
+        number: '225',
+        artifact: 'apps/web/src/pages/CoursePage.test.tsx',
+        notes: 'Covered by course link regression.',
+      }],
+    }));
+    const rawExport = JSON.stringify([{
+      results: [{
+        id: 'feedback-1',
+        kind: 'external_link',
+        issue: 'broken_link',
+        page: 'course',
+        subject: 'CS',
+        number: '225',
+      }],
+    }]);
+
+    const summary = await writeFeedbackArtifacts(
+      rawExport,
+      'test-export',
+      paths,
+      new Date('2026-06-03T03:00:00.000Z'),
+      resolutionsPath
+    );
+    const candidates = JSON.parse(await readFile(paths.candidatesPath!, 'utf8'));
+
+    expect(summary).toEqual({ rowCount: 1, candidateCount: 0 });
+    expect(candidates).toMatchObject({
+      candidate_count: 1,
+      needs_review_count: 0,
+      candidates: [{
+        status: 'promoted',
+        resolution: {
+          artifact: 'apps/web/src/pages/CoursePage.test.tsx',
+          notes: 'Covered by course link regression.',
         },
       }],
     });

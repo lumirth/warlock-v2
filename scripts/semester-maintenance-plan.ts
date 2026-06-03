@@ -296,7 +296,7 @@ export function formatSemesterMaintenanceReport(report: SemesterMaintenanceRepor
     `- Coverage terms needing backfill: ${report.counts.coverage_terms_needing_backfill}`,
     `- Freshness failed checks: ${report.counts.freshness_failed_checks}`,
     `- Feedback rows: ${report.counts.feedback_rows ?? 'skipped'}`,
-    `- Feedback candidates: ${report.counts.feedback_candidates ?? 'skipped'}`,
+    `- Feedback candidates needing review: ${report.counts.feedback_candidates ?? 'skipped'}`,
     `- Backup required before prune: ${report.backup_required_before_prune ? 'yes' : 'no'}`,
     '',
     '## Gates',
@@ -531,7 +531,8 @@ function buildMaintenanceReport(input: {
     {
       name: 'feedback export',
       ok: input.feedbackError === null,
-      detail: input.feedbackError ?? `${input.feedbackRows ?? 0} row(s), ${input.feedbackCandidates ?? 0} candidate(s)`,
+      detail: input.feedbackError
+        ?? `${input.feedbackRows ?? 0} row(s), ${input.feedbackCandidates ?? 0} candidate(s) needing review`,
     },
   ];
 

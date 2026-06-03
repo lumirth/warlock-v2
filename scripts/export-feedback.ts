@@ -1,9 +1,14 @@
 import { execFile } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { buildFeedbackCandidateReport, parseFeedbackExport } from './feedback-corpus-candidates.js';
+import {
+  buildFeedbackCandidateReport,
+  parseFeedbackExport,
+  parseFeedbackResolutionLedger,
+  type FeedbackCandidateResolution,
+} from './feedback-corpus-candidates.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +20,7 @@ type Args = {
   outputDir: string;
   remote: boolean;
   noCandidates: boolean;
+  resolutions?: string | null;
 };
 
 export type FeedbackExportPaths = {
@@ -24,6 +30,7 @@ export type FeedbackExportPaths = {
 
 const DEFAULT_DATABASE = 'course-search-db-staging';
 const DEFAULT_OUTPUT_DIR = 'artifacts/feedback';
+const DEFAULT_RESOLUTIONS_PATH = 'docs/feedback-triage-resolutions.json';
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1000;
 const WRANGLER_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
@@ -33,11 +40,13 @@ function usage(): string {
     'Feedback export and triage',
     '',
     'Usage:',
-    '  npm run feedback:export -- [--database course-search-db-staging] [--limit 200] [--output <path>] [--candidates-output <path>]',
+    '  npm run feedback:export -- [--database course-search-db-staging] [--limit 200] [--output <path>] [--candidates-output <path>] [--resolutions <path>]',
     '',
     'Defaults to remote staging D1 and writes timestamped artifacts under artifacts/feedback.',
+    `Reviewed candidate resolutions are applied from ${DEFAULT_RESOLUTIONS_PATH} by default.`,
     'Use --local to omit Wrangler --remote for local D1 inspection.',
     'Use --no-candidates to export raw feedback without generating candidate triage JSON.',
+    'Use --no-resolutions to inspect raw candidate status without the reviewed-resolution ledger.',
   ].join('\n');
 }
 
@@ -48,6 +57,7 @@ export function parseArgs(argv: string[]): Args {
     outputDir: DEFAULT_OUTPUT_DIR,
     remote: true,
     noCandidates: false,
+    resolutions: DEFAULT_RESOLUTIONS_PATH,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -74,6 +84,11 @@ export function parseArgs(argv: string[]): Args {
       args.remote = true;
     } else if (arg === '--no-candidates') {
       args.noCandidates = true;
+    } else if (arg === '--resolutions' && next) {
+      args.resolutions = next;
+      i += 1;
+    } else if (arg === '--no-resolutions') {
+      args.resolutions = null;
     } else if (arg === '--help' || arg === '-h') {
       console.log(usage());
       process.exit(0);
@@ -131,7 +146,8 @@ export async function writeFeedbackArtifacts(
   rawExport: string,
   source: string,
   paths: FeedbackExportPaths,
-  now = new Date()
+  now = new Date(),
+  resolutionsPath: string | null = DEFAULT_RESOLUTIONS_PATH
 ): Promise<{ rowCount: number; candidateCount: number }> {
   await mkdir(path.dirname(paths.exportPath), { recursive: true });
   await writeFile(paths.exportPath, rawExport.endsWith('\n') ? rawExport : `${rawExport}\n`);
@@ -141,11 +157,29 @@ export async function writeFeedbackArtifacts(
     return { rowCount: rows.length, candidateCount: 0 };
   }
 
-  const report = buildFeedbackCandidateReport(rows, source, now);
+  const resolutions = await loadFeedbackResolutions(resolutionsPath);
+  const report = buildFeedbackCandidateReport(rows, source, now, resolutions);
   await mkdir(path.dirname(paths.candidatesPath), { recursive: true });
   await writeFile(paths.candidatesPath, `${JSON.stringify(report, null, 2)}\n`);
 
-  return { rowCount: rows.length, candidateCount: report.candidate_count };
+  return { rowCount: rows.length, candidateCount: report.needs_review_count };
+}
+
+async function loadFeedbackResolutions(pathname: string | null): Promise<FeedbackCandidateResolution[]> {
+  if (!pathname) return [];
+
+  try {
+    return parseFeedbackResolutionLedger(await readFile(pathname, 'utf8'));
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }
 
 function parseLimit(value: string): number {
@@ -164,14 +198,14 @@ async function main(): Promise<void> {
     cwd: process.cwd(),
     maxBuffer: WRANGLER_MAX_BUFFER_BYTES,
   });
-  const summary = await writeFeedbackArtifacts(stdout, paths.exportPath, paths);
+  const summary = await writeFeedbackArtifacts(stdout, paths.exportPath, paths, new Date(), args.resolutions);
 
   console.log(`Feedback export written: ${paths.exportPath}`);
   if (paths.candidatesPath) {
     console.log(`Feedback candidates written: ${paths.candidatesPath}`);
   }
   console.log(`Rows: ${summary.rowCount}`);
-  console.log(`Candidates: ${summary.candidateCount}`);
+  console.log(`Candidates needing review: ${summary.candidateCount}`);
 
   if (summary.rowCount === 0) {
     console.log('No feedback rows found.');
