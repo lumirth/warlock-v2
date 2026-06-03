@@ -102,6 +102,7 @@ function submitSearch() {
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   vi.clearAllMocks()
 })
 
@@ -324,6 +325,95 @@ describe('SearchPage request state', () => {
     ).toBeGreaterThanOrEqual(1)
   })
 
+  it('switches to table view and refetches when a sortable table header is clicked', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce(
+        searchResponse([
+          course({
+            id: 'CS-225-2026-spring',
+            number: '225',
+            title: 'Data Structures',
+            quality_score: 88,
+            difficulty_score: 42,
+            avg_gpa: 3.62,
+            primary_instructor_rmp: 4.8,
+          }),
+        ])
+      )
+      .mockResolvedValueOnce(
+        searchResponse([
+          course({
+            id: 'STAT-100-2026-spring',
+            subject: 'STAT',
+            number: '100',
+            title: 'Statistics',
+            avg_gpa: 3.82,
+          }),
+        ])
+      )
+
+    renderSearchPage()
+
+    setQuery('online stats class')
+    submitSearch()
+
+    await screen.findByText(/CS 225: Data Structures/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
+
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /sort by avg gpa, descending/i })
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /sort by avg gpa, descending/i })
+    )
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith(
+        'online stats class',
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          limit: 20,
+          offset: 0,
+          sort: { field: 'gpa', direction: 'desc' },
+        })
+      )
+    })
+    expect(
+      screen.getByRole('columnheader', { name: /avg gpa/i })
+    ).toHaveAttribute('aria-sort', 'descending')
+  })
+
+  it('persists the result view preference across renders', async () => {
+    vi.mocked(api.search).mockResolvedValue(
+      searchResponse([
+        course({
+          id: 'CS-225-2026-spring',
+          number: '225',
+          title: 'Data Structures',
+        }),
+      ])
+    )
+
+    const rendered = renderSearchPage()
+
+    setQuery('cs 225')
+    submitSearch()
+    await screen.findByText(/CS 225: Data Structures/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
+    expect(window.localStorage.getItem('uiuc-course-search.result-view')).toBe(
+      'table'
+    )
+
+    rendered.unmount()
+    renderSearchPage()
+
+    setQuery('cs 225')
+    submitSearch()
+    await screen.findByRole('table')
+  })
+
   it('de-emphasizes historical result cards and places the status next to the term', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(
       searchResponse([
@@ -534,6 +624,9 @@ describe('SearchPage request state', () => {
     fireEvent.change(screen.getByLabelText('Credits'), {
       target: { value: '4' },
     })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Level' }))
+    fireEvent.click(await screen.findByRole('option', { name: '400 level' }))
+    fireEvent.click(screen.getByLabelText('Include past terms'))
     fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
 
     await waitFor(() => {
@@ -548,6 +641,8 @@ describe('SearchPage request state', () => {
             number: '225',
             instructor: 'Fagen',
             credits: 4,
+            level: 400,
+            scope: 'all',
           }),
         })
       )

@@ -4,6 +4,10 @@ import {
   buildCourseExplorerSectionUrl,
   buildRmpProfessorUrl,
   buildRmpSearchUrl,
+  getQualityTierLabel,
+  getQualityTierRank,
+  getWorkloadTierLabel,
+  getWorkloadTierRank,
 } from './index.js';
 
 describe('shared external link builders', () => {
@@ -37,5 +41,36 @@ describe('shared external link builders', () => {
       'https://www.ratemyprofessors.com/search/professors/1112?q=Wade%20Fagen-Ulmschneider'
     );
     expect(buildRmpSearchUrl('')).toBeNull();
+  });
+});
+
+describe('shared course score tiers', () => {
+  it('maps quality scores to displayed word-label tiers', () => {
+    expect(getQualityTierLabel(91)).toBe('Excellent');
+    expect(getQualityTierLabel(78)).toBe('Good');
+    expect(getQualityTierLabel(62)).toBe('Fair');
+    expect(getQualityTierLabel(42)).toBe('Low');
+    expect(getQualityTierLabel(null)).toBeNull();
+  });
+
+  it('exposes coarse quality ranks rather than raw composite precision', () => {
+    expect(getQualityTierRank(91)).toBe(4);
+    expect(getQualityTierRank(86)).toBe(4);
+    expect(getQualityTierRank(42)).toBe(1);
+    expect(getQualityTierRank(undefined)).toBeNull();
+  });
+
+  it('maps workload scores to displayed word-label tiers', () => {
+    expect(getWorkloadTierLabel(20)).toBe('Easy');
+    expect(getWorkloadTierLabel(58)).toBe('Moderate');
+    expect(getWorkloadTierLabel(82)).toBe('Hard');
+    expect(getWorkloadTierLabel(null)).toBeNull();
+  });
+
+  it('exposes coarse workload ranks for easiest-first sorting', () => {
+    expect(getWorkloadTierRank(20)).toBe(1);
+    expect(getWorkloadTierRank(58)).toBe(2);
+    expect(getWorkloadTierRank(82)).toBe(3);
+    expect(getWorkloadTierRank(undefined)).toBeNull();
   });
 });

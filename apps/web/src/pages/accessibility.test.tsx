@@ -1,5 +1,5 @@
 import axe from 'axe-core'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CourseDto } from '@uiuc-course-search/query-types'
@@ -50,6 +50,7 @@ async function expectNoA11yViolations(container: HTMLElement): Promise<void> {
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   vi.clearAllMocks()
 })
 
@@ -75,6 +76,38 @@ describe('page accessibility', () => {
       </TestUiProvider>
     )
 
+    await expectNoA11yViolations(container)
+  })
+
+  it('keeps the search table view free of automated accessibility violations', async () => {
+    window.localStorage.setItem('uiuc-course-search.result-view', 'table')
+    vi.mocked(api.search).mockResolvedValueOnce({
+      results: [course()],
+      meta: {
+        query: { raw: 'cs 225', residual: 'cs 225' },
+        extraction: { hints: [] },
+        plan: { filters: {}, semanticQuery: 'cs 225', keywordQuery: 'cs 225' },
+        timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
+        appliedSort: { field: 'relevance', direction: 'desc' },
+        appliedScope: 'active',
+      },
+      pagination: { total: 1, limit: 20, offset: 0 },
+    })
+
+    const { container } = render(
+      <TestUiProvider>
+        <RouterProvider
+          router={createMemoryRouter([{ path: '/', element: <SearchPage /> }])}
+        />
+      </TestUiProvider>
+    )
+
+    fireEvent.change(screen.getByLabelText(/course search query/i), {
+      target: { value: 'cs 225' },
+    })
+    fireEvent.submit(screen.getByRole('search'))
+
+    await screen.findByRole('table')
     await expectNoA11yViolations(container)
   })
 

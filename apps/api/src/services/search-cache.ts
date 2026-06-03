@@ -4,7 +4,7 @@ import type {
   SearchPlanningResult,
 } from "./search-pipeline.js";
 
-const SEARCH_CACHE_VERSION = "v2";
+const SEARCH_CACHE_VERSION = "v3";
 const SEARCH_PLAN_TTL_SECONDS = 5 * 60;
 const SEARCH_RESULT_TTL_SECONDS = 30;
 
@@ -24,11 +24,13 @@ export function searchResultCacheKey(
   rawQuery: string,
   limit: number,
   overrides?: CacheableOverrides,
+  controls?: CacheableOverrides,
 ): string {
   return cacheKey("result", {
     query: normalizeQuery(rawQuery),
     limit,
     overrides: stableRecord(overrides),
+    controls: stableRecord(controls),
   });
 }
 
@@ -62,10 +64,11 @@ export async function getCachedSearchResult(
   rawQuery: string,
   limit: number,
   overrides?: CacheableOverrides,
+  controls?: CacheableOverrides,
 ): Promise<SearchPipelineResult | null> {
   return getJson<SearchPipelineResult>(
     kv,
-    searchResultCacheKey(rawQuery, limit, overrides),
+    searchResultCacheKey(rawQuery, limit, overrides, controls),
   );
 }
 
@@ -75,10 +78,11 @@ export function cacheSearchResult(
   limit: number,
   result: SearchPipelineResult,
   overrides?: CacheableOverrides,
+  controls?: CacheableOverrides,
 ): Promise<void> {
   return putJson(
     kv,
-    searchResultCacheKey(rawQuery, limit, overrides),
+    searchResultCacheKey(rawQuery, limit, overrides, controls),
     result,
     SEARCH_RESULT_TTL_SECONDS,
   );

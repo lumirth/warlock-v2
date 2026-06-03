@@ -146,6 +146,7 @@ function buildAdvancedState(hints: Hint[], filters: SearchFilters, residual: str
     online: filters.online,
     status: filters.status,
     difficulty: filters.difficulty,
+    level: filters.level,
   };
 }
 
@@ -323,6 +324,8 @@ function filterFromHint(hint: Hint): Partial<SearchFilters> {
       return { time: formatHintValue(hint.value) };
     case 'credits':
       return { credits: Number(hint.value) };
+    case 'level':
+      return { level: Number(hint.value) };
     case 'online':
       return { online: Boolean(hint.value) };
     case 'status':

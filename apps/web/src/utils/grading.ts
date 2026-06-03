@@ -1,12 +1,12 @@
-import { QUALITY } from '../config/constants'
+import {
+  getQualityTierLabel,
+  type QualityTierLabel,
+} from '@uiuc-course-search/query-types'
 
-export type QualityLabel = 'Excellent' | 'Good' | 'Fair' | 'Low'
+export type QualityLabel = QualityTierLabel
 
 export function getQualityLabel(score: number): QualityLabel {
-  if (score >= QUALITY.THRESHOLDS.EXCELLENT) return 'Excellent'
-  if (score >= QUALITY.THRESHOLDS.GOOD) return 'Good'
-  if (score >= QUALITY.THRESHOLDS.FAIR) return 'Fair'
-  return 'Low'
+  return getQualityTierLabel(score) ?? 'Low'
 }
 
 export function getQualityTone(

@@ -9,7 +9,15 @@ import {
   SearchPipeline,
   type SearchOverrides,
 } from "../services/search-pipeline.js";
-import type { SearchResponseDto } from "@uiuc-course-search/query-types";
+import {
+  DEFAULT_SEARCH_SCOPE,
+  SEARCH_SCOPE_VALUES,
+  SEARCH_SORT_DEFAULT_DIRECTIONS,
+  SEARCH_SORT_FIELDS,
+  type SearchResponseDto,
+  type SearchScope,
+  type SearchSort,
+} from "@uiuc-course-search/query-types";
 import { searchResultToCourseDto } from "../dto/course.js";
 import { buildSearchUiPlan } from "../dto/search-ui.js";
 import {
@@ -32,6 +40,7 @@ const TIME_VALUES = [
   "evening",
 ] as const;
 const STATUS_VALUES = ["open", "available", "closed"] as const;
+const LEVEL_VALUES = [100, 200, 300, 400, 500] as const;
 
 type Bindings = {
   DB: D1Database;
@@ -64,6 +73,40 @@ function parseBooleanParam(
 
 function hasOverrides(overrides: SearchOverrides): boolean {
   return Object.values(overrides).some((value) => value !== undefined);
+}
+
+function parseSortParams(fieldRaw?: string, directionRaw?: string): SearchSort {
+  const normalizedField = fieldRaw?.trim().toLowerCase();
+  const field = SEARCH_SORT_FIELDS.includes(normalizedField as SearchSort["field"])
+    ? (normalizedField as SearchSort["field"])
+    : "relevance";
+  const normalizedDirection = directionRaw?.trim().toLowerCase();
+  const defaultDirection = SEARCH_SORT_DEFAULT_DIRECTIONS[field];
+  const direction =
+    normalizedDirection === "asc" || normalizedDirection === "desc"
+      ? normalizedDirection
+      : defaultDirection;
+
+  return {
+    field,
+    direction: field === "relevance" ? defaultDirection : direction,
+  };
+}
+
+function parseScopeParam(raw?: string): SearchScope {
+  const normalized = raw?.trim().toLowerCase();
+  return SEARCH_SCOPE_VALUES.includes(normalized as SearchScope)
+    ? (normalized as SearchScope)
+    : DEFAULT_SEARCH_SCOPE;
+}
+
+function parseLevelParam(raw?: string): number | undefined {
+  if (!raw) return undefined;
+
+  const value = parseInt(raw.trim(), 10);
+  return LEVEL_VALUES.includes(value as (typeof LEVEL_VALUES)[number])
+    ? value
+    : undefined;
 }
 
 // Hybrid search endpoint (combines semantic + keyword with RRF)
@@ -207,6 +250,14 @@ searchRoutes.get("/api/search", async (c) => {
     return c.json({ error: "difficulty must be one of: easy, hard" }, 400);
   }
 
+  const level = parseLevelParam(c.req.query("level"));
+  if (level !== undefined) {
+    overrides.level = level;
+  }
+
+  const sort = parseSortParams(c.req.query("sort"), c.req.query("direction"));
+  const scope = parseScopeParam(c.req.query("scope"));
+
   if (!query.trim() && !hasOverrides(overrides)) {
     return c.json({ error: "Missing query parameter q" }, 400);
   }
@@ -219,18 +270,31 @@ searchRoutes.get("/api/search", async (c) => {
       c.env.SEARCH_CACHE,
     );
     const requestedWindow = offset + limit + 1;
-    const fetchLimit = Math.min(
-      MAX_SEARCH_FETCH_WINDOW,
-      Math.max(requestedWindow, (offset + limit) * 2),
-    );
+    const fetchLimit =
+      sort.field === "relevance"
+        ? Math.min(
+            MAX_SEARCH_FETCH_WINDOW,
+            Math.max(requestedWindow, (offset + limit) * 2),
+          )
+        : MAX_SEARCH_FETCH_WINDOW;
     const result = await pipeline.search(
       query,
       fetchLimit,
       overrides,
+      { sort, scope },
       c.executionCtx.waitUntil.bind(c.executionCtx),
     );
     const pageResults = result.results.slice(offset, offset + limit);
     const hasMore = result.results.length > offset + limit;
+
+    const ui = buildSearchUiPlan(
+      result.meta.extraction.hints,
+      result.meta.plan,
+      result.meta.query.residual,
+    );
+    if (scope === "all") {
+      ui.advanced.scope = scope;
+    }
 
     const response: SearchResponseDto = {
       results: pageResults.map((searchResult) =>
@@ -243,12 +307,10 @@ searchRoutes.get("/api/search", async (c) => {
       meta: {
         ...result.meta,
         ambiguities: result.meta.plan.ambiguities,
+        appliedSort: result.meta.appliedSort ?? sort,
+        appliedScope: result.meta.appliedScope ?? scope,
         term: await getSearchTermSummary(c.env.DB),
-        ui: buildSearchUiPlan(
-          result.meta.extraction.hints,
-          result.meta.plan,
-          result.meta.query.residual,
-        ),
+        ui,
       },
       pagination: {
         total: offset + pageResults.length + (hasMore ? 1 : 0),

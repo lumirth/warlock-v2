@@ -275,7 +275,10 @@ export function buildFilterClauses(
 
   // Level filter
   if (filters.level !== undefined) {
-    where.push('CAST(SUBSTR(c.number, 1, 1) AS INTEGER) * 100 = ?');
+    const levelExpression = 'CAST(SUBSTR(c.number, 1, 1) AS INTEGER) * 100';
+    where.push(
+      filters.level >= 500 ? `${levelExpression} >= ?` : `${levelExpression} = ?`
+    );
     params.push(filters.level);
   }
 

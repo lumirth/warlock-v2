@@ -47,6 +47,13 @@ describe('buildFilterClauses', () => {
       expect(result.where).toContain('CAST(SUBSTR(c.number, 1, 1) AS INTEGER) * 100 = ?');
       expect(result.params).toContain(400);
     });
+
+    it('treats the 500 level filter as 500+', () => {
+      const filters: SearchFilters = { level: 500 };
+      const result = buildFilterClauses(filters);
+      expect(result.where).toContain('CAST(SUBSTR(c.number, 1, 1) AS INTEGER) * 100 >= ?');
+      expect(result.params).toContain(500);
+    });
   });
 
   describe('credits filter', () => {

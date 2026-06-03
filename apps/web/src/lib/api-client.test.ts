@@ -149,11 +149,14 @@ describe('ApiClient', () => {
         online: true,
         status: 'open',
         difficulty: 'easy',
+        level: 400,
+        scope: 'all',
       },
+      sort: { field: 'gpa', direction: 'desc' },
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.example.test/api/search?q=algorithms&limit=20&offset=0&subject=CS&number=225&instructor=Fagen&term=spring&year=2026&gened=HUM&credits=4&days=MWF&time=morning&online=true&status=open&difficulty=easy',
+      'https://api.example.test/api/search?q=algorithms&limit=20&offset=0&subject=CS&number=225&instructor=Fagen&term=spring&year=2026&gened=HUM&credits=4&days=MWF&time=morning&online=true&status=open&difficulty=easy&level=400&scope=all&sort=gpa&direction=desc',
       { signal: undefined }
     )
   })

@@ -64,6 +64,104 @@ export interface SearchFilters {
   year?: number;
 }
 
+export const SEARCH_SORT_FIELDS = [
+  "relevance",
+  "gpa",
+  "quality",
+  "workload",
+  "instructor_rating",
+  "level",
+  "credits",
+] as const;
+
+export type SortField = (typeof SEARCH_SORT_FIELDS)[number];
+
+export type SortDirection = "asc" | "desc";
+
+export type SearchSort = {
+  field: SortField;
+  direction: SortDirection;
+};
+
+export const SEARCH_SORT_DEFAULT_DIRECTIONS: Record<
+  SortField,
+  SortDirection
+> = {
+  relevance: "desc",
+  gpa: "desc",
+  quality: "desc",
+  workload: "asc",
+  instructor_rating: "desc",
+  level: "asc",
+  credits: "asc",
+} as const;
+
+export const DEFAULT_SEARCH_SORT: SearchSort = {
+  field: "relevance",
+  direction: SEARCH_SORT_DEFAULT_DIRECTIONS.relevance,
+} as const;
+
+export const SEARCH_SCOPE_VALUES = ["active", "all"] as const;
+
+export type SearchScope = (typeof SEARCH_SCOPE_VALUES)[number];
+
+export const DEFAULT_SEARCH_SCOPE: SearchScope = "active";
+
+export const QUALITY_TIER_THRESHOLDS = {
+  EXCELLENT: 85,
+  GOOD: 70,
+  FAIR: 50,
+} as const;
+
+export type QualityTierLabel = "Excellent" | "Good" | "Fair" | "Low";
+
+export function getQualityTierLabel(
+  score: number | null | undefined,
+): QualityTierLabel | null {
+  if (typeof score !== "number") return null;
+  if (score >= QUALITY_TIER_THRESHOLDS.EXCELLENT) return "Excellent";
+  if (score >= QUALITY_TIER_THRESHOLDS.GOOD) return "Good";
+  if (score >= QUALITY_TIER_THRESHOLDS.FAIR) return "Fair";
+  return "Low";
+}
+
+export function getQualityTierRank(
+  score: number | null | undefined,
+): number | null {
+  const label = getQualityTierLabel(score);
+  if (label === "Excellent") return 4;
+  if (label === "Good") return 3;
+  if (label === "Fair") return 2;
+  if (label === "Low") return 1;
+  return null;
+}
+
+export const WORKLOAD_TIER_THRESHOLDS = {
+  HARD: 75,
+  MODERATE: 45,
+} as const;
+
+export type WorkloadTierLabel = "Easy" | "Moderate" | "Hard";
+
+export function getWorkloadTierLabel(
+  score: number | null | undefined,
+): WorkloadTierLabel | null {
+  if (typeof score !== "number") return null;
+  if (score > WORKLOAD_TIER_THRESHOLDS.HARD) return "Hard";
+  if (score > WORKLOAD_TIER_THRESHOLDS.MODERATE) return "Moderate";
+  return "Easy";
+}
+
+export function getWorkloadTierRank(
+  score: number | null | undefined,
+): number | null {
+  const label = getWorkloadTierLabel(score);
+  if (label === "Easy") return 1;
+  if (label === "Moderate") return 2;
+  if (label === "Hard") return 3;
+  return null;
+}
+
 export interface Ambiguity {
   term: string;
   chosen: { type: string; value: string; label: string };
@@ -391,6 +489,8 @@ export type SearchMetaDto = {
     originalResultCount: number;
     recoveryGroups?: SearchRecoveryGroup[];
   };
+  appliedSort?: SearchSort;
+  appliedScope?: SearchScope;
   term?: {
     activeTermId: string | null;
     registrableTermId: string | null;
@@ -458,6 +558,8 @@ export type AdvancedSearchStateDto = {
   online?: boolean;
   status?: string;
   difficulty?: "easy" | "hard";
+  level?: number;
+  scope?: SearchScope;
 };
 
 export type SearchUiPlanDto = {

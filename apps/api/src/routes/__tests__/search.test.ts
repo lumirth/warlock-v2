@@ -109,6 +109,7 @@ describe("Search Routes", () => {
       "CS 225",
       40,
       {},
+      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
       expect.any(Function),
     );
   });
@@ -159,7 +160,7 @@ describe("Search Routes", () => {
     });
 
     const res = await app.request(
-      "/api/search?q=systems&subject=cs&number=225&instructor=Fagen&term=spring&year=2026&gened=hum&credits=4&days=mwf&time=morning&online=true&status=open&difficulty=easy",
+      "/api/search?q=systems&subject=cs&number=225&instructor=Fagen&term=spring&year=2026&gened=hum&credits=4&days=mwf&time=morning&online=true&status=open&difficulty=easy&level=400",
       {},
       {
         DB: mockDB,
@@ -189,7 +190,9 @@ describe("Search Routes", () => {
         online: true,
         status: "open",
         difficulty: "easy",
+        level: 400,
       },
+      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
       expect.any(Function),
     );
   });
@@ -233,6 +236,103 @@ describe("Search Routes", () => {
       "",
       40,
       { credits: 3, online: true },
+      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
+      expect.any(Function),
+    );
+  });
+
+  it("passes sort, all-term scope, and level controls to the pipeline", async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: "history", residual: "history" },
+        extraction: { hints: [] },
+        plan: {
+          filters: { level: 500 },
+          semanticQuery: "history",
+          keywordQuery: "history",
+        },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+      },
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: searchSpy,
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?q=history&limit=5&sort=gpa&direction=asc&scope=all&level=500",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith(
+      "history",
+      1200,
+      { level: 500 },
+      { sort: { field: "gpa", direction: "asc" }, scope: "all" },
+      expect.any(Function),
+    );
+
+    const data = (await res.json()) as SearchResponseDto;
+    expect(data.meta.appliedSort).toEqual({ field: "gpa", direction: "asc" });
+    expect(data.meta.appliedScope).toBe("all");
+    expect(data.meta.ui?.advanced).toMatchObject({
+      level: 500,
+      scope: "all",
+    });
+  });
+
+  it("falls invalid new controls back to relevance, active scope, and no level", async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: "history", residual: "history" },
+        extraction: { hints: [] },
+        plan: {
+          filters: {},
+          semanticQuery: "history",
+          keywordQuery: "history",
+        },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+      },
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: searchSpy,
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?q=history&sort=nope&direction=sideways&scope=past&level=700",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith(
+      "history",
+      40,
+      {},
+      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
       expect.any(Function),
     );
   });
@@ -297,6 +397,7 @@ describe("Search Routes", () => {
       "intro to CS",
       30,
       {},
+      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
       expect.any(Function),
     );
     expect(data.results.map((result) => result.id)).toEqual([
@@ -353,6 +454,7 @@ describe("Search Routes", () => {
       "history",
       1200,
       {},
+      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
       expect.any(Function),
     );
 

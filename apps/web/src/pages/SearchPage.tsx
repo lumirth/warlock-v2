@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   type FormEvent,
@@ -6,25 +7,34 @@ import {
 } from 'react'
 import {
   AlertCircleIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
+  LayoutGridIcon,
   SearchIcon,
   SlidersHorizontalIcon,
+  Table2Icon,
   XIcon,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api-client'
 import { FeedbackButton } from '../components/FeedbackButton'
-import type {
-  AdvancedSearchStateDto,
-  CourseDto,
-  MatchEvidence,
-  SearchAmbiguityActionDto,
-  SearchChipDto,
-  SearchFilters,
-  SearchMetaDto,
-  SearchResponseDto,
+import {
+  DEFAULT_SEARCH_SORT,
+  SEARCH_SORT_DEFAULT_DIRECTIONS,
+  getWorkloadTierLabel,
+  type AdvancedSearchStateDto,
+  type CourseDto,
+  type MatchEvidence,
+  type SearchAmbiguityActionDto,
+  type SearchChipDto,
+  type SearchFilters,
+  type SearchMetaDto,
+  type SearchResponseDto,
+  type SearchSort,
+  type SortDirection,
+  type SortField,
 } from '@uiuc-course-search/query-types'
 import { getQualityLabel, getQualityTone } from '../utils/grading'
-import { DIFFICULTY } from '../config/constants'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -61,11 +71,20 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { PageContainer } from '@/components/PageContainer'
 import { cn } from '@/lib/utils'
 
 const SEARCH_PAGE_SIZE = 20
 const ANY_SELECT_VALUE = '__any__'
+const RESULT_VIEW_STORAGE_KEY = 'uiuc-course-search.result-view'
 
 type SearchPagination = SearchResponseDto['pagination']
 type SearchOptions = {
@@ -73,8 +92,10 @@ type SearchOptions = {
   append?: boolean
   syncInput?: boolean
   filters?: AdvancedSearchStateDto
+  sort?: SearchSort
 }
 type Tone = 'success' | 'warning' | 'destructive' | 'muted'
+type ResultViewMode = 'cards' | 'table'
 type CourseResultMetric = {
   label: string
   value: string
@@ -84,6 +105,14 @@ type CourseResultMetric = {
 type SelectOption = {
   value: string
   label: string
+}
+type SortFieldOption = SelectOption & {
+  value: SortField
+}
+type TableSortColumn = {
+  field: Exclude<SortField, 'relevance'>
+  label: string
+  className?: string
 }
 
 const ADVANCED_SEARCH_KEYS: (keyof AdvancedSearchStateDto)[] = [
@@ -99,7 +128,13 @@ const ADVANCED_SEARCH_KEYS: (keyof AdvancedSearchStateDto)[] = [
   'online',
   'status',
   'difficulty',
+  'level',
+  'scope',
 ]
+
+const ADVANCED_CONTRADICTION_KEYS = ADVANCED_SEARCH_KEYS.filter(
+  (key) => key !== 'scope'
+)
 
 const TERM_OPTIONS: SelectOption[] = [
   { value: 'spring', label: 'Spring' },
@@ -127,6 +162,33 @@ const STATUS_OPTIONS: SelectOption[] = [
 const WORKLOAD_OPTIONS: SelectOption[] = [
   { value: 'easy', label: 'Easier' },
   { value: 'hard', label: 'Harder' },
+]
+
+const LEVEL_OPTIONS: SelectOption[] = [
+  { value: '100', label: '100 level' },
+  { value: '200', label: '200 level' },
+  { value: '300', label: '300 level' },
+  { value: '400', label: '400 level' },
+  { value: '500', label: '500+ level' },
+]
+
+const SORT_FIELD_OPTIONS: SortFieldOption[] = [
+  { value: 'relevance', label: 'Relevance' },
+  { value: 'gpa', label: 'Avg GPA' },
+  { value: 'quality', label: 'Quality' },
+  { value: 'workload', label: 'Workload' },
+  { value: 'instructor_rating', label: 'Instructor rating' },
+  { value: 'level', label: 'Level' },
+  { value: 'credits', label: 'Credits' },
+]
+
+const TABLE_SORT_COLUMNS: TableSortColumn[] = [
+  { field: 'quality', label: 'Quality' },
+  { field: 'workload', label: 'Workload' },
+  { field: 'gpa', label: 'Avg GPA' },
+  { field: 'instructor_rating', label: 'Instructor rating' },
+  { field: 'level', label: 'Level' },
+  { field: 'credits', label: 'Credits' },
 ]
 const FIRST_RUN_EXAMPLE_QUERIES = [
   'CS 225',
@@ -157,14 +219,13 @@ const WEAK_RESIDUAL_TERMS = new Set([
 ])
 
 function getDifficultyLabel(score: number): string {
-  if (score > DIFFICULTY.HARD) return 'Hard'
-  if (score > DIFFICULTY.MODERATE) return 'Moderate'
-  return 'Easy'
+  return getWorkloadTierLabel(score) ?? 'Easy'
 }
 
 function getDifficultyTone(score: number): Tone {
-  if (score > DIFFICULTY.HARD) return 'destructive'
-  if (score > DIFFICULTY.MODERATE) return 'warning'
+  const label = getWorkloadTierLabel(score)
+  if (label === 'Hard') return 'destructive'
+  if (label === 'Moderate') return 'warning'
   return 'success'
 }
 
@@ -324,6 +385,76 @@ function formatTermLabel(term: string, year: number): string {
   return `${term.charAt(0).toUpperCase()}${term.slice(1).toLowerCase()} ${year}`
 }
 
+function readStoredResultViewMode(): ResultViewMode {
+  if (typeof window === 'undefined') return 'cards'
+
+  return window.localStorage.getItem(RESULT_VIEW_STORAGE_KEY) === 'table'
+    ? 'table'
+    : 'cards'
+}
+
+function normalizeSearchSort(sort: SearchSort): SearchSort {
+  const direction =
+    sort.field === 'relevance'
+      ? SEARCH_SORT_DEFAULT_DIRECTIONS.relevance
+      : sort.direction
+
+  return {
+    field: sort.field,
+    direction,
+  }
+}
+
+function nextSortForField(field: SortField, current: SearchSort): SearchSort {
+  if (field === current.field && field !== 'relevance') {
+    return {
+      field,
+      direction: current.direction === 'asc' ? 'desc' : 'asc',
+    }
+  }
+
+  return {
+    field,
+    direction: SEARCH_SORT_DEFAULT_DIRECTIONS[field],
+  }
+}
+
+function directionLabel(direction: SortDirection): string {
+  return direction === 'asc' ? 'Ascending' : 'Descending'
+}
+
+function formatCourseLevel(course: CourseDto): string {
+  const number = parseInt(course.number, 10)
+  if (Number.isNaN(number)) return '-'
+
+  const level = Math.floor(number / 100) * 100
+  return level >= 500 ? '500+' : String(level)
+}
+
+function formatNumber(
+  value: number | null | undefined,
+  digits: number
+): string {
+  return typeof value === 'number' ? value.toFixed(digits) : '-'
+}
+
+function formatCredits(value: number | null): string {
+  return typeof value === 'number' ? String(value) : '-'
+}
+
+function sortButtonLabel(
+  label: string,
+  isActive: boolean,
+  direction: SortDirection
+): string {
+  if (!isActive) {
+    return `Sort by ${label}, ${directionLabel(direction).toLowerCase()}`
+  }
+
+  const nextDirection = direction === 'asc' ? 'desc' : 'asc'
+  return `Sort by ${label}, ${directionLabel(nextDirection).toLowerCase()}`
+}
+
 function normalizeAdvancedValue(
   value: AdvancedSearchStateDto[keyof AdvancedSearchStateDto]
 ): string {
@@ -373,6 +504,15 @@ function cleanAdvancedFilters(
   if (state.difficulty === 'easy' || state.difficulty === 'hard') {
     next.difficulty = state.difficulty
   }
+  if (
+    typeof state.level === 'number' &&
+    [100, 200, 300, 400, 500].includes(state.level)
+  ) {
+    next.level = state.level
+  }
+  if (state.scope === 'all') {
+    next.scope = 'all'
+  }
 
   return next
 }
@@ -394,6 +534,7 @@ function advancedStateFromFilter(
     online: filter.online,
     status: filter.status,
     difficulty: filter.difficulty,
+    level: filter.level,
   })
 }
 
@@ -454,6 +595,10 @@ function advancedFiltersForChipRemoval(
     delete next.difficulty
     changed = true
   }
+  if (filter?.level !== undefined && next.level === filter.level) {
+    delete next.level
+    changed = true
+  }
 
   return changed ? cleanAdvancedFilters(next) : null
 }
@@ -462,7 +607,7 @@ function advancedFiltersContradictQuery(
   previous: AdvancedSearchStateDto,
   next: AdvancedSearchStateDto
 ): boolean {
-  return ADVANCED_SEARCH_KEYS.some((key) => {
+  return ADVANCED_CONTRADICTION_KEYS.some((key) => {
     const previousValue = normalizeAdvancedValue(previous[key])
     if (!previousValue) return false
 
@@ -555,6 +700,287 @@ function AdvancedSelectField({
   )
 }
 
+function AdvancedCheckboxField({
+  id,
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  id: string
+  label: string
+  description: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <Field className="rounded-md border bg-background px-3 py-2">
+      <div className="flex items-start gap-2">
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.currentTarget.checked)}
+          className="mt-1 size-4 rounded-[var(--radius-sm)] border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <FieldLabel htmlFor={id}>{label}</FieldLabel>
+          <p className="text-muted-foreground text-xs leading-5">
+            {description}
+          </p>
+        </div>
+      </div>
+    </Field>
+  )
+}
+
+function ResultsToolbar({
+  showingResultsLabel,
+  sort,
+  resultViewMode,
+  onSortFieldChange,
+  onDirectionToggle,
+  onViewChange,
+}: {
+  showingResultsLabel: string
+  sort: SearchSort
+  resultViewMode: ResultViewMode
+  onSortFieldChange: (field: SortField) => void
+  onDirectionToggle: () => void
+  onViewChange: (view: ResultViewMode) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <p className="text-muted-foreground text-xs tabular-nums">
+        {showingResultsLabel}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground text-xs">Sort</span>
+        <Field className="w-40">
+          <FieldLabel htmlFor="results-sort-field" className="sr-only">
+            Sort results
+          </FieldLabel>
+          <Select
+            value={sort.field}
+            onValueChange={(value) => onSortFieldChange(value as SortField)}
+          >
+            <SelectTrigger id="results-sort-field" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {SORT_FIELD_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        {sort.field !== 'relevance' && (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            aria-label={`Sort ${directionLabel(sort.direction).toLowerCase()}`}
+            onClick={onDirectionToggle}
+          >
+            {sort.direction === 'asc' ? (
+              <ArrowUpIcon aria-hidden />
+            ) : (
+              <ArrowDownIcon aria-hidden />
+            )}
+          </Button>
+        )}
+        <div
+          className="flex rounded-md border bg-background p-0.5"
+          role="group"
+          aria-label="Result view"
+        >
+          <Button
+            type="button"
+            size="xs"
+            variant={resultViewMode === 'cards' ? 'secondary' : 'ghost'}
+            aria-pressed={resultViewMode === 'cards'}
+            onClick={() => onViewChange('cards')}
+          >
+            <LayoutGridIcon data-icon="inline-start" aria-hidden />
+            Cards
+          </Button>
+          <Button
+            type="button"
+            size="xs"
+            variant={resultViewMode === 'table' ? 'secondary' : 'ghost'}
+            aria-pressed={resultViewMode === 'table'}
+            onClick={() => onViewChange('table')}
+          >
+            <Table2Icon data-icon="inline-start" aria-hidden />
+            Table
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SortableTableHead({
+  column,
+  sort,
+  onSort,
+}: {
+  column: TableSortColumn
+  sort: SearchSort
+  onSort: (field: Exclude<SortField, 'relevance'>) => void
+}) {
+  const isActive = sort.field === column.field
+  const direction = isActive
+    ? sort.direction
+    : SEARCH_SORT_DEFAULT_DIRECTIONS[column.field]
+
+  return (
+    <TableHead
+      scope="col"
+      aria-sort={
+        isActive ? (direction === 'asc' ? 'ascending' : 'descending') : undefined
+      }
+      className={column.className}
+    >
+      <Button
+        type="button"
+        size="xs"
+        variant="ghost"
+        className="-ml-2 justify-start px-2"
+        aria-label={sortButtonLabel(column.label, isActive, direction)}
+        onClick={() => onSort(column.field)}
+      >
+        {column.label}
+        {isActive &&
+          (direction === 'asc' ? (
+            <ArrowUpIcon data-icon="inline-end" aria-hidden />
+          ) : (
+            <ArrowDownIcon data-icon="inline-end" aria-hidden />
+          ))}
+      </Button>
+    </TableHead>
+  )
+}
+
+function CourseResultsTable({
+  results,
+  sort,
+  onSort,
+}: {
+  results: CourseDto[]
+  sort: SearchSort
+  onSort: (field: Exclude<SortField, 'relevance'>) => void
+}) {
+  return (
+    <Table className="min-w-[880px]">
+      <TableHeader>
+        <TableRow>
+          <TableHead scope="col">Course</TableHead>
+          <TableHead scope="col">Term</TableHead>
+          {TABLE_SORT_COLUMNS.map((column) => (
+            <SortableTableHead
+              key={column.field}
+              column={column}
+              sort={sort}
+              onSort={onSort}
+            />
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {results.map((course) => {
+          const isHistorical = course._historical === true
+          const qualityLabel =
+            typeof course.quality_score === 'number'
+              ? getQualityLabel(course.quality_score)
+              : null
+          const workloadLabel =
+            typeof course.difficulty_score === 'number'
+              ? getDifficultyLabel(course.difficulty_score)
+              : null
+
+          return (
+            <TableRow
+              key={getCourseKey(course)}
+              data-historical={isHistorical ? 'true' : undefined}
+              className={cn(isHistorical && 'bg-muted/50')}
+            >
+              <TableCell className="max-w-80 whitespace-normal">
+                <Link
+                  to={getCoursePath(course)}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {course.subject} {course.number}
+                </Link>
+                <div className="text-muted-foreground mt-1 line-clamp-2 text-xs leading-5">
+                  {course.title}
+                </div>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-col gap-1">
+                  <span>{formatTermLabel(course.term, course.year)}</span>
+                  {isHistorical && (
+                    <Badge
+                      variant="outline"
+                      className="w-fit text-muted-foreground"
+                    >
+                      Historical
+                    </Badge>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                {qualityLabel ? (
+                  <span
+                    className={cn(
+                      'font-semibold',
+                      toneTextClass(getQualityTone(qualityLabel))
+                    )}
+                  >
+                    {qualityLabel}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {workloadLabel ? (
+                  <span
+                    className={cn(
+                      'font-semibold',
+                      toneTextClass(getDifficultyTone(course.difficulty_score!))
+                    )}
+                  >
+                    {workloadLabel}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
+              </TableCell>
+              <TableCell className="tabular-nums">
+                {formatNumber(course.avg_gpa, 2)}
+              </TableCell>
+              <TableCell className="tabular-nums">
+                {formatNumber(course.primary_instructor_rmp, 1)}
+              </TableCell>
+              <TableCell className="tabular-nums">
+                {formatCourseLevel(course)}
+              </TableCell>
+              <TableCell className="tabular-nums">
+                {formatCredits(course.credit_hours)}
+              </TableCell>
+            </TableRow>
+          )
+        })}
+      </TableBody>
+    </Table>
+  )
+}
+
 export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   const [query, setQuery] = useState('')
   const [activeSearchText, setActiveSearchText] = useState('')
@@ -568,8 +994,16 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedSearchStateDto>({})
+  const [sort, setSort] = useState<SearchSort>(DEFAULT_SEARCH_SORT)
+  const [resultViewMode, setResultViewMode] = useState<ResultViewMode>(() =>
+    readStoredResultViewMode()
+  )
 
   const searchController = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    window.localStorage.setItem(RESULT_VIEW_STORAGE_KEY, resultViewMode)
+  }, [resultViewMode])
 
   const updateAdvancedDraft = <Key extends keyof AdvancedSearchStateDto>(
     key: Key,
@@ -582,6 +1016,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
     const normalizedQuery = searchText.trim()
     const requestFilters = cleanAdvancedFilters(options.filters || {})
     const hasRequestFilters = hasAdvancedFilterValue(requestFilters)
+    const requestSort = normalizeSearchSort(options.sort ?? sort)
     if (!normalizedQuery && !hasRequestFilters) return
     const offset = options.offset ?? 0
     const append = options.append === true && offset > 0
@@ -614,6 +1049,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
         limit: SEARCH_PAGE_SIZE,
         offset,
         filters: hasRequestFilters ? requestFilters : undefined,
+        sort: requestSort,
       })
       const nextResults = data.results || []
       setResults((currentResults) =>
@@ -622,6 +1058,9 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
       setMeta(data.meta || null)
       setPagination(data.pagination || null)
       setAdvancedDraft(data.meta?.ui?.advanced || {})
+      if (!append) {
+        setSort(data.meta?.appliedSort ?? requestSort)
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
       setError('Give it another moment, or try a broader search.')
@@ -742,7 +1181,38 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
       append: true,
       syncInput: false,
       filters: activeAdvancedFilters,
+      sort,
     })
+  }
+
+  const applySort = (nextSort: SearchSort) => {
+    const normalizedSort = normalizeSearchSort(nextSort)
+    setSort(normalizedSort)
+    void runSearch(activeSearchText || query, {
+      syncInput: false,
+      filters: activeAdvancedFilters,
+      sort: normalizedSort,
+    })
+  }
+
+  const handleSortFieldChange = (field: SortField) => {
+    applySort({
+      field,
+      direction: SEARCH_SORT_DEFAULT_DIRECTIONS[field],
+    })
+  }
+
+  const toggleSortDirection = () => {
+    if (sort.field === 'relevance') return
+
+    applySort({
+      field: sort.field,
+      direction: sort.direction === 'asc' ? 'desc' : 'asc',
+    })
+  }
+
+  const handleTableSort = (field: Exclude<SortField, 'relevance'>) => {
+    applySort(nextSortForField(field, sort))
   }
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -906,7 +1376,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                   <div className="flex flex-col gap-5">
                     <FieldSet>
                       <FieldLegend variant="label">Course</FieldLegend>
-                      <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                         <AdvancedTextField
                           id="advanced-subject"
                           label="Subject"
@@ -955,6 +1425,20 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                               value.toUpperCase() || undefined
                             )
                           }
+                        />
+                        <AdvancedSelectField
+                          id="advanced-level"
+                          label="Level"
+                          placeholder="Any level"
+                          value={advancedDraft.level?.toString()}
+                          options={LEVEL_OPTIONS}
+                          onChange={(value) => {
+                            const level = value ? parseInt(value, 10) : NaN
+                            updateAdvancedDraft(
+                              'level',
+                              Number.isNaN(level) ? undefined : level
+                            )
+                          }}
                         />
                       </FieldGroup>
                     </FieldSet>
@@ -1013,6 +1497,18 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                           }
                         />
                       </FieldGroup>
+                      <AdvancedCheckboxField
+                        id="advanced-include-past"
+                        label="Include past terms"
+                        description="Add historical offerings to the result pool."
+                        checked={advancedDraft.scope === 'all'}
+                        onChange={(checked) =>
+                          updateAdvancedDraft(
+                            'scope',
+                            checked ? 'all' : undefined
+                          )
+                        }
+                      />
                     </FieldSet>
 
                     <FieldSet>
@@ -1177,81 +1673,102 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
           ) : (
             <div className="flex flex-col gap-3">
               {meta && (
-                <div className="flex flex-wrap items-end justify-between gap-2 py-1">
+                <div className="flex flex-wrap items-end justify-between gap-3 py-1">
                   <div>
                     <h2 className="font-semibold">{resultsHeadingLabel}</h2>
-                    <p className="text-muted-foreground text-xs">
-                      {showingResultsLabel}
-                    </p>
                   </div>
+                  <ResultsToolbar
+                    showingResultsLabel={showingResultsLabel}
+                    sort={sort}
+                    resultViewMode={resultViewMode}
+                    onSortFieldChange={handleSortFieldChange}
+                    onDirectionToggle={toggleSortDirection}
+                    onViewChange={setResultViewMode}
+                  />
                 </div>
               )}
-              {results.map((course) => {
-                const isHistorical = course._historical === true
+              <p className="sr-only" aria-live="polite">
+                {resultViewMode === 'table'
+                  ? 'Table view selected'
+                  : 'Cards view selected'}
+              </p>
+              {resultViewMode === 'table' ? (
+                <CourseResultsTable
+                  results={results}
+                  sort={sort}
+                  onSort={handleTableSort}
+                />
+              ) : (
+                results.map((course) => {
+                  const isHistorical = course._historical === true
 
-                return (
-                  <Link
-                    key={getCourseKey(course)}
-                    to={getCoursePath(course)}
-                    className="text-foreground block no-underline"
-                  >
-                    <Card
-                      className={cn(
-                        'hover:bg-muted/60 transition-colors',
-                        isHistorical && 'border-border bg-muted/60'
-                      )}
-                      data-historical={isHistorical ? 'true' : undefined}
+                  return (
+                    <Link
+                      key={getCourseKey(course)}
+                      to={getCoursePath(course)}
+                      className="text-foreground block no-underline"
                     >
-                      <CardContent>
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <h3
+                      <Card
+                        className={cn(
+                          'hover:bg-muted/60 transition-colors',
+                          isHistorical && 'border-border bg-muted/60'
+                        )}
+                        data-historical={isHistorical ? 'true' : undefined}
+                      >
+                        <CardContent>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <h3
+                                className={cn(
+                                  'min-w-0 flex-1 text-base leading-snug font-bold break-words',
+                                  isHistorical && 'text-muted-foreground'
+                                )}
+                              >
+                                {course.subject} {course.number}:{' '}
+                                {course.title}
+                              </h3>
+                            </div>
+                            <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                              <span
+                                className={cn(isHistorical && 'font-semibold')}
+                              >
+                                {formatTermLabel(course.term, course.year)}
+                              </span>
+                              {isHistorical && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-muted-foreground"
+                                >
+                                  Historical term
+                                </Badge>
+                              )}
+                              <span>{course.credit_hours} credits</span>
+                              {course.primary_instructor && (
+                                <span className="border-l pl-2">
+                                  {course.primary_instructor}
+                                </span>
+                              )}
+                              {course.gened && (
+                                <span>GenEd {course.gened}</span>
+                              )}
+                            </div>
+                            {renderScoreSummary(course)}
+                            <p
                               className={cn(
-                                'min-w-0 flex-1 text-base leading-snug font-bold break-words',
-                                isHistorical && 'text-muted-foreground'
+                                'text-muted-foreground mt-2 line-clamp-3 max-w-3xl text-sm leading-6',
+                                isHistorical && 'opacity-80'
                               )}
                             >
-                              {course.subject} {course.number}: {course.title}
-                            </h3>
+                              {course.description}
+                            </p>
+                            {renderMatchEvidence(course.match_evidence)}
                           </div>
-                          <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                            <span
-                              className={cn(isHistorical && 'font-semibold')}
-                            >
-                              {formatTermLabel(course.term, course.year)}
-                            </span>
-                            {isHistorical && (
-                              <Badge
-                                variant="outline"
-                                className="text-muted-foreground"
-                              >
-                                Historical term
-                              </Badge>
-                            )}
-                            <span>{course.credit_hours} credits</span>
-                            {course.primary_instructor && (
-                              <span className="border-l pl-2">
-                                {course.primary_instructor}
-                              </span>
-                            )}
-                            {course.gened && <span>GenEd {course.gened}</span>}
-                          </div>
-                          {renderScoreSummary(course)}
-                          <p
-                            className={cn(
-                              'text-muted-foreground mt-2 line-clamp-3 max-w-3xl text-sm leading-6',
-                              isHistorical && 'opacity-80'
-                            )}
-                          >
-                            {course.description}
-                          </p>
-                          {renderMatchEvidence(course.match_evidence)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                )
-              })}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  )
+                })
+              )}
               {pagination?.hasMore && (
                 <div className="flex justify-center pt-2">
                   <Button

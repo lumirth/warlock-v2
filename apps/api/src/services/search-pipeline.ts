@@ -24,16 +24,23 @@ import {
   getCachedSearchResult,
 } from "./search-cache.js";
 import { errorFields, logger } from "../observability/logger.js";
-import type {
-  ParsedQuery,
-  SearchRecoveryGroup,
-  SearchPlan,
-  ExtractedQuery,
-  QueryHint,
-  QueryHintType,
-  SearchFilters,
-  Hint,
-  FieldFilter,
+import {
+  DEFAULT_SEARCH_SCOPE,
+  DEFAULT_SEARCH_SORT,
+  SEARCH_SORT_DEFAULT_DIRECTIONS,
+  getQualityTierRank,
+  getWorkloadTierRank,
+  type ParsedQuery,
+  type SearchRecoveryGroup,
+  type SearchPlan,
+  type SearchScope,
+  type SearchSort,
+  type ExtractedQuery,
+  type QueryHint,
+  type QueryHintType,
+  type SearchFilters,
+  type Hint,
+  type FieldFilter,
 } from "@uiuc-course-search/query-types";
 import type { ExtractionResult } from "./extractor.js";
 
@@ -59,8 +66,25 @@ export interface SearchPipelineResult {
       originalResultCount: number;
       recoveryGroups?: SearchRecoveryGroup[];
     };
+    appliedSort?: SearchSort;
+    appliedScope?: SearchScope;
   };
 }
+
+export interface SearchControls {
+  sort?: Partial<SearchSort>;
+  scope?: SearchScope;
+}
+
+type AppliedSearchControls = {
+  sort: SearchSort;
+  scope: SearchScope;
+};
+
+const DEFAULT_SEARCH_CONTROLS: AppliedSearchControls = {
+  sort: DEFAULT_SEARCH_SORT,
+  scope: DEFAULT_SEARCH_SCOPE,
+};
 
 function mapHintType(type: string): QueryHintType {
   const mapping: Record<string, QueryHintType> = {
@@ -308,6 +332,104 @@ export function searchCandidateLimit(
   return Math.max(requestedLimit, MIN_INTRODUCTORY_GATEWAY_CANDIDATES);
 }
 
+function isWaitUntilCallback(
+  value: SearchControls | ((promise: Promise<unknown>) => void) | undefined,
+): value is (promise: Promise<unknown>) => void {
+  return typeof value === "function";
+}
+
+export function normalizeSearchControls(
+  controls?: SearchControls,
+): AppliedSearchControls {
+  const field = controls?.sort?.field ?? DEFAULT_SEARCH_CONTROLS.sort.field;
+  const direction =
+    controls?.sort?.direction ??
+    SEARCH_SORT_DEFAULT_DIRECTIONS[field] ??
+    DEFAULT_SEARCH_CONTROLS.sort.direction;
+
+  return {
+    sort: { field, direction },
+    scope: controls?.scope ?? DEFAULT_SEARCH_CONTROLS.scope,
+  };
+}
+
+function parseCourseNumberForSort(value: string | null | undefined): number | null {
+  const match = String(value ?? "").match(/\d+/);
+  if (!match) return null;
+
+  const parsed = parseInt(match[0], 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function sortValueForResult(
+  result: SearchResult,
+  field: SearchSort["field"],
+): number | null {
+  const course = result.course;
+
+  switch (field) {
+    case "gpa":
+      return typeof course.avg_gpa === "number" ? course.avg_gpa : null;
+    case "quality":
+      return getQualityTierRank(course.quality_score);
+    case "workload":
+      return getWorkloadTierRank(course.difficulty_score);
+    case "instructor_rating":
+      return typeof course.primary_instructor_rmp === "number"
+        ? course.primary_instructor_rmp
+        : null;
+    case "level":
+      return parseCourseNumberForSort(course.number);
+    case "credits":
+      return typeof course.credit_hours === "number"
+        ? course.credit_hours
+        : null;
+    case "relevance":
+      return null;
+  }
+}
+
+export function applySearchControls(
+  results: SearchResult[],
+  controls: SearchControls = DEFAULT_SEARCH_CONTROLS,
+): SearchResult[] {
+  const applied = normalizeSearchControls(controls);
+  const scopedResults =
+    applied.scope === "active"
+      ? results.filter((result) => result.historical !== true)
+      : [...results];
+
+  if (applied.sort.field === "relevance") {
+    return scopedResults;
+  }
+
+  return scopedResults
+    .map((result, relevanceIndex) => ({
+      result,
+      relevanceIndex,
+      value: sortValueForResult(result, applied.sort.field),
+    }))
+    .sort((left, right) => {
+      if (left.value === null && right.value === null) {
+        return left.relevanceIndex - right.relevanceIndex;
+      }
+      if (left.value === null) return 1;
+      if (right.value === null) return -1;
+
+      const leftValue = left.value;
+      const rightValue = right.value;
+
+      if (leftValue !== rightValue) {
+        return applied.sort.direction === "asc"
+          ? leftValue - rightValue
+          : rightValue - leftValue;
+      }
+
+      return left.relevanceIndex - right.relevanceIndex;
+    })
+    .map((item) => item.result);
+}
+
 export interface SearchPlanningInput {
   parsed: ParsedQuery;
   extraction: ExtractionResult;
@@ -415,6 +537,12 @@ function manualHintsFromOverrides(overrides?: SearchOverrides): Hint[] {
     addManualHint(
       hints,
       manualHint("credits", overrides.credits, String(overrides.credits)),
+    );
+  }
+  if (overrides.level !== undefined) {
+    addManualHint(
+      hints,
+      manualHint("level", overrides.level, `${overrides.level} level`),
     );
   }
   if (overrides.days) {
@@ -543,15 +671,27 @@ export class SearchPipeline {
     query: string,
     limit: number = 20,
     overrides?: SearchOverrides,
-    _waitUntil?: (promise: Promise<unknown>) => void,
+    controlsOrWaitUntil?:
+      | SearchControls
+      | ((promise: Promise<unknown>) => void),
+    maybeWaitUntil?: (promise: Promise<unknown>) => void,
   ): Promise<SearchPipelineResult> {
     const startTime = performance.now();
+    const controls = normalizeSearchControls(
+      isWaitUntilCallback(controlsOrWaitUntil)
+        ? undefined
+        : controlsOrWaitUntil,
+    );
+    const _waitUntil = isWaitUntilCallback(controlsOrWaitUntil)
+      ? controlsOrWaitUntil
+      : maybeWaitUntil;
 
     const cachedResult = await getCachedSearchResult(
       this.searchCache,
       query,
       limit,
       overrides,
+      controls,
     ).catch((error) => {
       logger.warn("search.cache.result_get_failed", { ...errorFields(error) });
       return null;
@@ -652,7 +792,7 @@ export class SearchPipeline {
         }
       }
     }
-    results = results.slice(0, limit);
+    results = applySearchControls(results, controls).slice(0, limit);
     const recoveryGroups = buildRecoveryGroups(plan, query, results.length);
     const searchEndTime = performance.now();
     const totalEndTime = performance.now();
@@ -679,11 +819,20 @@ export class SearchPipeline {
           originalResultCount,
           recoveryGroups,
         },
+        appliedSort: controls.sort,
+        appliedScope: controls.scope,
       },
     };
 
     enqueueCacheWrite(
-      cacheSearchResult(this.searchCache, query, limit, result, overrides),
+      cacheSearchResult(
+        this.searchCache,
+        query,
+        limit,
+        result,
+        overrides,
+        controls,
+      ),
       _waitUntil,
       "search.cache.result_put_failed",
     );

@@ -3,6 +3,7 @@ import type {
   CourseDto,
   FeedbackResponseDto,
   FeedbackSubmitDto,
+  SearchSort,
   SearchResponseDto,
 } from '@uiuc-course-search/query-types'
 
@@ -16,6 +17,7 @@ export type SearchRequestOptions = {
   limit?: number
   offset?: number
   filters?: AdvancedSearchStateDto
+  sort?: SearchSort
 }
 
 export class ApiClient {
@@ -65,6 +67,7 @@ export class ApiClient {
     if (requestOptions.offset !== undefined)
       params.set('offset', requestOptions.offset.toString())
     appendSearchFilters(params, requestOptions.filters)
+    appendSearchSort(params, requestOptions.sort)
 
     return this.fetch<SearchResponseDto>(`api/search?${params.toString()}`, {
       signal: requestOptions.signal,
@@ -121,6 +124,15 @@ function appendSearchFilters(
   if (filters.online !== undefined) params.set('online', String(filters.online))
   if (filters.status) params.set('status', filters.status)
   if (filters.difficulty) params.set('difficulty', filters.difficulty)
+  if (filters.level !== undefined) params.set('level', filters.level.toString())
+  if (filters.scope) params.set('scope', filters.scope)
+}
+
+function appendSearchSort(params: URLSearchParams, sort: SearchSort | undefined) {
+  if (!sort || sort.field === 'relevance') return
+
+  params.set('sort', sort.field)
+  params.set('direction', sort.direction)
 }
 
 export const api = new ApiClient()
