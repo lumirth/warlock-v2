@@ -61,7 +61,7 @@ npm run data:term-retention -- \
   --output artifacts/term-retention-plan.json
 ```
 
-The retention planner pins active and registrable terms, then walks backward from the newest terms while giving fall/spring enough priority to outrank adjacent winter/summer terms when the budget is tight. The sibling SQL artifact deletes dropped terms completely from term-local course tables and includes verification queries. Before executing that SQL remotely, create and restore-verify a D1 Time Travel backup.
+The retention planner pins active and registrable terms, then walks backward from the newest terms. Within the same year, fall and spring outrank winter and summer when the budget is tight; across years, newer winter/summer terms still outrank older fall/spring terms. The sibling SQL artifact deletes dropped terms completely from term-local course tables and includes verification queries. Before executing that SQL remotely, create and restore-verify a D1 Time Travel backup.
 
 After pruning, run the freshness audit against the retention plan:
 

@@ -103,14 +103,14 @@ describe('term retention plan', () => {
     expect(report.retained_term_ids).toEqual([
       '2026-fall',
       '2026-spring',
-      '2025-fall',
-      '2025-spring',
+      '2026-summer',
+      '2026-winter',
     ]);
     expect(report.dropped_term_ids).toEqual(expect.arrayContaining([
       '2024-fall',
       '2024-spring',
-      '2025-summer',
-      '2025-winter',
+      '2025-fall',
+      '2025-spring',
     ]));
     expect(report.terms.find(term => term.term_id === '2026-fall')).toMatchObject({
       pinned: true,
@@ -145,6 +145,33 @@ describe('term retention plan', () => {
 
     expect(report.retained_term_ids).toEqual(['2025-fall', '2025-spring']);
     expect(report.dropped_term_ids).toEqual(['2025-summer', '2025-winter']);
+  });
+
+  it('does not let older fall and spring terms outrank newer winter and summer terms', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }))
+      .mockResolvedValueOnce(response({ Winter: 'winter', Summer: 'summer' }));
+
+    const report = await buildTermRetentionReport(args({
+      fromYear: 2026,
+      toYear: 2027,
+      currentYear: 2028,
+      currentTerm: 'spring',
+      maxRetainedTerms: 2,
+    }), {
+      fetcher,
+      status: {
+        termStates: [
+          termState('2026-spring'),
+          termState('2026-fall'),
+          termState('2027-winter'),
+          termState('2027-summer'),
+        ],
+      },
+    });
+
+    expect(report.retained_term_ids).toEqual(['2027-summer', '2027-winter']);
+    expect(report.dropped_term_ids).toEqual(expect.arrayContaining(['2026-fall', '2026-spring']));
   });
 
   it('does not fill leftover budget with older tiny terms after a newer candidate stops fitting', async () => {

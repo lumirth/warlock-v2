@@ -196,6 +196,17 @@ describe('term priority', () => {
     expect(priorities.get('2026-spring')).toBeLessThan(priorities.get('2026-winter')!);
     expect(priorities.get('2026-summer')).toBeLessThan(priorities.get('2027-spring')!);
   });
+
+  it('does not let an older registrable regular semester outrank a newer registrable winter or summer term', () => {
+    const priorities = buildTermPriorityMap([
+      { term_id: '2026-fall', year: 2026, term: 'fall', status: 'registrable' },
+      { term_id: '2027-winter', year: 2027, term: 'winter', status: 'registrable' },
+      { term_id: '2027-summer', year: 2027, term: 'summer', status: 'registrable' },
+    ]);
+
+    expect(priorities.get('2027-summer')).toBeLessThan(priorities.get('2026-fall')!);
+    expect(priorities.get('2027-winter')).toBeLessThan(priorities.get('2026-fall')!);
+  });
 });
 
 describe('search SQL batching', () => {

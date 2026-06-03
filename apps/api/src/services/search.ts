@@ -97,6 +97,7 @@ export function buildTermPriorityMap(termStates: TermInfo[]): Map<string, number
     const statusRank = (status: string): number => status === 'registrable' ? 0 : status === 'active' ? 1 : 2;
     const statusDelta = statusRank(left.status) - statusRank(right.status);
     if (statusDelta !== 0) return statusDelta;
+    if (left.year !== right.year) return right.year - left.year;
     const regularTermDelta = regularTermRank(left.term) - regularTermRank(right.term);
     if (regularTermDelta !== 0) return regularTermDelta;
     return termChronology(right.year, right.term) - termChronology(left.year, left.term);

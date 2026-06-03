@@ -21,6 +21,11 @@ function createSummaryDb(rows: Array<{ term_id: string; status: string }>) {
   };
 }
 
+function preparedSql(db: { prepare: unknown }): string {
+  const prepare = db.prepare as { mock: { calls: unknown[][] } };
+  return String(prepare.mock.calls[0]?.[0] ?? '');
+}
+
 describe('resolveTermContext', () => {
   it('uses term_state as the default source when no term is requested', async () => {
     const db = createDb({ term_id: '2026-fall', year: 2026, term: 'fall', status: 'registrable' });
@@ -37,6 +42,19 @@ describe('resolveTermContext', () => {
       status: 'registrable',
       source: 'term_state',
     });
+  });
+
+  it('orders default open-term SQL by status, year recency, then same-year regular semester preference', async () => {
+    const db = createDb({ term_id: '2027-winter', year: 2027, term: 'winter', status: 'registrable' });
+
+    await resolveTermContext(db as unknown as D1Database, {
+      fallbackYear: '2026',
+      fallbackTerm: 'spring',
+    });
+
+    const sql = preparedSql(db);
+    expect(sql.indexOf('CASE status')).toBeLessThan(sql.indexOf('year DESC'));
+    expect(sql.indexOf('year DESC')).toBeLessThan(sql.indexOf("CASE term WHEN 'fall' THEN 0"));
   });
 
   it('uses env values only as a fallback', async () => {
@@ -70,5 +88,18 @@ describe('resolveTermContext', () => {
       activeTermId: '2026-spring',
       activeTermIds: ['2026-spring', '2026-winter'],
     });
+  });
+
+  it('orders open-term summary SQL by status, year recency, then same-year regular semester preference', async () => {
+    const db = createSummaryDb([
+      { term_id: '2027-winter', status: 'registrable' },
+      { term_id: '2026-fall', status: 'registrable' },
+    ]);
+
+    await getSearchTermSummary(db as unknown as D1Database);
+
+    const sql = preparedSql(db);
+    expect(sql.indexOf('CASE status')).toBeLessThan(sql.indexOf('year DESC'));
+    expect(sql.indexOf('year DESC')).toBeLessThan(sql.indexOf("CASE term WHEN 'fall' THEN 0"));
   });
 });

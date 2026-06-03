@@ -181,19 +181,20 @@ function regularTermRank(term: Term): number {
   return term === 'fall' || term === 'spring' ? 0 : 1;
 }
 
-function retentionPriorityScore(row: Pick<TermRetentionRow, 'year' | 'term'>): number {
-  const regularSemesterBoost = regularTermRank(row.term) === 0 ? 6 : 0;
-  return row.year * TERMS.length + TERM_ORDER[row.term] + regularSemesterBoost;
+function compareRetentionPriority(
+  left: Pick<TermRetentionRow, 'year' | 'term'>,
+  right: Pick<TermRetentionRow, 'year' | 'term'>
+): number {
+  if (left.year !== right.year) return right.year - left.year;
+
+  const regularTermDelta = regularTermRank(left.term) - regularTermRank(right.term);
+  if (regularTermDelta !== 0) return regularTermDelta;
+
+  return TERM_ORDER[right.term] - TERM_ORDER[left.term];
 }
 
 function sortRetentionCandidates(rows: TermRetentionRow[]): TermRetentionRow[] {
-  return [...rows].sort((left, right) => {
-    const scoreDelta = retentionPriorityScore(right) - retentionPriorityScore(left);
-    if (scoreDelta !== 0) return scoreDelta;
-
-    if (left.year !== right.year) return right.year - left.year;
-    return TERM_ORDER[right.term] - TERM_ORDER[left.term];
-  });
+  return [...rows].sort(compareRetentionPriority);
 }
 
 function sortRetainedOutputRows(rows: TermRetentionRow[]): TermRetentionRow[] {

@@ -47,8 +47,8 @@ export async function resolveTermContext(
     WHERE status IN ('registrable', 'active')
     ORDER BY
       CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
-      CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
       year DESC,
+      CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
       CASE term WHEN 'fall' THEN 4 WHEN 'summer' THEN 3 WHEN 'spring' THEN 2 WHEN 'winter' THEN 1 ELSE 0 END DESC
     LIMIT 1
   `).first<TermStateRow>();
@@ -86,8 +86,8 @@ export async function getSearchTermSummary(db: D1Database): Promise<{
     WHERE status IN ('active', 'registrable')
     ORDER BY
       CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
-      CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
       year DESC,
+      CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
       CASE term WHEN 'fall' THEN 4 WHEN 'summer' THEN 3 WHEN 'spring' THEN 2 WHEN 'winter' THEN 1 ELSE 0 END DESC
   `).all<{ term_id: string; status: string }>();
   const activeTermIds = result.results
