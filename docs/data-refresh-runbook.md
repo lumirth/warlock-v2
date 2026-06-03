@@ -55,6 +55,7 @@ npm run data:semester:plan -- \
   --from-year 2004 \
   --to-year 2027 \
   --target-size-mb 250 \
+  --max-retained-terms 18 \
   --feedback-database course-search-db-staging
 ```
 
@@ -64,6 +65,8 @@ The main searchable corpus is rolling and full-detail. Full searchable history b
 
 The `--from-year 2004` examples below are discovery horizons for databases that may already contain old terms. They let the retention planner identify old candidates to drop cleanly. They are not a requirement to backfill or preserve every term since 2004. The retained term IDs in the generated retention plan are the source of truth for what must remain searchable and fully detailed. When `--status-input` is provided, retention and coverage planning use `freshness.currentTermId` from that status artifact as the default current-term reference; explicit `--current-year` and `--current-term` flags are only for controlled what-if plans.
 
+Staging D1 currently uses `--target-size-mb 250 --max-retained-terms 18`. Keep that cap until the retention estimator includes measured D1 file, FTS, and index overhead; the raw row-byte estimate is useful for ordering but was optimistic for the actual Cloudflare D1 size limit. Increase the cap only after a read-only preflight and measured post-prune size evidence show the larger retained window fits.
+
 Generate a retention plan before broad backfill or prune work:
 
 ```bash
@@ -72,6 +75,7 @@ npm run data:term-retention -- \
   --to-year 2027 \
   --status-input artifacts/sync-status.json \
   --target-size-mb 250 \
+  --max-retained-terms 18 \
   --output artifacts/term-retention-plan.json
 ```
 

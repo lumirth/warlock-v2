@@ -42,7 +42,7 @@ The pass is complete only when every item below has concrete evidence in the fin
 | Clickable "maybe you meant" alternatives | API ambiguity DTOs, SearchPage buttons, URL/state round-trip tests |
 | Advanced search mode | Public controls for term, subject, GenEd, schedule, credits, online/status, instructor, difficulty/quality; typed free text remains separate from structured filters, and contradictory filter edits clear stale structured words from the search box |
 | Public-facing copy | Search/course UI copy tests and Browser screenshots without debug timing or `n=` copy |
-| Historical result prominence | Historical cards are visually de-emphasized, and the `Historical` badge appears next to the term before credits/instructors |
+| Historical result prominence | Historical cards are visually de-emphasized, and the `Historical term` badge appears next to the term before credits/instructors |
 | Rate My Professors links | Real public URL or safe search fallback generation, tests and Browser QA |
 | Course Explorer links | Course and section official links, tests and Browser QA |
 | Automated freshness | Scheduled/sync docs, status route or script evidence, tests for current/upcoming/retained-historical paths |

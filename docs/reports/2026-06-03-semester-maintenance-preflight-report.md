@@ -15,7 +15,7 @@ The command is read-only. It does not prune, backfill, or mutate D1. It writes a
 
 ## Local Verification
 
-- `npm run test:scripts`: 12 files, 78 tests passing.
+- `npm run test:scripts`: 12 files, 79 tests passing.
 - `npm run typecheck:scripts`: passing.
 
 ## Staging Evidence
@@ -29,61 +29,63 @@ npm run data:semester:plan -- \
   --from-year 2004 \
   --to-year 2027 \
   --target-size-mb 250 \
+  --max-retained-terms 18 \
   --feedback-database course-search-db-staging \
-  --output-dir artifacts/semester-maintenance/20260603T030000Z-staging
+  --output-dir artifacts/semester-maintenance/20260603T-live-policy-check
 ```
 
-Result: exited non-zero because the preflight found real retained-corpus work.
+Current result: exited zero with `Overall: ready`.
 
 Artifact bundle:
 
-- `artifacts/semester-maintenance/20260603T030000Z-staging/sync-status.json`
-- `artifacts/semester-maintenance/20260603T030000Z-staging/term-retention-plan.json`
-- `artifacts/semester-maintenance/20260603T030000Z-staging/term-retention-prune.sql`
-- `artifacts/semester-maintenance/20260603T030000Z-staging/term-coverage-plan.json`
-- `artifacts/semester-maintenance/20260603T030000Z-staging/data-freshness-audit.json`
-- `artifacts/semester-maintenance/20260603T030000Z-staging/feedback-events.json`
-- `artifacts/semester-maintenance/20260603T030000Z-staging/feedback-candidates.json`
-- `artifacts/semester-maintenance/20260603T030000Z-staging/semester-maintenance-plan.md`
+- `artifacts/semester-maintenance/20260603T-live-policy-check/sync-status.json`
+- `artifacts/semester-maintenance/20260603T-live-policy-check/term-retention-plan.json`
+- `artifacts/semester-maintenance/20260603T-live-policy-check/term-retention-prune.sql`
+- `artifacts/semester-maintenance/20260603T-live-policy-check/term-coverage-plan.json`
+- `artifacts/semester-maintenance/20260603T-live-policy-check/data-freshness-audit.json`
+- `artifacts/semester-maintenance/20260603T-live-policy-check/feedback-events.json`
+- `artifacts/semester-maintenance/20260603T-live-policy-check/feedback-candidates.json`
+- `artifacts/semester-maintenance/20260603T-live-policy-check/semester-maintenance-plan.md`
 
 Summary:
 
-- Retained terms: 24.
-- Dropped terms: 55.
-- Estimated retained bytes: 253,132,404.
-- Retention warnings: none.
-- Coverage terms needing backfill: 6.
-- Freshness failed checks: 2.
-- Feedback rows exported: 20.
+- Retained terms: 18.
+- Dropped terms: 61.
+- Coverage terms needing backfill: 0.
+- Freshness failed checks: 0.
+- Feedback rows exported: 21.
 - Feedback candidates generated: 2.
-- Backup required before prune: yes.
+- Backup required before prune: no.
 
-Retained terms needing backfill:
+Current term evidence from `sync-status.json`:
 
-- `2023-winter`: missing from `term_state`.
-- `2022-summer`: missing from `term_state`.
-- `2022-winter`: missing from `term_state`.
-- `2021-spring`: missing from `term_state`.
-- `2021-summer`: missing from `term_state`.
-- `2021-winter`: missing from `term_state`.
+- `freshness.currentTermId`: `2026-fall`.
+- `freshness.configuredCurrentTermId`: `2026-fall`.
+- `freshness.registrableTermIds`: `2026-fall`, `2026-summer`.
+- `freshness.activeTermIds`: none.
+- `freshness.historicalTermCount`: 16.
+- `freshness.staleTermIds`: none.
+- `freshness.staleSyncStateIds`: none.
 
-Freshness failures:
+Retained terms are complete through the configured rolling window:
 
-- `retained corpus term coverage`: the six retained terms above are missing.
-- `retained corpus full-detail counts`: the six retained terms above have no course/section counts because they are absent.
+- `2026-fall`, `2026-summer`, `2026-spring`, `2026-winter`.
+- `2025-fall`, `2025-spring`, `2025-summer`, `2025-winter`.
+- `2024-fall`, `2024-spring`, `2024-summer`, `2024-winter`.
+- `2023-fall`, `2023-spring`, `2023-summer`, `2023-winter`.
+- `2022-fall`, `2022-spring`.
 
 Feedback candidates:
 
 - `professor fagen algorithms`: `search_eval`, high priority, 19 duplicate reports.
 - `CS 225`: `link_audit`, medium priority, 1 report.
 
+Earlier preflight artifact `artifacts/semester-maintenance/20260603T030000Z-staging` exited non-zero before the backup-gated backfill/prune data phase. It found 24 retained terms, 55 dropped terms, six missing retained terms, and two freshness failures. That artifact is historical evidence for the work that was needed, not the current operator state.
+
 ## Decision
 
-The 2004-to-present range is a discovery horizon, not a full-history requirement. The preflight confirms the rolling full-detail policy is the right next operational frame: current/registrable terms are pinned, retained historical terms must be complete, and old terms outside the budget should be pruned after backup evidence.
+The 2004-to-present range is a discovery horizon, not a full-history requirement. The live preflight confirms the rolling full-detail policy is now in force: current/registrable terms are pinned, retained historical terms are complete, and old terms outside the budget are intentionally absent after backup-gated prune work.
 
-Next work should be backup-gated:
+Current next action:
 
-- Create and restore-verify a D1 Time Travel backup.
-- Backfill the six missing retained terms from the coverage plan.
-- Execute and verify the generated prune SQL for dropped terms only after backup evidence exists.
-- Re-run `npm run data:semester:plan` and require zero retained-term coverage/freshness failures.
+- Review generated feedback candidates and promote accepted items into evals, score audits, link audits, or copy audits.
