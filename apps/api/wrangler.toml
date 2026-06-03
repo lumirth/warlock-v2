@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 CURRENT_YEAR = "2026"
-CURRENT_TERM = "spring"
+CURRENT_TERM = "fall"
 
 # API endpoints
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
@@ -77,7 +77,7 @@ crons = []
 
 [env.staging.vars]
 CURRENT_YEAR = "2026"
-CURRENT_TERM = "spring"
+CURRENT_TERM = "fall"
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 FRONTEND_BASE = "https://courses.illinois.edu"
 SYNC_CONCURRENCY = "25"

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applySearchIntentBoosts, applyTitleBoost, buildTermPriorityMap } from '../search.js';
+import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
+import { applySearchIntentBoosts, applyTitleBoost, buildTermPriorityMap, hybridSearch } from '../search.js';
 import type { SearchResult } from '../search.js';
 import type { Course } from '../../db/index.js';
 
@@ -194,5 +195,53 @@ describe('term priority', () => {
     expect(priorities.get('2026-fall')).toBeLessThan(priorities.get('2026-summer')!);
     expect(priorities.get('2026-spring')).toBeLessThan(priorities.get('2026-winter')!);
     expect(priorities.get('2026-summer')).toBeLessThan(priorities.get('2027-spring')!);
+  });
+});
+
+describe('search SQL batching', () => {
+  it('chunks large course metadata fetches for deep pagination windows', async () => {
+    const bindCounts: number[] = [];
+    const courses = Array.from({ length: 120 }, (_, index) => course({
+      id: `CS-${String(index).padStart(3, '0')}-2026-fall`,
+      number: String(index).padStart(3, '0'),
+      title: `Course ${index}`,
+      term: 'fall',
+    }));
+    const courseById = new Map(courses.map(item => [item.id, item]));
+    const db = {
+      prepare: (sql: string) => ({
+        bind: (...params: unknown[]) => ({
+          all: async () => {
+            bindCounts.push(params.length);
+            if (params.length > 50) {
+              throw new Error(`too many SQL variables in test: ${params.length}`);
+            }
+
+            if (sql.includes('SELECT id, quality_score FROM courses')) {
+              return { results: params.map(id => ({ id, quality_score: null })) };
+            }
+
+            if (sql.includes('SELECT * FROM courses WHERE id IN')) {
+              return { results: params.map(id => courseById.get(String(id))).filter(Boolean) };
+            }
+
+            if (sql.includes('SELECT DISTINCT c.id')) {
+              return { results: courses.map((item, index) => ({ id: item.id, fts_score: index })) };
+            }
+
+            return { results: [] };
+          },
+        }),
+      }),
+    } as unknown as D1Database;
+
+    const results = await hybridSearch(db, {} as VectorizeIndex, {} as Ai, {
+      filters: {},
+      keywordQuery: '',
+      semanticQuery: '',
+    }, 120);
+
+    expect(results).toHaveLength(120);
+    expect(Math.max(...bindCounts)).toBe(50);
   });
 });

@@ -10,12 +10,18 @@ function createSetBasedDb() {
   const db = {
     prepare: vi.fn((sql: string) => ({
       first: vi.fn(async () => {
-        if (sql.includes('FROM term_state')) {
-          return { term_id: '2026-spring', year: 2026, term: 'spring' };
-        }
         return null;
       }),
       all: vi.fn(async () => {
+        if (sql.includes('FROM term_state')) {
+          return {
+            success: true,
+            results: [
+              { term_id: '2026-fall', year: 2026, term: 'fall' },
+              { term_id: '2026-summer', year: 2026, term: 'summer' },
+            ],
+          };
+        }
         if (sql.includes('FROM courses c')) {
           return {
             success: true,
@@ -64,7 +70,7 @@ function createSetBasedDb() {
 }
 
 describe('coordinateEnrichment', () => {
-  it('rebuilds active-term instructor links in one set-based pass and recomputes scores once', async () => {
+  it('rebuilds every registrable or active term in set-based passes and recomputes scores once', async () => {
     const { db, stateWrites, linkRebuildBinds, updateBinds } = createSetBasedDb();
     const selfBinding: { fetch: ReturnType<typeof vi.fn> } = {
       fetch: vi.fn(),
@@ -77,16 +83,23 @@ describe('coordinateEnrichment', () => {
     );
 
     expect(result).toEqual({
-      taskCount: 7734,
-      batchCount: 1,
-      linkCount: 7734,
+      taskCount: 15468,
+      batchCount: 2,
+      linkCount: 15468,
       scoreUpdateCount: 1,
     });
     expect(selfBinding.fetch).not.toHaveBeenCalled();
-    expect(linkRebuildBinds).toEqual([['2026-spring', 2026, 'spring']]);
+    expect(linkRebuildBinds).toEqual([
+      ['2026-fall', 2026, 'fall'],
+      ['2026-summer', 2026, 'summer'],
+    ]);
     expect(updateBinds).toEqual([[85.3, 25, 4.5, 'CS-225-2026-spring']]);
-    expect(stateWrites[0]).toEqual(['enrichment:2026-spring', 'running', 0, 1, '2026-spring']);
-    expect(stateWrites.at(-1)).toEqual(['enrichment:2026-spring', 'complete', 7734, 1, '2026-spring']);
+    expect(stateWrites).toEqual([
+      ['enrichment:2026-fall', 'running', 0, 1, '2026-fall'],
+      ['enrichment:2026-fall', 'complete', 7734, 1, '2026-fall'],
+      ['enrichment:2026-summer', 'running', 0, 1, '2026-summer'],
+      ['enrichment:2026-summer', 'complete', 7734, 1, '2026-summer'],
+    ]);
   });
 });
 

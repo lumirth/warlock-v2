@@ -106,27 +106,32 @@ export async function coordinateEnrichment(
       WHEN 'spring' THEN 2
       WHEN 'winter' THEN 1
     END DESC
-    LIMIT 1
-  `).first<{ term_id: string; year: number; term: string }>();
+  `).all<{ term_id: string; year: number; term: string }>();
 
-  if (!termResult) {
+  if (!termResult.success || termResult.results.length === 0) {
     return { taskCount: 0, batchCount: 0, linkCount: 0, scoreUpdateCount: 0 };
   }
-  const { term_id: termId, year: activeYear, term: activeTerm } = termResult;
 
-  await updateEnrichmentState(db, termId, 'running', 0, 1);
-  const linkResult = await rebuildInstructorCourseLinks(db, {
-    termId,
-    year: activeYear,
-    term: activeTerm,
-  });
+  let taskCount = 0;
+  let linkCount = 0;
+  for (const term of termResult.results) {
+    await updateEnrichmentState(db, term.term_id, 'running', 0, 1);
+    const linkResult = await rebuildInstructorCourseLinks(db, {
+      termId: term.term_id,
+      year: term.year,
+      term: term.term,
+    });
+    taskCount += linkResult.contextCount;
+    linkCount += linkResult.linkCount;
+    await updateEnrichmentState(db, term.term_id, 'complete', linkResult.contextCount, 1);
+  }
+
   const scores = await enrichCoursesWithScores(db);
-  await updateEnrichmentState(db, termId, 'complete', linkResult.contextCount, 1);
 
   return {
-    taskCount: linkResult.contextCount,
-    batchCount: 1,
-    linkCount: linkResult.linkCount,
+    taskCount,
+    batchCount: termResult.results.length,
+    linkCount,
     scoreUpdateCount: scores.updated,
   };
 }

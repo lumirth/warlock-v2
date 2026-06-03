@@ -43,6 +43,8 @@ const STATUS_VALUES: Record<string, string[]> = {
   'closed': ['Closed'],
 };
 
+const D1_ID_BATCH_SIZE = 50;
+
 const DAY_ALIASES: Record<string, string> = {
   monday: 'M',
   mon: 'M',
@@ -676,23 +678,28 @@ export async function postFilterSemanticResults(
 
   // Fetch valid course IDs from DB by applying all filters to the candidate set
   const courseIds = semanticResults.map(r => r.id);
-  const placeholders = courseIds.map(() => '?').join(',');
+  const validIdSet = new Set<string>();
 
-  const sql = `
-    SELECT c.id
-    FROM courses c
-    ${joins.join(' ')}
-    WHERE c.id IN (${placeholders})
-    ${where.length > 0 ? 'AND ' + where.join(' AND ') : ''}
-    ${groupBy ? 'GROUP BY ' + groupBy : ''}
-    ${having ? 'HAVING ' + having : ''}
-  `;
+  for (const batch of chunkValues(courseIds, D1_ID_BATCH_SIZE)) {
+    const placeholders = batch.map(() => '?').join(',');
 
-  // Param order: IN clause ids -> WHERE clause params -> HAVING clause params
-  const finalParams = [...courseIds, ...params, ...(havingParams || [])];
+    const sql = `
+      SELECT c.id
+      FROM courses c
+      ${joins.join(' ')}
+      WHERE c.id IN (${placeholders})
+      ${where.length > 0 ? 'AND ' + where.join(' AND ') : ''}
+      ${groupBy ? 'GROUP BY ' + groupBy : ''}
+      ${having ? 'HAVING ' + having : ''}
+    `;
 
-  const validIdsResult = await db.prepare(sql).bind(...finalParams).all<{ id: string }>();
-  const validIdSet = new Set(validIdsResult.results.map(r => r.id));
+    // Param order: IN clause ids -> WHERE clause params -> HAVING clause params
+    const finalParams = [...batch, ...params, ...(havingParams || [])];
+    const validIdsResult = await db.prepare(sql).bind(...finalParams).all<{ id: string }>();
+    for (const row of validIdsResult.results) {
+      validIdSet.add(row.id);
+    }
+  }
 
   return semanticResults.filter(r => validIdSet.has(r.id));
 }
@@ -801,14 +808,7 @@ export async function hybridSearch(
     return [];
   }
 
-  // Fetch full course data
-  const placeholders = topIds.map(() => '?').join(',');
-  const coursesResult = await db.prepare(`
-    SELECT * FROM courses WHERE id IN (${placeholders})
-  `).bind(...topIds.map(s => s.id)).all<Course>();
-
-  const courseMap = new Map<string, Course>();
-  coursesResult.results.forEach(c => courseMap.set(c.id, c));
+  const courseMap = await fetchCoursesById(db, topIds.map(s => s.id));
 
   // Apply title boost for exact/partial matches
   const resultsWithTitles = topIds.map(s => ({
@@ -833,9 +833,7 @@ async function fetchQualityScores(db: D1Database, courseIds: string[]): Promise<
     return qualityScores;
   }
 
-  const BIND_BATCH_SIZE = 50;
-  for (let i = 0; i < courseIds.length; i += BIND_BATCH_SIZE) {
-    const batch = courseIds.slice(i, i + BIND_BATCH_SIZE);
+  for (const batch of chunkValues(courseIds, D1_ID_BATCH_SIZE)) {
     const placeholders = batch.map(() => '?').join(',');
     const result = await db.prepare(`
       SELECT id, quality_score FROM courses WHERE id IN (${placeholders})
@@ -849,6 +847,34 @@ async function fetchQualityScores(db: D1Database, courseIds: string[]): Promise<
   }
 
   return qualityScores;
+}
+
+async function fetchCoursesById(db: D1Database, courseIds: string[]): Promise<Map<string, Course>> {
+  const courseMap = new Map<string, Course>();
+  if (courseIds.length === 0) {
+    return courseMap;
+  }
+
+  for (const batch of chunkValues(courseIds, D1_ID_BATCH_SIZE)) {
+    const placeholders = batch.map(() => '?').join(',');
+    const result = await db.prepare(`
+      SELECT * FROM courses WHERE id IN (${placeholders})
+    `).bind(...batch).all<Course>();
+
+    for (const course of result.results) {
+      courseMap.set(course.id, course);
+    }
+  }
+
+  return courseMap;
+}
+
+function chunkValues<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    chunks.push(values.slice(i, i + size));
+  }
+  return chunks;
 }
 
 export async function hybridSearchWithTermRanking(

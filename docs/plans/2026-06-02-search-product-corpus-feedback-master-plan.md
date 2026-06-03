@@ -22,7 +22,8 @@ The pass is complete only when every item below has concrete evidence in the fin
 - Browser and Computer QA cover desktop and mobile search, course detail, score surfaces, sections overflow, advanced search, clickable alternatives, feedback, console inspection, and network inspection.
 - Staging deploy smoke tests cover auth, search, course detail, feedback, public rate limits/WAF behavior, Rate My Professors link behavior, Course Explorer links, and data-refresh status.
 - D1 backup/export and restore paths are verified against a non-production target before destructive D1 actions.
-- Current, upcoming, and historical semester freshness evidence exists, including GPA and rating refresh cadence.
+- The searchable course corpus uses a rolling full-detail retention policy. Full history back to 2004 is no longer expected in D1; retained terms must be complete, currently registrable terms must be pinned and prioritized, and dropped terms must be intentionally absent.
+- Current, upcoming, and retained historical semester freshness evidence exists, including GPA and rating refresh cadence.
 - Bundle and performance budgets are defined and passing.
 - README, release checklist, rollback docs, data-refresh docs, active plans, and final stabilization report reflect the real state.
 - No secret values are committed or exposed.
@@ -43,7 +44,8 @@ The pass is complete only when every item below has concrete evidence in the fin
 | Public-facing copy | Search/course UI copy tests and Browser screenshots without debug timing or `n=` copy |
 | Rate My Professors links | Real public URL or safe search fallback generation, tests and Browser QA |
 | Course Explorer links | Course and section official links, tests and Browser QA |
-| Automated freshness | Scheduled/sync docs, status route or script evidence, tests for current/upcoming/historical paths |
+| Automated freshness | Scheduled/sync docs, status route or script evidence, tests for current/upcoming/retained-historical paths |
+| Rolling retained corpus | Retention plan, D1 backup/restore proof, prune evidence, retained-term coverage audit, dropped-term absence audit; no requirement to search every term back through 2004 |
 | GPA/rating refresh | Sync-state evidence, cadence docs, smoke checks |
 | Code quality | Module boundaries, lint zero warnings, typecheck/tests/build pass |
 | Backup before risky actions | Backup command output, restore test evidence, rollback docs |
