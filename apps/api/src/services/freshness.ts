@@ -106,13 +106,13 @@ function compareTerm(year: number, term: string, currentYear: number, currentTer
 
 function sortTermsByRecency<T extends { year: number; term: string }>(terms: T[]): T[] {
   return [...terms].sort((left, right) => {
+    if (left.year !== right.year) {
+      return right.year - left.year;
+    }
+
     const regularTermDelta = regularTermRank(left.term) - regularTermRank(right.term);
     if (regularTermDelta !== 0) {
       return regularTermDelta;
-    }
-
-    if (left.year !== right.year) {
-      return right.year - left.year;
     }
 
     return (TERM_ORDER[right.term.toLowerCase()] ?? 0) - (TERM_ORDER[left.term.toLowerCase()] ?? 0);

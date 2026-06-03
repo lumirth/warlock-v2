@@ -89,6 +89,28 @@ describe('buildFreshnessSummary', () => {
     expect(summary.upcomingTermIds).toEqual([]);
   });
 
+  it('does not let an older regular semester outrank a newer open winter or summer term', () => {
+    const summary = buildFreshnessSummary({
+      nowSeconds,
+      currentYear: 2026,
+      currentTerm: 'fall',
+      syncStates: [
+        sync({ id: 'gpa' }),
+        sync({ id: 'rmp' }),
+      ],
+      termStates: [
+        term({ term_id: '2026-fall', year: 2026, term: 'fall', status: 'registrable' }),
+        term({ term_id: '2027-winter', year: 2027, term: 'winter', status: 'registrable' }),
+        term({ term_id: '2027-summer', year: 2027, term: 'summer', status: 'active' }),
+        term({ term_id: '2026-spring', year: 2026, term: 'spring', status: 'active' }),
+      ],
+    });
+
+    expect(summary.currentTermId).toBe('2027-winter');
+    expect(summary.registrableTermIds).toEqual(['2027-winter', '2026-fall']);
+    expect(summary.activeTermIds).toEqual(['2027-summer', '2026-spring']);
+  });
+
   it('applies freshness thresholds from last sync ages instead of wall-clock term names', () => {
     const summary = buildFreshnessSummary({
       nowSeconds,
