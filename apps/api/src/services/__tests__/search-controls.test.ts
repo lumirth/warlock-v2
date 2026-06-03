@@ -141,6 +141,22 @@ describe('applySearchControls', () => {
     expect(scoped.map((item) => item.course.id)).toEqual(['active']);
   });
 
+  it('keeps explicitly requested historical terms even under the default active scope', () => {
+    const scoped = applySearchControls(
+      [
+        result('active', {}, { historical: false }),
+        result('requested-spring', {}, { historical: true }),
+      ],
+      { scope: 'active' },
+      { hasExplicitTermFilter: true },
+    );
+
+    expect(scoped.map((item) => item.course.id)).toEqual([
+      'active',
+      'requested-spring',
+    ]);
+  });
+
   it('orders level by numeric course number', () => {
     const sorted = applySearchControls(
       [

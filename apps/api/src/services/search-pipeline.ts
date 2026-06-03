@@ -564,10 +564,11 @@ function sortValueForResult(
 export function applySearchControls(
   results: SearchResult[],
   controls: SearchControls = DEFAULT_SEARCH_CONTROLS,
+  context: { hasExplicitTermFilter?: boolean } = {},
 ): SearchResult[] {
   const applied = normalizeSearchControls(controls);
   const scopedResults =
-    applied.scope === "active"
+    applied.scope === "active" && !context.hasExplicitTermFilter
       ? results.filter((result) => result.historical !== true)
       : [...results];
 
@@ -968,7 +969,9 @@ export class SearchPipeline {
         }
       }
     }
-    results = applySearchControls(results, effectiveControls).slice(0, limit);
+    results = applySearchControls(results, effectiveControls, {
+      hasExplicitTermFilter: Boolean(plan.filters.term || plan.filters.year),
+    }).slice(0, limit);
     const recoveryGroups = buildRecoveryGroups(plan, query, results.length);
     const searchEndTime = performance.now();
     const totalEndTime = performance.now();

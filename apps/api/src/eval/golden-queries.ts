@@ -356,6 +356,11 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     query: "CS spring 2026",
     expected_filters: { subject: "CS", term: "spring", year: 2026 },
     expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { subjects: ["CS"] }
+    },
     category: "structured",
     notes: "Term extraction"
   },
@@ -364,6 +369,11 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     query: "fall 2025 MATH",
     expected_filters: { subject: "MATH", term: "fall", year: 2025 },
     expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { subjects: ["MATH"] }
+    },
     category: "structured"
   },
 
