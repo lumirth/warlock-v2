@@ -564,6 +564,55 @@ export function sanitizeFtsQuery(query: string): string {
   return sanitized.replace(/\s+/g, ' ').trim();
 }
 
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, match => `\\${match}`);
+}
+
+export async function titleKeywordSearch(
+  db: D1Database,
+  keywordQuery: string,
+  filters: SearchFilters,
+  limit: number = 20,
+): Promise<{ id: string; rank: number }[]> {
+  const titleNeedle = keywordQuery.replace(/"/g, '').toLowerCase().trim();
+  if (!titleNeedle) return [];
+
+  const filterResults = buildFilterClauses(filters);
+  const { joins, where, params, having, havingParams } = filterResults;
+  const titlePrefix = `${escapeLike(titleNeedle)}%`;
+  const titleContains = `%${escapeLike(titleNeedle)}%`;
+  const titleWhere = "LOWER(c.title) LIKE ? ESCAPE '\\'";
+  const whereClause = where.length > 0
+    ? `WHERE ${where.join(' AND ')} AND ${titleWhere}`
+    : `WHERE ${titleWhere}`;
+
+  const sql = `
+    SELECT c.id,
+      MIN(CASE
+        WHEN LOWER(c.title) = ? THEN 1
+        WHEN LOWER(c.title) LIKE ? ESCAPE '\\' THEN 2
+        ELSE 3
+      END) as title_rank
+    FROM courses c
+    ${joins.join(' ')}
+    ${whereClause}
+    GROUP BY c.id
+    ${having ? 'HAVING ' + having : ''}
+    ORDER BY title_rank ASC,
+      c.year DESC,
+      CASE c.term WHEN 'fall' THEN 1 WHEN 'spring' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END,
+      c.subject,
+      c.number
+    LIMIT ?
+  `;
+
+  const result = await db.prepare(sql)
+    .bind(titleNeedle, titlePrefix, ...params, titleContains, ...(havingParams ?? []), limit)
+    .all<{ id: string; title_rank: number }>();
+
+  return result.results.map((row, index) => ({ id: row.id, rank: index + 1 }));
+}
+
 export async function keywordSearch(
   db: D1Database,
   plan: SearchPlan,
@@ -619,6 +668,9 @@ export async function keywordSearch(
 
   // Sanitize the query
   const cleanQuery = hasKeyword ? sanitizeFtsQuery(keywordQuery) : '';
+  const titleResults = hasKeyword
+    ? await titleKeywordSearch(db, cleanQuery, filters, limit)
+    : [];
   let searchParam = cleanQuery;
 
   // Query Expansion: "Computer Science" -> ("Computer Science") OR CS
@@ -652,7 +704,21 @@ export async function keywordSearch(
 
   const result = await db.prepare(sql).bind(...finalParams).all<{ id: string; fts_score: number }>();
 
-  return result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+  const ftsResults = result.results.map((r, i) => ({ id: r.id, rank: i + 1 }));
+  if (titleResults.length === 0) {
+    return ftsResults;
+  }
+
+  const seen = new Set<string>();
+  const combined: { id: string; rank: number }[] = [];
+  for (const row of [...titleResults, ...ftsResults]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    combined.push({ id: row.id, rank: combined.length + 1 });
+    if (combined.length >= limit) break;
+  }
+
+  return combined;
 }
 
 export async function sectionKeywordSearch(

@@ -4,7 +4,7 @@ import type {
   SearchPlanningResult,
 } from "./search-pipeline.js";
 
-const SEARCH_CACHE_VERSION = "v3";
+const SEARCH_CACHE_VERSION = "v4";
 const SEARCH_PLAN_TTL_SECONDS = 5 * 60;
 const SEARCH_RESULT_TTL_SECONDS = 30;
 

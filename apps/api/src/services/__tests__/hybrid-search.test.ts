@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { hybridSearch, postFilterSemanticResults } from '../search.js';
+import { hybridSearch, keywordSearch, postFilterSemanticResults } from '../search.js';
 import * as embeddings from '../embeddings.js';
 import { validateSubject } from '../query-resolver.js';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
@@ -210,6 +210,57 @@ describe('hybridSearch', () => {
     expect(results).toHaveLength(20);
     expect(qualityBindSizes.length).toBeGreaterThan(1);
     expect(qualityBindSizes.every(size => size <= 50)).toBe(true);
+  });
+});
+
+describe('keywordSearch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('recalls exact title matches before unrelated FTS matches', async () => {
+    const seenSql: string[] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        seenSql.push(sql);
+        return {
+          bind: vi.fn((...params: unknown[]) => ({
+            all: vi.fn(async () => {
+              if (sql.includes('LOWER(c.title) LIKE')) {
+                expect(params).toEqual([
+                  'data structures',
+                  'data structures%',
+                  '%data structures%',
+                  20,
+                ]);
+                return { results: [{ id: 'CS-225-2026-fall', title_rank: 1 }] };
+              }
+              if (sql.includes('courses_fts MATCH')) {
+                return {
+                  results: [
+                    { id: 'ECE-541-2026-fall', fts_score: -1 },
+                    { id: 'CS-225-2026-fall', fts_score: 0 },
+                  ],
+                };
+              }
+              return { results: [] };
+            }),
+          })),
+        };
+      }),
+    };
+
+    const results = await keywordSearch(db as unknown as D1Database, {
+      filters: {},
+      keywordQuery: 'data structures',
+      semanticQuery: 'data structures',
+    }, 20);
+
+    expect(seenSql.some(sql => sql.includes('LOWER(c.title) LIKE'))).toBe(true);
+    expect(results.slice(0, 2)).toEqual([
+      { id: 'CS-225-2026-fall', rank: 1 },
+      { id: 'ECE-541-2026-fall', rank: 2 },
+    ]);
   });
 });
 
