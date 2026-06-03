@@ -11,7 +11,7 @@ This is not a chatbot architecture. AI can assist offline alias generation, quer
 - Worker: query normalization, SearchPlan compilation, lane orchestration, rank fusion, explanations, and query logging.
 - D1: source of truth for courses, sections, requirements, aliases, workload/evidence signals, and search/eval data.
 - D1 FTS5: official course text, section text, student aliases, and workload/evidence text.
-- KV: normalized query plan/result payload cache for popular searches. The Worker uses the `SEARCH_CACHE` binding when available; keys are prefixed as `search:v1:*` so the namespace can be shared during staging and split later.
+- KV: normalized query plan/result payload cache for popular searches. The Worker uses the `SEARCH_CACHE` binding when available; keys are prefixed as `search:v2:*` so semantic search-plan changes do not reuse older interpretation payloads.
 - R2: raw catalog or syllabus snapshots when ingestion needs durable object storage.
 - Queues/Cron: catalog ingestion, reindexing, offline alias generation, syllabi extraction, and query-log mining.
 - Vectorize/AI Search: optional semantic sidecar for topic/vibe recall only. It must not be the source of truth.
