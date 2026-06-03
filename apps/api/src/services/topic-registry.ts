@@ -29,6 +29,10 @@ export const TOPIC_GROUPS: TopicGroup[] = [
     aliases: ['swe', 'software engineering', 'software dev', 'software development'],
   },
   {
+    expansion: 'compiler design programming languages',
+    aliases: ['compiler', 'compilers', 'compiler design'],
+  },
+  {
     expansion: 'operating systems',
     aliases: ['os', 'operating systems'],
   },

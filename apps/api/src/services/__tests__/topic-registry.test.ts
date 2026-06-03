@@ -36,6 +36,7 @@ describe('topic-registry', () => {
       expect(expandTopics('cyber security')).toContain('cybersecurity');
       expect(expandTopics('user experience')).toContain('human computer interaction');
       expect(expandTopics('software development')).toContain('software engineering');
+      expect(expandTopics('intro to compilers')).toContain('compiler design programming languages');
       expect(expandTopics('c++')).toContain('c++ programming');
     });
 
@@ -62,6 +63,7 @@ describe('topic-registry', () => {
       expect(TOPIC_MAP['ml']).toBe('machine learning');
       expect(TOPIC_MAP['os']).toBe('operating systems');
       expect(TOPIC_MAP['cyber security']).toBe('cybersecurity');
+      expect(TOPIC_MAP['compilers']).toBe('compiler design programming languages');
     });
 
     it('contains grouped topic entries for maintainable corpus expansion', () => {

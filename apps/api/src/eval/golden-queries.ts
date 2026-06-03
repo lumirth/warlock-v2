@@ -409,6 +409,11 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     query: "intro to compilers",
     expected_filters: {},
     expected_residual: "intro to compilers",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      must_include: [{ titleIncludes: "Compiler" }]
+    },
     category: "semantic",
     notes: "intro should NOT force level=100 for compilers"
   },
@@ -642,6 +647,11 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_filters: {},
     expected_soft_preferences: { levelBoost: 100 },
     expected_residual: "intro to compilers",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      must_include: [{ titleIncludes: "Compiler" }]
+    },
     category: "semantic",
     notes: "Introductory gateway intent requires a subject or explicit subject override; topic searches stay topical"
   },
