@@ -473,7 +473,7 @@ export async function buildTermRetentionReport(
     const wouldExceedCount = args.maxRetainedTerms !== undefined && retainedIds.size >= args.maxRetainedTerms;
     const wouldExceedBytes = estimatedRetainedBytes + row.estimated_bytes > targetSizeBytes;
     if (wouldExceedCount || wouldExceedBytes) {
-      continue;
+      break;
     }
 
     retainedIds.add(row.term_id);

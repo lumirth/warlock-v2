@@ -40,6 +40,14 @@ function termState(termId: string, status = 'historical') {
   };
 }
 
+function sizedTermState(termId: string, coursesCount: number, sectionsCount: number) {
+  return {
+    ...termState(termId),
+    courses_count: coursesCount,
+    sections_count: sectionsCount,
+  };
+}
+
 describe('term retention plan', () => {
   it('parses operator flags', () => {
     expect(parseTermRetentionArgs([
@@ -137,6 +145,32 @@ describe('term retention plan', () => {
 
     expect(report.retained_term_ids).toEqual(['2025-fall', '2025-spring']);
     expect(report.dropped_term_ids).toEqual(['2025-summer', '2025-winter']);
+  });
+
+  it('does not fill leftover budget with older tiny terms after a newer candidate stops fitting', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ Fall: 'fall' }))
+      .mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }));
+
+    const report = await buildTermRetentionReport(args({
+      fromYear: 2025,
+      toYear: 2026,
+      currentYear: 2027,
+      currentTerm: 'spring',
+      targetSizeMb: 0.05,
+    }), {
+      fetcher,
+      status: {
+        termStates: [
+          sizedTermState('2026-fall', 10, 10),
+          sizedTermState('2026-spring', 100_000, 100_000),
+          sizedTermState('2025-fall', 10, 10),
+        ],
+      },
+    });
+
+    expect(report.retained_term_ids).toEqual(['2026-fall']);
+    expect(report.dropped_term_ids).toEqual(['2026-spring', '2025-fall']);
   });
 
   it('generates prune SQL that deletes all term-local course data and verifies absence', () => {
