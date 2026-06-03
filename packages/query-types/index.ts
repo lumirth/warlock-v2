@@ -248,6 +248,7 @@ export type SearchRecoveryGroup = {
 };
 
 export interface SearchPlan {
+  rawQuery?: string;
   filters: SearchFilters;
   softPreferences?: Record<string, unknown>;
   intents?: SearchIntent[];

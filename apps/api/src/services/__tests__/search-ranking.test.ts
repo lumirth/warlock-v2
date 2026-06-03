@@ -44,10 +44,21 @@ describe('exact-title boost', () => {
 
     const boosted = applyTitleBoost(scores, 'data structures');
 
-    // CS-225 should now be ranked higher due to title match
-    // 0.5 + 0.5 = 1.0 > 0.6
+    // CS-225 should now be ranked higher due to a decisive exact-title match.
     expect(boosted[0].id).toBe('CS-225');
-    expect(boosted[0].score).toBeGreaterThan(0.9);
+    expect(boosted[0].score).toBeGreaterThan(2.9);
+  });
+
+  it('lets exact title matches beat high semantic scores', () => {
+    const scores = [
+      { id: 'CS-225', score: 0.03, title: 'Data Structures' },
+      { id: 'CS-562', score: 0.75, title: 'Advanced Topics in Security, Privacy, and Machine Learning' },
+    ];
+
+    const boosted = applyTitleBoost(scores, 'data structures');
+
+    expect(boosted[0].id).toBe('CS-225');
+    expect(boosted[0].score).toBeGreaterThan(boosted[1].score);
   });
 
   it('boosts partial title matches moderately', () => {
@@ -58,9 +69,9 @@ describe('exact-title boost', () => {
 
     const boosted = applyTitleBoost(scores, 'intelligence');
 
-    // CS-440 should get a boost (0.2) -> 0.7 > 0.55
+    // CS-440 should get a meaningful title-contained boost.
     expect(boosted[0].id).toBe('CS-440');
-    expect(boosted[0].score).toBeCloseTo(0.7);
+    expect(boosted[0].score).toBeCloseTo(1.7);
   });
 
   it('does nothing if no match', () => {
@@ -77,13 +88,13 @@ describe('exact-title boost', () => {
       { id: 'CS-101', score: 0.55, title: 'Intro to Computing' },
     ];
 
-    // "data structures" is in the query, so it should get a smaller boost (0.15)
+    // "data structures" is in the query, so it should get a smaller boost.
     const boosted = applyTitleBoost(scores, 'i need help with data structures class');
 
-    // CS-225: 0.5 + 0.15 = 0.65
+    // CS-225: 0.5 + 0.45 = 0.95
     // CS-101: 0.55 (no change)
     expect(boosted[0].id).toBe('CS-225');
-    expect(boosted[0].score).toBeCloseTo(0.65);
+    expect(boosted[0].score).toBeCloseTo(0.95);
   });
 });
 

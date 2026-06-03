@@ -744,6 +744,7 @@ export async function createSearchPlan(
 ): Promise<SearchPlanningResult> {
   const planningInput = withManualOverrideHints(input, overrides);
   const plan = await resolveQuery(db, planningInput.extracted);
+  plan.rawQuery = query;
   let queryResidual = plan.semanticQuery;
 
   const clause = planningInput.parsed.clauses[0];

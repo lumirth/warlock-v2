@@ -252,6 +252,7 @@ describe('keywordSearch', () => {
 
     const results = await keywordSearch(db as unknown as D1Database, {
       filters: {},
+      rawQuery: 'data structures',
       keywordQuery: 'data structures',
       semanticQuery: 'data structures',
     }, 20);
@@ -261,6 +262,26 @@ describe('keywordSearch', () => {
       { id: 'CS-225-2026-fall', rank: 1 },
       { id: 'ECE-541-2026-fall', rank: 2 },
     ]);
+  });
+
+  it('does not run title LIKE recall for expanded decision queries', async () => {
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        expect(sql).not.toContain('LOWER(c.title) LIKE');
+        return {
+          bind: vi.fn(() => ({
+            all: vi.fn(async () => ({ results: [] })),
+          })),
+        };
+      }),
+    };
+
+    await keywordSearch(db as unknown as D1Database, {
+      filters: {},
+      rawQuery: 'class about movies no essays',
+      keywordQuery: 'class about movies no essays film cinema media documentary television pop culture visual culture papers essays',
+      semanticQuery: 'class about movies no essays',
+    }, 20);
   });
 });
 

@@ -141,11 +141,11 @@ export function applyTitleBoost<T extends { id: string; score: number; title?: s
     let boost = 0;
 
     if (titleLower === queryLower) {
-      boost = 0.5;  // Exact match
+      boost = 2.5;  // Exact title queries should beat broad semantic similarity.
     } else if (titleLower.includes(queryLower)) {
-      boost = 0.2;  // Query contained in title
+      boost = 1.2;  // Query contained in title
     } else if (queryLower.includes(titleLower)) {
-      boost = 0.15;  // Title contained in query
+      boost = 0.45;  // Title contained in query
     }
 
     return { ...item, score: item.score + boost };
@@ -568,6 +568,62 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, match => `\\${match}`);
 }
 
+const TITLE_LANE_BLOCK_WORDS = new Set([
+  'after',
+  'avoid',
+  'before',
+  'booster',
+  'campus',
+  'chill',
+  'class',
+  'classes',
+  'count',
+  'counts',
+  'course',
+  'courses',
+  'does',
+  'easy',
+  'easiest',
+  'evening',
+  'friday',
+  'gen',
+  'gened',
+  'gpa',
+  'hard',
+  'hardest',
+  'how',
+  'is',
+  'less',
+  'monday',
+  'morning',
+  'no',
+  'not',
+  'online',
+  'prof',
+  'professor',
+  'requirement',
+  'should',
+  'tuesday',
+  'urbana',
+  'wednesday',
+  'what',
+  'whats',
+  'with',
+  'without',
+]);
+
+function titleLaneQuery(plan: SearchPlan, cleanKeywordQuery: string): string {
+  const rawCandidate = sanitizeFtsQuery(plan.rawQuery ?? '').replace(/"/g, '').toLowerCase().trim();
+  const candidate = rawCandidate || cleanKeywordQuery.replace(/"/g, '').toLowerCase().trim();
+  if (!candidate || candidate.length > 80) return '';
+
+  const tokens = candidate.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 5) return '';
+  if (tokens.some(token => TITLE_LANE_BLOCK_WORDS.has(token))) return '';
+
+  return candidate;
+}
+
 export async function titleKeywordSearch(
   db: D1Database,
   keywordQuery: string,
@@ -668,8 +724,9 @@ export async function keywordSearch(
 
   // Sanitize the query
   const cleanQuery = hasKeyword ? sanitizeFtsQuery(keywordQuery) : '';
+  const titleQuery = hasKeyword ? titleLaneQuery(plan, cleanQuery) : '';
   const titleResults = hasKeyword
-    ? await titleKeywordSearch(db, cleanQuery, filters, limit)
+    ? await titleKeywordSearch(db, titleQuery, filters, limit)
     : [];
   let searchParam = cleanQuery;
 
