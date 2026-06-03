@@ -16,6 +16,21 @@ type SearchOptions = {
   syncInput?: boolean
 }
 
+const ADVANCED_SEARCH_KEYS: (keyof AdvancedSearchStateDto)[] = [
+  'subject',
+  'number',
+  'instructor',
+  'term',
+  'year',
+  'gened',
+  'credits',
+  'days',
+  'time',
+  'online',
+  'status',
+  'difficulty',
+]
+
 function getEvidenceColor(evidence: MatchEvidence): string {
   if (evidence.weight === 'hard') return 'blue'
   if (evidence.weight === 'rank') return evidence.kind === 'semantic' ? 'violet' : 'gray'
@@ -119,7 +134,9 @@ function buildAdvancedQuery(state: AdvancedSearchStateDto, fallbackQuery: string
   if (state.status) tokens.push(state.status.toLowerCase())
   if (state.difficulty) tokens.push(state.difficulty)
 
-  return tokens.join(' ').trim() || fallbackQuery.trim()
+  if (fallbackQuery.trim()) tokens.push(fallbackQuery.trim())
+
+  return tokens.join(' ').trim()
 }
 
 function getChipColor(chip: SearchChipDto): string {
@@ -129,6 +146,36 @@ function getChipColor(chip: SearchChipDto): string {
   if (chip.type === 'difficulty') return 'orange'
   if (chip.type === 'courseCode' || chip.type === 'subject') return 'blue'
   return 'indigo'
+}
+
+function formatTermLabel(term: string, year: number): string {
+  return `${term.charAt(0).toUpperCase()}${term.slice(1).toLowerCase()} ${year}`
+}
+
+function normalizeAdvancedValue(value: AdvancedSearchStateDto[keyof AdvancedSearchStateDto]): string {
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value === 'string') return value.trim().toLowerCase()
+  return String(value)
+}
+
+function advancedValuesEqual(
+  left: AdvancedSearchStateDto[keyof AdvancedSearchStateDto],
+  right: AdvancedSearchStateDto[keyof AdvancedSearchStateDto]
+): boolean {
+  return normalizeAdvancedValue(left) === normalizeAdvancedValue(right)
+}
+
+function advancedFiltersChanged(previous: AdvancedSearchStateDto, next: AdvancedSearchStateDto): boolean {
+  return ADVANCED_SEARCH_KEYS.some((key) => !advancedValuesEqual(previous[key], next[key]))
+}
+
+function advancedFiltersContradictQuery(previous: AdvancedSearchStateDto, next: AdvancedSearchStateDto): boolean {
+  return ADVANCED_SEARCH_KEYS.some((key) => {
+    const previousValue = normalizeAdvancedValue(previous[key])
+    if (!previousValue) return false
+
+    return !advancedValuesEqual(previous[key], next[key])
+  })
 }
 
 export function SearchPage() {
@@ -216,7 +263,20 @@ export function SearchPage() {
   }
 
   const applyAdvancedSearch = () => {
-    void runSearch(buildAdvancedQuery(advancedDraft, meta?.query.residual || query), { syncInput: false })
+    const previousAdvanced = meta?.ui?.advanced || {}
+    const changed = advancedFiltersChanged(previousAdvanced, advancedDraft)
+    const contradictsQuery = advancedFiltersContradictQuery(previousAdvanced, advancedDraft)
+    const freeTextQuery = contradictsQuery ? (meta?.query.residual || '').trim() : query.trim()
+    const nextQuery = changed
+      ? buildAdvancedQuery(advancedDraft, freeTextQuery)
+      : activeSearchText || query
+
+    if (!nextQuery.trim()) return
+    if (contradictsQuery) {
+      setQuery(freeTextQuery)
+    }
+
+    void runSearch(nextQuery, { syncInput: false })
   }
 
   const loadMoreResults = () => {
@@ -467,22 +527,37 @@ export function SearchPage() {
                   padding="sm"
                   component={Link}
                   to={`/course/${r.subject}/${r.number}?term=${r.term}&year=${r.year}`}
-                  style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                  data-historical={r._historical ? 'true' : undefined}
+                  style={{
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    backgroundColor: r._historical ? 'var(--mantine-color-gray-0)' : undefined,
+                    borderColor: r._historical ? 'var(--mantine-color-gray-3)' : undefined,
+                    opacity: r._historical ? 0.78 : 1,
+                  }}
                   shadow="sm"
                 >
                   <Flex justify="space-between" align="flex-start" gap="sm" wrap="wrap">
                     <Box style={{ minWidth: 0, flex: '1 1 18rem' }}>
-                      <Text fw={700}>{r.subject} {r.number}: {r.title}</Text>
+                      <Text fw={700} c={r._historical ? 'dimmed' : undefined}>{r.subject} {r.number}: {r.title}</Text>
                       <Group gap="xs" mt={4}>
-                        <Text size="xs" c="dimmed">
-                          {r.term} {r.year} | {r.credit_hours} credits
+                        <Text size="xs" c={r._historical ? 'gray.7' : 'dimmed'}>
+                          {formatTermLabel(r.term, r.year)}
+                        </Text>
+                        {r._historical && (
+                          <Badge color="gray" variant="filled" size="xs">
+                            Historical
+                          </Badge>
+                        )}
+                        <Text size="xs" c={r._historical ? 'gray.7' : 'dimmed'}>
+                          {r.credit_hours} credits
                         </Text>
                         {r.primary_instructor && (
                           <Text size="xs" c="dimmed" style={{ borderLeft: '1px solid var(--mantine-color-gray-3)', paddingLeft: '8px' }}>
                             {r.primary_instructor}
                           </Text>
                         )}
-                        {r._historical && <Badge color="yellow" size="xs">historical</Badge>}
                         {r.gened && <Badge variant="outline" size="xs">{r.gened}</Badge>}
                       </Group>
                       {r.match_evidence && r.match_evidence.length > 0 && (
@@ -504,10 +579,16 @@ export function SearchPage() {
                       {renderScoreBadges(r)}
                     </Box>
                     {typeof r._score === 'number' && (
-                      <Badge variant="light" style={{ flexShrink: 0 }}>{getRelevanceLabel(r._score)}</Badge>
+                      <Badge
+                        variant={r._historical ? 'outline' : 'light'}
+                        color={r._historical ? 'gray' : undefined}
+                        style={{ flexShrink: 0 }}
+                      >
+                        {getRelevanceLabel(r._score)}
+                      </Badge>
                     )}
                   </Flex>
-                  <Text size="sm" mt="xs" lineClamp={3} c="dimmed">
+                  <Text size="sm" mt="xs" lineClamp={3} c={r._historical ? 'gray.6' : 'dimmed'}>
                     {r.description}
                   </Text>
                 </Card>

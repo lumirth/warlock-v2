@@ -18,7 +18,7 @@ The pass is complete only when every item below has concrete evidence in the fin
 - A typed query/eval corpus covers instructor, course, GenEd, schedule, semester, score, ambiguity, and natural-language failure cases.
 - Corpus/eval tests include professor-name searches such as `professor fagen`, `prof fagen`, `with wade`, lowercase instructor names, hyphenated/apostrophe names, and ambiguous instructor queries.
 - Hermetic API integration tests cover search, course detail, feedback submission, feedback rejection, and data-refresh status paths without requiring Wrangler auth or a live dev server.
-- Frontend DTO/state tests cover editable search chips, clickable disambiguation alternatives, advanced search controls, feedback submission states, public score labels, Rate My Professors fallback links, and Course Explorer links.
+- Frontend DTO/state tests cover editable search chips, clickable disambiguation alternatives, advanced search controls, contradictory filter/query edits, historical-result de-emphasis, feedback submission states, public score labels, Rate My Professors fallback links, and Course Explorer links.
 - Browser and Computer QA cover desktop and mobile search, course detail, score surfaces, sections overflow, advanced search, clickable alternatives, feedback, console inspection, and network inspection.
 - Staging deploy smoke tests cover auth, search, course detail, feedback, public rate limits/WAF behavior, Rate My Professors link behavior, Course Explorer links, and data-refresh status.
 - D1 backup/export and restore paths are verified against a non-production target before destructive D1 actions.
@@ -40,8 +40,9 @@ The pass is complete only when every item below has concrete evidence in the fin
 | Feedback-to-eval path | Feedback triage docs/script or admin route, corpus promotion workflow, tests |
 | Editable badges/search chips | Shared query-plan state, SearchPage controls, frontend state tests, Browser QA |
 | Clickable "maybe you meant" alternatives | API ambiguity DTOs, SearchPage buttons, URL/state round-trip tests |
-| Advanced search mode | Public controls for term, subject, GenEd, schedule, credits, online/status, instructor, difficulty/quality |
+| Advanced search mode | Public controls for term, subject, GenEd, schedule, credits, online/status, instructor, difficulty/quality; typed free text remains separate from structured filters, and contradictory filter edits clear stale structured words from the search box |
 | Public-facing copy | Search/course UI copy tests and Browser screenshots without debug timing or `n=` copy |
+| Historical result prominence | Historical cards are visually de-emphasized, and the `Historical` badge appears next to the term before credits/instructors |
 | Rate My Professors links | Real public URL or safe search fallback generation, tests and Browser QA |
 | Course Explorer links | Course and section official links, tests and Browser QA |
 | Automated freshness | Scheduled/sync docs, status route or script evidence, tests for current/upcoming/retained-historical paths |
@@ -81,11 +82,13 @@ The pass is complete only when every item below has concrete evidence in the fin
    - Chips can be removed or adjusted through one canonical state.
    - Clickable ambiguity alternatives update the query state and rerun search.
    - Advanced search mode edits the same query state, not a second path.
+   - The search box represents free-text/topic terms. Advanced controls own structured filters; additive filters preserve free text, while contradictory edits clear stale structured text.
 
 6. **Public Course Experience**
    - Remove debug timing and internal labels from default UI.
    - Replace `n=` with student-facing sample copy.
    - Replace technical badges with digestible score, workload, GPA, rating, and evidence labels.
+   - Make historical results visibly quieter than active/registrable results and place the historical status beside the term label.
    - Add official Course Explorer links for courses and sections.
    - Replace broken Rate My Professors direct links with verified public URLs or safe search fallbacks.
 

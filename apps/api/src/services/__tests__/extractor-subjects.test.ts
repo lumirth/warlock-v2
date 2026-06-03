@@ -109,6 +109,7 @@ describe('Subject Extraction Rules', () => {
 
   it.each([
     ['philosphy', 'PHIL'],
+    ['philospohy', 'PHIL'],
     ['intro to philosphy', 'PHIL'],
     ['computr science', 'CS'],
     ['politcal science', 'PS'],

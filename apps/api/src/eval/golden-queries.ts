@@ -838,4 +838,13 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_residual: "software development",
     category: "semantic"
   },
+  {
+    id: 101,
+    query: "philospohy",
+    expected_filters: { subject: "PHIL" },
+    expected_residual: "",
+    invariants: { subject: "PHIL" },
+    category: "structured",
+    notes: "Common adjacent-letter swaps in official subject names should resolve as subject filters"
+  },
 ];

@@ -107,6 +107,7 @@ describe('AliasRegistry', () => {
 
     it.each([
       ['philosphy', 'PHIL'],
+      ['philospohy', 'PHIL'],
       ['computr science', 'CS'],
       ['politcal science', 'PS'],
       ['informaton sciences', 'IS'],

@@ -205,6 +205,28 @@ describe('SearchPage request state', () => {
     expect(screen.getByTitle('Based on 820 GPA records')).toBeInTheDocument()
   })
 
+  it('de-emphasizes historical result cards and places the status next to the term', async () => {
+    vi.mocked(api.search).mockResolvedValueOnce(searchResponse([
+      course({
+        id: 'CS-225-2026-spring',
+        number: '225',
+        title: 'Data Structures',
+        _historical: true,
+        _score: 0.81,
+      }),
+    ]))
+
+    renderSearchPage()
+
+    setQuery('cs 225')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+
+    const card = await screen.findByRole('link', { name: /CS 225: Data Structures Spring 2026 Historical/i })
+    expect(card).toHaveAttribute('data-historical', 'true')
+    expect(card).toHaveStyle({ opacity: '0.78' })
+    expect(screen.getByText('Historical')).toBeInTheDocument()
+  })
+
   it('lets users remove interpreted search chips and reruns the edited query', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
@@ -288,7 +310,7 @@ describe('SearchPage request state', () => {
     expect(screen.getByLabelText(/course search query/i)).toHaveValue('CS gened')
   })
 
-  it('builds a query from advanced controls', async () => {
+  it('builds a query from advanced controls while preserving free-text terms', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
         ...searchResponse([]),
@@ -318,13 +340,58 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith('CS 225 professor Fagen 4 credits', expect.objectContaining({
+      expect(api.search).toHaveBeenLastCalledWith('CS 225 professor Fagen 4 credits algorithms', expect.objectContaining({
         signal: expect.any(AbortSignal),
         limit: 20,
         offset: 0,
       }))
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue('algorithms')
+  })
+
+  it('clears stale search text when advanced filters contradict parsed query filters', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'intro to CS', residual: '' },
+          ui: {
+            chips: [{
+              id: 'subject-0',
+              type: 'subject',
+              label: 'Subject CS',
+              value: 'CS',
+              source: 'natural_language',
+              removable: true,
+              editable: true,
+              queryPatch: { removeText: 'CS' },
+            }],
+            advanced: { subject: 'CS' },
+            ambiguityActions: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce(searchResponse([]))
+
+    renderSearchPage()
+
+    setQuery('intro to CS')
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    await screen.findByText('Subject CS')
+
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'PHIL' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith('subject:PHIL', expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        limit: 20,
+        offset: 0,
+      }))
+    })
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('')
   })
 
   it('loads more from the refined query without changing the visible search text', async () => {

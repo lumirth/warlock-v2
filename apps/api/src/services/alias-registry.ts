@@ -133,7 +133,7 @@ export class AliasRegistry {
           if (isConsumed(spanStart, spanEnd, consumed)) continue;
 
           const candidate = spanTokens.map(token => token.text).join(' ');
-          const distance = boundedLevenshtein(aliasLower, candidate, maxDistance);
+          const distance = boundedEditDistance(aliasLower, candidate, maxDistance);
           if (distance > maxDistance) continue;
 
           matches.push({
@@ -192,36 +192,53 @@ function maxFuzzySubjectDistance(alias: string): number {
   return compactLength >= 18 ? 2 : 1;
 }
 
-function boundedLevenshtein(left: string, right: string, maxDistance: number): number {
+function boundedEditDistance(left: string, right: string, maxDistance: number): number {
   if (Math.abs(left.length - right.length) > maxDistance) {
     return maxDistance + 1;
   }
 
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  let current = new Array<number>(right.length + 1);
+  const distances = Array.from(
+    { length: left.length + 1 },
+    () => new Array<number>(right.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= left.length; i += 1) {
+    distances[i][0] = i;
+  }
+
+  for (let j = 0; j <= right.length; j += 1) {
+    distances[0][j] = j;
+  }
 
   for (let i = 1; i <= left.length; i++) {
-    current[0] = i;
-    let rowMin = current[0];
+    let rowMin = distances[i][0];
 
     for (let j = 1; j <= right.length; j++) {
       const cost = left[i - 1] === right[j - 1] ? 0 : 1;
-      current[j] = Math.min(
-        previous[j] + 1,
-        current[j - 1] + 1,
-        previous[j - 1] + cost
+      distances[i][j] = Math.min(
+        distances[i - 1][j] + 1,
+        distances[i][j - 1] + 1,
+        distances[i - 1][j - 1] + cost
       );
-      rowMin = Math.min(rowMin, current[j]);
+
+      if (
+        i > 1 &&
+        j > 1 &&
+        left[i - 1] === right[j - 2] &&
+        left[i - 2] === right[j - 1]
+      ) {
+        distances[i][j] = Math.min(distances[i][j], distances[i - 2][j - 2] + 1);
+      }
+
+      rowMin = Math.min(rowMin, distances[i][j]);
     }
 
     if (rowMin > maxDistance) {
       return maxDistance + 1;
     }
-
-    [previous, current] = [current, previous];
   }
 
-  return previous[right.length];
+  return distances[left.length][right.length];
 }
 
 export function createDefaultRegistry(): AliasRegistry {
