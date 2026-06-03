@@ -187,6 +187,29 @@ describe('CoursePage request state', () => {
     expect(screen.getAllByText('820 records').length).toBeGreaterThanOrEqual(2)
   })
 
+  it('uses a course score sidebar at laptop widths, not only extra-wide screens', async () => {
+    vi.mocked(api.getCourse).mockResolvedValueOnce(
+      course({
+        avg_gpa: 3.62,
+        gpa_sample_size: 820,
+        quality_score: 88,
+        difficulty_score: 42,
+      })
+    )
+
+    renderCoursePage('/course/CS/225?term=spring&year=2026')
+
+    const scorecard = (await screen.findByText('Course scores')).closest(
+      '[data-slot="card"]'
+    ) as HTMLElement
+    const sidebar = scorecard.closest('aside')
+    const layout = sidebar?.parentElement
+
+    expect(sidebar).toHaveClass('lg:sticky')
+    expect(layout).toHaveClass('lg:grid-cols-[18rem_minmax(0,1fr)]')
+    expect(layout).not.toHaveClass('xl:grid-cols-[21rem_minmax(0,1fr)]')
+  })
+
   it('renders official Course Explorer links and public instructor link fallbacks', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(
       course({

@@ -59,6 +59,17 @@ describe('FeedbackButton', () => {
     })
   })
 
+  it('opens as a usable full-width panel instead of a cramped button-width form', () => {
+    renderFeedbackButton()
+
+    fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
+
+    const panel = screen
+      .getAllByText('Send feedback')[0]
+      .closest('[data-slot="card"]')
+    expect(panel).toHaveClass('w-full')
+  })
+
   it('uses calm recovery copy when feedback submission fails', async () => {
     vi.mocked(api.submitFeedback).mockRejectedValueOnce(
       new Error('Internal server error')

@@ -37,6 +37,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
@@ -57,14 +58,17 @@
   color-scheme: light;
   --illinois-navy: oklch(0.283 0.069 258.938);
   --illinois-orange: oklch(0.687 0.209 41.155);
+  --action-orange: oklch(0.553 0.174 38.4);
+  --action-orange-hover: oklch(0.47 0.143 37.297);
   --background: oklch(0.984 0.004 251.663);
   --foreground: var(--illinois-navy);
   --card: oklch(1 0 0);
   --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
-  --primary: var(--illinois-orange);
-  --primary-foreground: var(--illinois-navy);
+  --primary: var(--action-orange);
+  --primary-hover: var(--action-orange-hover);
+  --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.968 0.007 249.837);
   --secondary-foreground: var(--foreground);
   --muted: oklch(0.968 0.007 249.837);
@@ -79,7 +83,7 @@
   --warning-foreground: var(--foreground);
   --border: oklch(0.869 0.02 253.494);
   --input: oklch(0.869 0.02 253.494);
-  --ring: var(--primary);
+  --ring: var(--illinois-orange);
   --chart-1: var(--primary);
   --chart-2: var(--success);
   --chart-3: var(--warning);
@@ -104,8 +108,9 @@
   --card-foreground: var(--foreground);
   --popover: oklch(0.237 0.049 254.635);
   --popover-foreground: var(--foreground);
-  --primary: var(--illinois-orange);
-  --primary-foreground: var(--illinois-navy);
+  --primary: var(--action-orange);
+  --primary-hover: var(--action-orange-hover);
+  --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.266 0.054 255.02);
   --secondary-foreground: var(--foreground);
   --muted: oklch(0.266 0.054 255.02);
@@ -120,7 +125,7 @@
   --warning-foreground: var(--illinois-navy);
   --border: oklch(0.346 0.074 256.137);
   --input: oklch(0.346 0.074 256.137);
-  --ring: var(--primary);
+  --ring: var(--illinois-orange);
   --chart-1: var(--primary);
   --chart-2: var(--success);
   --chart-3: var(--warning);

@@ -52,6 +52,9 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
 
   const existingLabels = new Set(chips.map(chip => chip.label.toLowerCase()));
   for (const assumption of plan.rescue?.assumptions ?? []) {
+    if (shouldHideAssumptionChip(assumption.kind, hints, plan.filters)) {
+      continue;
+    }
     if (existingLabels.has(assumption.label.toLowerCase())) {
       continue;
     }
@@ -70,6 +73,22 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
   }
 
   return chips;
+}
+
+function shouldHideAssumptionChip(kind: string, hints: Hint[], filters: SearchFilters): boolean {
+  if (kind === 'schedule_fit' || kind === 'requirement_match' || kind === 'requirement_ambiguous') {
+    return true;
+  }
+
+  if (kind === 'online_preferred') {
+    return filters.online !== undefined || hints.some(hint => hint.type === 'online');
+  }
+
+  if (kind === 'credit_count') {
+    return filters.credits !== undefined || hints.some(hint => hint.type === 'credits');
+  }
+
+  return false;
 }
 
 function textToRemoveForAssumption(kind: string, residual: string): string | undefined {

@@ -16,18 +16,19 @@ Warmth here means **clarity and reassurance, never jokes**. No "Oops!", no excla
 
 The palette is built from UIUC's real brand colors, split to encode the identity principle: **navy is the precise core, orange is the warmth.**
 
-| Role               | Value                                        | Use                                                                                                                |
-| ------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Ink / foreground   | **Illinois Navy `#13294B`**                  | Light-mode body text and data. ~14:1 on white. The cold, concrete core.                                            |
-| Primary / accent   | **Illinois Orange `#FF5F05`**                | Primary buttons, active filters, focus rings, the live "how we read your query" highlights. The warmth and energy. |
-| Primary foreground | **Illinois Navy `#13294B`**                  | Text/icons _on_ orange. See contrast note below.                                                                   |
-| Canvas             | white / near-white                           | Background.                                                                                                        |
-| Neutrals           | stone ramp, nudged a hair cooler toward navy | Borders, muted text, secondary surfaces.                                                                           |
-| Semantic           | green / amber / red                          | Meaningful state only (open/closed, success/warning/error, workload, ratings).                                     |
+| Role               | Value                                        | Use                                                                                            |
+| ------------------ | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Ink / foreground   | **Illinois Navy `#13294B`**                  | Light-mode body text and data. ~14:1 on white. The cold, concrete core.                        |
+| Brand accent       | **Illinois Orange `#FF5F05`**                | Focus rings, active interpretation highlights, and small brand moments. The warmth and energy. |
+| Primary action     | **Deep Orange `#C2410C`**                    | Filled action buttons. Dark enough to carry white text without turning brown.                  |
+| Primary foreground | white                                        | Text/icons on deep orange action fills. See contrast note below.                               |
+| Canvas             | white / near-white                           | Background.                                                                                    |
+| Neutrals           | stone ramp, nudged a hair cooler toward navy | Borders, muted text, secondary surfaces.                                                       |
+| Semantic           | green / amber / red                          | Meaningful state only (open/closed, success/warning/error, workload, ratings).                 |
 
-**Contrast rule (load-bearing, do not violate):** white text on Illinois Orange is ~3.0:1 and **fails WCAG AA**. Never put white text or white icons on an orange fill. Orange fills carry **navy** text (`#13294B` on `#FF5F05` ≈ 4.7:1, passes AA), which is also more recognizably Illinois. This is why `--primary-foreground` is navy, not white.
+**Contrast rule (load-bearing, do not violate):** white text on Illinois Orange is ~3.0:1 and **fails WCAG AA** for normal text. Filled controls therefore use Deep Orange `#C2410C`, where white text is ~5.18:1. Illinois Orange remains the brand accent and focus-ring color rather than the filled-button background.
 
-- Dark mode is first-class. In dark mode, the canvas and cards move into deep navy while text flips to a cool light neutral. Orange remains the focus and primary action color, still with navy foreground text.
+- Dark mode is first-class. In dark mode, the canvas and cards move into deep navy while text flips to a cool light neutral. Illinois Orange remains the focus color; Deep Orange remains the primary action color with white foreground text.
 - Muted text must still meet AA against its background; verify the muted-foreground token at the small sizes it is used at.
 - No decorative gradients, glows, or multi-accent badge palettes. Orange and navy are the only brand colors; everything else is neutral or semantic.
 

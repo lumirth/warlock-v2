@@ -104,8 +104,12 @@ describe('buildSearchUiPlan', () => {
     expect(plan.chips.map(chip => chip.label)).toEqual(['Introductory courses']);
   });
 
-  it('adds interpreted rescue assumptions as removable chips', () => {
-    const plan = buildSearchUiPlan([], {
+  it('hides rescue assumptions already represented by concrete filter chips', () => {
+    const plan = buildSearchUiPlan([{
+      type: 'online',
+      value: true,
+      metadata: { source: 'alias', confidence: 0.9, raw: 'online' },
+    }], {
       filters: { online: true },
       keywordQuery: '',
       semanticQuery: '',
@@ -115,6 +119,7 @@ describe('buildSearchUiPlan', () => {
         topicTerms: [],
         expandedTerms: [],
         assumptions: [
+          { kind: 'schedule_fit', label: 'Schedule or delivery fit matters', confidence: 0.78, source: 'rule' },
           { kind: 'online_preferred', label: 'Online preferred', confidence: 0.86, source: 'rule' },
           { kind: 'low_writing', label: 'Low writing preferred', confidence: 0.82, source: 'rule' },
         ],
@@ -127,7 +132,7 @@ describe('buildSearchUiPlan', () => {
     }, '');
 
     expect(plan.chips).toEqual([
-      expect.objectContaining({ type: 'assumption', label: 'Online preferred', queryPatch: { removeText: 'online' } }),
+      expect.objectContaining({ type: 'online', label: 'Online', queryPatch: { removeText: 'online' } }),
       expect.objectContaining({ type: 'assumption', label: 'Low writing preferred', queryPatch: { removeText: 'no essays' } }),
     ]);
   });

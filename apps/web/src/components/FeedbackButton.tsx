@@ -89,12 +89,17 @@ export function FeedbackButton({
   }
 
   return (
-    <div className={cn('flex flex-col gap-2', fullWidth && 'w-full')}>
+    <div
+      className={cn(
+        'flex flex-col gap-2',
+        fullWidth ? 'w-full' : 'w-full sm:max-w-xl sm:self-end'
+      )}
+    >
       {!open && (
         <Button
           variant={buttonVariant}
           size="xs"
-          className={cn(fullWidth && 'w-full')}
+          className={cn(fullWidth ? 'w-full' : 'self-end')}
           onClick={() => setOpen(true)}
         >
           <MessageCircleIcon data-icon="inline-start" aria-hidden />
@@ -103,7 +108,7 @@ export function FeedbackButton({
       )}
 
       {open && (
-        <Card size="sm">
+        <Card size="sm" className="w-full">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle>Send feedback</CardTitle>
             <Button variant="ghost" size="xs" onClick={() => setOpen(false)}>
