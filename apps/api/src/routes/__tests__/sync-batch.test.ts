@@ -1,0 +1,182 @@
+import { Hono } from 'hono';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Ai, D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
+import type { TermState } from '../../db/index.js';
+import { syncSubjects, syncTerm } from '../../services/parallel-sync.js';
+import { syncRoutes } from '../sync.js';
+
+vi.mock('../../services/parallel-sync.js', () => ({
+  syncSubjects: vi.fn(),
+  syncTerm: vi.fn(),
+}));
+
+type RunCall = {
+  sql: string;
+  params: unknown[];
+};
+
+function createEnv(existingTerm: TermState | null, runCalls: RunCall[] = []) {
+  const db = {
+    prepare: vi.fn((sql: string) => ({
+      bind: vi.fn((...params: unknown[]) => ({
+        first: vi.fn(async () => {
+          if (sql.includes('FROM term_state')) return existingTerm;
+          if (sql.includes('FROM courses')) return { count: 42 };
+          if (sql.includes('FROM sections')) return { count: 99 };
+          return null;
+        }),
+        all: vi.fn(async () => {
+          if (sql.includes('FROM term_state') && sql.includes('WHERE status = ?')) {
+            return {
+              success: true,
+              results: existingTerm && params[0] === existingTerm.status ? [existingTerm] : [],
+            };
+          }
+          return { success: true, results: [] };
+        }),
+        run: vi.fn(async () => {
+          runCalls.push({ sql, params });
+          return { success: true };
+        }),
+      })),
+    })),
+  } as unknown as D1Database;
+
+  return {
+    DB: db,
+    VECTORIZE: {} as VectorizeIndex,
+    AI: {} as Ai,
+    SELF: {} as Fetcher,
+    GPA_CACHE: {} as KVNamespace,
+    CURRENT_YEAR: '2026',
+    CURRENT_TERM: 'fall',
+    CISAPI_BASE: 'https://example.invalid',
+    FRONTEND_BASE: 'https://example.invalid',
+    SYNC_CONCURRENCY: '1',
+  };
+}
+
+function app(): Hono {
+  const instance = new Hono();
+  instance.route('/', syncRoutes);
+  return instance;
+}
+
+function termState(overrides: Partial<TermState> = {}): TermState {
+  return {
+    term_id: '2026-fall',
+    year: 2026,
+    term: 'fall',
+    status: 'registrable',
+    last_checked: 100,
+    last_synced: 111,
+    subjects_count: 12,
+    courses_count: 40,
+    sections_count: 90,
+    sync_errors: null,
+    created_at: 1,
+    updated_at: 2,
+    ...overrides,
+  };
+}
+
+describe('internal sync batch route', () => {
+  beforeEach(() => {
+    vi.mocked(syncSubjects).mockReset();
+    vi.mocked(syncTerm).mockReset();
+  });
+
+  it('updates term_state with cumulative counts after a successful fan-out batch', async () => {
+    vi.mocked(syncSubjects).mockResolvedValue({
+      termId: '2026-fall',
+      year: 2026,
+      term: 'fall',
+      subjectResults: [{ subject: 'CS', success: true, coursesCount: 2, sectionsCount: 3, durationMs: 1 }],
+      totalCourses: 2,
+      totalSections: 3,
+      successfulSubjects: 1,
+      failedSubjects: 0,
+      durationMs: 1,
+      rateLimitHits: 0,
+      pagination: { total: 1, offset: 0, limit: 1, hasMore: false },
+    });
+    const runCalls: RunCall[] = [];
+
+    const response = await app().request('/internal/sync-batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        year: 2026,
+        term: 'fall',
+        subjects: ['CS'],
+        status: 'registrable',
+        totalSubjects: 187,
+      }),
+    }, createEnv(termState(), runCalls));
+
+    expect(response.status).toBe(200);
+    const termUpsert = runCalls.find(call => call.sql.includes('INSERT INTO term_state'));
+    expect(termUpsert?.params.slice(0, 4)).toEqual(['2026-fall', 2026, 'fall', 'registrable']);
+    expect(termUpsert?.params[5]).toEqual(expect.any(Number));
+    expect(termUpsert?.params.slice(6, 9)).toEqual([187, 42, 99]);
+    expect(termUpsert?.params[9]).toBeNull();
+  });
+
+  it('does not mark a skipped-only batch as freshly synced', async () => {
+    vi.mocked(syncSubjects).mockResolvedValue({
+      termId: '2026-fall',
+      year: 2026,
+      term: 'fall',
+      subjectResults: [{ subject: 'CS', success: true, skipped: true, coursesCount: 0, sectionsCount: 0, durationMs: 1 }],
+      totalCourses: 0,
+      totalSections: 0,
+      successfulSubjects: 1,
+      failedSubjects: 0,
+      durationMs: 1,
+      rateLimitHits: 0,
+      pagination: { total: 1, offset: 0, limit: 1, hasMore: false },
+    });
+    const runCalls: RunCall[] = [];
+
+    const response = await app().request('/internal/sync-batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        year: 2026,
+        term: 'fall',
+        subjects: ['CS'],
+        totalSubjects: 187,
+      }),
+    }, createEnv(termState({ last_synced: 111 }), runCalls));
+
+    expect(response.status).toBe(200);
+    const termUpsert = runCalls.find(call => call.sql.includes('INSERT INTO term_state'));
+    expect(termUpsert?.params[5]).toBe(111);
+    expect(termUpsert?.params.slice(6, 9)).toEqual([187, 42, 99]);
+  });
+
+  it('does not mark sync-active skipped-only terms as freshly synced', async () => {
+    vi.mocked(syncTerm).mockResolvedValue({
+      termId: '2026-fall',
+      year: 2026,
+      term: 'fall',
+      subjectResults: [{ subject: 'CS', success: true, skipped: true, coursesCount: 0, sectionsCount: 0, durationMs: 1 }],
+      totalCourses: 0,
+      totalSections: 0,
+      successfulSubjects: 1,
+      failedSubjects: 0,
+      durationMs: 1,
+      rateLimitHits: 0,
+      pagination: { total: 187, offset: 0, limit: 1, hasMore: true },
+    });
+    const runCalls: RunCall[] = [];
+
+    const response = await app().request('/admin/sync-active', {
+      method: 'POST',
+    }, createEnv(termState({ last_synced: 111 }), runCalls));
+
+    expect(response.status).toBe(200);
+    const termUpsert = runCalls.find(call => call.sql.includes('INSERT INTO term_state'));
+    expect(termUpsert?.params[4]).toEqual(expect.any(Number));
+    expect(termUpsert?.params[5]).toBe(111);
+    expect(termUpsert?.params.slice(6, 9)).toEqual([187, 42, 99]);
+  });
+});

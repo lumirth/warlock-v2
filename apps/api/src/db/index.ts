@@ -285,6 +285,18 @@ export async function upsertTermState(
   ).run();
 }
 
+export async function touchTermStateChecked(
+  db: D1Database,
+  termId: string,
+  lastChecked: number
+): Promise<void> {
+  await db.prepare(`
+    UPDATE term_state
+    SET last_checked = ?, updated_at = unixepoch()
+    WHERE term_id = ?
+  `).bind(lastChecked, termId).run();
+}
+
 export async function getTermsByStatus(
   db: D1Database,
   status: TermStateStatus

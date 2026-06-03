@@ -104,6 +104,10 @@ function parseForceRunningLocks(value: string | undefined): boolean | null {
   return null;
 }
 
+function refreshedSubjectCount(result: { subjectResults: Array<{ success: boolean; skipped?: boolean }> }): number {
+  return result.subjectResults.filter(subject => subject.success && !subject.skipped).length;
+}
+
 syncRoutes.get('/admin/sync/status', async (c) => {
   const [syncStates, termStates, enrichmentCoverage] = await Promise.all([
     c.env.DB.prepare(`
@@ -260,10 +264,32 @@ syncRoutes.post('/admin/sync-gpa', async (c) => {
 syncRoutes.post('/internal/sync-batch', async (c) => {
   const runId = createRunId('sync-batch');
   try {
-    const { year, term, subjects } = await c.req.json<{ year: number; term: string; subjects: string[] }>();
+    const { year, term, subjects, status, totalSubjects } = await c.req.json<{
+      year: number;
+      term: string;
+      subjects: string[];
+      status?: TermStateStatus;
+      totalSubjects?: number;
+    }>();
 
     if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400);
+    }
+
+    let requestedStatus: TermStateStatus | undefined;
+    if (status !== undefined) {
+      const parsedStatus = parseEnumParam(status, 'status', TERM_STATUSES);
+      if (!parsedStatus.ok) return c.json({ error: parsedStatus.error }, 400);
+      requestedStatus = parsedStatus.value;
+    }
+
+    const parsedTotalSubjects = totalSubjects === undefined
+      ? null
+      : Number.isInteger(totalSubjects) && totalSubjects >= subjects.length
+        ? totalSubjects
+        : undefined;
+    if (parsedTotalSubjects === undefined) {
+      return c.json({ error: 'totalSubjects must be an integer greater than or equal to subjects.length' }, 400);
     }
 
     const config = {
@@ -284,6 +310,32 @@ syncRoutes.post('/internal/sync-batch', async (c) => {
       syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.VECTORIZE : undefined,
       syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.AI : undefined
     );
+
+    const termId = makeTermId(year, term);
+    const existingTerm = await getTermState(c.env.DB, termId);
+    const aggregateCounts = await readTermAggregateCounts(
+      c.env.DB,
+      termId,
+      year,
+      term,
+      parsedTotalSubjects ?? existingTerm?.subjects_count ?? result.pagination?.total ?? subjects.length
+    );
+    const now = Math.floor(Date.now() / 1000);
+
+    await upsertTermState(c.env.DB, {
+      term_id: termId,
+      year,
+      term,
+      status: resolveManualSyncTermStatus(existingTerm, requestedStatus),
+      last_checked: now,
+      last_synced: refreshedSubjectCount(result) > 0 ? now : existingTerm?.last_synced ?? null,
+      subjects_count: aggregateCounts.subjectsCount,
+      courses_count: aggregateCounts.coursesCount,
+      sections_count: aggregateCounts.sectionsCount,
+      sync_errors: result.failedSubjects > 0
+        ? JSON.stringify(result.subjectResults.filter(r => !r.success).map(r => r.error))
+        : null,
+    });
 
     return c.json(result);
   } catch (error) {
@@ -400,13 +452,14 @@ syncRoutes.post('/admin/sync/:year/:term', async (c) => {
       parsedTerm.value,
       result.pagination?.total ?? result.successfulSubjects + result.failedSubjects
     );
+    const now = Math.floor(Date.now() / 1000);
     await upsertTermState(c.env.DB, {
       term_id: termId,
       year: parsedYear.value,
       term: parsedTerm.value,
       status: resolveManualSyncTermStatus(existingTerm, requestedStatus),
-      last_checked: Math.floor(Date.now() / 1000),
-      last_synced: Math.floor(Date.now() / 1000),
+      last_checked: now,
+      last_synced: refreshedSubjectCount(result) > 0 ? now : existingTerm?.last_synced ?? null,
       subjects_count: aggregateCounts.subjectsCount,
       courses_count: aggregateCounts.coursesCount,
       sections_count: aggregateCounts.sectionsCount,
@@ -468,12 +521,22 @@ syncRoutes.post('/admin/sync-active', async (c) => {
 
     const warnings = validateSyncResult(result);
     results.push({ ...result, warnings });
+    const aggregateCounts = await readTermAggregateCounts(
+      c.env.DB,
+      termState.term_id,
+      termState.year,
+      termState.term,
+      result.pagination?.total ?? termState.subjects_count ?? result.successfulSubjects + result.failedSubjects
+    );
 
+    const now = Math.floor(Date.now() / 1000);
     await upsertTermState(c.env.DB, {
       ...termState,
-      last_synced: Math.floor(Date.now() / 1000),
-      courses_count: result.totalCourses,
-      sections_count: result.totalSections,
+      last_checked: now,
+      last_synced: refreshedSubjectCount(result) > 0 ? now : termState.last_synced,
+      subjects_count: aggregateCounts.subjectsCount,
+      courses_count: aggregateCounts.coursesCount,
+      sections_count: aggregateCounts.sectionsCount,
       sync_errors: result.failedSubjects > 0
         ? JSON.stringify(result.subjectResults.filter(r => !r.success).map(r => r.error))
         : null,
