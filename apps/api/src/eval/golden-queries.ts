@@ -1019,6 +1019,12 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
       retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
       assumptions: ["low_workload", "low_exams", "requirement_match"]
     },
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { gened: "US", level_lte: 400 },
+      max_graduate_top_k: 0
+    },
     category: "decision"
   },
   {
@@ -1050,6 +1056,12 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
       retrievalLanes: ["official_text", "requirement", "structured_section", "student_language_alias", "workload_evidence"],
       relaxationSteps: ["strict", "evidence-backed-workload", "any-delivery", "adjacent-requirements"],
       assumptions: ["online_preferred", "low_writing", "low_exams", "compressed_term", "requirement_match"]
+    },
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { gened: "US", level_lte: 400 },
+      max_graduate_top_k: 0
     },
     category: "decision",
     notes: "Over-constrained query used to verify recovery groups in pipeline tests"
@@ -1107,7 +1119,20 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
       all_top_k: { gened: "CS", level_lte: 400 }
     },
     category: "structured",
-    notes: "Student diversity language maps to Cultural Studies until US/NW/WCC ingestion is complete"
+    notes: "Student diversity language maps to the broader Cultural Studies bucket"
+  },
+  {
+    id: 123,
+    query: "non western",
+    expected_filters: { gened_code: "NW" },
+    expected_residual: "",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { gened: "NW", level_lte: 400 }
+    },
+    category: "structured",
+    notes: "Canonical student-facing NW should match source attribute_code=1NW rows"
   },
   {
     id: 118,

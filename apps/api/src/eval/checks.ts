@@ -1,5 +1,6 @@
 import type { GoldQuery, EvalResult, ResultSelector } from './types.js';
 import type { SearchPlanRescue } from '@uiuc-course-search/query-types';
+import { canonicalGenedCode } from '../services/gened-codes.js';
 
 export interface ApiSearchResult {
   id: string;
@@ -185,12 +186,12 @@ function resultLevel(result: ApiSearchResult): number | null {
 }
 
 function resultHasGened(result: ApiSearchResult, gened: string): boolean {
-  if (result.gened === gened) return true;
+  const canonical = canonicalGenedCode(gened);
+  if (!canonical) return false;
+  if (canonicalGenedCode(result.gened) === canonical) return true;
   return (result.geneds ?? []).some(entry =>
-    entry.categoryId === gened
-    || entry.category_id === gened
-    || entry.attributeCode === gened
-    || entry.attribute_code === gened
+    canonicalGenedCode(entry.categoryId ?? entry.category_id) === canonical
+    || canonicalGenedCode(entry.attributeCode ?? entry.attribute_code) === canonical
   );
 }
 

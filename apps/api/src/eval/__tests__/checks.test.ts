@@ -23,13 +23,25 @@ const culturalStudiesResult = {
     {
       categoryId: 'CS',
       category_id: 'CS',
-      attributeCode: 'WCC',
-      attribute_code: 'WCC',
+      attributeCode: '1WCC',
+      attribute_code: '1WCC',
     },
   ],
 };
 
 describe('result coherence checks', () => {
+  it('fails a query that requires non-empty results when search returns nothing', () => {
+    const violations = checkResultCoherence(
+      query({
+        non_empty: true,
+        top_k: 10,
+      }),
+      [],
+    );
+
+    expect(violations).toEqual(['results expected to be non-empty']);
+  });
+
   it('matches required gen-ed selectors against the full gened set, not just the flattened code', () => {
     const violations = checkResultCoherence(
       query({

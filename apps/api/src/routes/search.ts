@@ -28,6 +28,7 @@ import {
   parseSubjectParam,
 } from "../http/params.js";
 import { getSearchTermSummary } from "../services/term-state.js";
+import { canonicalGenedCode } from "../services/gened-codes.js";
 import { errorFields, logger } from "../observability/logger.js";
 
 const MAX_SEARCH_OFFSET = 1000;
@@ -144,7 +145,7 @@ async function loadSearchResultGeneds(
       geneds.push({
         categoryId: row.category_id,
         categoryName: row.category_name,
-        attributeCode: row.attribute_code,
+        attributeCode: canonicalGenedCode(row.attribute_code),
         attributeName: row.attribute_name,
       });
       genedsByCourseId.set(row.course_id, geneds);

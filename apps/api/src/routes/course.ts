@@ -18,6 +18,7 @@ import {
   toInstructorLinkMap,
 } from '../dto/course.js';
 import { resolveTermContext } from '../services/term-state.js';
+import { canonicalGenedCode } from '../services/gened-codes.js';
 import { parseBoundedIntParam, parseCourseNumberParam, parseEnumParam, parseSubjectParam } from '../http/params.js';
 import { errorFields, logger } from '../observability/logger.js';
 
@@ -107,7 +108,7 @@ async function loadCourseGeneds(db: D1Database, courseId: string): Promise<Cours
   return rows.results.map(row => ({
     categoryId: row.category_id,
     categoryName: row.category_name,
-    attributeCode: row.attribute_code,
+    attributeCode: canonicalGenedCode(row.attribute_code),
     attributeName: row.attribute_name,
   }));
 }

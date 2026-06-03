@@ -120,8 +120,19 @@ describe('buildFilterClauses', () => {
     it('generates SQL for gened_any', () => {
       const filters: SearchFilters = { gened_any: ['HUM', 'US'] };
       const result = buildFilterClauses(filters);
-      expect(result.where.some(w => w.includes('cg.category_id IN') && w.includes('cg.attribute_code IN'))).toBe(true);
+      expect(result.where.some(w => w.includes('cg.category_id IN') && w.includes('SUBSTR(cg.attribute_code, 2)'))).toBe(true);
       expect(result.params.filter(param => param === 'HUM')).toHaveLength(2);
+      expect(result.params.filter(param => param === 'US')).toHaveLength(2);
+    });
+
+    it('normalizes source-prefixed gen-ed attribute codes before matching', () => {
+      const filters: SearchFilters = { gened_code: '1WCC', gened_all: ['1QR1', 'US'] };
+      const result = buildFilterClauses(filters);
+      expect(result.where.join('\n')).toContain('SUBSTR(cg.attribute_code, 2)');
+      expect(result.where.join('\n')).toContain('cg_all_0');
+      expect(result.where.join('\n')).toContain('cg_all_1');
+      expect(result.params.filter(param => param === 'WCC')).toHaveLength(2);
+      expect(result.params.filter(param => param === 'QR1')).toHaveLength(2);
       expect(result.params.filter(param => param === 'US')).toHaveLength(2);
     });
   });

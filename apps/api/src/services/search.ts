@@ -1,6 +1,7 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { searchCourses as semanticSearch } from './embeddings.js';
 import { validateSubject } from './query-resolver.js';
+import { canonicalGenedCode, canonicalGenedCodes } from './gened-codes.js';
 import type { Course } from '../db/index.js';
 import type { RetrievalLane, SearchPlan, SearchFilters } from '@uiuc-course-search/query-types';
 import { errorFields, logger } from '../observability/logger.js';
@@ -47,6 +48,10 @@ const STATUS_VALUES: Record<string, string[]> = {
 };
 
 const D1_ID_BATCH_SIZE = 50;
+
+function canonicalAttributeCodeSql(alias: string): string {
+  return `CASE WHEN ${alias}.attribute_code LIKE '1%' THEN SUBSTR(${alias}.attribute_code, 2) ELSE ${alias}.attribute_code END`;
+}
 
 const DAY_ALIASES: Record<string, string> = {
   monday: 'M',
@@ -241,8 +246,6 @@ export function buildFilterClauses(
   const joinsSet = new Set<string>();
   const where: string[] = [];
   const params: (string | number)[] = [];
-  let groupBy: string | undefined;
-  let having: string | undefined;
   const havingParams: (string | number)[] = [];
 
   // Subject filter
@@ -284,28 +287,36 @@ export function buildFilterClauses(
 
   // GenEd filter (single)
   if (filters.gened_code) {
-    joinsSet.add('JOIN course_gened cg ON cg.course_id = c.id');
-    where.push('(cg.category_id = ? OR cg.attribute_code = ?)');
-    params.push(filters.gened_code, filters.gened_code);
+    const genedCode = canonicalGenedCode(filters.gened_code);
+    if (genedCode) {
+      joinsSet.add('JOIN course_gened cg ON cg.course_id = c.id');
+      where.push(`(cg.category_id = ? OR ${canonicalAttributeCodeSql('cg')} = ?)`);
+      params.push(genedCode, genedCode);
+    }
   }
 
   // GenEd filter (any)
   if (filters.gened_any?.length) {
-    joinsSet.add('JOIN course_gened cg ON cg.course_id = c.id');
-    const placeholders = filters.gened_any.map(() => '?').join(',');
-    where.push(`(cg.category_id IN (${placeholders}) OR cg.attribute_code IN (${placeholders}))`);
-    params.push(...filters.gened_any, ...filters.gened_any);
+    const geneds = canonicalGenedCodes(filters.gened_any);
+    if (geneds.length > 0) {
+      joinsSet.add('JOIN course_gened cg ON cg.course_id = c.id');
+      const placeholders = geneds.map(() => '?').join(',');
+      where.push(`(cg.category_id IN (${placeholders}) OR ${canonicalAttributeCodeSql('cg')} IN (${placeholders}))`);
+      params.push(...geneds, ...geneds);
+    }
   }
 
-  // GenEd filter (all) - requires GROUP BY + HAVING
+  // GenEd filter (all)
   if (filters.gened_all?.length) {
-    joinsSet.add('JOIN course_gened cg_all ON cg_all.course_id = c.id');
-    const placeholders = filters.gened_all.map(() => '?').join(',');
-    where.push(`cg_all.category_id IN (${placeholders})`);
-    params.push(...filters.gened_all);
-    groupBy = 'c.id';
-    having = `COUNT(DISTINCT cg_all.category_id) = ?`;
-    havingParams.push(filters.gened_all.length);
+    canonicalGenedCodes(filters.gened_all).forEach((gened, index) => {
+      const alias = `cg_all_${index}`;
+      where.push(`EXISTS (
+        SELECT 1 FROM course_gened ${alias}
+        WHERE ${alias}.course_id = c.id
+          AND (${alias}.category_id = ? OR ${canonicalAttributeCodeSql(alias)} = ?)
+      )`);
+      params.push(gened, gened);
+    });
   }
 
   // Part of Term filter
@@ -470,14 +481,16 @@ export function buildFilterClauses(
     }
 
     if (filters.not.geneds?.length) {
-      const geneds = [...new Set(filters.not.geneds.map(gened => gened.toUpperCase()))];
-      const placeholders = geneds.map(() => '?').join(',');
-      where.push(`NOT EXISTS (
-        SELECT 1 FROM course_gened cg_neg
-        WHERE cg_neg.course_id = c.id
-          AND (cg_neg.category_id IN (${placeholders}) OR cg_neg.attribute_code IN (${placeholders}))
-      )`);
-      params.push(...geneds, ...geneds);
+      const geneds = canonicalGenedCodes(filters.not.geneds);
+      if (geneds.length > 0) {
+        const placeholders = geneds.map(() => '?').join(',');
+        where.push(`NOT EXISTS (
+          SELECT 1 FROM course_gened cg_neg
+          WHERE cg_neg.course_id = c.id
+            AND (cg_neg.category_id IN (${placeholders}) OR ${canonicalAttributeCodeSql('cg_neg')} IN (${placeholders}))
+        )`);
+        params.push(...geneds, ...geneds);
+      }
     }
 
     if (filters.not.keywords?.length) {
@@ -501,8 +514,6 @@ export function buildFilterClauses(
     joins: Array.from(joinsSet),
     where,
     params,
-    groupBy,
-    having,
     havingParams,
   };
 }

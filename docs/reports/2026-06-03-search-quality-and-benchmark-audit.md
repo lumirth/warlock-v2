@@ -34,11 +34,12 @@ There are **four distinct root problems wearing one costume**, and they need dif
 
 1. **Query understanding** (most failures): negation, cue-less gen-eds, superlatives,
    question phrasing, slang, shorthand, residual hygiene.
-2. **A data / ingestion gap**: the `US`, `NW`, `WCC` gen-ed filters return zero. `search.ts`
-   already filters the rich `course_gened` table correctly — matching `category_id` *or*
-   `attribute_code` (verified) — so this is a genuine **ingestion gap** (those sub-attribute rows
-   aren't being written), not a query bug. (Separate, narrower read-path issue: the DTO/display
-   still flatten every course to one `courses.gened`, so multiple gen-eds per course aren't shown.)
+2. **A gen-ed code normalization gap**: the `US`, `NW`, `WCC`, `QR1`, and `QR2` filters can return
+   zero even though `course_gened` has the source rows. UIUC source attributes arrive as SIS-style
+   codes such as `1US`, `1NW`, `1WCC`, `1QR1`, and `1QR2`; student-facing filters use `US`, `NW`,
+   `WCC`, `QR1`, and `QR2`. Matching `attribute_code` exactly is therefore insufficient. The app
+   must canonicalize attribute codes at the search/DTO/eval boundary, while still exposing the
+   full multi-gen-ed set instead of flattening every course to one `courses.gened`.
 3. **A broken ranking primitive**: `difficulty=easy` is implemented as "highest average GPA,"
    which surfaces tiny **graduate seminars**. This fails *even when the query is shaped
    perfectly*, so understanding fixes alone won't help.
@@ -287,21 +288,20 @@ is the capability that produces these results; the query in each row is just one
 | "physics for non majors" | PHYS 403 (grad) | `subject=PHYS, conceptual` → **PHYS 100 Thinking About Physics** | understanding + ranking |
 | "is cs 225 hard" | 0 results | `subject=CS,number=225` → **CS 225 Data Structures** (11 sections) | understanding |
 
-### Exception 1 — a genuine DATA GAP (ingestion, not parsing)
+### Exception 1 — a gen-ed code normalization gap
 
 ```
-gened=US  -> 0 results
-gened=NW  -> 0 results
+gened=US  -> 0 results when matched against raw attribute_code
+gened=NW  -> 0 results when matched against raw attribute_code
 gened=CS  -> 41+ results   (AAS, AFRO, ...)
 gened=ACP -> 41+ results
 ```
 
-`US` (US Minority Cultures) and `NW` (Non-Western Cultures) — and almost certainly `WCC`
-(Western/Comparative) — are **completely unpopulated.** Cultural Studies courses are all tagged
-`CS`; the subcategories are being flattened during ingestion. CLAUDE.md lists US/NW/WCC as valid
-gen-ed codes, but they are dead in staging. **No parser fix can help here** — until ingestion
-populates these codes, an entire class of requirement searches is impossible. **Verify WCC; fix
-the ingestion mapping of Cultural Studies subcategories.**
+`US` (US Minority Cultures), `NW` (Non-Western Cultures), `WCC`
+(Western/Comparative), `QR1`, and `QR2` exist in `course_gened`, but the source stores them as
+`1US`, `1NW`, `1WCC`, `1QR1`, and `1QR2`. Public filters should use canonical codes without the
+source prefix, so exact `attribute_code = 'US'` matching fails. This is a boundary normalization
+bug: search, DTO display, and eval assertions must compare canonical gen-ed codes.
 
 ### Exception 2 — the ranking primitive is broken even when carved correctly
 
@@ -352,18 +352,16 @@ The schema models **multiple meetings per section** (`meetings`: type, days, tim
 structure collapses to one row; building/room becomes a single free-text `location` (often "TBA")
 instead of structured building+room; multiple meeting patterns and per-meeting instructors are lost.
 
-### The multi-gen-ed table: filtering uses it; display and ingestion don't
+### The multi-gen-ed table: filtering must canonicalize source attributes
 
-**Correction to an earlier hypothesis, verified in `search.ts`.** The gen-ed *filter* already
-JOINs the rich `course_gened` table and matches `(cg.category_id = ? OR cg.attribute_code = ?)` —
-so it *does* look at the US/NW/WCC `attribute_code`. The filter path is **not** the bug. Therefore
-`gened=US`/`NW` returning zero means `course_gened` genuinely **has no US/NW/WCC rows** — a real
-**ingestion gap** (the sub-attributes aren't being written), consistent with Exception 1 (§8).
-What *is* a read-path gap is narrower and about **display**: the DTO (`course.gened`) and
-`courses_fts` use the single flattened column, so a course's *multiple* gen-eds are never shown or
-keyword-searchable even though the filter can match them. Two fixes, different layers: (1)
-ingestion must populate `course_gened` with US/NW/WCC; (2) the DTO/display should expose a course's
-full gen-ed set, not one.
+**Correction after remote D1 verification.** The gen-ed filter joins the rich `course_gened` table,
+but exact matching on `attribute_code` is still not enough. Staging contains cultural and
+quantitative subattribute rows as SIS-style source codes (`1US`, `1NW`, `1WCC`, `1QR1`, `1QR2`),
+while the public query language and UI use canonical student-facing codes (`US`, `NW`, `WCC`,
+`QR1`, `QR2`). So `gened=US` returning zero is a **normalization/read-path bug**, not an absence of
+rows. The fix is to canonicalize source attribute codes before search matching, API display, and
+result-coherence evaluation. Separately, the DTO/display must expose a course's full gen-ed set,
+not one flattened `courses.gened` value.
 
 ### Course fields stored but dropped
 
@@ -404,9 +402,9 @@ The read path is a **fourth axis**, alongside understanding, data/ingestion, and
   registrable / right part-of-term / not honors-restricted" if those never reach the response.
 - It **starves the sort/compare feature** you're already building, which wants exactly these
   columns (part-of-term, dates, section type, would-take-again, median GPA, restrictions).
-- It **sharpens the US/NW gap**: filtering already uses `course_gened` correctly (verified in
-  `search.ts`), so the zero is a genuine ingestion gap — while display still flattens every course
-  to a single gen-ed.
+- It **sharpens the US/NW/WCC gap**: the data exists with source-prefixed codes, so exact matching
+  on raw `attribute_code` is not enough, and display still must expose the full gen-ed set rather
+  than a single flattened value.
 - It makes some inferred intents **promises the system can't keep** (compressed-term, no-prereq).
 
 **Audit rule for the fix:** for every signal the query layer can infer, confirm the backing datum
@@ -450,13 +448,12 @@ laundering (cf. §0.5), not a fix.
    compsci→CS, macroecon→ECON) and fix mis-resolution (ochem→BIOC); aggressive residual hygiene.
    **For each, §8 gives the target result set to assert against.**
 
-2. **Data / ingestion + read-path fidelity** — `gened=US`/`NW`/`WCC` return zero, and this is a
-   genuine **ingestion gap**: `search.ts` already filters `course_gened` correctly (matching
-   `category_id` *or* `attribute_code`, verified), so the sub-attribute rows simply aren't being
-   written — fix ingestion. Separately, this track owns the **data-fidelity gap (§8.5)**: surface
+2. **Data normalization + read-path fidelity** — `gened=US`/`NW`/`WCC` can return zero because
+   source attributes are stored as `1US`/`1NW`/`1WCC` while the public search contract uses
+   canonical codes. Filter and display paths must canonicalize these values, then surface
    part-of-term, section dates, the `meetings` table, topics-course section titles,
    restrictions/approval, prereqs, would-take-again %, median GPA, and a course's *full* gen-ed set
-   (the DTO/display still flatten to one) — and stop inferring intents the exposed data can't satisfy.
+   — and stop inferring intents the exposed data can't satisfy.
 
 3. **Ranking primitives** — redefine "easy"/"hard" as **level-aware + workload-evidence**, not
    raw GPA; make superlatives sortable over honest signals; **dedup** cross-listed and multi-term
@@ -529,9 +526,8 @@ Concretely:
 - **`npm run eval:smoke` already runs**, but it only checks the parse layer against a mock DB. Add
   the missing **result-coherence instrument** that hits a seeded DB or staging and asserts on the
   actual result list — that is the whole point of §10.
-- For US/NW/WCC: you **cannot author a positive result-coherence assertion yet** — that absence
-  is itself the signal that track 2 (ingestion) is broken. Add a guard that flags these codes as
-  zero-coverage so the gap can't silently persist.
+- For US/NW/WCC/QR1/QR2: author positive result-coherence assertions against canonical codes and
+  add guards that source-prefixed values such as `1US` do not leak into the public contract.
 
 ---
 
@@ -546,7 +542,9 @@ Concretely:
    NAT/SBS/ACP/US-NW-CS; stop "science"→ACES.
 4. **Ranking primitive:** redefine "easy"/"hard" (level-aware + workload), make superlatives
    sortable, dedup. (Unblocks the carve test for the understanding fixes.)
-5. **Ingestion:** populate US/NW/WCC.
+5. **Gen-ed code normalization:** canonicalize SIS-style `1*` attribute codes (`1US`, `1NW`,
+   `1WCC`, `1QR1`, `1QR2`) wherever student-facing filters, display, or eval assertions consume
+   gen-ed data.
 6. **Shorthand lexicon** + question-phrasing stripping.
 7. **In parallel, rebuild the benchmark** per §11 so each fix lands with a result-coherence
    assertion and can't regress.
@@ -641,8 +639,8 @@ CARVE gened=NAT,difficulty=easy   -> 41+  ASTR150 KillerSkies; ATMS120 SevereWea
                                           ANSC207 SciOfPets; ANTH246 ForensicSci; ESE143
 CARVE gened=SBS                   -> 41+  HK111 IntroPublicHealth; GGIS101; ANTH210
 CARVE gened=CS                    -> 41+  AAS100 IntroAsianAmStudies; AFRO132; AAS281
-CARVE gened=US                    -> 0    *** DATA GAP ***
-CARVE gened=NW                    -> 0    *** DATA GAP ***
+CARVE gened=US                    -> failed before canonicalizing source code 1US
+CARVE gened=NW                    -> failed before canonicalizing source code 1NW
 CARVE gened=ACP                   -> 41+  ENGL109 IntroToFiction-ACP
 CARVE subject=MATH,difficulty=easy-> 41+  MATH595(grad); MATH580(grad); MATH542(grad)  *** ranking ***
 CARVE subject=CS,"introduction"   -> 41+  CS124 IntroToCS I (gpa 3.67)
