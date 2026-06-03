@@ -29,6 +29,7 @@
     "feedback:export": "tsx scripts/export-feedback.ts",
     "data:freshness:audit": "tsx scripts/data-freshness-audit.ts",
     "data:term-retention": "tsx scripts/term-retention-plan.ts",
+    "data:semester:plan": "tsx scripts/semester-maintenance-plan.ts",
     "data:backfill:term": "tsx scripts/term-backfill.ts",
     "data:term-coverage": "tsx scripts/term-coverage-plan.ts",
     "data:backfill:coverage": "tsx scripts/term-coverage-backfill.ts",

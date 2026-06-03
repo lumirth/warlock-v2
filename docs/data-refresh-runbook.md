@@ -46,6 +46,20 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync/s
 npm run data:freshness:audit -- --input artifacts/sync-status.json --output artifacts/data-freshness-audit.json --min-historical-terms 1
 ```
 
+For regular semester maintenance, prefer the single read-only preflight command. It fetches or reads sync status once, writes a timestamped artifact bundle, generates the rolling retention plan, generates retained-term coverage/backfill evidence, runs the retention-scoped freshness audit, and exports feedback candidates for corpus triage:
+
+```bash
+STAGING_API_BASE_URL=... \
+STAGING_ADMIN_TOKEN=... \
+npm run data:semester:plan -- \
+  --from-year 2004 \
+  --to-year 2027 \
+  --target-size-mb 250 \
+  --feedback-database course-search-db-staging
+```
+
+Use `--status-input artifacts/sync-status.json` when status was already captured. The command is read-only. A non-zero exit means the artifact bundle found required operator work, such as retained terms needing backfill, stale GPA/RMP state, dropped terms still present, or a feedback export failure. It does not prune or backfill remotely.
+
 The main searchable corpus is rolling and full-detail. Full searchable history back through 2004 is no longer a requirement for D1. Do not keep old course-only shells in D1. If a term is retained, it must have courses, sections, meetings, instructors, and searchable index state. If storage pressure requires a tradeoff, drop the oldest terms completely and keep the retained terms trustworthy.
 
 The `--from-year 2004` examples below are discovery horizons for databases that may already contain old terms. They let the retention planner identify old candidates to drop cleanly. They are not a requirement to backfill or preserve every term since 2004. The retained term IDs in the generated retention plan are the source of truth for what must remain searchable and fully detailed. When `--status-input` is provided, retention and coverage planning use `freshness.currentTermId` from that status artifact as the default current-term reference; explicit `--current-year` and `--current-term` flags are only for controlled what-if plans.
@@ -169,6 +183,7 @@ Before destructive remote D1 actions, create and verify a restorable D1 Time Tra
 The final stabilization report must include:
 
 - The `/admin/sync/status` JSON summary for staging.
+- The `npm run data:semester:plan` artifact bundle for the latest staging preflight.
 - Evidence that current and upcoming terms are present.
 - Retained historical term count and dropped-term absence evidence from the retention-scoped audit.
 - GPA/RMP freshness status.

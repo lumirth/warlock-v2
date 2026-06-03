@@ -46,7 +46,7 @@ The pass is complete only when every item below has concrete evidence in the fin
 | Rate My Professors links | Real public URL or safe search fallback generation, tests and Browser QA |
 | Course Explorer links | Course and section official links, tests and Browser QA |
 | Automated freshness | Scheduled/sync docs, status route or script evidence, tests for current/upcoming/retained-historical paths |
-| Rolling retained corpus | Retention plan, D1 backup/restore proof, prune evidence, retained-term coverage audit, dropped-term absence audit; no requirement to search every term back through 2004 |
+| Rolling retained corpus | Semester maintenance preflight bundle, retention plan, D1 backup/restore proof, prune evidence, retained-term coverage audit, dropped-term absence audit; no requirement to search every term back through 2004 |
 | GPA/rating refresh | Sync-state evidence, cadence docs, smoke checks |
 | Code quality | Module boundaries, lint zero warnings, typecheck/tests/build pass |
 | Backup before risky actions | Backup command output, restore test evidence, rollback docs |
@@ -94,6 +94,7 @@ The pass is complete only when every item below has concrete evidence in the fin
 
 7. **Freshness And Operations**
    - Document and test current/upcoming/historical term coverage.
+   - Use `npm run data:semester:plan` as the recurring read-only semester preflight before prune, backfill, or promotion decisions.
    - Prove scheduled term discovery, course sync, GPA refresh, rating refresh, and enrichment paths.
    - Add status evidence and stale-data behavior.
    - Verify D1 backup/export/restore before destructive data work.

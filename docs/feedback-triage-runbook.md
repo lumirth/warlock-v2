@@ -16,6 +16,14 @@ npm run feedback:export -- --database course-search-db-staging --limit 200
 
 This writes timestamped raw feedback and candidate files under `artifacts/feedback/`. The command is read-only and uses Wrangler `d1 execute --remote --json`; it does not print or require secret values.
 
+Semester maintenance preflight also includes this export by default:
+
+```sh
+npm run data:semester:plan -- --feedback-database course-search-db-staging
+```
+
+Use the dedicated `feedback:export` command for ad hoc triage outside the full data freshness/retention check.
+
 For a raw export only:
 
 ```sh
