@@ -369,8 +369,44 @@ function applyTopicExpansion(plan: SearchPlan): string[] {
     plan.semanticQuery,
     expansions.join(" "),
   );
-  plan.keywordQuery = appendQueryText(plan.keywordQuery, expansions.join(" "));
+  plan.keywordQuery = buildTopicExpansionKeywordQuery(plan.keywordQuery, expansions);
   return expansions;
+}
+
+const TOPIC_EXPANSION_STOPWORDS = new Set([
+  "a",
+  "about",
+  "an",
+  "class",
+  "classes",
+  "course",
+  "courses",
+  "for",
+  "the",
+]);
+
+function buildTopicExpansionKeywordQuery(
+  keywordQuery: string,
+  expansions: string[],
+): string {
+  const terms = [
+    keywordQuery,
+    ...expansions,
+  ]
+    .flatMap(text => text.split(/\s+/))
+    .map(term => term.trim())
+    .filter(Boolean)
+    .filter(term => !TOPIC_EXPANSION_STOPWORDS.has(term.toLowerCase()));
+
+  const seen = new Set<string>();
+  const uniqueTerms = terms.filter(term => {
+    const key = term.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return uniqueTerms.join(" OR ");
 }
 
 function applySortIntent(plan: SearchPlan, rawQuery: string): void {

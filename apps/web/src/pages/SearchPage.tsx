@@ -30,6 +30,7 @@ import {
   type SearchChipDto,
   type SearchFilters,
   type SearchMetaDto,
+  type SearchRecoveryGroup,
   type SearchResponseDto,
   type SearchSort,
   type SortDirection,
@@ -476,6 +477,10 @@ function sortButtonLabel(
 
   const nextDirection = direction === 'asc' ? 'desc' : 'asc'
   return `Sort by ${label}, ${directionLabel(nextDirection).toLowerCase()}`
+}
+
+function recoveryButtonLabel(group: SearchRecoveryGroup): string {
+  return group.label.startsWith('Show ') ? group.label : `Try: ${group.label}`
 }
 
 function normalizeAdvancedValue(
@@ -1201,6 +1206,20 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
     })
   }
 
+  const applyRecoveryGroup = (group: SearchRecoveryGroup) => {
+    const nextQuery =
+      group.queryPatch?.replaceQuery ||
+      group.queryPatch?.appendText ||
+      meaningfulResidualQuery(meta?.query.residual || '') ||
+      activeRequestQuery
+
+    void runSearch(nextQuery, {
+      syncInput: false,
+      filters: activeAdvancedFilters,
+      sort,
+    })
+  }
+
   const applyAdvancedSearch = () => {
     const previousAdvanced = meta?.ui?.advanced || {}
     const changed = advancedFiltersChanged(previousAdvanced, advancedDraft)
@@ -1298,6 +1317,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
     !meta && !loading && !hasActiveRequest && !error
   const isRefreshingResults = loading && (meta !== null || results.length > 0)
   const showInitialSkeleton = loading && !isRefreshingResults
+  const recoveryGroups = meta?.fallback?.recoveryGroups ?? []
 
   return (
     <PageContainer className="py-4 sm:py-6">
@@ -1680,12 +1700,13 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
         )}
 
         {meta && (
-          <div className="flex justify-end">
+          <div>
             <FeedbackButton
               buttonLabel="Results not right?"
               page="search"
               kind="search_results"
               issue="expected_different_results"
+              fullWidth
               context={{
                 query: meta.query.raw,
                 metadata: {
@@ -1707,6 +1728,22 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
               aria-label="Searching courses"
               className="flex flex-col gap-3"
             >
+              <Card>
+                <CardContent className="flex flex-col gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-col gap-1">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                    <Skeleton className="h-7 w-32" />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Skeleton className="h-5 w-20" />
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-28" />
+                  </div>
+                </CardContent>
+              </Card>
               {[0, 1, 2].map((index) => (
                 <Card key={index}>
                   <CardContent className="flex flex-col gap-3">
@@ -1729,20 +1766,42 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                   Try removing a filter or using a broader phrase.
                 </EmptyDescription>
               </EmptyHeader>
-              {meta.ui?.chips?.length ? (
+              {meta.ui?.chips?.length || recoveryGroups.length ? (
                 <EmptyContent>
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={() =>
-                      removeChip(
-                        meta.ui!.chips.find((chip) => chip.removable) ??
-                          meta.ui!.chips[0]
-                      )
-                    }
-                  >
-                    Remove one filter
-                  </Button>
+                  {meta.ui?.chips?.length ? (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() =>
+                        removeChip(
+                          meta.ui!.chips.find((chip) => chip.removable) ??
+                            meta.ui!.chips[0]
+                        )
+                      }
+                    >
+                      Remove one filter
+                    </Button>
+                  ) : null}
+                  {recoveryGroups.length ? (
+                    <div className="flex flex-col gap-2 pt-1">
+                      <p className="text-muted-foreground text-xs">
+                        Or broaden the search while keeping the useful parts.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {recoveryGroups.map((group) => (
+                          <Button
+                            key={group.id}
+                            size="xs"
+                            variant="secondary"
+                            onClick={() => applyRecoveryGroup(group)}
+                            title={group.description}
+                          >
+                            {recoveryButtonLabel(group)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </EmptyContent>
               ) : null}
             </Empty>

@@ -211,6 +211,93 @@ describe('hybridSearch', () => {
     expect(qualityBindSizes.length).toBeGreaterThan(1);
     expect(qualityBindSizes.every(size => size <= 50)).toBe(true);
   });
+
+  it('applies exact-title boosts before trimming the candidate pool', async () => {
+    vi.mocked(validateSubject).mockResolvedValue(null);
+    vi.mocked(embeddings.searchCourses).mockResolvedValue([
+      { id: 'CS-562-2026-fall', score: 0.99 },
+    ]);
+
+    const makeCourse = (id: string, title: string): Course => ({
+      id,
+      subject: 'CS',
+      number: id.includes('225') ? '225' : '562',
+      title,
+      description: null,
+      credit_hours: 3,
+      gened: null,
+      subject_id: 'CS',
+      course_info: null,
+      degree_attributes: null,
+      class_schedule_info: null,
+      date_range_text: null,
+      registration_notes: null,
+      approval_code: null,
+      year: 2026,
+      term: 'fall',
+      avg_gpa: null,
+      gpa_sample_size: null,
+      primary_instructor: null,
+      primary_instructor_rmp: null,
+      difficulty_score: null,
+      quality_score: null,
+      last_synced: 0,
+      created_at: 0,
+      updated_at: 0,
+    });
+
+    mockDb.prepare.mockImplementation((sql: string) => {
+      const statement = {
+        params: [] as unknown[],
+        bind(...params: unknown[]) {
+          this.params = params;
+          return this;
+        },
+        async all() {
+          if (sql.includes('LOWER(c.title) LIKE')) {
+            return {
+              results: [{ id: 'CS-225-2026-fall', title_rank: 1 }],
+            };
+          }
+          if (sql.includes('FROM courses_fts') || sql.includes('FROM sections_fts')) {
+            return { results: [] };
+          }
+          if (sql.includes('quality_score')) {
+            return {
+              results: [{ id: 'CS-562-2026-fall', quality_score: 95 }],
+            };
+          }
+          if (sql.includes('FROM courses c') && sql.includes('WHERE c.id IN')) {
+            return {
+              results: this.params.map((param) => {
+                const id = String(param);
+                return id.includes('225')
+                  ? makeCourse(id, 'Data Structures')
+                  : makeCourse(id, 'Advanced Topics in Security, Privacy, and Machine Learning');
+              }),
+            };
+          }
+          return { results: [] };
+        },
+      };
+      return statement;
+    });
+
+    const results = await hybridSearch(
+      mockDb as unknown as D1Database,
+      mockVectorize as unknown as VectorizeIndex,
+      mockAi as unknown as Ai,
+      {
+        keywordQuery: 'data structures',
+        semanticQuery: 'data structures',
+        filters: {},
+      },
+      1,
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].course.id).toBe('CS-225-2026-fall');
+  });
 });
 
 describe('keywordSearch', () => {

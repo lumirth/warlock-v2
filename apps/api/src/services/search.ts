@@ -1233,21 +1233,21 @@ export async function hybridSearch(
     return 0;
   });
 
-  const topIds = scores.slice(0, limit);
-
-  if (topIds.length === 0) {
+  if (scores.length === 0) {
     return [];
   }
 
-  const courseMap = await fetchCoursesById(db, topIds.map(s => s.id));
+  const courseMap = await fetchCoursesById(db, scores.map(s => s.id));
 
-  // Apply title boost for exact/partial matches
-  const resultsWithTitles = topIds.map(s => ({
+  // Apply title boost before trimming candidates so exact title matches are not
+  // discarded by weaker pre-boost semantic scores.
+  const resultsWithTitles = scores.map(s => ({
     ...s,
     title: courseMap.get(s.id)?.title
   }));
 
-  const boostedResults = applyTitleBoost(resultsWithTitles, plan.keywordQuery || '');
+  const boostedResults = applyTitleBoost(resultsWithTitles, plan.keywordQuery || '')
+    .slice(0, limit);
 
   // Return results with scores
   const rankedResults = boostedResults.map(s => ({

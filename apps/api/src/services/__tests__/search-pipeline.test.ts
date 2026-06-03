@@ -270,7 +270,7 @@ describe("SearchPipeline", () => {
       vi.mocked(search.hybridSearchWithTermRanking).mock.calls[0][3],
     ).toMatchObject({
       semanticQuery: "ml machine learning",
-      keywordQuery: "ml machine learning",
+      keywordQuery: "ml OR machine OR learning",
       softPreferences: { topicExpansions: ["machine learning"] },
     });
     expect(result.results.length).toBe(1);

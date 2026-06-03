@@ -561,6 +561,109 @@ describe('SearchPage request state', () => {
     )
   })
 
+  it('offers recovery groups for empty searches and keeps the relaxed query through sort changes', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: {
+            raw: 'class about movies no essays',
+            residual: 'about movies',
+          },
+          fallback: {
+            tierReached: 1,
+            constraintsRelaxed: [],
+            originalResultCount: 0,
+            recoveryGroups: [
+              {
+                id: 'evidence-backed-workload',
+                label:
+                  'Show low-workload evidence when exact assignment evidence is missing',
+                description:
+                  'Keeps the topic while relaxing low-writing evidence.',
+                relaxes: ['lowWriting'],
+                keeps: ['topic'],
+                queryPatch: { replaceQuery: 'class about movies' },
+              },
+            ],
+          },
+          ui: {
+            chips: [],
+            advanced: {},
+            ambiguityActions: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce(
+        searchResponse([
+          course({
+            id: 'MACS-150-2026-spring',
+            subject: 'MACS',
+            number: '150',
+            title: 'Introduction to Film',
+          }),
+        ])
+      )
+      .mockResolvedValueOnce(
+        searchResponse([
+          course({
+            id: 'MACS-356-2026-spring',
+            subject: 'MACS',
+            number: '356',
+            title: 'Film History',
+            avg_gpa: 3.7,
+          }),
+        ])
+      )
+
+    renderSearchPage()
+
+    setQuery('class about movies no essays')
+    submitSearch()
+
+    await screen.findByText('Nothing matched that search.')
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /show low-workload evidence/i,
+      })
+    )
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith(
+        'class about movies',
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          limit: 20,
+          offset: 0,
+          filters: undefined,
+        })
+      )
+    })
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue(
+      'class about movies no essays'
+    )
+
+    await screen.findByText(/MACS 150: Introduction to Film/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /sort by avg gpa, descending/i })
+    )
+
+    await waitFor(() => {
+      expect(api.search).toHaveBeenLastCalledWith(
+        'class about movies',
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          limit: 20,
+          offset: 0,
+          filters: undefined,
+          sort: { field: 'gpa', direction: 'desc' },
+        })
+      )
+    })
+  })
+
   it('keeps accepted ambiguity actions as the canonical request during sort changes', async () => {
     const culturalStudiesResponse = deferred<SearchResponseDto>()
     const sortedResponse = deferred<SearchResponseDto>()

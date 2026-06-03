@@ -921,6 +921,11 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
       relaxationSteps: ["evidence-backed-workload"],
       assumptions: ["low_writing"]
     },
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { level_lte: 500 }
+    },
     category: "decision"
   },
   {
@@ -1055,6 +1060,11 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_filters: {},
     expected_soft_preferences: { topicExpansions: ["film cinema media documentary television pop culture visual culture"] },
     expected_residual: "campus urbana movies",
+    expected_results: {
+      non_empty: true,
+      top_k: 10,
+      all_top_k: { level_lte: 500 }
+    },
     category: "unsupported_language",
     notes: "Unsupported campus-scope language remains searchable while the topic still expands"
   },

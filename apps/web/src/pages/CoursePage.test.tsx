@@ -247,8 +247,9 @@ describe('CoursePage request state', () => {
     const sidebar = scorecard.closest('aside')
     const layout = sidebar?.parentElement
 
-    expect(sidebar).toHaveClass('lg:sticky')
-    expect(layout).toHaveClass('lg:grid-cols-[18rem_minmax(0,1fr)]')
+    expect(sidebar).toHaveClass('md:sticky')
+    expect(layout).toHaveClass('md:grid-cols-[17rem_minmax(0,1fr)]')
+    expect(layout).toHaveClass('xl:grid-cols-[18rem_minmax(0,1fr)]')
     expect(layout).not.toHaveClass('xl:grid-cols-[21rem_minmax(0,1fr)]')
   })
 

@@ -88,7 +88,7 @@ export function CoursePage() {
           role="status"
           aria-live="polite"
           aria-label="Loading course"
-          className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[20rem_minmax(0,1fr)]"
+          className="grid gap-6 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[20rem_minmax(0,1fr)]"
         >
           <div className="flex flex-col gap-3">
             <Skeleton className="h-8 w-32" />
@@ -166,8 +166,8 @@ export function CoursePage() {
         </p>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[20rem_minmax(0,1fr)]">
-        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+      <div className="grid gap-8 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[20rem_minmax(0,1fr)]">
+        <aside className="min-w-0 md:sticky md:top-24 md:self-start">
           <div className="flex flex-col gap-3">
             <Scorecard
               qualityScore={course.quality_score}
