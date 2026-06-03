@@ -167,6 +167,24 @@ function parseTermStateId(row: JsonRecord): string | null {
   return year && term ? termId(year, term) : null;
 }
 
+function currentTermFromStatus(status: JsonRecord | null): { year: number; term: Term } | null {
+  const freshness = asRecord(status?.freshness);
+  const currentTermId = typeof freshness?.currentTermId === 'string'
+    ? freshness.currentTermId
+    : typeof freshness?.configuredCurrentTermId === 'string'
+      ? freshness.configuredCurrentTermId
+      : null;
+  if (!currentTermId) return null;
+
+  const match = /^(\d{4})-([a-z]+)$/i.exec(currentTermId);
+  if (!match) return null;
+
+  const term = normalizeTerm(match[2]);
+  if (!term) return null;
+
+  return { year: Number.parseInt(match[1], 10), term };
+}
+
 function compareTerms(year: number, term: Term, currentYear: number, currentTerm: Term): number {
   if (year !== currentYear) return year - currentYear;
   return TERM_ORDER[term] - TERM_ORDER[currentTerm];
@@ -427,11 +445,12 @@ export async function buildTermRetentionReport(
     now?: Date;
   } = {}
 ): Promise<TermRetentionReport> {
-  const currentYear = args.currentYear ?? options.now?.getFullYear() ?? new Date().getFullYear();
-  const currentTerm = args.currentTerm ?? inferCurrentTerm(options.now);
   const statusResult = options.status === undefined
     ? await loadStatus(args.statusInput)
     : { status: options.status, source: options.statusSource ?? args.statusInput ?? null };
+  const statusCurrentTerm = currentTermFromStatus(statusResult.status);
+  const currentYear = args.currentYear ?? statusCurrentTerm?.year ?? options.now?.getFullYear() ?? new Date().getFullYear();
+  const currentTerm = args.currentTerm ?? statusCurrentTerm?.term ?? inferCurrentTerm(options.now);
   const discovered = await discoverAvailableTerms(args, options.fetcher);
   const storedByTermId = new Map<string, JsonRecord>();
 

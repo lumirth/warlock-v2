@@ -136,6 +136,35 @@ describe('term coverage plan', () => {
     expect(report.freshness_audit_command).toContain('--min-historical-terms 1');
   });
 
+  it('uses sync-status freshness currentTermId instead of wall-clock term inference', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }));
+
+    const report = await buildTermCoverageReport(args({
+      fromYear: 2026,
+      toYear: 2026,
+      currentYear: undefined,
+      currentTerm: undefined,
+    }), {
+      fetcher,
+      status: {
+        freshness: {
+          currentTermId: '2026-fall',
+        },
+        termStates: [],
+      },
+      now: new Date('2026-02-01T12:00:00Z'),
+    });
+
+    expect(report.current_year).toBe(2026);
+    expect(report.current_term).toBe('fall');
+    expect(report.terms.find(term => term.term_id === '2026-spring')).toMatchObject({
+      expected_status: 'historical',
+    });
+    expect(report.terms.find(term => term.term_id === '2026-fall')).toMatchObject({
+      expected_status: 'active',
+    });
+  });
+
   it('keeps partially synced terms in the backfill plan', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring' }));
     const status = {

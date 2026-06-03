@@ -48,7 +48,7 @@ npm run data:freshness:audit -- --input artifacts/sync-status.json --output arti
 
 The main searchable corpus is rolling and full-detail. Full searchable history back through 2004 is no longer a requirement for D1. Do not keep old course-only shells in D1. If a term is retained, it must have courses, sections, meetings, instructors, and searchable index state. If storage pressure requires a tradeoff, drop the oldest terms completely and keep the retained terms trustworthy.
 
-The `--from-year 2004` examples below are discovery horizons for databases that may already contain old terms. They let the retention planner identify old candidates to drop cleanly. They are not a requirement to backfill or preserve every term since 2004. The retained term IDs in the generated retention plan are the source of truth for what must remain searchable and fully detailed.
+The `--from-year 2004` examples below are discovery horizons for databases that may already contain old terms. They let the retention planner identify old candidates to drop cleanly. They are not a requirement to backfill or preserve every term since 2004. The retained term IDs in the generated retention plan are the source of truth for what must remain searchable and fully detailed. When `--status-input` is provided, retention and coverage planning use `freshness.currentTermId` from that status artifact as the default current-term reference; explicit `--current-year` and `--current-term` flags are only for controlled what-if plans.
 
 Generate a retention plan before broad backfill or prune work:
 

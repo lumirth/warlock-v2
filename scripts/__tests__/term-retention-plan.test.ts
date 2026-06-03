@@ -147,6 +147,41 @@ describe('term retention plan', () => {
     expect(report.dropped_term_ids).toEqual(['2025-summer', '2025-winter']);
   });
 
+  it('uses sync-status freshness currentTermId instead of wall-clock term inference', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({
+      Spring: 'spring',
+      Fall: 'fall',
+    }));
+
+    const report = await buildTermRetentionReport(args({
+      fromYear: 2026,
+      toYear: 2026,
+      currentYear: undefined,
+      currentTerm: undefined,
+      maxRetainedTerms: 2,
+    }), {
+      fetcher,
+      status: {
+        freshness: {
+          currentTermId: '2026-fall',
+        },
+        termStates: [],
+      },
+      now: new Date('2026-02-01T12:00:00Z'),
+    });
+
+    expect(report.current_year).toBe(2026);
+    expect(report.current_term).toBe('fall');
+    expect(report.terms.find(term => term.term_id === '2026-spring')).toMatchObject({
+      expected_status: 'historical',
+      pinned: false,
+    });
+    expect(report.terms.find(term => term.term_id === '2026-fall')).toMatchObject({
+      expected_status: 'active',
+      pinned: true,
+    });
+  });
+
   it('does not let older fall and spring terms outrank newer winter and summer terms', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }))
