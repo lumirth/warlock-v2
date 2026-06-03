@@ -1,10 +1,10 @@
 import axe from 'axe-core'
-import { MantineProvider } from '@mantine/core'
 import { cleanup, render, screen } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CourseDto } from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
+import { TestMantineProvider } from '../test/TestMantineProvider'
 import { SearchPage } from './SearchPage'
 import { CoursePage } from './CoursePage'
 
@@ -55,9 +55,9 @@ afterEach(() => {
 describe('page accessibility', () => {
   it('keeps the search page free of automated accessibility violations', async () => {
     const { container } = render(
-      <MantineProvider>
+      <TestMantineProvider>
         <RouterProvider router={createMemoryRouter([{ path: '/', element: <SearchPage /> }])} />
-      </MantineProvider>
+      </TestMantineProvider>
     )
 
     await expectNoA11yViolations(container)
@@ -67,12 +67,12 @@ describe('page accessibility', () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(course())
 
     const { container } = render(
-      <MantineProvider>
+      <TestMantineProvider>
         <RouterProvider router={createMemoryRouter([
           { path: '/course/:subject/:number', element: <CoursePage /> },
           { path: '/', element: <div /> },
         ], { initialEntries: ['/course/CS/225?term=spring&year=2026'] })} />
-      </MantineProvider>
+      </TestMantineProvider>
     )
 
     await screen.findByText(/CS 225: Data Structures/i)

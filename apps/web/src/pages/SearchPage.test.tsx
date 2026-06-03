@@ -1,9 +1,9 @@
-import { MantineProvider } from '@mantine/core'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CourseDto, SearchResponseDto } from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
+import { TestMantineProvider } from '../test/TestMantineProvider'
 import { SearchPage } from './SearchPage'
 
 vi.mock('../lib/api-client', () => ({
@@ -71,11 +71,11 @@ function searchResponse(results: CourseDto[]): SearchResponseDto {
 
 function renderSearchPage() {
   return render(
-    <MantineProvider>
+    <TestMantineProvider>
       <MemoryRouter>
         <SearchPage />
       </MemoryRouter>
-    </MantineProvider>
+    </TestMantineProvider>
   )
 }
 
@@ -83,6 +83,10 @@ function setQuery(value: string) {
   fireEvent.change(screen.getByPlaceholderText(/easy cs gened/i), {
     target: { value },
   })
+}
+
+function submitSearch() {
+  fireEvent.submit(screen.getByRole('search'))
 }
 
 afterEach(() => {
@@ -108,10 +112,10 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('first')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     setQuery('second')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     await act(async () => {
       first.reject(abortError())
@@ -119,9 +123,27 @@ describe('SearchPage request state', () => {
     })
 
     setQuery('third')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     expect(secondSignal?.aborted).toBe(true)
+  })
+
+  it('submits the primary search through the form without a standalone search button', async () => {
+    vi.mocked(api.search).mockResolvedValueOnce(searchResponse([
+      course({ id: 'CS-225-2026-spring', number: '225', title: 'Data Structures' }),
+    ]))
+
+    renderSearchPage()
+
+    setQuery('cs 225')
+    submitSearch()
+
+    await screen.findByText(/CS 225: Data Structures/i)
+    expect(api.search).toHaveBeenCalledWith('cs 225', expect.objectContaining({
+      limit: 20,
+      offset: 0,
+    }))
+    expect(screen.queryByRole('button', { name: /^search$/i })).not.toBeInTheDocument()
   })
 
   it('clears stale results when a new search fails', async () => {
@@ -136,11 +158,11 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('cs 225')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
     await screen.findByText(/CS 225: Data Structures/i)
 
     setQuery('broken')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(/Search failed/i)
@@ -168,7 +190,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('cs 225')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     await screen.findByText(/CS 225: Data Structures/i)
     expect(screen.getByText('Course CS 225')).toBeInTheDocument()
@@ -195,7 +217,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('cs 225')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     await screen.findByText(/CS 225: Data Structures/i)
     expect(screen.getByText('Quality B+')).toBeInTheDocument()
@@ -219,13 +241,13 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('cs 225')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     const card = await screen.findByRole('link', { name: /CS 225: Data Structures Spring 2026 Historical term/i })
     expect(card).toHaveAttribute('data-historical', 'true')
     expect(card).toHaveStyle({
-      opacity: '0.72',
-      filter: 'grayscale(0.25)',
+      opacity: '0.84',
+      filter: 'grayscale(0.16)',
     })
     expect(screen.getByText('Historical term')).toBeInTheDocument()
   })
@@ -258,7 +280,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('professor fagen algorithms')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     await screen.findByText('Instructor fagen')
     fireEvent.click(screen.getByRole('button', { name: /remove instructor fagen/i }))
@@ -298,7 +320,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('CS gened')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     await screen.findByRole('button', { name: /use cultural studies/i })
     fireEvent.click(screen.getByRole('button', { name: /use cultural studies/i }))
@@ -332,8 +354,8 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('algorithms')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
-    await screen.findByText('Search filters')
+    submitSearch()
+    await screen.findByText('Refine results')
 
     fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'cs' } })
@@ -380,7 +402,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('intro to CS')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
     await screen.findByText('Subject CS')
 
     fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
@@ -425,7 +447,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('CS algorithms')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
     await screen.findByText('Subject CS')
 
     fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
@@ -481,7 +503,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('professor fagen algorithms')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     await screen.findByText('Instructor fagen')
     fireEvent.click(screen.getByRole('button', { name: /remove instructor fagen/i }))
@@ -516,7 +538,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('intro to CS')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     await screen.findByText(/CS 100: Freshman Orientation/i)
     fireEvent.click(screen.getByRole('button', { name: /show more results/i }))
@@ -548,7 +570,7 @@ describe('SearchPage request state', () => {
     renderSearchPage()
 
     setQuery('intro to CS')
-    fireEvent.click(screen.getByRole('button', { name: /^search$/i }))
+    submitSearch()
 
     await screen.findByText(/CS 100: Freshman Orientation/i)
     fireEvent.click(screen.getByRole('button', { name: /show more results/i }))

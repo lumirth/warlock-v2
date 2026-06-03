@@ -52,9 +52,9 @@ const WEAK_RESIDUAL_TERMS = new Set([
 ])
 
 function getEvidenceColor(evidence: MatchEvidence): string {
-  if (evidence.weight === 'hard') return 'blue'
-  if (evidence.weight === 'rank') return evidence.kind === 'semantic' ? 'violet' : 'gray'
-  return 'teal'
+  if (evidence.weight === 'hard') return 'orange'
+  if (evidence.kind === 'instructor') return 'orange'
+  return 'stone'
 }
 
 function getDifficultyLabel(score: number): string {
@@ -66,7 +66,7 @@ function getDifficultyLabel(score: number): string {
 function getDifficultyColor(score: number): string {
   if (score > DIFFICULTY.HARD) return 'red'
   if (score > DIFFICULTY.MODERATE) return 'yellow'
-  return 'teal'
+  return 'green'
 }
 
 function getRelevanceLabel(score: number): string {
@@ -93,7 +93,7 @@ function renderScoreBadges(course: CourseDto) {
   return (
     <Group gap={4} mt={6}>
       {hasQuality && (
-        <Badge size="xs" variant="light" color="blue" tt="none">
+        <Badge size="xs" variant="light" color="stone" tt="none">
           Quality {getLetterGrade(qualityScore)}
         </Badge>
       )}
@@ -103,7 +103,7 @@ function renderScoreBadges(course: CourseDto) {
         </Badge>
       )}
       {hasRating && (
-        <Badge size="xs" variant="light" color={primaryInstructorRmp >= 3.5 ? 'teal' : 'orange'} tt="none">
+        <Badge size="xs" variant="light" color={primaryInstructorRmp >= 3.5 ? 'green' : 'orange'} tt="none">
           Instructor rating {primaryInstructorRmp.toFixed(1)}
         </Badge>
       )}
@@ -111,7 +111,7 @@ function renderScoreBadges(course: CourseDto) {
         <Badge
           size="xs"
           variant="light"
-          color="cyan"
+          color="stone"
           tt="none"
           title={typeof course.gpa_sample_size === 'number' ? `Based on ${course.gpa_sample_size.toLocaleString()} GPA records` : undefined}
         >
@@ -160,12 +160,12 @@ function buildAdvancedQuery(state: AdvancedSearchStateDto, fallbackQuery: string
 }
 
 function getChipColor(chip: SearchChipDto): string {
-  if (chip.type === 'semantic') return 'gray'
-  if (chip.type === 'instructor') return 'teal'
-  if (chip.type === 'gened') return 'yellow'
+  if (chip.type === 'semantic') return 'stone'
+  if (chip.type === 'instructor') return 'orange'
+  if (chip.type === 'gened') return 'stone'
   if (chip.type === 'difficulty') return 'orange'
-  if (chip.type === 'courseCode' || chip.type === 'subject') return 'blue'
-  return 'indigo'
+  if (chip.type === 'courseCode' || chip.type === 'subject') return 'orange'
+  return 'stone'
 }
 
 function formatTermLabel(term: string, year: number): string {
@@ -318,32 +318,30 @@ export function SearchPage() {
     void runSearch(activeSearchText || query, { offset: nextOffset, append: true, syncInput: false })
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch()
-    }
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    handleSearch()
   }
 
   return (
-    <Container size="md" py="xl">
+    <Container size="lg" py="xl">
       <Stack align="center" mb="xl">
         <Title order={1}>UIUC Smart Course Search</Title>
         <Text c="dimmed">Find courses by difficulty, GenEd, time, and more.</Text>
       </Stack>
 
-      <Group mb="md">
+      <Box component="form" role="search" mb="md" autoComplete="off" onSubmit={handleSearchSubmit}>
         <TextInput
           aria-label="Course search query"
+          autoComplete="off"
           placeholder="e.g., easy cs gened, MWF morning 3 credits"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          style={{ flex: 1 }}
           leftSection={<IconSearch size={16} />}
-          size="md"
+          radius="md"
+          size="lg"
         />
-        <Button onClick={handleSearch} size="md" leftSection={<IconSearch size={16} />}>Search</Button>
-      </Group>
+      </Box>
 
       {/* Error Message */}
       {error && (
@@ -353,12 +351,12 @@ export function SearchPage() {
       )}
 
       {meta && (
-        <Paper p="sm" withBorder bg="gray.0" mb="md">
+        <Paper p="md" withBorder bg="stone.0" mb="md" className="search-refinement-panel">
           <Group justify="space-between" align="center" mb="xs">
-            <Text size="sm" fw={600}>Search filters</Text>
+            <Text size="sm" fw={600}>Refine results</Text>
             <Button
               size="xs"
-              variant="subtle"
+              variant="outline"
               leftSection={<IconAdjustments size={14} />}
               onClick={() => setAdvancedOpen((value) => !value)}
             >
@@ -416,40 +414,50 @@ export function SearchPage() {
           ) : null}
 
           <Collapse in={advancedOpen} transitionDuration={0}>
-            <Paper mt="sm" p="sm" withBorder bg="white">
+            <Box
+              mt="md"
+              pt="md"
+              style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}
+            >
               <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xs">
                 <TextInput
                   label="Subject"
+                  autoComplete="off"
                   placeholder="CS"
                   value={advancedDraft.subject ?? ''}
                   onChange={(event) => setAdvancedDraft((state) => ({ ...state, subject: event.currentTarget.value || undefined }))}
                 />
                 <TextInput
                   label="Course number"
+                  autoComplete="off"
                   placeholder="225"
                   value={advancedDraft.number ?? ''}
                   onChange={(event) => setAdvancedDraft((state) => ({ ...state, number: event.currentTarget.value || undefined }))}
                 />
                 <TextInput
                   label="Instructor"
+                  autoComplete="off"
                   placeholder="Fagen"
                   value={advancedDraft.instructor ?? ''}
                   onChange={(event) => setAdvancedDraft((state) => ({ ...state, instructor: event.currentTarget.value || undefined }))}
                 />
                 <TextInput
                   label="GenEd"
+                  autoComplete="off"
                   placeholder="HUM"
                   value={advancedDraft.gened ?? ''}
                   onChange={(event) => setAdvancedDraft((state) => ({ ...state, gened: event.currentTarget.value || undefined }))}
                 />
                 <TextInput
                   label="Term"
+                  autoComplete="off"
                   placeholder="spring"
                   value={advancedDraft.term ?? ''}
                   onChange={(event) => setAdvancedDraft((state) => ({ ...state, term: event.currentTarget.value || undefined }))}
                 />
                 <TextInput
                   label="Year"
+                  autoComplete="off"
                   placeholder="2026"
                   value={advancedDraft.year?.toString() ?? ''}
                   onChange={(event) => {
@@ -459,6 +467,7 @@ export function SearchPage() {
                 />
                 <TextInput
                   label="Credits"
+                  autoComplete="off"
                   placeholder="3"
                   value={advancedDraft.credits?.toString() ?? ''}
                   onChange={(event) => {
@@ -468,12 +477,14 @@ export function SearchPage() {
                 />
                 <TextInput
                   label="Days"
+                  autoComplete="off"
                   placeholder="MWF"
                   value={advancedDraft.days ?? ''}
                   onChange={(event) => setAdvancedDraft((state) => ({ ...state, days: event.currentTarget.value || undefined }))}
                 />
                 <TextInput
                   label="Time"
+                  autoComplete="off"
                   placeholder="morning"
                   value={advancedDraft.time ?? ''}
                   onChange={(event) => setAdvancedDraft((state) => ({ ...state, time: event.currentTarget.value || undefined }))}
@@ -515,7 +526,7 @@ export function SearchPage() {
               <Group justify="flex-end" mt="sm">
                 <Button size="xs" onClick={applyAdvancedSearch}>Apply filters</Button>
               </Group>
-            </Paper>
+            </Box>
           </Collapse>
         </Paper>
       )}
@@ -554,21 +565,21 @@ export function SearchPage() {
                 <Card
                   key={r.id || `${r.subject}-${r.number}-${r.term}-${r.year}`}
                   withBorder
-                  padding="sm"
+                  padding="md"
                   component={Link}
                   to={`/course/${r.subject}/${r.number}?term=${r.term}&year=${r.year}`}
+                  className={r._historical ? 'course-result-card course-result-card--historical' : 'course-result-card'}
                   data-historical={r._historical ? 'true' : undefined}
                   style={{
                     textDecoration: 'none',
                     color: 'inherit',
                     cursor: 'pointer',
-                    backgroundColor: r._historical ? 'var(--mantine-color-gray-0)' : undefined,
-                    borderColor: r._historical ? 'var(--mantine-color-gray-4)' : undefined,
-                    boxShadow: r._historical ? 'none' : undefined,
-                    opacity: r._historical ? 0.72 : 1,
-                    filter: r._historical ? 'grayscale(0.25)' : undefined,
+                    backgroundColor: r._historical ? 'var(--mantine-color-stone-0)' : 'var(--mantine-color-white)',
+                    borderColor: r._historical ? 'var(--mantine-color-stone-3)' : undefined,
+                    opacity: r._historical ? 0.84 : 1,
+                    filter: r._historical ? 'grayscale(0.16)' : undefined,
                   }}
-                  shadow="sm"
+                  shadow="xs"
                 >
                   <Flex justify="space-between" align="flex-start" gap="sm" wrap="wrap">
                     <Box style={{ minWidth: 0, flex: '1 1 18rem' }}>

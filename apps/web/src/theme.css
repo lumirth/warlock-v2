@@ -6,7 +6,7 @@
 
 body {
   margin: 0;
-  background: var(--mantine-color-body);
+  background: var(--mantine-color-stone-0);
   color: var(--mantine-color-text);
   font-family: var(--mantine-font-family);
 }
@@ -56,4 +56,46 @@ select {
 .mantine-Tooltip-tooltip {
   font-size: var(--mantine-font-size-xs);
   padding-block: 2px;
+}
+
+.search-refinement-panel {
+  background: var(--mantine-color-stone-0);
+}
+
+.course-result-card {
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.course-result-card:hover {
+  border-color: var(--mantine-color-stone-4);
+  box-shadow: var(--mantine-shadow-sm);
+  transform: translateY(-1px);
+}
+
+.course-result-card--historical:hover {
+  border-color: var(--mantine-color-stone-4);
+  box-shadow: none;
+  transform: none;
+}
+
+.sections-table-shell {
+  background: var(--mantine-color-white);
+}
+
+.sections-table-scroll-cue {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), var(--mantine-color-white));
+  box-shadow: inset -14px 0 16px -16px rgba(28, 25, 23, 0.52);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-result-card {
+    transition: none;
+  }
+
+  .course-result-card:hover {
+    transform: none;
+  }
 }

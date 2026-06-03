@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { Container, Title, Text, Button, Loader, Flex, Grid, Stack, Badge, Group, Paper, Alert, ScrollArea } from '@mantine/core'
+import { Box, Container, Title, Text, Button, Loader, Flex, Grid, Stack, Badge, Group, Paper, Alert, ScrollArea } from '@mantine/core'
 import { IconAlertCircle, IconExternalLink } from '@tabler/icons-react'
 import { Scorecard } from '../components/Scorecard'
 import { SectionsTable } from '../components/SectionsTable'
@@ -68,7 +68,7 @@ export function CoursePage() {
   }
 
   return (
-    <Container size="lg" py="xl">
+    <Container size="xl" py="xl">
       <Button component={Link} to="/" variant="subtle" mb="md">
         ← Back to Search
       </Button>
@@ -76,21 +76,21 @@ export function CoursePage() {
       {/* Header Section */}
       <Stack gap="xs" mb="xl">
         <Group align="center">
-            <Title order={1} fz={36}>{course.subject} {course.number}: {course.title}</Title>
-            {course.gened && <Badge size="lg" variant="gradient" gradient={{ from: 'indigo', to: 'cyan' }}>{course.gened}</Badge>}
-            {course.course_explorer_url && (
-              <Button
-                component="a"
-                href={course.course_explorer_url}
-                target="_blank"
-                rel="noreferrer"
-                variant="light"
-                size="xs"
-                leftSection={<IconExternalLink size={14} />}
-              >
-                Course Explorer
-              </Button>
-            )}
+          <Title order={1} fz={34}>{course.subject} {course.number}: {course.title}</Title>
+          {course.gened && <Badge size="lg" variant="light" color="orange">{course.gened}</Badge>}
+          {course.course_explorer_url && (
+            <Button
+              component="a"
+              href={course.course_explorer_url}
+              target="_blank"
+              rel="noreferrer"
+              variant="outline"
+              size="xs"
+              leftSection={<IconExternalLink size={14} />}
+            >
+              Course Explorer
+            </Button>
+          )}
         </Group>
         <Text size="lg" c="dimmed">
           {course.credit_hours} Credit Hours • {course.term} {course.year}
@@ -135,7 +135,7 @@ export function CoursePage() {
         <Grid.Col span={{ base: 12, md: 8 }}>
           <Stack gap="xl">
             {/* Description */}
-            <Paper p="md" bg="gray.0">
+            <Paper p="md" withBorder bg="stone.0">
               <Title order={2} size="h4" mb="xs">Description</Title>
               <Text lh={1.6}>{course.description}</Text>
             </Paper>
@@ -143,14 +143,32 @@ export function CoursePage() {
             {/* Sections Table */}
             <div>
               <Title order={2} size="h3" mb="md">Sections & Instructors</Title>
-              <Paper withBorder radius="md">
-                <ScrollArea type="auto" offsetScrollbars>
+              <Paper
+                withBorder
+                radius="md"
+                shadow="sm"
+                className="sections-table-shell"
+                style={{ position: 'relative', overflow: 'hidden' }}
+              >
+                <ScrollArea type="always" offsetScrollbars aria-label="Sections table with horizontal scrolling">
                   <SectionsTable
                     sections={course.sections || []}
                     instructorLinks={course.instructor_links}
                     courseExplorerUrl={course.course_explorer_url}
                   />
                 </ScrollArea>
+                <Box
+                  aria-hidden
+                  className="sections-table-scroll-cue"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    bottom: 14,
+                    width: 28,
+                    pointerEvents: 'none',
+                  }}
+                />
               </Paper>
             </div>
           </Stack>

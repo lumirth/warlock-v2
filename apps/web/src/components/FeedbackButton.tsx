@@ -77,7 +77,7 @@ export function FeedbackButton({
       )}
 
       {open && (
-        <Paper withBorder p="sm" radius="sm">
+        <Paper withBorder p="sm" radius="md" shadow="xs">
           <Stack gap="xs">
             <Group justify="space-between" align="center">
               <Text size="sm" fw={600}>Send feedback</Text>

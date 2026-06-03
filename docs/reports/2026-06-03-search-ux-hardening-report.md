@@ -13,6 +13,17 @@ Scope: tighten result-card clarity and advanced search state after live QA found
 - Contradictory advanced edits clear stale structured text. Example: changing parsed `Subject CS` to `PHIL` clears `intro to CS` from the search box and searches `subject:PHIL`.
 - Subject typo matching now treats common adjacent-letter swaps as one edit, so `philospohy` resolves to `PHIL` without loosening the fuzzy subject threshold.
 
+Follow-up frontend-skill pass:
+
+- Replaced the over-rounded theme draft with restrained radius tokens: compact controls, medium product surfaces, and `xl` capped at 16px instead of 24px.
+- Removed default `xl` shadows/radii from `Paper` and `Card`; interactive results use subtle `xs` shadows and explicit hover affordance.
+- Converted the advanced-search content from a nested card into an expanded refinement section with a divider, so the panel reads as one control surface.
+- Removed the adjacent Search button; the search box submits through the form with Enter.
+- Added `autocomplete="off"` to the search and advanced text fields after Chrome QA showed stale advanced values being autofilled.
+- Reduced badge color noise: orange now marks hard filters/actions, green/yellow/red mark evaluative state, and neutral metadata uses stone.
+- Kept the course sections table framed but less pill-like, with a subtle right-edge scroll cue for horizontal overflow.
+- Switched frontend component tests to the same Mantine theme provider used by the app.
+
 ## Browser Evidence
 
 Local frontend was first run against the staging API:
@@ -59,6 +70,11 @@ Deployed staging observed results:
 Passed locally:
 
 ```sh
+npm test --workspace apps/web -- SearchPage CoursePage FeedbackButton accessibility
+npm run typecheck --workspace apps/web
+npm run build --workspace apps/web
+npm run bundle:budget
+npm run typecheck
 npm test --workspace apps/web -- SearchPage.test.tsx
 npm run typecheck
 npm test
@@ -89,3 +105,6 @@ Focused frontend coverage:
 - Historical cards expose `data-historical`, faded styling, and a visible `Historical term` status near the term.
 - Advanced additive filters preserve free text in the search box.
 - Advanced contradictory filters clear stale structured query text.
+- Search submits through the form with no standalone Search button.
+- Search/course/feedback/accessibility tests render through the production Mantine theme provider.
+- Browser QA covered desktop search, result refinement, advanced panel expansion, and the course sections table scroll cue against the local mock API.

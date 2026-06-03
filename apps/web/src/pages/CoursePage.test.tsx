@@ -1,9 +1,9 @@
-import { MantineProvider } from '@mantine/core'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CourseDto } from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
+import { TestMantineProvider } from '../test/TestMantineProvider'
 import { CoursePage } from './CoursePage'
 
 vi.mock('../lib/api-client', () => ({
@@ -42,9 +42,9 @@ function renderCoursePage(initialEntry: string) {
   ], { initialEntries: [initialEntry] })
 
   render(
-    <MantineProvider>
+    <TestMantineProvider>
       <RouterProvider router={router} />
-    </MantineProvider>
+    </TestMantineProvider>
   )
 
   return router
@@ -135,5 +135,51 @@ describe('CoursePage request state', () => {
     expect(screen.getByText('4.8 ★')).toBeInTheDocument()
     expect(screen.getByText('3.62')).toBeInTheDocument()
     expect(screen.getByText('820 records')).toBeInTheDocument()
+  })
+
+  it('renders official Course Explorer links and public instructor link fallbacks', async () => {
+    vi.mocked(api.getCourse).mockResolvedValueOnce(course({
+      course_explorer_url: 'https://courses.illinois.edu/schedule/2026/fall/CS/225',
+      sections: [
+        {
+          crn: '45678',
+          sectionNumber: 'AL1',
+          status: 'Open',
+          type: 'Lecture',
+          days: 'MWF',
+          startTime: '09:00',
+          endTime: '09:50',
+          location: 'Siebel Center',
+          instructor: 'Fagen-Ulmschneider, W',
+          instructorRmp: null,
+          instructorGpa: null,
+          course_explorer_url: 'https://courses.illinois.edu/schedule/2026/fall/CS/225',
+          instructorStats: [{
+            instructor_name: 'Fagen-Ulmschneider, W',
+            rmp_rating: 4.9,
+            rmp_difficulty: 3.4,
+            rmp_id: '85515',
+            avg_gpa: 3.45,
+            gpa_sample_size: 1200,
+            num_ratings: 180,
+          }],
+        },
+      ],
+    }))
+
+    renderCoursePage('/course/CS/225?term=fall&year=2026')
+
+    expect(await screen.findByRole('link', { name: 'Course Explorer' })).toHaveAttribute(
+      'href',
+      'https://courses.illinois.edu/schedule/2026/fall/CS/225'
+    )
+    expect(screen.getByRole('link', { name: 'CRN 45678' })).toHaveAttribute(
+      'href',
+      'https://courses.illinois.edu/schedule/2026/fall/CS/225'
+    )
+    expect(screen.getByRole('link', { name: 'Fagen-Ulmschneider, W' })).toHaveAttribute(
+      'href',
+      'https://www.ratemyprofessors.com/professor/85515'
+    )
   })
 })

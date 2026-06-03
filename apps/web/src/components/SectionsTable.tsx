@@ -126,7 +126,7 @@ export function SectionsTable({ sections, instructorLinks, courseExplorerUrl }: 
         </Table.Td>
         <Table.Td>
           {typeof displayedRating === 'number' ? (
-            <Badge size="xs" color={displayedRating > RMP_THRESHOLDS.GOOD ? 'teal' : 'orange'}>
+            <Badge size="xs" color={displayedRating > RMP_THRESHOLDS.GOOD ? 'green' : 'orange'}>
               {displayedRating.toFixed(1)} ★
             </Badge>
           ) : (

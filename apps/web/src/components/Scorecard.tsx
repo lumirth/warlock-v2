@@ -38,7 +38,7 @@ export function Scorecard({
     : 'teal'
 
   return (
-    <Paper withBorder p="md" radius="md">
+    <Paper withBorder p="md" radius="md" shadow="xs">
       <Group justify="space-between" align="center">
         <Stack gap={0}>
           <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
@@ -74,12 +74,12 @@ export function Scorecard({
       {(hasPrimaryRating || hasAvgGpa) && (
         <Group gap="xs" mt="sm">
           {hasPrimaryRating && (
-            <Badge variant="light" color={primaryInstructorRmp >= 3.5 ? 'teal' : 'orange'} tt="none">
+            <Badge variant="light" color={primaryInstructorRmp >= 3.5 ? 'green' : 'orange'} tt="none">
               Rating {primaryInstructorRmp.toFixed(1)}
             </Badge>
           )}
           {hasAvgGpa && (
-            <Badge variant="light" color="blue" tt="none">
+            <Badge variant="light" color="stone" tt="none">
               Avg GPA {avgGpa.toFixed(2)}
               {typeof gpaSampleSize === 'number' ? ` from ${gpaSampleSize.toLocaleString()} records` : ''}
             </Badge>
