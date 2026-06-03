@@ -505,6 +505,7 @@ function buildMaintenanceReport(input: {
   feedbackError: string | null;
 }): SemesterMaintenanceReport {
   const failedFreshness = input.freshness.checks.filter(check => !check.ok);
+  const droppedTermAbsenceFailed = failedFreshness.some(check => check.name === 'dropped term absence');
   const gates: SemesterMaintenanceGate[] = [
     {
       name: 'retention plan generated',
@@ -547,14 +548,13 @@ function buildMaintenanceReport(input: {
       feedback_rows: input.feedbackRows,
       feedback_candidates: input.feedbackCandidates,
     },
-    backup_required_before_prune: input.retention.counts.dropped_terms > 0,
+    backup_required_before_prune: droppedTermAbsenceFailed,
     gates,
-    next_actions: nextActions(input.retention, input.coverage, failedFreshness, input.feedbackCandidates, input.feedbackError),
+    next_actions: nextActions(input.coverage, failedFreshness, input.feedbackCandidates, input.feedbackError),
   };
 }
 
 function nextActions(
-  retention: TermRetentionReport,
   coverage: TermCoverageReport,
   failedFreshness: FreshnessAuditReport['checks'],
   feedbackCandidates: number | null,
@@ -562,7 +562,7 @@ function nextActions(
 ): string[] {
   const actions: string[] = [];
 
-  if (retention.counts.dropped_terms > 0) {
+  if (failedFreshness.some(check => check.name === 'dropped term absence')) {
     actions.push('Create and restore-verify a D1 Time Travel backup before executing the generated prune SQL remotely.');
   }
   if (coverage.counts.terms_needing_backfill > 0) {

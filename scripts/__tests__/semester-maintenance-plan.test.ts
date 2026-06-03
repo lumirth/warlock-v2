@@ -223,6 +223,80 @@ describe('semester maintenance plan', () => {
     expect(readFileSync(report.artifacts.feedbackCandidates!, 'utf8')).toContain('"candidate_count": 1');
   });
 
+  it('does not request prune backup work when dropped terms are already absent', async () => {
+    const fetcher = vi.fn(async (request: Request) => {
+      const url = new URL(request.url);
+      if (url.pathname === '/admin/sync/status') {
+        const lastSync = 1_780_370_000;
+        return response({
+          syncStates: [
+            { id: 'gpa', last_sync: lastSync, last_status: 'complete' },
+            { id: 'rmp', last_sync: lastSync, last_status: 'complete' },
+            { id: 'course-sync:2026-summer:CS', last_status: 'complete' },
+            { id: 'course-sync:2026-summer:MATH', last_status: 'complete' },
+            { id: 'course-sync:2026-fall:CS', last_status: 'complete' },
+            { id: 'course-sync:2026-fall:MATH', last_status: 'complete' },
+          ],
+          termStates: [
+            {
+              term_id: '2026-summer',
+              year: 2026,
+              term: 'summer',
+              status: 'registrable',
+              subjects_count: 2,
+              courses_count: 100,
+              sections_count: 220,
+              last_synced: lastSync,
+            },
+            {
+              term_id: '2026-fall',
+              year: 2026,
+              term: 'fall',
+              status: 'registrable',
+              subjects_count: 2,
+              courses_count: 100,
+              sections_count: 220,
+              last_synced: lastSync,
+            },
+          ],
+          enrichmentCoverage: [
+            { term_id: '2026-summer', courses_with_gpa: 10, courses_with_quality: 20, courses_with_difficulty: 20, enriched_links: 30 },
+            { term_id: '2026-fall', courses_with_gpa: 10, courses_with_quality: 20, courses_with_difficulty: 20, enriched_links: 30 },
+          ],
+          freshness: {
+            currentTermId: '2026-fall',
+            currentTermPresent: true,
+            registrableTermIds: ['2026-fall', '2026-summer'],
+            activeTermIds: ['2026-fall', '2026-summer'],
+            upcomingTermIds: ['2026-fall'],
+            historicalTermCount: 1,
+            staleTermIds: [],
+            staleSyncStateIds: [],
+          },
+        });
+      }
+      if (url.pathname.endsWith('/ajax/search/termlist/2025')) {
+        return response({ Fall: 'fall' });
+      }
+      if (url.pathname.endsWith('/ajax/search/termlist/2026')) {
+        return response({ Spring: 'spring', Summer: 'summer', Fall: 'fall' });
+      }
+      return response({ error: 'not found' }, 404);
+    });
+
+    const report = await runSemesterMaintenancePlan(args({
+      maxRetainedTerms: 2,
+    }), {
+      fetcher,
+      now: new Date('2026-06-03T02:00:00Z'),
+    });
+
+    expect(report.counts.dropped_terms).toBeGreaterThan(0);
+    expect(report.backup_required_before_prune).toBe(false);
+    expect(report.next_actions).not.toContain('Create and restore-verify a D1 Time Travel backup before executing the generated prune SQL remotely.');
+    expect(formatSemesterMaintenanceReport(report)).toContain('Overall: ready');
+  });
+
   it('surfaces backfill, freshness, and feedback failures as gates instead of hiding them', async () => {
     const fetcher = vi.fn(async (request: Request) => {
       const url = new URL(request.url);
