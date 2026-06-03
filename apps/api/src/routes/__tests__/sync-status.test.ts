@@ -16,6 +16,33 @@ function createDb(): D1Database {
             ],
           };
         }
+        if (sql.includes('courses_with_gpa')) {
+          return {
+            success: true,
+            results: [
+              {
+                term_id: '2026-fall',
+                status: 'registrable',
+                courses_count: null,
+                sections_count: null,
+                courses_with_gpa: 0,
+                courses_with_quality: 0,
+                courses_with_difficulty: 0,
+                enriched_links: 0,
+              },
+              {
+                term_id: '2026-winter',
+                status: 'registrable',
+                courses_count: 2,
+                sections_count: 3,
+                courses_with_gpa: 1,
+                courses_with_quality: 1,
+                courses_with_difficulty: 1,
+                enriched_links: 1,
+              },
+            ],
+          };
+        }
         if (sql.includes('FROM term_state')) {
           return {
             success: true,
@@ -92,6 +119,7 @@ describe('sync status route', () => {
     const data = await response.json() as {
       syncStates: Array<{ id: string; last_status: string }>;
       termStates: Array<{ term_id: string; status: string }>;
+      enrichmentCoverage: Array<{ term_id: string; courses_with_quality: number }>;
       unhealthySyncStates: Array<{ id: string }>;
       runningSyncStates: Array<{ id: string }>;
       freshness: {
@@ -110,6 +138,10 @@ describe('sync status route', () => {
     expect(data.termStates).toEqual(expect.arrayContaining([
       expect.objectContaining({ term_id: '2026-winter', status: 'registrable' }),
       expect.objectContaining({ term_id: '2026-fall', status: 'registrable' }),
+    ]));
+    expect(data.enrichmentCoverage).toEqual(expect.arrayContaining([
+      expect.objectContaining({ term_id: '2026-fall', courses_with_quality: 0 }),
+      expect.objectContaining({ term_id: '2026-winter', courses_with_quality: 1 }),
     ]));
     expect(data.unhealthySyncStates).toEqual([expect.objectContaining({ id: 'gpa' })]);
     expect(data.runningSyncStates).toEqual([expect.objectContaining({ id: 'course-sync:2026-spring:CS' })]);

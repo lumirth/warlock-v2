@@ -78,6 +78,17 @@ Not every active course has ratings because GPA/RMP sources only cover matched h
 - A regression where `CURRENT_YEAR/CURRENT_TERM` fallback is stale but a newer registrable Fall term correctly becomes current.
 - A synthetic-year threshold test that checks active, historical, GPA, and RMP freshness based on `last_synced` age, so the test does not become stale as real semesters change.
 
+## Enrichment Observability
+
+Follow-up hardening added an `enrichmentCoverage` array to `/admin/sync/status` for every active or registrable term. The data freshness audit now fails when any current, active, or registrable term is missing enrichment coverage or has zero GPA/score/link coverage.
+
+Live staging status after deploy `06c05425-c0ec-4d25-8a08-e71aaf512706` includes:
+
+- `2026-fall`: 2,278 courses with GPA, 3,210 with quality/workload scores, 4,022 enriched links.
+- `2026-summer`: 434 courses with GPA, 644 with quality/workload scores, 692 enriched links.
+
+Retention-scoped audit artifact `artifacts/retention/staging-freshness-audit-with-enrichment-20260603T022000Z.json` passes 15/15 checks, including `active/registrable enrichment coverage`.
+
 ## Requirement Update
 
 The active product requirements now state that full D1 history back through 2004 is no longer expected:
@@ -98,7 +109,10 @@ Local:
 Staging:
 
 - API deploy version: `fc0fb81d-2847-4712-9372-cbfd0f5603ed`
+- Enrichment coverage status deploy version: `06c05425-c0ec-4d25-8a08-e71aaf512706`
 - Deep search pagination succeeds at offsets 240 and 1000.
 - Retention-scoped freshness audit artifact: `artifacts/retention/staging-freshness-audit-post-enrichment-20260603T021200Z.json`
 - Audit result: 14 passing checks, 0 failed.
+- Retention-scoped audit with enrichment coverage artifact: `artifacts/retention/staging-freshness-audit-with-enrichment-20260603T022000Z.json`
+- Audit with enrichment coverage result: 15 passing checks, 0 failed.
 - D1 size after enrichment: 461,303,808 bytes.

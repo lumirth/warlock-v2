@@ -57,6 +57,28 @@ function status(overrides: Record<string, unknown> = {}): Record<string, unknown
         sections_count: 11000,
       },
     ],
+    enrichmentCoverage: [
+      {
+        term_id: '2026-spring',
+        status: 'active',
+        courses_count: 4494,
+        sections_count: 11960,
+        courses_with_gpa: 2200,
+        courses_with_quality: 3200,
+        courses_with_difficulty: 3200,
+        enriched_links: 4000,
+      },
+      {
+        term_id: '2026-fall',
+        status: 'registrable',
+        courses_count: 4400,
+        sections_count: 11000,
+        courses_with_gpa: 2100,
+        courses_with_quality: 3000,
+        courses_with_difficulty: 3000,
+        enriched_links: 3800,
+      },
+    ],
     freshness: {
       currentTermId: '2026-spring',
       configuredCurrentTermId: '2026-spring',
@@ -115,6 +137,60 @@ describe('data freshness audit', () => {
     };
 
     expect(formatFreshnessAuditReport(report)).toContain('PASS current term present');
+  });
+
+  it('fails when active or registrable enrichment coverage is missing or zero', () => {
+    const zeroChecks = auditFreshnessStatus(status({
+      enrichmentCoverage: [
+        {
+          term_id: '2026-spring',
+          status: 'active',
+          courses_count: 4494,
+          sections_count: 11960,
+          courses_with_gpa: 0,
+          courses_with_quality: 0,
+          courses_with_difficulty: 0,
+          enriched_links: 0,
+        },
+        {
+          term_id: '2026-fall',
+          status: 'registrable',
+          courses_count: 4400,
+          sections_count: 11000,
+          courses_with_gpa: 2100,
+          courses_with_quality: 3000,
+          courses_with_difficulty: 3000,
+          enriched_links: 3800,
+        },
+      ],
+    }), { minHistoricalTerms: 10 });
+
+    expect(zeroChecks.find(check => check.name === 'active/registrable enrichment coverage')).toEqual({
+      name: 'active/registrable enrichment coverage',
+      ok: false,
+      detail: 'zero GPA/score/link coverage for 2026-spring',
+    });
+
+    const missingChecks = auditFreshnessStatus(status({
+      enrichmentCoverage: [
+        {
+          term_id: '2026-spring',
+          status: 'active',
+          courses_count: 4494,
+          sections_count: 11960,
+          courses_with_gpa: 2200,
+          courses_with_quality: 3200,
+          courses_with_difficulty: 3200,
+          enriched_links: 4000,
+        },
+      ],
+    }), { minHistoricalTerms: 10 });
+
+    expect(missingChecks.find(check => check.name === 'active/registrable enrichment coverage')).toEqual({
+      name: 'active/registrable enrichment coverage',
+      ok: false,
+      detail: 'missing coverage for 2026-fall',
+    });
   });
 
   it('checks retained full-detail coverage and dropped term absence from a retention plan', () => {

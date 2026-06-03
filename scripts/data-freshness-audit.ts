@@ -108,6 +108,12 @@ function termStates(status: JsonRecord): JsonRecord[] {
     : [];
 }
 
+function enrichmentCoverage(status: JsonRecord): JsonRecord[] {
+  return Array.isArray(status.enrichmentCoverage)
+    ? status.enrichmentCoverage.map(asRecord).filter((item): item is JsonRecord => item !== null)
+    : [];
+}
+
 function syncStateById(status: JsonRecord, id: string): JsonRecord | null {
   return syncStates(status).find(state => state.id === id) ?? null;
 }
@@ -116,8 +122,23 @@ function termStateById(status: JsonRecord, id: string): JsonRecord | null {
   return termStates(status).find(state => state.term_id === id) ?? null;
 }
 
+function enrichmentCoverageByTermId(status: JsonRecord, id: string): JsonRecord | null {
+  return enrichmentCoverage(status).find(state => state.term_id === id) ?? null;
+}
+
 function positiveNumber(value: unknown): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function hasPositiveEnrichmentCoverage(row: JsonRecord | null): boolean {
+  return positiveNumber(row?.courses_with_gpa)
+    || positiveNumber(row?.courses_with_quality)
+    || positiveNumber(row?.courses_with_difficulty)
+    || positiveNumber(row?.enriched_links);
+}
+
+function uniqueStrings(values: Array<string | null>): string[] {
+  return [...new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0))];
 }
 
 function truncateList(values: string[]): string {
@@ -170,6 +191,7 @@ export function auditFreshnessStatus(
   const gpaState = syncStateById(status, 'gpa');
   const rmpState = syncStateById(status, 'rmp');
   const currentTermState = currentTermId ? termStateById(status, currentTermId) : null;
+  const currentOpenTermIds = uniqueStrings([currentTermId, ...registrableTermIds, ...activeTermIds]);
 
   const checks = [
     check('freshness object present', freshness !== null, freshness ? 'ok' : 'missing freshness summary'),
@@ -192,6 +214,23 @@ export function auditFreshnessStatus(
       'current term has course and section counts',
       positiveNumber(currentTermState.courses_count) && positiveNumber(currentTermState.sections_count),
       `courses=${String(currentTermState.courses_count)} sections=${String(currentTermState.sections_count)}`
+    ));
+  }
+
+  if (currentOpenTermIds.length > 0) {
+    const missingCoverage = currentOpenTermIds.filter(id => !enrichmentCoverageByTermId(status, id));
+    const zeroCoverage = currentOpenTermIds.filter(id => {
+      const row = enrichmentCoverageByTermId(status, id);
+      return row !== null && !hasPositiveEnrichmentCoverage(row);
+    });
+    checks.push(check(
+      'active/registrable enrichment coverage',
+      missingCoverage.length === 0 && zeroCoverage.length === 0,
+      missingCoverage.length > 0
+        ? `missing coverage for ${truncateList(missingCoverage)}`
+        : zeroCoverage.length > 0
+          ? `zero GPA/score/link coverage for ${truncateList(zeroCoverage)}`
+          : `${currentOpenTermIds.length} current/open term(s) have positive enrichment coverage`
     ));
   }
 
