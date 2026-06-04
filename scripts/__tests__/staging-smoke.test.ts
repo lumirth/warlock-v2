@@ -35,9 +35,9 @@ function makeFetcher(options: MockOptions = {}) {
         return json(200, {
           results: [],
           meta: {
-            plan: {
-              filters: {
-                instructor_ids: [3365],
+            ui: {
+              advanced: {
+                instructor: 'fagen',
               },
             },
           },
