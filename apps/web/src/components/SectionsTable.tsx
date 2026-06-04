@@ -460,13 +460,13 @@ export function SectionsTable({
                 </TableCell>
                 <TableCell>
                   {officialUrl ? (
-	                    <a
-	                      href={officialUrl}
-	                      target="_blank"
-	                      rel="noreferrer"
-	                      aria-label={`CRN ${section.crn}`}
-	                      className="inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline"
-	                    >
+                    <a
+                      href={officialUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`CRN ${section.crn}`}
+                      className="inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline"
+                    >
                       {section.crn}
                       <ExternalLinkIcon className="size-3" aria-hidden />
                     </a>
