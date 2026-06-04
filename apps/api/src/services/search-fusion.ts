@@ -1,10 +1,7 @@
 import type { RetrievalLane } from "@uiuc-course-search/query-types/search-planner";
-import {
-  COURSE_USEFULNESS_POLICY,
-  getQualityTierRank,
-} from "@uiuc-course-search/query-types";
+import type { RetrievalLaneResult } from "./search-types.js";
 
-export type RankedLaneRow = { id: string; rank: number };
+export type RankedLaneRow = RetrievalLaneResult;
 export type WorkloadLaneRow = RankedLaneRow & { claims: string[] };
 
 export interface FusedSearchScore {
@@ -14,6 +11,7 @@ export interface FusedSearchScore {
   keywordRank?: number;
   laneMatches: RetrievalLane[];
   laneRanks: Partial<Record<RetrievalLane, number>>;
+  laneResults: RetrievalLaneResult[];
   supportedSubjectiveClaims: string[];
 }
 
@@ -24,7 +22,7 @@ export interface RetrievalLaneResults {
   requirementResults: RankedLaneRow[];
   structuredSectionResults: RankedLaneRow[];
   aliasResults: RankedLaneRow[];
-  semanticResults: { id: string; score: number }[];
+  semanticResults: RankedLaneRow[];
   workloadResults: WorkloadLaneRow[];
 }
 
@@ -42,44 +40,34 @@ const LANE_WEIGHTS: Record<RetrievalLane, number> = {
   help_path: 1,
 };
 
-export function fuseRetrievalResults(
-  lanes: RetrievalLaneResults,
-  qualityScores: Map<string, number>,
-): FusedSearchScore[] {
+export function fuseRetrievalResults(lanes: RetrievalLaneResults): FusedSearchScore[] {
   const laneRanks = new Map<string, Partial<Record<RetrievalLane, number>>>();
+  const laneEvidence = new Map<string, RetrievalLaneResult[]>();
   const supportedClaims = new Map<string, Set<string>>();
 
-  const addLaneRanks = (
-    lane: RetrievalLane,
-    rows: RankedLaneRow[],
-  ): void => {
+  const addLaneRanks = (rows: RankedLaneRow[]): void => {
     rows.forEach((row, index) => {
       const rank = row.rank ?? index + 1;
+      const lane = row.lane;
       const ranks = laneRanks.get(row.id) ?? {};
       const existing = ranks[lane];
       if (!existing || rank < existing) {
         ranks[lane] = rank;
       }
       laneRanks.set(row.id, ranks);
+      const existingEvidence = laneEvidence.get(row.id) ?? [];
+      existingEvidence.push({ ...row, rank });
+      laneEvidence.set(row.id, existingEvidence);
     });
   };
 
-  addLaneRanks(
-    lanes.isNavigational ? "exact" : "official_text",
-    lanes.courseKeywordResults,
-  );
-  addLaneRanks("section_text", lanes.sectionKeywordResults);
-  addLaneRanks("requirement", lanes.requirementResults);
-  addLaneRanks("structured_section", lanes.structuredSectionResults);
-  addLaneRanks("student_language_alias", lanes.aliasResults);
-  addLaneRanks(
-    "topic_semantic",
-    lanes.semanticResults.map((row, index) => ({
-      id: row.id,
-      rank: index + 1,
-    })),
-  );
-  addLaneRanks("workload_evidence", lanes.workloadResults);
+  addLaneRanks(lanes.courseKeywordResults);
+  addLaneRanks(lanes.sectionKeywordResults);
+  addLaneRanks(lanes.requirementResults);
+  addLaneRanks(lanes.structuredSectionResults);
+  addLaneRanks(lanes.aliasResults);
+  addLaneRanks(lanes.semanticResults);
+  addLaneRanks(lanes.workloadResults);
   for (const row of lanes.workloadResults) {
     supportedClaims.set(row.id, new Set(row.claims));
   }
@@ -90,14 +78,9 @@ export function fuseRetrievalResults(
     const ranks = laneRanks.get(id) ?? {};
     const semanticRank = ranks.topic_semantic;
     const keywordRank = bestKeywordLikeRank(ranks);
-    const qualityTierRank = getQualityTierRank(qualityScores.get(id));
 
     for (const [lane, rank] of Object.entries(ranks) as [RetrievalLane, number][]) {
       score += laneRrfScore(lane, rank);
-      if (lane === "exact") score += 3.5;
-    }
-    if (qualityTierRank !== null) {
-      score += qualityTierRank * COURSE_USEFULNESS_POLICY.FUSION.QUALITY_TIER_WEIGHT;
     }
 
     scores.push({
@@ -107,6 +90,7 @@ export function fuseRetrievalResults(
       keywordRank,
       laneMatches: Object.keys(ranks) as RetrievalLane[],
       laneRanks: ranks,
+      laneResults: laneEvidence.get(id) ?? [],
       supportedSubjectiveClaims: Array.from(supportedClaims.get(id) ?? []),
     });
   }
@@ -125,31 +109,6 @@ export function fuseRetrievalResults(
     }
     return 0;
   });
-}
-
-export function applyTitleBoost<T extends { id: string; score: number; title?: string }>(
-  scores: T[],
-  query: string,
-): T[] {
-  const queryLower = query.toLowerCase().trim();
-  if (!queryLower) return scores;
-
-  return scores.map(item => {
-    if (!item.title) return item;
-
-    const titleLower = item.title.toLowerCase();
-    let boost = 0;
-
-    if (titleLower === queryLower) {
-      boost = 2.5;
-    } else if (titleLower.includes(queryLower)) {
-      boost = 1.2;
-    } else if (queryLower.includes(titleLower)) {
-      boost = 0.45;
-    }
-
-    return { ...item, score: item.score + boost };
-  }).sort((a, b) => b.score - a.score);
 }
 
 function laneRrfScore(lane: RetrievalLane, rank: number): number {

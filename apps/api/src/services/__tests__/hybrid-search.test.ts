@@ -9,7 +9,6 @@ import {
   type SearchCandidateBudget,
 } from '../search.js';
 import * as embeddings from '../embeddings.js';
-import { validateSubject } from '../query-resolver.js';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import type { Course } from '../../db/index.js';
@@ -27,15 +26,6 @@ vi.mock('../embeddings.js', () => ({
   searchCourses: vi.fn().mockResolvedValue([]),
 }));
 
-// Mock query-resolver to control validateSubject behavior
-vi.mock('../query-resolver.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../query-resolver.js')>();
-  return {
-    ...actual,
-    validateSubject: vi.fn(),
-  };
-});
-
 describe('hybridSearch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,12 +41,7 @@ describe('hybridSearch', () => {
       ...buildSearchCandidateBudget(plan, { limit, offset: 0 }, controls),
       ...budgetOverrides,
     };
-    return buildRetrievalPlan(
-      mockDb as unknown as D1Database,
-      plan,
-      controls,
-      budget,
-    );
+    return buildRetrievalPlan(plan, controls, budget);
   }
 
   it('skips semantic search for purely navigational queries (Subject + Number)', async () => {
@@ -118,9 +103,7 @@ describe('hybridSearch', () => {
     );
   });
 
-  it('promotes "Computer Science" query to strict Subject Filter', async () => {
-    vi.mocked(validateSubject).mockResolvedValue('CS');
-
+  it('does not promote keyword text to a subject filter during retrieval', async () => {
     const plan: SearchPlan = {
       keywordQuery: 'Computer Science',
       semanticQuery: 'Computer Science',
@@ -140,27 +123,22 @@ describe('hybridSearch', () => {
       await retrievalPlan(plan),
     );
 
-    // Verify validateSubject was checked
-    expect(validateSubject).toHaveBeenCalledWith(mockDb, 'Computer Science');
-
-    // Verify semanticSearch was called WITH subject filter
     expect(embeddings.searchCourses).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         'Computer Science',
-        expect.objectContaining({ subject: 'CS' }),
+        {},
         80
     );
     expect(plan.filters).toEqual({});
   });
 
-  it('chunks quality score lookups for broad hybrid result sets', async () => {
-    vi.mocked(validateSubject).mockResolvedValue(null);
+  it('chunks broad hybrid candidate loading and preserves lane evidence', async () => {
     vi.mocked(embeddings.searchCourses).mockResolvedValue(
       Array.from({ length: 50 }, (_, index) => ({ id: `semantic-${index}`, score: 1 - index / 100 }))
     );
 
-    const qualityBindSizes: number[] = [];
+    const courseLoadBindSizes: number[] = [];
     const makeCourse = (id: string): Course => ({
       id,
       subject: 'CS',
@@ -207,11 +185,8 @@ describe('hybridSearch', () => {
               results: Array.from({ length: 50 }, (_, index) => ({ id: `section-${index}`, fts_score: index })),
             };
           }
-          if (sql.includes('quality_score')) {
-            qualityBindSizes.push(this.params.length);
-            return { results: [] };
-          }
           if (sql.includes('FROM courses c') && sql.includes('WHERE c.id IN')) {
+            courseLoadBindSizes.push(this.params.length);
             return {
               results: this.params.map(param => makeCourse(String(param))),
             };
@@ -236,12 +211,18 @@ describe('hybridSearch', () => {
     );
 
     expect(results).toHaveLength(80);
-    expect(qualityBindSizes.length).toBeGreaterThan(1);
-    expect(qualityBindSizes.every(size => size <= 50)).toBe(true);
+    expect(courseLoadBindSizes.length).toBeGreaterThan(1);
+    expect(courseLoadBindSizes.every(size => size <= 50)).toBe(true);
+    expect(results[0].laneResults?.[0]).toEqual(expect.objectContaining({
+      lane: expect.any(String),
+      reason: expect.any(String),
+    }));
+    expect(results[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'retrieval_fusion' }),
+    ]));
   });
 
-  it('applies exact-title boosts before trimming the candidate pool', async () => {
-    vi.mocked(validateSubject).mockResolvedValue(null);
+  it('applies title-match ranking before trimming the candidate pool', async () => {
     vi.mocked(embeddings.searchCourses).mockResolvedValue([
       { id: 'CS-562-2026-fall', score: 0.99 },
     ]);
@@ -289,11 +270,6 @@ describe('hybridSearch', () => {
           }
           if (sql.includes('FROM courses_fts') || sql.includes('FROM sections_fts')) {
             return { results: [] };
-          }
-          if (sql.includes('quality_score')) {
-            return {
-              results: [{ id: 'CS-562-2026-fall', quality_score: 95 }],
-            };
           }
           if (sql.includes('FROM courses c') && sql.includes('WHERE c.id IN')) {
             return {
@@ -377,8 +353,19 @@ describe('keywordSearch', () => {
 
     expect(seenSql.some(sql => sql.includes('LOWER(c.title) LIKE'))).toBe(true);
     expect(results.slice(0, 2)).toEqual([
-      { id: 'CS-225-2026-fall', rank: 1 },
-      { id: 'ECE-541-2026-fall', rank: 2 },
+      expect.objectContaining({
+        id: 'CS-225-2026-fall',
+        lane: 'official_text',
+        rank: 1,
+        reason: expect.any(String),
+      }),
+      expect.objectContaining({
+        id: 'ECE-541-2026-fall',
+        lane: 'official_text',
+        rank: 2,
+        rawScore: -1,
+        reason: expect.any(String),
+      }),
     ]);
   });
 

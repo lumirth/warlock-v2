@@ -23,8 +23,15 @@ describe('search refinement actions', () => {
         id: '0-0-gened-CS',
         term: 'CS',
         label: 'Cultural Studies',
-        filter: { gened: 'CS' },
-        queryPatch: { replaceQuery: 'gened:CS' },
+        action: {
+          kind: 'run_search',
+          nextRequest: {
+            query: '',
+            filters: { gened: 'CS' },
+            sort: { field: 'relevance', direction: 'desc' },
+            scope: 'active',
+          },
+        },
       },
       baseContext
     )
@@ -35,11 +42,12 @@ describe('search refinement actions', () => {
       request: {
         query: '',
         filters: { gened: 'CS' },
+        sort: { field: 'relevance', direction: 'desc' },
       },
     })
   })
 
-  it('removes chips using public filter patches before falling back to query patches', () => {
+  it('removes chips by running their canonical next request', () => {
     const plan = planChipRemoval(
       {
         id: 'subject-0',
@@ -49,8 +57,14 @@ describe('search refinement actions', () => {
         source: 'natural_language',
         removable: true,
         editable: true,
-        filter: { subject: 'CS' },
-        queryPatch: { removeText: 'CS' },
+        action: {
+          kind: 'run_search',
+          nextRequest: {
+            query: 'CS',
+            sort: { field: 'relevance', direction: 'desc' },
+            scope: 'active',
+          },
+        },
       },
       baseContext
     )
@@ -61,11 +75,12 @@ describe('search refinement actions', () => {
       request: {
         query: 'CS',
         filters: {},
+        sort: { field: 'relevance', direction: 'desc' },
       },
     })
   })
 
-  it('uses recovery group query patches and preserves the active sort', () => {
+  it('uses recovery group canonical requests and preserves the requested sort', () => {
     const plan = planRecoveryAction(
       {
         id: 'any-delivery',
@@ -73,7 +88,15 @@ describe('search refinement actions', () => {
         description: 'Relax online delivery.',
         relaxes: ['online'],
         keeps: ['topic'],
-        queryPatch: { replaceQuery: 'movies class' },
+        action: {
+          kind: 'run_search',
+          nextRequest: {
+            query: 'movies class',
+            filters: { online: true },
+            sort: { field: 'gpa', direction: 'desc' },
+            scope: 'active',
+          },
+        },
       },
       {
         ...baseContext,
@@ -85,6 +108,7 @@ describe('search refinement actions', () => {
 
     expect(plan).toEqual({
       kind: 'search',
+      draft: { online: true },
       request: {
         query: 'movies class',
         filters: { online: true },

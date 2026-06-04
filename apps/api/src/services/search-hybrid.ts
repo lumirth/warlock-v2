@@ -1,8 +1,9 @@
 import type { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 import { searchCourses as semanticSearch } from "./embeddings.js";
 import { errorFields, logger } from "../observability/logger.js";
-import { applyTitleBoost, fuseRetrievalResults } from "./search-fusion.js";
-import { fetchCoursesById, fetchQualityScores } from "./search-loaders.js";
+import { fuseRetrievalResults } from "./search-fusion.js";
+import { fetchCoursesById } from "./search-loaders.js";
+import { applyRankingPolicy } from "./search-ranking-policy.js";
 import { laneEnabled, type RetrievalPlan } from "./search-retrieval-plan.js";
 import {
   keywordSearch,
@@ -13,8 +14,7 @@ import {
   studentAliasLaneSearch,
   workloadEvidenceLaneSearch,
 } from "./search-retrieval-lanes.js";
-import type { SearchResult } from "./search-types.js";
-import { applyUsefulnessRerank } from "./search-usefulness.js";
+import type { RetrievalLaneResult, SearchResult } from "./search-types.js";
 
 export async function hybridSearch(
   db: D1Database,
@@ -22,7 +22,7 @@ export async function hybridSearch(
   ai: Ai,
   retrievalPlan: RetrievalPlan,
 ): Promise<SearchResult[]> {
-  const { effectivePlan, budget } = retrievalPlan;
+  const { plan, budget } = retrievalPlan;
   const laneLimit = budget.laneCandidateLimit;
   const runSemantic = laneEnabled(retrievalPlan, "topic_semantic");
 
@@ -39,31 +39,31 @@ export async function hybridSearch(
       ? semanticSearch(
           vectorize,
           ai,
-          effectivePlan.semanticQuery,
-          effectivePlan.filters,
+          plan.semanticQuery,
+          plan.filters,
           laneLimit,
         ).catch(err => {
           logger.warn("search.semantic.failed", { ...errorFields(err) });
           return [];
         })
       : Promise.resolve([]),
-    keywordSearch(db, effectivePlan, laneLimit),
+    keywordSearch(db, plan, laneLimit),
     retrievalPlan.hasKeywordQuery && laneEnabled(retrievalPlan, "section_text")
       ? sectionKeywordSearch(
           db,
-          effectivePlan.keywordQuery!,
-          effectivePlan.filters,
+          plan.keywordQuery!,
+          plan.filters,
           laneLimit,
         )
       : Promise.resolve([]),
     laneEnabled(retrievalPlan, "requirement")
-      ? requirementLaneSearch(db, effectivePlan, laneLimit).catch(err => {
+      ? requirementLaneSearch(db, plan, laneLimit).catch(err => {
           logger.warn("search.requirement_lane.failed", { ...errorFields(err) });
           return [];
         })
       : Promise.resolve([]),
     laneEnabled(retrievalPlan, "structured_section")
-      ? structuredSectionLaneSearch(db, effectivePlan, laneLimit).catch(err => {
+      ? structuredSectionLaneSearch(db, plan, laneLimit).catch(err => {
           logger.warn("search.section_lane.failed", { ...errorFields(err) });
           return [];
         })
@@ -71,7 +71,7 @@ export async function hybridSearch(
     laneEnabled(retrievalPlan, "student_language_alias")
       ? studentAliasLaneSearch(
           db,
-          effectivePlan,
+          plan,
           laneLimit,
           retrievalPlan.aliasQuery,
         ).catch(err => {
@@ -82,7 +82,7 @@ export async function hybridSearch(
     laneEnabled(retrievalPlan, "workload_evidence")
       ? workloadEvidenceLaneSearch(
           db,
-          effectivePlan,
+          plan,
           laneLimit,
           retrievalPlan.workloadSignalTypes,
         ).catch(err => {
@@ -93,53 +93,35 @@ export async function hybridSearch(
   ]);
 
   const semanticResults = runSemantic
-    ? await postFilterSemanticResults(db, rawSemanticResults, effectivePlan.filters)
+    ? (await postFilterSemanticResults(db, rawSemanticResults, plan.filters))
+      .map((row, index): RetrievalLaneResult => ({
+        id: row.id,
+        lane: "topic_semantic",
+        rank: index + 1,
+        rawScore: row.score,
+        reason: "Semantic topic recall.",
+        matchedTerms: [plan.semanticQuery].filter(Boolean),
+      }))
     : [];
-  const qualityScores = await fetchQualityScores(
-    db,
-    [
-      ...new Set([
-        ...courseKeywordResults.map(row => row.id),
-        ...sectionKeywordResults.map(row => row.id),
-        ...requirementResults.map(row => row.id),
-        ...structuredSectionResults.map(row => row.id),
-        ...aliasResults.map(row => row.id),
-        ...semanticResults.map(row => row.id),
-        ...workloadResults.map(row => row.id),
-      ]),
-    ],
-  );
-  const scores = fuseRetrievalResults(
-    {
-      isNavigational: retrievalPlan.isNavigational,
-      courseKeywordResults,
-      sectionKeywordResults,
-      requirementResults,
-      structuredSectionResults,
-      aliasResults,
-      semanticResults,
-      workloadResults,
-    },
-    qualityScores,
-  );
+  const scores = fuseRetrievalResults({
+    isNavigational: retrievalPlan.isNavigational,
+    courseKeywordResults,
+    sectionKeywordResults,
+    requirementResults,
+    structuredSectionResults,
+    aliasResults,
+    semanticResults,
+    workloadResults,
+  });
 
   if (scores.length === 0) {
     return [];
   }
 
   const courseMap = await fetchCoursesById(db, scores.map(score => score.id));
-  const resultsWithTitles = scores.map(score => ({
-    ...score,
-    title: courseMap.get(score.id)?.title,
-  }));
-
-  const boostedResults = applyTitleBoost(
-    resultsWithTitles,
-    effectivePlan.keywordQuery || "",
-  ).slice(0, budget.termCandidateLimit);
 
   const rankedResults: SearchResult[] = [];
-  for (const score of boostedResults) {
+  for (const score of scores) {
     const course = courseMap.get(score.id);
     if (!course) continue;
     rankedResults.push({
@@ -149,9 +131,12 @@ export async function hybridSearch(
       keywordRank: score.keywordRank,
       laneMatches: score.laneMatches,
       laneRanks: score.laneRanks,
+      laneResults: score.laneResults,
       supportedSubjectiveClaims: score.supportedSubjectiveClaims,
     });
   }
 
-  return applyUsefulnessRerank(rankedResults, effectivePlan);
+  return applyRankingPolicy(rankedResults, plan, {
+    query: plan.keywordQuery || "",
+  }).slice(0, budget.termCandidateLimit);
 }

@@ -555,13 +555,27 @@ export function buildResultExplanation(
   warnings: ResultWarning[]
 ): ResultExplanation {
   const rescue = context.plan.rescue;
-  const whyMatched = evidence
+  const evidenceReasons = evidence
     .slice(0, 7)
     .map(item => item.value ? `${item.label}: ${item.value}` : item.label);
+  const rankingReasons = result.scoreComponents
+    ?.filter(component => component.value > 0 && component.name !== 'retrieval_fusion')
+    .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
+    .map(component => component.evidence?.length
+      ? `${component.reason}: ${component.evidence.slice(0, 2).join(', ')}`
+      : component.reason
+    ) ?? [];
+  const whyMatched = Array.from(new Set([
+    ...evidenceReasons,
+    ...rankingReasons,
+  ])).slice(0, 7);
 
   const watchOut = [
     ...warnings.map(warning => warning.message),
     ...(rescue?.warnings.map(warning => warning.message) ?? []),
+    ...(result.scoreComponents
+      ?.filter(component => component.value < 0)
+      .map(component => component.reason) ?? []),
   ];
 
   if (

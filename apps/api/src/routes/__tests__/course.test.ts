@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { courseRoutes } from '../course.js';
 import { browserFetch } from '../../http/browser-fetch.js';
+import { resetUpstreamBackoff } from '../../services/upstream-backoff.js';
 
 vi.mock('../../http/browser-fetch.js', () => ({
   browserFetch: vi.fn(),
@@ -16,6 +17,7 @@ function app() {
 describe('course routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetUpstreamBackoff();
   });
 
   it('rejects malformed subject and course number params', async () => {

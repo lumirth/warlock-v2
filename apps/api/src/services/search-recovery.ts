@@ -1,9 +1,11 @@
 import type { SearchRecoveryGroup } from "@uiuc-course-search/query-types";
 import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import { searchActionFromRequest } from "../dto/search-actions.js";
+import type { CanonicalSearchRequest } from "./search-request.js";
 
 export function buildRecoveryGroups(
   plan: SearchPlan,
-  rawQuery: string,
+  request: CanonicalSearchRequest,
   resultCount: number,
 ): SearchRecoveryGroup[] | undefined {
   if (resultCount > 0 || !plan.rescue?.relaxationPlan.length) {
@@ -20,9 +22,10 @@ export function buildRecoveryGroups(
         description: describeRelaxation(step.relaxes),
         relaxes: step.relaxes,
         keeps: step.keeps,
-        queryPatch: {
-          replaceQuery: relaxedQuery(rawQuery, step.relaxes),
-        },
+        action: searchActionFromRequest({
+          ...request,
+          query: relaxedQuery(request.query, step.relaxes),
+        }),
       }),
     );
 

@@ -1,9 +1,7 @@
 import type {
   DecisionQueryType,
-  RetrievalLane,
   SearchPlan,
   SearchPlanAssumption,
-  SearchSoftPreferences,
   SearchPlanWarning,
   SearchPlanWarningKind,
   SearchRelaxationStep,
@@ -13,16 +11,19 @@ import {
   requirementFilter,
 } from '@uiuc-course-search/query-types';
 import { GENERIC_GENED_CODES } from './gened-codes.js';
-
-type RescueRule = {
-  queryTypes: DecisionQueryType[];
-  patterns: RegExp[];
-  removePatterns?: RegExp[];
-  negativeTerms?: string[];
-  softPreferences?: Partial<SearchSoftPreferences>;
-  assumptions?: SearchPlanAssumption[];
-  warnings?: SearchPlanWarning[];
-};
+import {
+  ASYNC_PATTERNS,
+  COMPARISON_PATTERNS,
+  COMPRESSED_TERM_PATTERNS,
+  GENERIC_DECISION_PATTERNS,
+  GENERIC_GENED_PATTERNS,
+  HELP_PATTERNS,
+  lanesForDecisionQueryTypes,
+  NON_MAJOR_PATTERNS,
+  REQUIREMENT_PATTERNS,
+  STUDENT_LANGUAGE_RESCUE_RULES,
+  STUDENT_PROFILE_PATTERNS,
+} from './student-language-lexicon.js';
 
 type TimePreference = {
   key: 'startAfterMinutes' | 'startBeforeMinutes';
@@ -34,144 +35,6 @@ export interface DecisionSearchRescueResult {
   queryResidual: string;
 }
 
-const GENERIC_DECISION_PATTERNS = [
-  /\bi\s+(?:need|want|am looking for|m looking for)\b/gi,
-  /\b(?:need|want|looking for)\b/gi,
-  /\b(?:a|an|the)\b/gi,
-  /\b(?:does|this)\b/gi,
-  /\bcounts?\s+for\b/gi,
-  /\b(?:that|which)\s+counts?\b/gi,
-  /\b(?:class|classes|course|courses)\b/gi,
-  /\b(?:please|show me|find me)\b/gi,
-];
-
-const RESCUE_RULES: RescueRule[] = [
-  {
-    queryTypes: ['avoidance', 'subjective_vibe'],
-    patterns: [/\bno\s+(?:essays?|papers?|writing)\b/i, /\bnot\s+writing\s+heavy\b/i, /\b(?:low|light|writing[-\s]+light)\s+writing\b/i, /\bwriting[-\s]+light\b/i],
-    negativeTerms: ['writing_heavy', 'essays', 'papers'],
-    softPreferences: { lowWriting: 0.9 },
-    assumptions: [assumption('low_writing', 'Low writing preferred', 0.82)],
-    warnings: [warning('writing_evidence_incomplete', 'Essay and writing workload evidence is incomplete for many courses.', 0.78)],
-  },
-  {
-    queryTypes: ['avoidance', 'subjective_vibe'],
-    patterns: [/\bno\s+(?:exams?|tests?|midterms?|finals?)\b/i, /\blow\s+exam\b/i],
-    negativeTerms: ['exam_heavy', 'tests', 'exams'],
-    softPreferences: { lowExams: 0.88 },
-    assumptions: [assumption('low_exams', 'Low exam load preferred', 0.78)],
-    warnings: [warning('exam_evidence_incomplete', 'Exam workload evidence usually comes from syllabi or student reports, not catalog text.', 0.74)],
-  },
-  {
-    queryTypes: ['avoidance', 'subjective_vibe'],
-    patterns: [/\bnot\s+math(?:[-\s]+heavy)?\b/i, /\bno\s+math\b/i, /\bi\s+hate\s+math\b/i, /\blow\s+math\b/i],
-    negativeTerms: ['math_heavy', 'calculus', 'statistics', 'formal_logic', 'quantitative'],
-    softPreferences: { lowMath: 0.86 },
-    assumptions: [assumption('low_math', 'Avoid math-heavy courses', 0.78)],
-    warnings: [warning('math_risk_inferred', 'Math-heavy risk is inferred from course language and requirements until syllabus evidence is available.', 0.72)],
-  },
-  {
-    queryTypes: ['eligibility'],
-    patterns: [/\bno\s+(?:listed\s+)?prereq(?:uisite)?s?\b/i, /\bwithout\s+prereq(?:uisite)?s?\b/i],
-    negativeTerms: ['prerequisites', 'restricted_access'],
-    softPreferences: { noListedPrereq: true },
-    assumptions: [assumption('no_listed_prereq', 'No listed prerequisite preferred', 0.82)],
-    warnings: [warning('prereq_evidence_incomplete', 'Prerequisite and restriction text can be incomplete or term-specific.', 0.7)],
-  },
-  {
-    queryTypes: ['subjective_vibe'],
-    patterns: [/\b(?:easy|chill|gpa\s+booster|grade\s+booster|easy\s+a|low\s+workload)\b/i],
-    softPreferences: { lowWorkload: 0.84 },
-    assumptions: [assumption('low_workload', 'Low workload preferred', 0.82)],
-    warnings: [warning('workload_evidence_incomplete', 'Workload is estimated from scores and available evidence, not guaranteed.', 0.72)],
-  },
-  {
-    queryTypes: ['subjective_vibe'],
-    patterns: [/\b(?:fun|interesting|cool)\b/i],
-    softPreferences: { fun: 0.55 },
-    assumptions: [assumption('fun_or_interesting', 'Fun or interesting topic preferred', 0.52)],
-  },
-  {
-    queryTypes: ['avoidance'],
-    patterns: [/\bless\s+bio(?:logy)?\b/i, /\bnot\s+bio(?:logy)?(?:[-\s]+heavy)?\b/i, /\bno\s+bio(?:logy)?\b/i],
-    negativeTerms: ['biology_heavy', 'bio'],
-    softPreferences: { lowBiology: 0.72 },
-    assumptions: [assumption('low_biology', 'Avoid biology-heavy courses', 0.68)],
-  },
-  {
-    queryTypes: ['avoidance'],
-    patterns: [/\bno\s+group\s+projects?\b/i, /\bavoid\s+group\s+projects?\b/i],
-    negativeTerms: ['group_projects'],
-    softPreferences: { lowGroupWork: 0.8 },
-    assumptions: [assumption('avoid_group_projects', 'Avoid group projects', 0.76)],
-    warnings: [warning('workload_evidence_incomplete', 'Group-project evidence usually requires syllabi or student reports.', 0.68)],
-  },
-  {
-    queryTypes: ['subjective_vibe'],
-    patterns: [/\blow\s+reading\b/i, /\bminimal\s+reading\b/i],
-    negativeTerms: ['reading_heavy'],
-    softPreferences: { lowReading: 0.78 },
-    assumptions: [assumption('low_reading', 'Low reading load preferred', 0.72)],
-    warnings: [warning('workload_evidence_incomplete', 'Reading workload evidence is incomplete for many courses.', 0.68)],
-  },
-];
-
-const REQUIREMENT_PATTERNS = [
-  /\bgen\s*-?\s*ed\b/i,
-  /\brequirements?\b/i,
-  /\bcounts?\s+for\b/i,
-  /\bthat\s+counts?\b/i,
-  /\bcounts?\b/i,
-  /\bfulfills?\b/i,
-  /\bdouble\s+count/i,
-  /\btwo\s+requirements?\b/i,
-];
-
-const GENERIC_GENED_PATTERNS = [
-  /\bgen\s*-?\s*ed\b/i,
-  /\bgened\b/i,
-];
-
-const STUDENT_PROFILE_PATTERNS = [
-  /\bcounts?\s+for\b/i,
-  /\bcounts?\s+for\s+something\b/i,
-  /\bthat\s+counts?\b/i,
-  /\bdouble\s+count/i,
-  /\btwo\s+requirements?\b/i,
-  /\bwhat\s+(?:do\s+)?i\s+need\b/i,
-  /\bwhat\s+(?:am\s+)?i\s+missing\b/i,
-  /\bdegree\s+(?:audit|progress|requirements?)\b/i,
-];
-
-const HELP_PATTERNS = [
-  /\bhow\s+do\s+i\b/i,
-  /\bwhat\s+should\s+i\s+take\b/i,
-  /\bhow\s+to\b/i,
-  /\bhelp\b/i,
-];
-
-const COMPARISON_PATTERNS = [
-  /\blike\s+[A-Z]{2,4}\s*\d{3}\b/i,
-  /\bsimilar\s+to\b/i,
-];
-
-const COMPRESSED_TERM_PATTERNS = [
-  /\b8\s*-?\s*week\b/i,
-  /\beight\s*-?\s*week\b/i,
-  /\bfirst\s+half\b/i,
-  /\bsecond\s+half\b/i,
-];
-
-const NON_MAJOR_PATTERNS = [
-  /\bnon[-\s]?majors?\b/i,
-  /\bfor\s+non[-\s]?majors?\b/i,
-  /\bfreshman\b/i,
-];
-
-const ASYNC_PATTERNS = [
-  /\basync(?:hronous)?\b/i,
-  /\bself[-\s]?paced\b/i,
-];
 
 export function applyDecisionSearchRescue(
   plan: SearchPlan,
@@ -182,12 +45,11 @@ export function applyDecisionSearchRescue(
   const negativeTerms = new Set<string>();
   const assumptions = new Map<string, SearchPlanAssumption>();
   const warnings = new Map<SearchPlanWarningKind, SearchPlanWarning>();
-  const interpretedLanes = new Set<RetrievalLane>();
   const relaxations = new Map<string, SearchRelaxationStep>();
   const removePatterns: RegExp[] = [];
   const normalizedRaw = rawQuery.toLowerCase();
 
-  for (const rule of RESCUE_RULES) {
+  for (const rule of STUDENT_LANGUAGE_RESCUE_RULES) {
     if (!rule.patterns.some(pattern => pattern.test(rawQuery))) {
       continue;
     }
@@ -317,7 +179,6 @@ export function applyDecisionSearchRescue(
     queryTypes.add('topic');
   }
 
-  addInterpretedLanes(interpretedLanes, queryTypes);
   buildRelaxations(relaxations, {
     hasRequirement: queryTypes.has('requirement'),
     hasSchedule: queryTypes.has('schedule'),
@@ -341,7 +202,7 @@ export function applyDecisionSearchRescue(
     expandedTerms: expansionTermsFrom(plan.softPreferences?.topicExpansions),
     assumptions: Array.from(assumptions.values()),
     warnings: Array.from(warnings.values()),
-    interpretedLanes: Array.from(interpretedLanes),
+    interpretedLanes: lanesForDecisionQueryTypes(queryTypes),
     relaxationPlan: Array.from(relaxations.values()),
     needsStudentProfile,
     confidence: rescueConfidence(queryTypes, normalizedRaw),
@@ -382,17 +243,6 @@ function hasScheduleIntent(plan: SearchPlan, rawQuery: string): boolean {
     || plan.filters.status
     || plan.filters.partOfTerm
   ) || COMPRESSED_TERM_PATTERNS.some(pattern => pattern.test(rawQuery));
-}
-
-function addInterpretedLanes(lanes: Set<RetrievalLane>, queryTypes: Set<DecisionQueryType>): void {
-  if (queryTypes.has('exact_course')) lanes.add('exact');
-  if (queryTypes.has('topic') || queryTypes.has('requirement') || queryTypes.has('comparison')) lanes.add('official_text');
-  if (queryTypes.has('requirement') || queryTypes.has('degree_progress')) lanes.add('requirement');
-  if (queryTypes.has('schedule')) lanes.add('structured_section');
-  if (queryTypes.has('subjective_vibe') || queryTypes.has('avoidance')) lanes.add('student_language_alias');
-  if (queryTypes.has('topic') || queryTypes.has('comparison')) lanes.add('topic_semantic');
-  if (queryTypes.has('subjective_vibe') || queryTypes.has('avoidance') || queryTypes.has('eligibility')) lanes.add('workload_evidence');
-  if (queryTypes.has('help_or_how_to') || queryTypes.has('degree_progress')) lanes.add('help_path');
 }
 
 function buildRelaxations(
@@ -479,6 +329,14 @@ function rescueConfidence(queryTypes: Set<DecisionQueryType>, normalizedRaw: str
   return 0.5;
 }
 
+function assumption(kind: string, label: string, confidence: number): SearchPlanAssumption {
+  return { kind, label, confidence, source: 'rule' };
+}
+
+function warning(kind: SearchPlanWarningKind, message: string, confidence: number): SearchPlanWarning {
+  return { kind, message, confidence };
+}
+
 function extractTimePreference(rawQuery: string): TimePreference | null {
   const lower = rawQuery.toLowerCase();
   if (/\bafter\s+lunch\b/.test(lower)) {
@@ -514,14 +372,6 @@ function extractTimePreference(rawQuery: string): TimePreference | null {
     value: (normalizedHour * 60) + minute,
     raw: match[0],
   };
-}
-
-function assumption(kind: string, label: string, confidence: number): SearchPlanAssumption {
-  return { kind, label, confidence, source: 'rule' };
-}
-
-function warning(kind: SearchPlanWarningKind, message: string, confidence: number): SearchPlanWarning {
-  return { kind, message, confidence };
 }
 
 function escapeRegex(value: string): string {

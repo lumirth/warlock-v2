@@ -1,4 +1,8 @@
 import { SUBJECT_ALIASES } from './data/valid-subjects.js';
+import {
+  GENED_CUES,
+  STUDENT_LANGUAGE_ALIAS_ENTRIES,
+} from './student-language-lexicon.js';
 
 export type AliasKind = 'subject' | 'gened' | 'delivery' | 'status' | 'difficulty' | 'days' | 'time';
 
@@ -17,8 +21,6 @@ export interface AliasMatch {
   raw: string;
 }
 
-// Cue words that indicate gened filter intent
-const GENED_CUES = ['gen ed', 'gened', 'gen-ed', 'requirement', 'category'];
 const FUZZY_SUBJECT_CONFIDENCE = 0.72;
 
 interface TokenSpan {
@@ -277,32 +279,7 @@ function boundedEditDistance(left: string, right: string, maxDistance: number): 
 export function createDefaultRegistry(): AliasRegistry {
   const registry = new AliasRegistry();
 
-  // Time aliases
-  registry.addAll([
-    { kind: 'time', canonical: 'early', aliases: ['early morning', 'early'] },
-    { kind: 'time', canonical: 'morning', aliases: ['morning', 'before noon', 'before lunch'] },
-    { kind: 'time', canonical: 'midday', aliases: ['midday', 'mid day', 'around noon'] },
-    { kind: 'time', canonical: 'afternoon', aliases: ['afternoon', 'after noon', 'after lunch'] },
-    { kind: 'time', canonical: 'evening', aliases: ['evening', 'night', 'after 5'] },
-  ]);
-
-  // Difficulty aliases
-  registry.addAll([
-    { kind: 'difficulty', canonical: 'easy', aliases: ['easy', 'simple', 'chill', 'low workload', 'grade booster', 'gpa booster', 'easy a', 'not hard'] },
-    { kind: 'difficulty', canonical: 'hard', aliases: ['hard', 'difficult', 'challenging', 'tough'] },
-  ]);
-
-  // Status aliases
-  registry.addAll([
-    { kind: 'status', canonical: 'open', aliases: ['open', 'available', 'has seats', 'not full', 'no waitlist'] },
-    { kind: 'status', canonical: 'closed', aliases: ['closed', 'full', 'waitlist'] },
-  ]);
-
-  // Delivery aliases
-  registry.addAll([
-    { kind: 'delivery', canonical: 'true', aliases: ['online', 'remote', 'virtual', 'asynchronous', 'async'] },
-    { kind: 'delivery', canonical: 'false', aliases: ['in person', 'in-person', 'on campus', 'face to face'] },
-  ]);
+  registry.addAll(STUDENT_LANGUAGE_ALIAS_ENTRIES);
 
   // Official Course Explorer subject names plus conservative student shorthand.
   // This is generated with the subject list so broad queries like "Philosophy"
@@ -316,44 +293,6 @@ export function createDefaultRegistry(): AliasRegistry {
         aliases: entry.aliases,
       }))
   );
-
-  // Days aliases
-  registry.addAll([
-    { kind: 'days', canonical: 'MWF', aliases: ['mwf', 'monday wednesday friday', 'mon wed fri', 'm w f'] },
-    { kind: 'days', canonical: 'TR', aliases: ['tr', 'tuesday thursday', 'tue thu', 'tue thur', 't r', 'tuth'] },
-    { kind: 'days', canonical: 'MW', aliases: ['mw', 'monday wednesday', 'mon wed'] },
-    { kind: 'days', canonical: 'WF', aliases: ['wf', 'wednesday friday', 'wed fri'] },
-  ]);
-
-  // GenEd aliases (require cue)
-  registry.addAll([
-    { kind: 'gened', canonical: 'HUM', aliases: ['humanities', 'humanities and the arts', 'arts'], requiresCue: true },
-    { kind: 'gened', canonical: 'NAT', aliases: ['natural sciences', 'nat sci', 'science'], requiresCue: true },
-    { kind: 'gened', canonical: 'PS', aliases: ['physical sciences', 'physical'], requiresCue: true },
-    { kind: 'gened', canonical: 'SBS', aliases: ['social sciences', 'behavioral sciences', 'social and behavioral'], requiresCue: true },
-    { kind: 'gened', canonical: 'CS', aliases: ['cultural studies'], requiresCue: true },
-    { kind: 'gened', canonical: 'QR', aliases: ['quantitative reasoning', 'quantitative', 'quant'], requiresCue: true },
-    { kind: 'gened', canonical: 'NW', aliases: ['non western', 'non-western', 'nonwestern'], requiresCue: true },
-    { kind: 'gened', canonical: 'US', aliases: ['us minority', 'minority cultures'], requiresCue: true },
-    { kind: 'gened', canonical: 'WCC', aliases: ['western comparative', 'western'], requiresCue: true },
-    { kind: 'gened', canonical: 'ACP', aliases: ['advanced composition', 'adv comp', 'writing intensive'], requiresCue: true },
-  ]);
-
-  // GenEd codes (no cue required - explicit codes always work)
-  registry.addAll([
-    { kind: 'gened', canonical: 'HUM', aliases: ['hum', 'humanities', 'humanities and the arts'] },
-    { kind: 'gened', canonical: 'NAT', aliases: ['nat', 'nat sci', 'natural sciences'] },
-    { kind: 'gened', canonical: 'PS', aliases: ['ps gened', 'ps gen ed', 'physical sciences'] },
-    { kind: 'gened', canonical: 'SBS', aliases: ['sbs', 'social sciences', 'behavioral sciences', 'social and behavioral'] },
-    { kind: 'gened', canonical: 'CS', aliases: ['cs gened', 'cs gen ed', 'cultural studies'] }, // "cultural studies" is specific enough
-    { kind: 'gened', canonical: 'QR', aliases: ['qr', 'quantitative reasoning'] },
-    { kind: 'gened', canonical: 'QR1', aliases: ['qr1', 'qr 1'] },
-    { kind: 'gened', canonical: 'QR2', aliases: ['qr2', 'qr 2'] },
-    { kind: 'gened', canonical: 'NW', aliases: ['nw', 'non western', 'non-western'] },
-    { kind: 'gened', canonical: 'US', aliases: ['us minority', 'minority cultures'] },
-    { kind: 'gened', canonical: 'WCC', aliases: ['wcc', 'western comparative'] },
-    { kind: 'gened', canonical: 'ACP', aliases: ['acp', 'advanced composition', 'writing intensive'] },
-  ]);
 
   return registry;
 }

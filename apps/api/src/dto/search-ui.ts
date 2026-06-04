@@ -2,8 +2,9 @@ import type {
   AdvancedSearchStateDto,
   SearchAmbiguityActionDto,
   SearchChipDto,
-  SearchRequestFilterPatchDto,
+  SearchRequestFiltersDto,
   SearchUiPlanDto,
+  NormalizedSearchRequestDto,
 } from '@uiuc-course-search/query-types';
 import type {
   Ambiguity,
@@ -23,16 +24,36 @@ import {
   isSearchTimeFilter,
 } from '@uiuc-course-search/query-types';
 import { isGenericAnyGenedFilter } from '../services/gened-codes.js';
+import {
+  ambiguitySearchAction,
+  removeSearchIntentAction,
+} from './search-actions.js';
 
-export function buildSearchUiPlan(hints: Hint[], plan: SearchPlan, residual: string): SearchUiPlanDto {
+export function buildSearchUiPlan(
+  hints: Hint[],
+  plan: SearchPlan,
+  residual: string,
+  request: NormalizedSearchRequestDto,
+): SearchUiPlanDto {
+  const advanced = buildAdvancedState(hints, plan.filters, residual);
   return {
-    chips: buildSearchChips(hints, plan, residual),
-    advanced: buildAdvancedState(hints, plan.filters, residual),
-    ambiguityActions: buildAmbiguityActions(plan.ambiguities ?? []),
+    chips: buildSearchChips(hints, plan, residual, request),
+    advanced,
+    ambiguityActions: buildAmbiguityActions(
+      plan.ambiguities ?? [],
+      request,
+      residual,
+      advanced,
+    ),
   };
 }
 
-function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): SearchChipDto[] {
+function buildSearchChips(
+  hints: Hint[],
+  plan: SearchPlan,
+  residual: string,
+  request: NormalizedSearchRequestDto,
+): SearchChipDto[] {
   const chips = hints.map((hint, index): SearchChipDto => ({
     id: `${hint.type}-${index}`,
     type: hint.type,
@@ -41,10 +62,11 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
     source: 'natural_language',
     removable: true,
     editable: isEditableHint(hint),
-    filter: resolvedFilterFromHint(hint, plan),
-    queryPatch: {
-      removeText: removeTextForHint(hint, residual),
-    },
+    action: removeSearchIntentAction(
+      request,
+      resolvedFilterFromHint(hint, plan),
+      removeTextForHint(hint, residual),
+    ),
   }));
 
   if (shouldShowGenericGenedChip(hints, plan.filters)) {
@@ -56,9 +78,7 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
       source: 'natural_language',
       removable: true,
       editable: false,
-      queryPatch: {
-        removeText: 'gened',
-      },
+      action: removeSearchIntentAction(request, undefined, 'gened'),
     });
   }
 
@@ -71,9 +91,7 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
       source: 'natural_language',
       removable: true,
       editable: true,
-      queryPatch: {
-        removeText: residual,
-      },
+      action: removeSearchIntentAction(request, undefined, residual),
     });
   }
 
@@ -93,9 +111,11 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
       source: 'natural_language',
       removable: true,
       editable: false,
-      queryPatch: {
-        removeText: textToRemoveForAssumption(assumption.kind, residual),
-      },
+      action: removeSearchIntentAction(
+        request,
+        undefined,
+        textToRemoveForAssumption(assumption.kind, residual),
+      ),
     });
   }
 
@@ -185,7 +205,12 @@ function publicLevel(value: number | undefined): AdvancedSearchStateDto['level']
   return isSearchLevelFilter(value) ? value : undefined;
 }
 
-function buildAmbiguityActions(ambiguities: Ambiguity[]): SearchAmbiguityActionDto[] {
+function buildAmbiguityActions(
+  ambiguities: Ambiguity[],
+  request: NormalizedSearchRequestDto,
+  residual: string,
+  baseFilters: SearchRequestFiltersDto,
+): SearchAmbiguityActionDto[] {
   return ambiguities.flatMap((ambiguity, ambiguityIndex) =>
     ambiguity.alternatives.map((alternative, alternativeIndex) => {
       const filter = ambiguityFilter(alternative.type, alternative.value);
@@ -194,16 +219,16 @@ function buildAmbiguityActions(ambiguities: Ambiguity[]): SearchAmbiguityActionD
         id: `${ambiguityIndex}-${alternativeIndex}-${alternative.type}-${alternative.value}`,
         term: ambiguity.term,
         label: alternative.label,
-        filter,
-        queryPatch: {
-          replaceQuery: queryForFilter(filter),
-        },
+        action: ambiguitySearchAction(request, baseFilters, filter, residual),
       };
     })
   );
 }
 
-function ambiguityFilter(type: string, value: string): SearchRequestFilterPatchDto {
+function ambiguityFilter(
+  type: string,
+  value: string,
+): Partial<SearchRequestFiltersDto> {
   if (type === 'subject') {
     return { subject: value.toUpperCase() };
   }
@@ -213,18 +238,6 @@ function ambiguityFilter(type: string, value: string): SearchRequestFilterPatchD
   }
 
   return {};
-}
-
-function queryForFilter(filter: SearchRequestFilterPatchDto): string {
-  if (filter.subject) {
-    return `subject:${filter.subject}`;
-  }
-
-  if (filter.gened) {
-    return `gened:${filter.gened}`;
-  }
-
-  return '';
 }
 
 function formatHintLabel(hint: Hint, residual = ''): string {
@@ -340,7 +353,7 @@ function formatHintValue(value: Hint['value']): string {
   return String(value);
 }
 
-function filterFromHint(hint: Hint): SearchRequestFilterPatchDto {
+function filterFromHint(hint: Hint): Partial<SearchRequestFiltersDto> {
   switch (hint.type) {
     case 'courseCode': {
       const value = hint.value as CourseCodeValue;
@@ -391,7 +404,10 @@ function filterFromHint(hint: Hint): SearchRequestFilterPatchDto {
   }
 }
 
-function resolvedFilterFromHint(hint: Hint, plan: SearchPlan): SearchRequestFilterPatchDto {
+function resolvedFilterFromHint(
+  hint: Hint,
+  plan: SearchPlan,
+): Partial<SearchRequestFiltersDto> {
   if (isSubjectHintResolvedAsGened(hint, plan)) {
     return { gened: formatHintValue(hint.value).toUpperCase() };
   }

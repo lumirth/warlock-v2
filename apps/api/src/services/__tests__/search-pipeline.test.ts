@@ -27,7 +27,7 @@ function request(query: string, filters = {}) {
 
 function planFromFirstSearchCall(): SearchPlan {
   return vi.mocked(termRanking.hybridSearchWithTermRanking).mock.calls[0][3]
-    .effectivePlan;
+    .plan;
 }
 
 const mockCourse = (overrides: Partial<Course> = {}): Course => ({
@@ -352,10 +352,12 @@ describe("SearchPipeline", () => {
 
     expect(termRanking.hybridSearchWithTermRanking).toHaveBeenCalledTimes(2);
     expect(result.meta.retrievalPlans).toHaveLength(2);
-    expect(result.meta.retrievalPlans[0].effectivePlan.keywordQuery).toBe("ml");
-    expect(result.meta.retrievalPlans[1].effectivePlan.keywordQuery).toBe(
+    expect(result.meta.retrievalPlans[0].plan.keywordQuery).toBe("ml");
+    expect(result.meta.retrievalPlans[1].plan.keywordQuery).toBe(
       "ml machine learning",
     );
+    expect(Object.isFrozen(result.meta.retrievalPlans[0].plan)).toBe(true);
+    expect(Object.isFrozen(result.meta.retrievalPlans[1].plan)).toBe(true);
     expect(result.results[0].course.id).toBe("expanded");
   });
 

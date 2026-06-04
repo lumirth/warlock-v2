@@ -1,9 +1,4 @@
 import {
-  SEARCH_LEVEL_OPTIONS as SEARCH_LEVEL_OPTIONS_CONTRACT,
-  SEARCH_STATUS_OPTIONS as SEARCH_STATUS_OPTIONS_CONTRACT,
-  SEARCH_TERM_OPTIONS as SEARCH_TERM_OPTIONS_CONTRACT,
-  SEARCH_TIME_OPTIONS as SEARCH_TIME_OPTIONS_CONTRACT,
-  SEARCH_WORKLOAD_OPTIONS as SEARCH_WORKLOAD_OPTIONS_CONTRACT,
   type SortField,
 } from '@uiuc-course-search/query-types'
 
@@ -25,13 +20,18 @@ export type TableSortColumn = {
   className?: string
 }
 
-export const TERM_OPTIONS: SelectOption[] = SEARCH_TERM_OPTIONS_CONTRACT.map(
-  (option) => ({ ...option })
-)
+export const TERM_OPTIONS: SelectOption[] = [
+  { value: 'spring', label: 'Spring' },
+  { value: 'summer', label: 'Summer' },
+  { value: 'fall', label: 'Fall' },
+  { value: 'winter', label: 'Winter' },
+]
 
-export const TIME_OPTIONS: SelectOption[] = SEARCH_TIME_OPTIONS_CONTRACT.map(
-  (option) => ({ ...option })
-)
+export const TIME_OPTIONS: SelectOption[] = [
+  { value: 'morning', label: 'Morning' },
+  { value: 'afternoon', label: 'Afternoon' },
+  { value: 'evening', label: 'Evening' },
+]
 
 export const PART_OF_TERM_OPTIONS: SelectOption[] = [
   { value: '1', label: 'Full term' },
@@ -44,17 +44,23 @@ export const DELIVERY_OPTIONS: SelectOption[] = [
   { value: 'false', label: 'In person' },
 ]
 
-export const STATUS_OPTIONS: SelectOption[] = SEARCH_STATUS_OPTIONS_CONTRACT.map(
-  (option) => ({ ...option })
-)
+export const STATUS_OPTIONS: SelectOption[] = [
+  { value: 'open', label: 'Open' },
+  { value: 'closed', label: 'Closed' },
+]
 
-export const WORKLOAD_OPTIONS: SelectOption[] = SEARCH_WORKLOAD_OPTIONS_CONTRACT.map(
-  (option) => ({ ...option })
-)
+export const WORKLOAD_OPTIONS: SelectOption[] = [
+  { value: 'easy', label: 'Easier' },
+  { value: 'hard', label: 'Harder' },
+]
 
-export const LEVEL_OPTIONS: SelectOption[] = SEARCH_LEVEL_OPTIONS_CONTRACT.map(
-  (option) => ({ value: String(option.value), label: option.label })
-)
+export const LEVEL_OPTIONS: SelectOption[] = [
+  { value: '100', label: '100 level' },
+  { value: '200', label: '200 level' },
+  { value: '300', label: '300 level' },
+  { value: '400', label: '400 level' },
+  { value: '500', label: '500+ level' },
+]
 
 export const SORT_FIELD_OPTIONS: SortFieldOption[] = [
   { value: 'relevance', label: 'Relevance' },

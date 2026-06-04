@@ -1,11 +1,32 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { hasRequirementFilter } from "@uiuc-course-search/query-types";
-import type { SearchFilters, SearchPlan } from "@uiuc-course-search/query-types/search-planner";
-import { validateSubject } from "./query-resolver.js";
+import type { RetrievalLane, SearchFilters, SearchPlan } from "@uiuc-course-search/query-types/search-planner";
 import { buildFilterClauses } from "./search-filters.js";
 import type { RankedLaneRow, WorkloadLaneRow } from "./search-fusion.js";
 import { chunkValues } from "./search-loaders.js";
 import { escapeLike, sanitizeFtsQuery, titleLaneQuery } from "./search-text.js";
+
+function rankedLaneRow(
+  lane: RetrievalLane,
+  id: string,
+  index: number,
+  reason: string,
+  options: {
+    rawScore?: number | null;
+    matchedTerms?: string[];
+    evidence?: string[];
+  } = {},
+): RankedLaneRow {
+  return {
+    id,
+    lane,
+    rank: index + 1,
+    reason,
+    rawScore: options.rawScore ?? undefined,
+    matchedTerms: options.matchedTerms,
+    evidence: options.evidence,
+  };
+}
 
 export async function titleKeywordSearch(
   db: D1Database,
@@ -49,10 +70,13 @@ export async function titleKeywordSearch(
     .bind(titleNeedle, titlePrefix, ...params, titleContains, ...(havingParams ?? []), limit)
     .all<{ id: string; title_rank: number }>();
 
-  return result.results.map((_row, index) => ({
-    id: _row.id,
-    rank: index + 1,
-  }));
+  return result.results.map((row, index) => rankedLaneRow(
+    "official_text",
+    row.id,
+    index,
+    row.title_rank === 1 ? "Exact title recall." : "Title prefix or contains recall.",
+    { rawScore: row.title_rank, matchedTerms: [titleNeedle] },
+  ));
 }
 
 export async function keywordSearch(
@@ -75,10 +99,13 @@ export async function keywordSearch(
       .all<{ id: string }>();
 
     if (exactResult.results.length > 0) {
-      return exactResult.results.map((row, index) => ({
-        id: row.id,
-        rank: index + 1,
-      }));
+      return exactResult.results.map((row, index) => rankedLaneRow(
+        "exact",
+        row.id,
+        index,
+        `Exact course code lookup for ${filters.subject} ${filters.number}.`,
+        { matchedTerms: [`${filters.subject} ${filters.number}`] },
+      ));
     }
   }
 
@@ -94,10 +121,13 @@ export async function keywordSearch(
       .bind(filters.crn)
       .all<{ id: string }>();
     if (crnResult.results.length > 0) {
-      return crnResult.results.map((row, index) => ({
-        id: row.id,
-        rank: index + 1,
-      }));
+      return crnResult.results.map((row, index) => rankedLaneRow(
+        "exact",
+        row.id,
+        index,
+        `Exact CRN lookup for ${filters.crn}.`,
+        { matchedTerms: [filters.crn!] },
+      ));
     }
   }
 
@@ -114,17 +144,8 @@ export async function keywordSearch(
   const titleResults = hasKeyword
     ? await titleKeywordSearch(db, titleQuery, filters, limit)
     : [];
-  let searchParam = cleanQuery;
-
-  if (hasKeyword && !filters.subject && !filters.number) {
-    const subjectId = await validateSubject(db, cleanQuery);
-    if (subjectId) {
-      const escaped = cleanQuery.replace(/"/g, '""');
-      searchParam = `"${escaped}" OR ${subjectId}`;
-    }
-  }
   const finalParams = hasKeyword
-    ? [...params, searchParam, limit]
+    ? [...params, cleanQuery, limit]
     : [...params, limit];
 
   const sql = hasKeyword ? `
@@ -149,10 +170,16 @@ export async function keywordSearch(
     .bind(...finalParams)
     .all<{ id: string; fts_score: number }>();
 
-  const ftsResults = result.results.map((row, index) => ({
-    id: row.id,
-    rank: index + 1,
-  }));
+  const ftsResults = result.results.map((row, index) => rankedLaneRow(
+    "official_text",
+    row.id,
+    index,
+    hasKeyword ? "Official course text FTS recall." : "Structured course-filter recall.",
+    {
+      rawScore: row.fts_score,
+      matchedTerms: hasKeyword ? [cleanQuery] : undefined,
+    },
+  ));
   if (titleResults.length === 0) {
     return ftsResults;
   }
@@ -162,7 +189,7 @@ export async function keywordSearch(
   for (const row of [...titleResults, ...ftsResults]) {
     if (seen.has(row.id)) continue;
     seen.add(row.id);
-    combined.push({ id: row.id, rank: combined.length + 1 });
+    combined.push({ ...row, rank: combined.length + 1 });
     if (combined.length >= limit) break;
   }
 
@@ -204,10 +231,13 @@ export async function sectionKeywordSearch(
     .bind(...params, escapedQuery, limit)
     .all<{ id: string; fts_score: number }>();
 
-  return result.results.map((row, index) => ({
-    id: row.id,
-    rank: index + 1,
-  }));
+  return result.results.map((row, index) => rankedLaneRow(
+    "section_text",
+    row.id,
+    index,
+    "Section text FTS recall.",
+    { rawScore: row.fts_score, matchedTerms: [escapedQuery] },
+  ));
 }
 
 export async function requirementLaneSearch(
@@ -243,10 +273,12 @@ export async function requirementLaneSearch(
     .bind(...params, ...(havingParams ?? []), limit)
     .all<{ id: string }>();
 
-  return result.results.map((row, index) => ({
-    id: row.id,
-    rank: index + 1,
-  }));
+  return result.results.map((row, index) => rankedLaneRow(
+    "requirement",
+    row.id,
+    index,
+    "Structured requirement mapping recall.",
+  ));
 }
 
 export async function structuredSectionLaneSearch(
@@ -293,10 +325,12 @@ export async function structuredSectionLaneSearch(
     .bind(...params, ...(havingParams ?? []), limit)
     .all<{ id: string }>();
 
-  return result.results.map((row, index) => ({
-    id: row.id,
-    rank: index + 1,
-  }));
+  return result.results.map((row, index) => rankedLaneRow(
+    "structured_section",
+    row.id,
+    index,
+    "Structured section constraint recall.",
+  ));
 }
 
 export async function studentAliasLaneSearch(
@@ -333,10 +367,13 @@ export async function studentAliasLaneSearch(
     .bind(...params, aliasQuery, ...(havingParams ?? []), limit)
     .all<{ id: string; fts_score: number }>();
 
-  return result.results.map((row, index) => ({
-    id: row.id,
-    rank: index + 1,
-  }));
+  return result.results.map((row, index) => rankedLaneRow(
+    "student_language_alias",
+    row.id,
+    index,
+    "Student-language alias FTS recall.",
+    { rawScore: row.fts_score, matchedTerms: [aliasQuery] },
+  ));
 }
 
 export async function workloadEvidenceLaneSearch(
@@ -373,11 +410,23 @@ export async function workloadEvidenceLaneSearch(
     .bind(...signalTypes, ...params, ...(havingParams ?? []), limit)
     .all<{ id: string; claims: string | null; evidence_score: number | null }>();
 
-  return result.results.map((row, index) => ({
-    id: row.id,
-    rank: index + 1,
-    claims: row.claims?.split(",").filter(Boolean) ?? [],
-  }));
+  return result.results.map((row, index) => {
+    const claims = row.claims?.split(",").filter(Boolean) ?? [];
+    return {
+      ...rankedLaneRow(
+        "workload_evidence",
+        row.id,
+        index,
+        "Structured workload or subjective evidence recall.",
+        {
+          rawScore: row.evidence_score,
+          matchedTerms: signalTypes,
+          evidence: claims,
+        },
+      ),
+      claims,
+    };
+  });
 }
 
 export async function postFilterSemanticResults(

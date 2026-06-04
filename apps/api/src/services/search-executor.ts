@@ -6,6 +6,7 @@ import {
   type SearchPageWindow,
 } from "./search-budget.js";
 import { applySearchControls, type AppliedSearchControls } from "./search-controls.js";
+import { compareRankedSearchResults } from "./search-ranking-policy.js";
 import {
   buildRetrievalPlan,
   type RetrievalPlan,
@@ -14,6 +15,7 @@ import { hybridSearchWithTermRanking } from "./search-term-ranking.js";
 import { sanitizeFtsQuery } from "./search-text.js";
 import type { SearchResult } from "./search-types.js";
 import { expandTopics } from "./topic-registry.js";
+import { deepFreeze } from "./search-request.js";
 
 export type SearchExecutionResult = {
   results: SearchResult[];
@@ -35,7 +37,7 @@ export async function executeSearchPlan(
   queryResidual: string,
   budget: SearchCandidateBudget = buildSearchCandidateBudget(plan, page, controls),
 ): Promise<SearchExecutionResult> {
-  const retrievalPlan = await buildRetrievalPlan(db, plan, controls, budget);
+  const retrievalPlan = buildRetrievalPlan(plan, controls, budget);
   const retrievalPlans = [retrievalPlan];
   const isNavigational = retrievalPlan.isNavigational;
   let tierReached = isNavigational ? 1 : 2;
@@ -53,8 +55,7 @@ export async function executeSearchPlan(
     const expandedPlan = expansionPlan(plan, queryResidual);
     if (expandedPlan) {
       tierReached = 3;
-      const expandedRetrievalPlan = await buildRetrievalPlan(
-        db,
+      const expandedRetrievalPlan = buildRetrievalPlan(
         expandedPlan,
         controls,
         budget,
@@ -95,7 +96,7 @@ function expansionPlan(plan: SearchPlan, queryResidual: string): SearchPlan | nu
     return null;
   }
 
-  return {
+  return deepFreeze({
     ...plan,
     keywordQuery: sanitizeFtsQuery(
       `${plan.keywordQuery} ${expandedKeywords.join(" ")}`,
@@ -103,7 +104,7 @@ function expansionPlan(plan: SearchPlan, queryResidual: string): SearchPlan | nu
     semanticQuery: sanitizeFtsQuery(
       `${plan.semanticQuery} ${expandedKeywords.join(" ")}`,
     ),
-  };
+  });
 }
 
 function mergeResults(
@@ -125,11 +126,6 @@ function mergeResults(
   }
 
   return Array.from(map.values())
-    .sort((a, b) => {
-      if (a.termPriority !== b.termPriority) {
-        return (a.termPriority ?? 100) - (b.termPriority ?? 100);
-      }
-      return b.score - a.score;
-    })
+    .sort(compareRankedSearchResults)
     .slice(0, limit);
 }

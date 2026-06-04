@@ -1,5 +1,11 @@
 import { createServer, type ServerResponse } from 'node:http';
-import type { CourseDto, SearchResponseDto, SearchUiPlanDto } from '@uiuc-course-search/query-types';
+import type {
+  CourseDto,
+  SearchActionDto,
+  SearchRequestDto,
+  SearchResponseDto,
+  SearchUiPlanDto,
+} from '@uiuc-course-search/query-types';
 
 const PORT = Number(process.env.QA_MOCK_API_PORT ?? 8787);
 
@@ -144,6 +150,10 @@ function courseVariant(overrides: Partial<CourseDto>): CourseDto {
   };
 }
 
+function searchAction(nextRequest: SearchRequestDto): SearchActionDto {
+  return { kind: 'run_search', nextRequest };
+}
+
 function searchUi(query: string): SearchUiPlanDto {
   const lower = query.toLowerCase();
   const chips: SearchUiPlanDto['chips'] = [];
@@ -159,7 +169,7 @@ function searchUi(query: string): SearchUiPlanDto {
       source: 'natural_language',
       removable: true,
       editable: true,
-      queryPatch: { removeText: 'CS 225' },
+      action: searchAction({ query: query.replace(/cs\s*225/i, '').trim() }),
     });
     advanced.subject = 'CS';
     advanced.number = '225';
@@ -174,7 +184,12 @@ function searchUi(query: string): SearchUiPlanDto {
       source: 'natural_language',
       removable: true,
       editable: true,
-      queryPatch: { removeText: lower.includes('professor fagen') ? 'professor fagen' : 'fagen' },
+      action: searchAction({
+        query: query
+          .replace(/professor\s+fagen/i, '')
+          .replace(/fagen/i, '')
+          .trim(),
+      }),
     });
     advanced.instructor = 'fagen';
   }
@@ -188,15 +203,16 @@ function searchUi(query: string): SearchUiPlanDto {
       source: 'natural_language',
       removable: true,
       editable: true,
-      queryPatch: { removeText: 'gened' },
+      action: searchAction({
+        query: query.replace(/\bgened\b/i, '').trim(),
+      }),
     });
     advanced.gened = 'CS';
     ambiguityActions.push({
       id: 'gened-CS-alternative',
       term: 'CS',
       label: 'Cultural Studies',
-      filter: { gened: 'CS' },
-      queryPatch: { replaceQuery: 'gened:CS' },
+      action: searchAction({ query: '', filters: { gened: 'CS' } }),
     });
   }
 
@@ -209,7 +225,7 @@ function searchUi(query: string): SearchUiPlanDto {
       source: 'natural_language',
       removable: true,
       editable: true,
-      queryPatch: { removeText: 'intro' },
+      action: searchAction({ query: query.replace(/\bintro\b/i, '').trim() }),
     });
     chips.push({
       id: 'subject-CS',
@@ -219,8 +235,12 @@ function searchUi(query: string): SearchUiPlanDto {
       source: 'natural_language',
       removable: true,
       editable: true,
-      filter: { subject: 'CS' },
-      queryPatch: { removeText: lower.includes('comp sci') ? 'comp sci' : 'CS' },
+      action: searchAction({
+        query: query
+          .replace(/comp\s+sci/i, '')
+          .replace(/\bcs\b/i, '')
+          .trim(),
+      }),
     });
     advanced.subject = 'CS';
   }

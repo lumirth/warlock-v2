@@ -3,11 +3,7 @@ import type { SearchPipelineResult } from "./search-response.js";
 import type {
   SearchPlanningResult,
 } from "./search-plan-compiler.js";
-import {
-  searchPlanRequestCachePayload,
-  searchRequestCachePayload,
-  type CanonicalSearchRequest,
-} from "./search-request.js";
+import type { CanonicalSearchRequest } from "./search-request.js";
 
 const SEARCH_CACHE_VERSION = "v11";
 const SEARCH_PLAN_TTL_SECONDS = 5 * 60;
@@ -80,6 +76,39 @@ function cacheKey(
   payload: Record<string, unknown>,
 ): string {
   return `search:${SEARCH_CACHE_VERSION}:${kind}:${hashStableJson(payload)}`;
+}
+
+function searchRequestCachePayload(
+  request: CanonicalSearchRequest,
+): Record<string, unknown> {
+  return {
+    query: normalizeSearchQueryForKey(request.query),
+    filters: stableSearchRecord(request.filters),
+    sort: stableSearchRecord(request.sort),
+    scope: request.scope,
+  };
+}
+
+function searchPlanRequestCachePayload(
+  request: CanonicalSearchRequest,
+): Record<string, unknown> {
+  return {
+    query: normalizeSearchQueryForKey(request.query),
+    filters: stableSearchRecord(request.filters),
+  };
+}
+
+function stableSearchRecord(value: object | undefined): Record<string, unknown> {
+  if (!value) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function normalizeSearchQueryForKey(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 function hashStableJson(value: unknown): string {

@@ -1,8 +1,8 @@
 import type {
   AdvancedSearchStateDto,
-  SearchRequestFilterPatchDto,
   SearchScope,
   SearchSort,
+  SearchRequestDto,
 } from "./search-contract.js";
 
 export * from "./course-policy.js";
@@ -65,11 +65,7 @@ export type SearchRecoveryGroup = {
   description: string;
   relaxes: string[];
   keeps: string[];
-  queryPatch?: {
-    replaceQuery?: string;
-    removeText?: string;
-    appendText?: string;
-  };
+  action: SearchActionDto;
 };
 
 export type SearchInterpretationDto = {
@@ -323,6 +319,11 @@ export type SearchChipSource =
   | "ambiguity"
   | "manual_override";
 
+export type SearchActionDto = {
+  kind: "run_search";
+  nextRequest: SearchRequestDto;
+};
+
 export type SearchChipDto = {
   id: string;
   type: SearchChipType;
@@ -331,23 +332,14 @@ export type SearchChipDto = {
   source: SearchChipSource;
   removable: boolean;
   editable: boolean;
-  filter?: SearchRequestFilterPatchDto;
-  queryPatch?: {
-    removeText?: string;
-    appendText?: string;
-    replaceQuery?: string;
-  };
+  action?: SearchActionDto;
 };
 
 export type SearchAmbiguityActionDto = {
   id: string;
   term: string;
   label: string;
-  filter: SearchRequestFilterPatchDto;
-  queryPatch?: {
-    appendText?: string;
-    replaceQuery?: string;
-  };
+  action: SearchActionDto;
 };
 
 export type SearchUiPlanDto = {

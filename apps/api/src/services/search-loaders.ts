@@ -3,31 +3,6 @@ import type { Course } from '../db/types.js';
 
 const D1_ID_BATCH_SIZE = 50;
 
-export async function fetchQualityScores(
-  db: D1Database,
-  courseIds: string[],
-): Promise<Map<string, number>> {
-  const qualityScores = new Map<string, number>();
-  if (courseIds.length === 0) {
-    return qualityScores;
-  }
-
-  for (const batch of chunkValues(courseIds, D1_ID_BATCH_SIZE)) {
-    const placeholders = batch.map(() => "?").join(",");
-    const result = await db.prepare(`
-      SELECT id, quality_score FROM courses WHERE id IN (${placeholders})
-    `).bind(...batch).all<{ id: string; quality_score: number | null }>();
-
-    for (const row of result.results) {
-      if (row.quality_score !== null && row.quality_score !== undefined) {
-        qualityScores.set(row.id, row.quality_score);
-      }
-    }
-  }
-
-  return qualityScores;
-}
-
 export async function fetchCoursesById(
   db: D1Database,
   courseIds: string[],

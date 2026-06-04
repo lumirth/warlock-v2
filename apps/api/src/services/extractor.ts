@@ -1,45 +1,22 @@
 import type { Hint, HintType, HintMetadata } from '@uiuc-course-search/query-types/search-planner';
 import { createDefaultRegistry } from './alias-registry.js';
 import { VALID_SUBJECTS, UNSAFE_LOWERCASE_SUBJECTS } from './data/valid-subjects.js';
+import {
+  CONTEXTUAL_GENED_RULES,
+  LEVEL_KEYWORDS_HARD,
+  LEVEL_KEYWORDS_SOFT,
+  NEGATED_SUBJECT_ALIASES,
+  NEGATION_TARGET_STOP_WORDS,
+  POSITIVE_NO_NOT_ALIASES,
+  STOP_PHRASES,
+  STUDENT_SHORTHAND_RULES,
+  WORKLOAD_NEGATION_TERMS,
+} from './student-language-lexicon.js';
 
 export interface ExtractionResult {
   hints: Hint[];
   residual: string;
 }
-
-const LEVEL_KEYWORDS_HARD: Record<string, number> = {
-  'advanced': 400,
-  'upper': 400,
-  'graduate': 500,
-  'grad': 500,
-};
-
-const LEVEL_KEYWORDS_SOFT: Record<string, number> = {
-  'intro': 100,
-  'introductory': 100,
-  'beginner': 100,
-  'freshman': 100,
-  'first year': 100,
-};
-
-// Stop-phrase removal - high-frequency generic tokens
-const STOP_PHRASES = [
-  'gen ed', 'gened', 'gen-ed',
-  'section', 'sections',
-  'class', 'classes',
-  'course', 'courses',
-  'only', 'booster',
-  'count', 'counts',
-  'week', 'weeks',
-  'what should i take',
-  'what can i take',
-  'what is', "what's", 'whats',
-  'which is', 'which are',
-  'how is', 'how are',
-  'is', 'are', 'was', 'were',
-  'and', 'but', 'or',
-  'that', 'for', 'with', 'without', 'no', 'not', 'avoid', 'avoiding',
-];
 
 const STOP_PHRASES_REGEX = new RegExp(`\\b(${STOP_PHRASES.join('|')})\\b`, 'gi');
 
@@ -52,104 +29,6 @@ function removeStopPhrases(text: string): string {
 
 // Cache the registry for performance
 const ALIAS_REGISTRY = createDefaultRegistry();
-
-const NEGATION_TARGET_STOP_WORDS = new Set([
-  'and',
-  'but',
-  'or',
-  'then',
-  'with',
-  'for',
-  'that',
-  'which',
-  'who',
-  'what',
-  'class',
-  'classes',
-  'course',
-  'courses',
-  'gen',
-  'gened',
-  'ed',
-  'requirement',
-  'requirements',
-]);
-
-const NEGATED_SUBJECT_ALIASES: Record<string, string> = {
-  math: 'MATH',
-  mathematics: 'MATH',
-  calculus: 'MATH',
-  stats: 'STAT',
-  stat: 'STAT',
-  statistics: 'STAT',
-  'computer science': 'CS',
-  'comp sci': 'CS',
-  compsci: 'CS',
-  chem: 'CHEM',
-  chemistry: 'CHEM',
-  orgo: 'CHEM',
-  ochem: 'CHEM',
-  biology: 'MCB',
-  bio: 'MCB',
-  physics: 'PHYS',
-};
-
-const WORKLOAD_NEGATION_TERMS = new Set([
-  'essay',
-  'essays',
-  'paper',
-  'papers',
-  'writing',
-  'writing heavy',
-  'writing-heavy',
-  'reading',
-  'reading heavy',
-  'reading-heavy',
-  'exam',
-  'exams',
-  'test',
-  'tests',
-  'lab',
-  'labs',
-  'coding',
-  'programming',
-  'group project',
-  'group projects',
-]);
-
-const STUDENT_SHORTHAND_RULES: Array<{
-  pattern: RegExp;
-  subject: string;
-  expansion: string;
-  confidence: number;
-}> = [
-  { pattern: /\b(?:orgo|ochem|organic\s+chem(?:istry)?)\b/gi, subject: 'CHEM', expansion: 'organic chemistry', confidence: 0.86 },
-  { pattern: /\b(?:diff\s*eq|diffeq|differential\s+equations?)\b/gi, subject: 'MATH', expansion: 'differential equations', confidence: 0.84 },
-  { pattern: /\b(?:compsci|comp\s+sci)\b/gi, subject: 'CS', expansion: 'computer science', confidence: 0.9 },
-  { pattern: /\bmacroecon(?:omics)?\b/gi, subject: 'ECON', expansion: 'macroeconomics', confidence: 0.84 },
-  { pattern: /\bmicroecon(?:omics)?\b/gi, subject: 'ECON', expansion: 'microeconomics', confidence: 0.84 },
-];
-
-const CONTEXTUAL_GENED_RULES: Array<{
-  code: string;
-  pattern: RegExp;
-  confidence: number;
-}> = [
-  { code: 'SBS', pattern: /\b(?:social\s+(?:and\s+behavioral\s+)?sciences?|behavioral\s+sciences?|social\s+science\s+(?:class|course|requirement|gen\s*-?\s*ed|gened))\b/gi, confidence: 0.86 },
-  { code: 'NAT', pattern: /\b(?:natural\s+sciences?|nat\s+sci|science\s+(?:class|course|requirement|gen\s*-?\s*ed|gened)|(?:easy|chill|need|counts?\s+for|fulfills?)\s+science)\b/gi, confidence: 0.84 },
-  { code: 'ACP', pattern: /\b(?:advanced\s+composition|adv\s+comp|writing\s+(?:requirement|intensive|gen\s*-?\s*ed|gened))\b/gi, confidence: 0.86 },
-  { code: 'CS', pattern: /\b(?:cultural\s+studies|diversity|race\s+and\s+ethnicity|race|ethnicity|other\s+cultures|culture\s+class|cultural\s+requirement)\b/gi, confidence: 0.78 },
-];
-
-const POSITIVE_NO_NOT_ALIASES: Array<{
-  pattern: RegExp;
-  type: Extract<HintType, 'difficulty' | 'status'>;
-  value: 'easy' | 'open';
-}> = [
-  { pattern: /\bnot\s+hard\b/gi, type: 'difficulty', value: 'easy' },
-  { pattern: /\bnot\s+full\b/gi, type: 'status', value: 'open' },
-  { pattern: /\bno\s+waitlist\b/gi, type: 'status', value: 'open' },
-];
 
 /**
  * Extract structured hints from natural language text.

@@ -24,16 +24,25 @@ export {
 export {
   createSearchPlan,
   extractSearchPlanningInput,
+  type SearchCompilerEvent,
   type SearchPlanningInput,
   type SearchPlanningResult,
 } from "./search-plan-compiler.js";
 export {
-  applyTitleBoost,
   type FusedSearchScore,
   type RankedLaneRow,
   type RetrievalLaneResults,
   type WorkloadLaneRow,
 } from "./search-fusion.js";
+export {
+  applyRankingPolicy,
+  applyTermRankingPolicy,
+  buildTermPriorityMap,
+  compareRankedSearchResults,
+  isSearchSort,
+  sortValueForResult,
+  type RankingTermInfo,
+} from "./search-ranking-policy.js";
 export {
   keywordSearch,
   postFilterSemanticResults,
@@ -53,11 +62,6 @@ export {
 } from "./search-retrieval-plan.js";
 export { sanitizeFtsQuery } from "./search-text.js";
 export {
-  buildTermPriorityMap,
   hybridSearchWithTermRanking,
   type TermInfo,
 } from "./search-term-ranking.js";
-export {
-  applySearchIntentBoosts,
-  applyUsefulnessRerank,
-} from "./search-usefulness.js";

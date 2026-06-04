@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { singleRequirementFilter } from '@uiuc-course-search/query-types';
 import {
-  applySearchIntentBoosts,
-  applyTitleBoost,
-  applyUsefulnessRerank,
+  applyRankingPolicy,
+  applyTermRankingPolicy,
   buildRetrievalPlan,
   buildSearchCandidateBudget,
   buildTermPriorityMap,
   hybridSearch,
   normalizeSearchControls,
 } from '../search.js';
+import { fuseRetrievalResults } from '../search-fusion.js';
 import type { SearchResult } from '../search.js';
 import type { Course } from '../../db/index.js';
 import type { SearchPlan } from '@uiuc-course-search/query-types/search-planner';
@@ -46,78 +46,98 @@ function course(overrides: Partial<Course>): Course {
   };
 }
 
-async function retrievalPlan(db: D1Database, plan: SearchPlan, limit = 20) {
+async function retrievalPlan(plan: SearchPlan, limit = 20) {
   const controls = normalizeSearchControls();
   const budget = buildSearchCandidateBudget(plan, { limit, offset: 0 }, controls);
-  return buildRetrievalPlan(db, plan, controls, budget);
+  return buildRetrievalPlan(plan, controls, budget);
 }
 
-describe('exact-title boost', () => {
-  it('boosts exact title matches significantly', () => {
-    const scores = [
-      { id: 'CS-225', score: 0.5, title: 'Data Structures' },
-      { id: 'CS-374', score: 0.6, title: 'Introduction to Algorithms' },
-    ];
+function resultWithTitle(
+  id: string,
+  title: string,
+  score: number,
+): SearchResult {
+  return {
+    course: course({ id, title }),
+    score,
+  };
+}
 
-    const boosted = applyTitleBoost(scores, 'data structures');
+function applyPolicyForQuery(
+  results: SearchResult[],
+  query: string,
+  plan: Partial<SearchPlan> = {},
+): SearchResult[] {
+  return applyRankingPolicy(results, {
+    filters: {},
+    semanticQuery: query,
+    keywordQuery: query,
+    ...plan,
+  }, { query });
+}
 
-    // CS-225 should now be ranked higher due to a decisive exact-title match.
-    expect(boosted[0].id).toBe('CS-225');
-    expect(boosted[0].score).toBeGreaterThan(2.9);
+describe('title-match ranking component', () => {
+  it('adds a decisive component for exact title matches', () => {
+    const ranked = applyPolicyForQuery([
+      resultWithTitle('CS-225', 'Data Structures', 0.5),
+      resultWithTitle('CS-374', 'Introduction to Algorithms', 0.6),
+    ], 'data structures');
+
+    expect(ranked[0].course.id).toBe('CS-225');
+    expect(ranked[0].score).toBeGreaterThan(2.9);
+    expect(ranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'title_match', value: 2.5 }),
+    ]));
   });
 
   it('lets exact title matches beat high semantic scores', () => {
-    const scores = [
-      { id: 'CS-225', score: 0.03, title: 'Data Structures' },
-      { id: 'CS-562', score: 0.75, title: 'Advanced Topics in Security, Privacy, and Machine Learning' },
-    ];
+    const ranked = applyPolicyForQuery([
+      resultWithTitle('CS-225', 'Data Structures', 0.03),
+      resultWithTitle('CS-562', 'Advanced Topics in Security, Privacy, and Machine Learning', 0.75),
+    ], 'data structures');
 
-    const boosted = applyTitleBoost(scores, 'data structures');
-
-    expect(boosted[0].id).toBe('CS-225');
-    expect(boosted[0].score).toBeGreaterThan(boosted[1].score);
+    expect(ranked[0].course.id).toBe('CS-225');
+    expect(ranked[0].score).toBeGreaterThan(ranked[1].score);
   });
 
-  it('boosts partial title matches moderately', () => {
-    const scores = [
-      { id: 'CS-440', score: 0.5, title: 'Artificial Intelligence' },
-      { id: 'CS-101', score: 0.55, title: 'Intro to Computing' },
-    ];
+  it('adds a moderate component for partial title matches', () => {
+    const ranked = applyPolicyForQuery([
+      resultWithTitle('CS-440', 'Artificial Intelligence', 0.5),
+      resultWithTitle('CS-101', 'Intro to Computing', 0.55),
+    ], 'intelligence');
 
-    const boosted = applyTitleBoost(scores, 'intelligence');
-
-    // CS-440 should get a meaningful title-contained boost.
-    expect(boosted[0].id).toBe('CS-440');
-    expect(boosted[0].score).toBeCloseTo(1.7);
+    expect(ranked[0].course.id).toBe('CS-440');
+    expect(ranked[0].score).toBeCloseTo(1.7);
   });
 
-  it('does nothing if no match', () => {
-    const scores = [
-      { id: 'CS-225', score: 0.5, title: 'Data Structures' },
-    ];
-    const boosted = applyTitleBoost(scores, 'biology');
-    expect(boosted[0].score).toBe(0.5);
+  it('does not add a title component if no title matches', () => {
+    const ranked = applyPolicyForQuery([
+      resultWithTitle('CS-225', 'Data Structures', 0.5),
+    ], 'biology');
+
+    expect(ranked[0].score).toBe(0.5);
+    expect(ranked[0].scoreComponents).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'title_match' }),
+    ]));
   });
 
-  it('boosts when query contains title (long natural language query)', () => {
-    const scores = [
-      { id: 'CS-225', score: 0.5, title: 'Data Structures' },
-      { id: 'CS-101', score: 0.55, title: 'Intro to Computing' },
-    ];
+  it('adds a smaller component when a long query contains the title', () => {
+    const ranked = applyPolicyForQuery([
+      resultWithTitle('CS-225', 'Data Structures', 0.5),
+      resultWithTitle('CS-101', 'Intro to Computing', 0.55),
+    ], 'i need help with data structures class');
 
-    // "data structures" is in the query, so it should get a smaller boost.
-    const boosted = applyTitleBoost(scores, 'i need help with data structures class');
-
-    // CS-225: 0.5 + 0.45 = 0.95
-    // CS-101: 0.55 (no change)
-    expect(boosted[0].id).toBe('CS-225');
-    expect(boosted[0].score).toBeCloseTo(0.95);
+    expect(ranked[0].course.id).toBe('CS-225');
+    expect(ranked[0].score).toBeCloseTo(0.95);
+    expect(ranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'title_match', value: 0.45 }),
+    ]));
   });
 });
 
-describe('introductory gateway intent boost', () => {
+describe('introductory gateway ranking components', () => {
   it('ranks 100-level gateway courses ahead of upper-level Introduction-to-X courses', () => {
-    const results: SearchResult[] = [
+    const ranked = applyPolicyForQuery([
       {
         course: course({
           id: 'CS-340',
@@ -136,22 +156,22 @@ describe('introductory gateway intent boost', () => {
         }),
         score: 0.4,
       },
-    ];
-
-    const boosted = applySearchIntentBoosts(results, {
+    ], '', {
       filters: { subject: 'CS' },
-      semanticQuery: '',
-      keywordQuery: '',
       intents: ['introductory_gateway'],
       softPreferences: { levelBoost: 100, introductoryIntent: 'gateway' },
-    }).sort((a, b) => b.score - a.score);
+    });
 
-    expect(boosted[0].course.id).toBe('CS-124');
-    expect(boosted[0].score).toBeGreaterThan(boosted[1].score);
+    expect(ranked[0].course.id).toBe('CS-124');
+    expect(ranked[0].score).toBeGreaterThan(ranked[1].score);
+    expect(ranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'introductory_gateway' }),
+      expect.objectContaining({ name: 'level_accessibility' }),
+    ]));
   });
 
   it('ranks canonical subject gateway numbers ahead of discovery and seminar courses', () => {
-    const results: SearchResult[] = [
+    const ranked = applyPolicyForQuery([
       {
         course: course({
           id: 'CS-107',
@@ -176,21 +196,17 @@ describe('introductory gateway intent boost', () => {
         }),
         score: 0.7,
       },
-    ];
-
-    const boosted = applySearchIntentBoosts(results, {
+    ], '', {
       filters: { subject: 'CS' },
-      semanticQuery: '',
-      keywordQuery: '',
       intents: ['introductory_gateway'],
       softPreferences: { levelBoost: 100, introductoryIntent: 'gateway' },
-    }).sort((a, b) => b.score - a.score);
+    });
 
-    expect(boosted.map(result => result.course.id)).toEqual(['CS-124', 'CS-107', 'CS-199']);
+    expect(ranked.map(result => result.course.id)).toEqual(['CS-124', 'CS-107', 'CS-199']);
   });
 
-  it('does not change topical intro searches without gateway intent', () => {
-    const results: SearchResult[] = [
+  it('does not add gateway components for topical intro searches without gateway intent', () => {
+    const ranked = applyPolicyForQuery([
       {
         course: course({
           id: 'CS-421',
@@ -199,18 +215,17 @@ describe('introductory gateway intent boost', () => {
         }),
         score: 0.7,
       },
-    ];
-
-    expect(applySearchIntentBoosts(results, {
-      filters: {},
-      semanticQuery: 'intro to compilers',
-      keywordQuery: 'intro to compilers',
+    ], 'intro to compilers', {
       softPreferences: { levelBoost: 100 },
-    })).toEqual(results);
+    });
+
+    expect(ranked[0].scoreComponents).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'introductory_gateway' }),
+    ]));
   });
 });
 
-describe('decision-search usefulness reranking', () => {
+describe('decision-search ranking policy', () => {
   it('prefers evidence-backed low-workload requirement matches over unsupported topical matches', () => {
     const results: SearchResult[] = [
       {
@@ -244,7 +259,7 @@ describe('decision-search usefulness reranking', () => {
       },
     ];
 
-    const reranked = applyUsefulnessRerank(results, {
+    const reranked = applyRankingPolicy(results, {
       filters: { requirement: singleRequirementFilter('HUM') },
       semanticQuery: 'movies',
       keywordQuery: 'movies',
@@ -265,6 +280,11 @@ describe('decision-search usefulness reranking', () => {
 
     expect(reranked[0].course.id).toBe('FILM-120');
     expect(reranked[0].score).toBeGreaterThan(reranked[1].score);
+    expect(reranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'requirement_match' }),
+      expect.objectContaining({ name: 'workload_evidence' }),
+      expect.objectContaining({ name: 'workload_preference' }),
+    ]));
   });
 
   it('penalizes graduate seminars for easy/non-major-friendly workload intent', () => {
@@ -294,7 +314,7 @@ describe('decision-search usefulness reranking', () => {
       },
     ];
 
-    const reranked = applyUsefulnessRerank(results, {
+    const reranked = applyRankingPolicy(results, {
       filters: { subject: 'PHYS', difficulty: 'easy' },
       semanticQuery: 'physics for non majors',
       keywordQuery: 'physics for non majors',
@@ -303,6 +323,195 @@ describe('decision-search usefulness reranking', () => {
 
     expect(reranked[0].course.id).toBe('PHYS-100');
     expect(reranked[0].score).toBeGreaterThan(reranked[1].score);
+    expect(reranked.find(result => result.course.id === 'PHYS-595')?.scoreComponents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'level_accessibility',
+          value: expect.any(Number),
+          reason: expect.stringContaining('risk'),
+        }),
+      ]),
+    );
+  });
+});
+
+describe('explainable ranking policy', () => {
+  it('keeps easy science with low-math intent from rewarding math-heavy graduate courses', () => {
+    const reranked = applyRankingPolicy([
+      {
+        course: course({
+          id: 'MATH-540',
+          subject: 'MATH',
+          number: '540',
+          title: 'Real Analysis',
+          description: 'Graduate treatment of quantitative proof, calculus, and formal logic.',
+          quality_score: 82,
+          difficulty_score: 20,
+          avg_gpa: 3.9,
+        }),
+        score: 1.4,
+        laneMatches: ['official_text'],
+      },
+      {
+        course: course({
+          id: 'ASTR-150',
+          subject: 'ASTR',
+          number: '150',
+          title: 'Killer Skies',
+          description: 'Introductory science for non-majors.',
+          gened: 'NAT',
+          quality_score: 82,
+          difficulty_score: 25,
+          avg_gpa: 3.65,
+        }),
+        score: 0.6,
+        laneMatches: ['requirement', 'workload_evidence'],
+        supportedSubjectiveClaims: ['low_workload', 'low_math'],
+      },
+    ], {
+      filters: {
+        requirement: singleRequirementFilter('NAT'),
+        difficulty: 'easy',
+        not: { subjects: ['MATH'] },
+      },
+      semanticQuery: 'easy science but no math',
+      keywordQuery: 'easy science but no math',
+      softPreferences: { lowMath: 0.86, lowWorkload: 0.84 },
+      rescue: {
+        queryTypes: ['requirement', 'subjective_vibe', 'avoidance'],
+        negativeTerms: ['math_heavy'],
+        topicTerms: ['science'],
+        expandedTerms: ['natural science'],
+        assumptions: [],
+        warnings: [],
+        interpretedLanes: ['requirement', 'workload_evidence', 'official_text'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.78,
+      },
+    });
+
+    expect(reranked[0].course.id).toBe('ASTR-150');
+    expect(reranked.find(result => result.course.id === 'MATH-540')?.scoreComponents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'negative_preference_penalty' }),
+        expect.objectContaining({ name: 'level_accessibility', value: -1.25 }),
+      ]),
+    );
+  });
+
+  it('prefers accessible non-major courses over graduate seminars under non-major-friendly intent', () => {
+    const reranked = applyRankingPolicy([
+      {
+        course: course({
+          id: 'PHYS-595',
+          subject: 'PHYS',
+          number: '595',
+          title: 'Advanced Topics in Physics',
+          avg_gpa: 3.95,
+          difficulty_score: 20,
+        }),
+        score: 1.1,
+      },
+      {
+        course: course({
+          id: 'PHYS-100',
+          subject: 'PHYS',
+          number: '100',
+          title: 'Thinking About Physics',
+          avg_gpa: 3.45,
+          difficulty_score: 34,
+          quality_score: 76,
+        }),
+        score: 0.6,
+        laneMatches: ['student_language_alias'],
+      },
+    ], {
+      filters: { subject: 'PHYS', difficulty: 'easy' },
+      semanticQuery: 'physics for non majors',
+      keywordQuery: 'physics for non majors',
+      softPreferences: { lowWorkload: 0.84, nonMajorFriendly: 0.72 },
+    });
+
+    expect(reranked.map(result => result.course.id)).toEqual(['PHYS-100', 'PHYS-595']);
+    expect(reranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'student_language' }),
+      expect.objectContaining({ name: 'level_accessibility', value: 0.55 }),
+    ]));
+  });
+
+  it('records term ordering as a named tie-break component', () => {
+    const ranked = applyTermRankingPolicy([
+      {
+        course: course({
+          id: 'CS-225-2025-fall',
+          number: '225',
+          term: 'fall',
+          year: 2025,
+        }),
+        score: 10,
+      },
+      {
+        course: course({
+          id: 'CS-225-2026-spring',
+          number: '225',
+          term: 'spring',
+          year: 2026,
+        }),
+        score: 1,
+      },
+    ], {
+      termStates: [
+        { term_id: '2026-spring', year: 2026, term: 'spring', status: 'registrable' },
+      ],
+      limit: 10,
+    });
+
+    expect(ranked.map(result => result.course.id)).toEqual([
+      'CS-225-2026-spring',
+      'CS-225-2025-fall',
+    ]);
+    expect(ranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'term_tie_breaker' }),
+    ]));
+  });
+});
+
+describe('retrieval fusion evidence', () => {
+  it('keeps lane evidence separate from ranking policy components', () => {
+    const fused = fuseRetrievalResults({
+      isNavigational: false,
+      courseKeywordResults: [{
+        id: 'CS-225',
+        lane: 'official_text',
+        rank: 1,
+        rawScore: -2,
+        matchedTerms: ['data structures'],
+        reason: 'Official course text FTS recall.',
+      }],
+      sectionKeywordResults: [],
+      requirementResults: [],
+      structuredSectionResults: [],
+      aliasResults: [],
+      semanticResults: [{
+        id: 'CS-225',
+        lane: 'topic_semantic',
+        rank: 3,
+        rawScore: 0.89,
+        matchedTerms: ['data structures'],
+        reason: 'Semantic topic recall.',
+      }],
+      workloadResults: [],
+    });
+
+    expect(fused[0]).toEqual(expect.objectContaining({
+      id: 'CS-225',
+      laneMatches: ['official_text', 'topic_semantic'],
+    }));
+    expect(fused[0].laneResults).toEqual(expect.arrayContaining([
+      expect.objectContaining({ lane: 'official_text', reason: 'Official course text FTS recall.' }),
+      expect.objectContaining({ lane: 'topic_semantic', reason: 'Semantic topic recall.' }),
+    ]));
   });
 });
 
@@ -352,10 +561,6 @@ describe('search SQL batching', () => {
               throw new Error(`too many SQL variables in test: ${params.length}`);
             }
 
-            if (sql.includes('SELECT id, quality_score FROM courses')) {
-              return { results: params.map(id => ({ id, quality_score: null })) };
-            }
-
             if (sql.includes('FROM courses c') && sql.includes('WHERE c.id IN')) {
               return { results: params.map(id => courseById.get(String(id))).filter(Boolean) };
             }
@@ -379,7 +584,7 @@ describe('search SQL batching', () => {
       db,
       {} as VectorizeIndex,
       {} as Ai,
-      await retrievalPlan(db, plan, 120),
+      await retrievalPlan(plan, 120),
     );
 
     expect(results).toHaveLength(120);

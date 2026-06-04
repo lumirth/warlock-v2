@@ -1,14 +1,11 @@
-import type { D1Database } from "@cloudflare/workers-types";
 import { hasRequirementFilter } from "@uiuc-course-search/query-types";
 import type { RetrievalLane, SearchPlan } from "@uiuc-course-search/query-types/search-planner";
-import { validateSubject } from "./query-resolver.js";
 import type { SearchCandidateBudget } from "./search-budget.js";
 import type { AppliedSearchControls } from "./search-controls.js";
 import {
   buildAliasLaneQuery,
   workloadSignalTypes,
 } from "./search-retrieval-lanes.js";
-import { sanitizeFtsQuery } from "./search-text.js";
 
 export type RetrievalLaneExecution = {
   lane: RetrievalLane;
@@ -18,8 +15,7 @@ export type RetrievalLaneExecution = {
 };
 
 export type RetrievalPlan = {
-  inputPlan: SearchPlan;
-  effectivePlan: SearchPlan;
+  plan: SearchPlan;
   controls: AppliedSearchControls;
   budget: SearchCandidateBudget;
   isNavigational: boolean;
@@ -30,25 +26,22 @@ export type RetrievalPlan = {
   workloadSignalTypes: string[];
 };
 
-export async function buildRetrievalPlan(
-  db: D1Database,
+export function buildRetrievalPlan(
   plan: SearchPlan,
   controls: AppliedSearchControls,
   budget: SearchCandidateBudget,
-): Promise<RetrievalPlan> {
-  const effectivePlan = await planWithResolvedSubject(db, plan);
-  const hasKeywordQuery = effectivePlan.keywordQuery.trim().length > 0;
-  const hasSemanticQuery = effectivePlan.semanticQuery.trim().length > 0;
+): RetrievalPlan {
+  const hasKeywordQuery = plan.keywordQuery.trim().length > 0;
+  const hasSemanticQuery = plan.semanticQuery.trim().length > 0;
   const isNavigational = Boolean(
-    (effectivePlan.filters.subject && effectivePlan.filters.number) ||
-      effectivePlan.filters.crn,
+    (plan.filters.subject && plan.filters.number) ||
+      plan.filters.crn,
   );
-  const aliasQuery = buildAliasLaneQuery(effectivePlan);
-  const signalTypes = workloadSignalTypes(effectivePlan);
+  const aliasQuery = buildAliasLaneQuery(plan);
+  const signalTypes = workloadSignalTypes(plan);
 
   return {
-    inputPlan: plan,
-    effectivePlan,
+    plan,
     controls,
     budget,
     isNavigational,
@@ -71,13 +64,13 @@ export async function buildRetrievalPlan(
       ),
       lane(
         "requirement",
-        hasRequirementLane(effectivePlan),
+        hasRequirementLane(plan),
         budget.laneCandidateLimit,
         "concrete requirement filter",
       ),
       lane(
         "structured_section",
-        hasStructuredSectionLane(effectivePlan),
+        hasStructuredSectionLane(plan),
         budget.laneCandidateLimit,
         "structured section filters or schedule preferences",
       ),
@@ -124,29 +117,6 @@ function lane(
     enabled,
     limit,
     reason,
-  };
-}
-
-async function planWithResolvedSubject(
-  db: D1Database,
-  plan: SearchPlan,
-): Promise<SearchPlan> {
-  if (plan.filters.subject || plan.filters.number || !plan.keywordQuery.trim()) {
-    return plan;
-  }
-
-  const cleanQuery = sanitizeFtsQuery(plan.keywordQuery);
-  const potentialSubject = await validateSubject(db, cleanQuery);
-  if (!potentialSubject) {
-    return plan;
-  }
-
-  return {
-    ...plan,
-    filters: {
-      ...plan.filters,
-      subject: potentialSubject,
-    },
   };
 }
 

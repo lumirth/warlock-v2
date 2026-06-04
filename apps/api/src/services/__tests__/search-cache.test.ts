@@ -75,10 +75,10 @@ describe('search cache', () => {
         keywordQuery: '',
         semanticQuery: '',
       },
+      compilerEvents: [],
     };
     const retrievalPlan: RetrievalPlan = {
-      inputPlan: planning.plan,
-      effectivePlan: planning.plan,
+      plan: planning.plan,
       controls: { sort: { field: 'relevance', direction: 'desc' }, scope: 'active' },
       budget: {
         pageLimit: 20,
@@ -103,6 +103,7 @@ describe('search cache', () => {
       meta: {
         query: { raw: 'easy online gen ed', residual: '' },
         extraction: { hints: [] },
+        compilerEvents: [],
         plan: planning.plan,
         retrievalPlan,
         retrievalPlans: [retrievalPlan],

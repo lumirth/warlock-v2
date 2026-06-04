@@ -10,19 +10,11 @@ import {
   getWorkloadTierLabel,
   getWorkloadTierRank,
   normalizeGpaWorkload,
-  parseSearchRequestQueryParams,
   requirementFilter,
-  searchRequestToQueryEntries,
+  normalizeSearchRequestDto,
   toNormalizedQualityScore,
   WORKLOAD_FILTER_THRESHOLDS,
 } from './index.js';
-
-function params(entries: Array<[string, string]>): { get(name: string): string | null } {
-  const map = new Map(entries);
-  return {
-    get: (name) => map.get(name) ?? null,
-  };
-}
 
 describe('shared external link builders', () => {
   it('builds official Course Explorer course URLs', () => {
@@ -123,86 +115,39 @@ describe('shared requirement policy', () => {
 });
 
 describe('shared public search contract', () => {
-  it('serializes public request filters without backend planner names', () => {
-    expect(searchRequestToQueryEntries({
+  it('normalizes public request filters without backend planner names', () => {
+    expect(normalizeSearchRequestDto({
       query: 'online stats class',
       filters: {
-        subject: 'stat',
-        gened: 'hum',
+        subject: ' stat ',
+        gened: ' hum ',
         online: true,
       },
       scope: 'all',
       sort: { field: 'gpa', direction: 'desc' },
-      pagination: { limit: 10, offset: 20 },
-    })).toEqual([
-      ['q', 'online stats class'],
-      ['limit', '10'],
-      ['offset', '20'],
-      ['subject', 'STAT'],
-      ['gened', 'HUM'],
-      ['online', 'true'],
-      ['scope', 'all'],
-      ['sort', 'gpa'],
-      ['direction', 'desc'],
-    ]);
-  });
-
-  it('parses URL params through the same canonical request boundary', () => {
-    const parsed = parseSearchRequestQueryParams(params([
-      ['q', 'systems'],
-      ['subject', 'cs'],
-      ['gened', 'hum'],
-      ['online', 'true'],
-      ['sort', 'quality'],
-      ['direction', 'asc'],
-      ['scope', 'all'],
-      ['limit', '5'],
-    ]));
-
-    expect(parsed).toEqual({
-      ok: true,
-      value: {
-        request: {
-          query: 'systems',
-          filters: {
-            subject: 'CS',
-            gened: 'HUM',
-            online: true,
-          },
-          sort: { field: 'quality', direction: 'asc' },
-          scope: 'all',
-        },
-        pagination: { limit: 5, offset: 0 },
+    })).toEqual({
+      query: 'online stats class',
+      filters: {
+        subject: 'STAT',
+        gened: 'HUM',
+        online: true,
       },
+      sort: { field: 'gpa', direction: 'desc' },
+      scope: 'all',
     });
   });
 
-  it('validates bounded params while falling unknown sort controls back to defaults', () => {
-    expect(parseSearchRequestQueryParams(params([
-      ['q', 'history'],
-      ['limit', '999'],
-    ]))).toEqual({
-      ok: false,
-      error: 'limit must be between 1 and 50',
-    });
-
-    expect(parseSearchRequestQueryParams(params([
-      ['q', 'history'],
-      ['sort', 'unknown'],
-      ['direction', 'sideways'],
-      ['scope', 'past'],
-      ['level', '700'],
-    ]))).toEqual({
-      ok: true,
-      value: {
-        request: {
-          query: 'history',
-          filters: {},
-          sort: { field: 'relevance', direction: 'desc' },
-          scope: 'active',
-        },
-        pagination: { limit: 20, offset: 0 },
-      },
+  it('normalizes invalid sort and scope controls back to defaults', () => {
+    expect(normalizeSearchRequestDto({
+      query: 'history',
+      sort: { field: 'not-real', direction: 'sideways' } as never,
+      scope: 'past' as never,
+      filters: { level: 700 as never },
+    })).toEqual({
+      query: 'history',
+      filters: {},
+      sort: { field: 'relevance', direction: 'desc' },
+      scope: 'active',
     });
   });
 });

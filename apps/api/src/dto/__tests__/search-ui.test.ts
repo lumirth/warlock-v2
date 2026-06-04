@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { normalizeSearchRequestDto } from '@uiuc-course-search/query-types';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { Hint, SearchPlan } from '@uiuc-course-search/query-types/search-planner';
 import { buildSearchUiPlan } from '../search-ui.js';
+
+const request = (query: string, filters = {}) =>
+  normalizeSearchRequestDto({ query, filters });
 
 describe('buildSearchUiPlan', () => {
   it('turns extraction hints and residual text into public chips', () => {
@@ -32,7 +36,7 @@ describe('buildSearchUiPlan', () => {
       },
       keywordQuery: 'systems',
       semanticQuery: 'systems',
-    }, 'systems');
+    }, 'systems', request('CS 225 professor fagen hard systems'));
 
     expect(plan.chips.map(chip => chip.label)).toEqual([
       'Course CS 225',
@@ -40,7 +44,7 @@ describe('buildSearchUiPlan', () => {
       'Hard workload',
       'Topic: systems',
     ]);
-    expect(plan.chips[0].queryPatch?.removeText).toBe('CS 225');
+    expect(plan.chips[0].action?.nextRequest.query).toBe('professor fagen hard systems');
     expect(plan.advanced).toMatchObject({
       subject: 'CS',
       number: '225',
@@ -61,12 +65,19 @@ describe('buildSearchUiPlan', () => {
       }],
     };
 
-    expect(buildSearchUiPlan([], plan, '').ambiguityActions).toEqual([{
+    expect(buildSearchUiPlan([], plan, '', request('CS')).ambiguityActions).toEqual([{
       id: '0-0-gened-CS',
       term: 'CS',
       label: 'Cultural Studies',
-      filter: { gened: 'CS' },
-      queryPatch: { replaceQuery: 'gened:CS' },
+      action: {
+        kind: 'run_search',
+        nextRequest: {
+          query: '',
+          filters: { gened: 'CS' },
+          sort: { field: 'relevance', direction: 'desc' },
+          scope: 'active',
+        },
+      },
     }]);
   });
 
@@ -94,12 +105,16 @@ describe('buildSearchUiPlan', () => {
       }],
     };
 
-    const ui = buildSearchUiPlan(hints, plan, '');
+    const ui = buildSearchUiPlan(hints, plan, '', request('easy cs'));
 
     expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'GenEd CS']);
-    expect(ui.chips[1].filter).toEqual({ gened: 'CS' });
+    expect(ui.chips[1].action?.nextRequest.query).toBe('easy');
     expect(ui.advanced.gened).toBe('CS');
     expect(ui.advanced.subject).toBeUndefined();
+    expect(ui.ambiguityActions[0].action.nextRequest).toMatchObject({
+      query: '',
+      filters: { subject: 'CS', difficulty: 'easy' },
+    });
   });
 
   it('does not show restored topic words inside instructor chips', () => {
@@ -111,14 +126,14 @@ describe('buildSearchUiPlan', () => {
       filters: { instructor_ids: [3365] },
       keywordQuery: 'algorithms',
       semanticQuery: 'algorithms',
-    }, 'algorithms');
+    }, 'algorithms', request('professor fagen algorithms'));
 
     expect(plan.chips.map(chip => chip.label)).toEqual([
       'Instructor fagen',
       'Topic: algorithms',
     ]);
     expect(plan.chips[0].value).toBe('fagen');
-    expect(plan.chips[0].queryPatch?.removeText).toBe('professor fagen');
+    expect(plan.chips[0].action?.nextRequest.query).toBe('algorithms');
     expect(plan.advanced.instructor).toBe('fagen');
   });
 
@@ -132,7 +147,7 @@ describe('buildSearchUiPlan', () => {
       keywordQuery: '',
       semanticQuery: '',
       intents: ['introductory_gateway'],
-    }, '');
+    }, '', request('intro cs'));
 
     expect(plan.chips.map(chip => chip.label)).toEqual(['Introductory courses']);
   });
@@ -163,12 +178,12 @@ describe('buildSearchUiPlan', () => {
         needsStudentProfile: false,
         confidence: 0.82,
       },
-    }, '');
+    }, '', request('online easy no essays'));
 
     expect(plan.chips).toEqual([
-      expect.objectContaining({ type: 'online', label: 'Online', queryPatch: { removeText: 'online' } }),
-      expect.objectContaining({ type: 'assumption', label: 'Low workload preferred', queryPatch: { removeText: 'easy' } }),
-      expect.objectContaining({ type: 'assumption', label: 'Low writing preferred', queryPatch: { removeText: 'no essays' } }),
+      expect.objectContaining({ type: 'online', label: 'Online', action: expect.any(Object) }),
+      expect.objectContaining({ type: 'assumption', label: 'Low workload preferred', action: expect.any(Object) }),
+      expect.objectContaining({ type: 'assumption', label: 'Low writing preferred', action: expect.any(Object) }),
     ]);
   });
 
@@ -195,10 +210,10 @@ describe('buildSearchUiPlan', () => {
         needsStudentProfile: false,
         confidence: 0.74,
       },
-    }, '');
+    }, '', request('easy'));
 
     expect(plan.chips).toEqual([
-      expect.objectContaining({ type: 'difficulty', label: 'Easy workload', queryPatch: { removeText: 'easy' } }),
+      expect.objectContaining({ type: 'difficulty', label: 'Easy workload', action: expect.any(Object) }),
     ]);
   });
 
@@ -235,7 +250,7 @@ describe('buildSearchUiPlan', () => {
         needsStudentProfile: false,
         confidence: 0.74,
       },
-    }, '');
+    }, '', request('gened'));
 
     expect(plan.chips).toEqual([
       expect.objectContaining({
@@ -256,12 +271,14 @@ describe('buildSearchUiPlan', () => {
       filters: { partOfTerm: 'B' },
       keywordQuery: '',
       semanticQuery: '',
-    }, '');
+    }, '', request('part B'));
 
     expect(plan.chips).toEqual([
       expect.objectContaining({
         type: 'partOfTerm',
-        filter: { partOfTerm: 'B' },
+        action: expect.objectContaining({
+          kind: 'run_search',
+        }),
       }),
     ]);
     expect(plan.advanced.partOfTerm).toBe('B');

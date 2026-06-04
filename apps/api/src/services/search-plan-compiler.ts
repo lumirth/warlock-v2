@@ -25,8 +25,24 @@ import type {
 } from "@uiuc-course-search/query-types/search-planner";
 import type { ExtractionResult } from "./extractor.js";
 import {
+  deepFreeze,
   searchPlanFiltersFromRequestFilters,
 } from "./search-request.js";
+
+export type SearchCompilerEventStage =
+  | "parse"
+  | "extract"
+  | "resolve"
+  | "compile"
+  | "rescue"
+  | "finalize";
+
+export type SearchCompilerEvent = {
+  stage: SearchCompilerEventStage;
+  type: string;
+  summary: string;
+  data?: Record<string, unknown>;
+};
 
 function mapHintType(type: string): QueryHintType {
   const mapping: Record<string, QueryHintType> = {
@@ -422,6 +438,7 @@ export interface SearchPlanningResult {
   extraction: ExtractionResult;
   queryResidual: string;
   plan: SearchPlan;
+  compilerEvents: SearchCompilerEvent[];
 }
 
 export function extractSearchPlanningInput(query: string): SearchPlanningInput {
@@ -584,14 +601,46 @@ export async function createSearchPlan(
   input: SearchPlanningInput = extractSearchPlanningInput(query),
   requestFilters?: SearchRequestFiltersDto,
 ): Promise<SearchPlanningResult> {
+  const compilerEvents: SearchCompilerEvent[] = [
+    compilerEvent("parse", "query_language", "Parsed query language clauses", {
+      clauses: input.parsed.clauses.length,
+      filters: input.parsed.clauses.flatMap((clause) => clause.filters).length,
+    }),
+    compilerEvent("extract", "student_language", "Extracted student-language hints", {
+      hints: input.extraction.hints.map((hint) => hint.type),
+      residual: input.extraction.residual,
+    }),
+  ];
   const planningInput = withManualRequestFilterHints(input, requestFilters);
+  if (requestFilters) {
+    compilerEvents.push(
+      compilerEvent("extract", "manual_filter_hints", "Merged structured request filters as manual hints", {
+        filters: Object.keys(requestFilters).filter((key) => requestFilters[key as keyof SearchRequestFiltersDto] !== undefined),
+      }),
+    );
+  }
+
   const plan = await resolveQuery(db, planningInput.extracted);
+  compilerEvents.push(
+    compilerEvent("resolve", "validated_hints", "Resolved extracted hints into structured filters", {
+      filters: Object.keys(plan.filters),
+      keywordQuery: plan.keywordQuery,
+      semanticQuery: plan.semanticQuery,
+    }),
+  );
   plan.rawQuery = query;
   let queryResidual = plan.semanticQuery;
 
   const clause = planningInput.parsed.clauses[0];
   for (const filter of clause.filters) {
     applyFieldFilter(filter, plan);
+  }
+  if (clause.filters.length > 0) {
+    compilerEvents.push(
+      compilerEvent("compile", "query_language_filters", "Applied explicit query-language filters", {
+        fields: clause.filters.map((filter) => filter.field),
+      }),
+    );
   }
 
   if (clause.genedMode) {
@@ -601,10 +650,22 @@ export async function createSearchPlan(
     if (clause.genedMode.all) {
       plan.filters.requirement = requirementFilter("all", clause.genedMode.all);
     }
+    compilerEvents.push(
+      compilerEvent("compile", "query_language_requirements", "Applied explicit requirement mode", {
+        mode: clause.genedMode.any ? "any" : "all",
+      }),
+    );
   }
 
   for (const negation of clause.negations) {
     applyNegationToken(negation, plan);
+  }
+  if (clause.negations.length > 0) {
+    compilerEvents.push(
+      compilerEvent("compile", "query_language_negations", "Applied explicit query-language negations", {
+        negations: clause.negations,
+      }),
+    );
   }
 
   if (clause.phrases.length > 0) {
@@ -614,29 +675,79 @@ export async function createSearchPlan(
     const semanticPhrases = clause.phrases.join(" ");
     plan.keywordQuery = appendQueryText(plan.keywordQuery, keywordPhrases);
     plan.semanticQuery = appendQueryText(plan.semanticQuery, semanticPhrases);
+    compilerEvents.push(
+      compilerEvent("compile", "quoted_phrases", "Added quoted phrases to retrieval query text", {
+        phrases: clause.phrases,
+      }),
+    );
   }
 
   if (requestFilters) {
     const filterOverrides = searchPlanFiltersFromRequestFilters(requestFilters);
     Object.assign(plan.filters, filterOverrides);
+    compilerEvents.push(
+      compilerEvent("compile", "request_filter_overrides", "Applied canonical structured request filters", {
+        filters: Object.keys(filterOverrides ?? {}),
+      }),
+    );
   }
 
   if (applyIntroductoryGatewayIntent(plan)) {
     queryResidual = plan.semanticQuery;
+    compilerEvents.push(
+      compilerEvent("compile", "introductory_gateway", "Compiled introductory subject search as gateway intent"),
+    );
   }
 
   const rescueResult = applyDecisionSearchRescue(plan, query, queryResidual);
   queryResidual = rescueResult.queryResidual;
+  if (plan.rescue) {
+    compilerEvents.push(
+      compilerEvent("rescue", "decision_search_rescue", "Compiled decision-oriented query rescue metadata", {
+        queryTypes: plan.rescue.queryTypes,
+        negativeTerms: plan.rescue.negativeTerms,
+      }),
+    );
+  }
 
   if (applySortIntent(plan, query)) {
     queryResidual = removeSortScaffolding(queryResidual);
+    compilerEvents.push(
+      compilerEvent("compile", "sort_intent", "Compiled sort language into request sort intent", {
+        sort: plan.softPreferences?.inferredSort,
+      }),
+    );
   }
 
   const topicExpansions = applyTopicExpansion(plan);
   syncDecisionSearchExpansions(plan, topicExpansions);
+  if (topicExpansions.length > 0) {
+    compilerEvents.push(
+      compilerEvent("compile", "topic_expansion", "Expanded student topic language for retrieval recall", {
+        expansions: topicExpansions,
+      }),
+    );
+  }
 
   plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);
   plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
+  compilerEvents.push(
+    compilerEvent("finalize", "sanitize_and_freeze", "Sanitized retrieval query text and froze compiled plan"),
+  );
 
-  return { extraction: planningInput.extraction, queryResidual, plan };
+  return deepFreeze({
+    extraction: planningInput.extraction,
+    queryResidual,
+    plan,
+    compilerEvents,
+  });
+}
+
+function compilerEvent(
+  stage: SearchCompilerEventStage,
+  type: string,
+  summary: string,
+  data?: Record<string, unknown>,
+): SearchCompilerEvent {
+  return data ? { stage, type, summary, data } : { stage, type, summary };
 }

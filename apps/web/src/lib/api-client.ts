@@ -5,7 +5,7 @@ import type {
   SearchRequestDto,
   SearchResponseDto,
 } from '@uiuc-course-search/query-types'
-import { searchRequestToQueryEntries } from '@uiuc-course-search/query-types'
+import { searchRequestToQueryParams } from './search-request-query'
 
 // Allow base URL configuration via env var
 const DEFAULT_API_BASE =
@@ -55,9 +55,7 @@ export class ApiClient {
     request: SearchRequestDto,
     options: ApiRequestOptions = {}
   ): Promise<SearchResponseDto> {
-    const params = new URLSearchParams(
-      searchRequestToQueryEntries(request).map(([key, value]) => [key, value])
-    )
+    const params = searchRequestToQueryParams(request)
 
     return this.fetch<SearchResponseDto>(`api/search?${params.toString()}`, {
       signal: options.signal,

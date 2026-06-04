@@ -1,17 +1,15 @@
 import type {
   AdvancedSearchStateDto,
   SearchAmbiguityActionDto,
+  SearchActionDto,
   SearchChipDto,
   SearchRecoveryGroup,
   SearchSort,
 } from '@uiuc-course-search/query-types'
 import {
-  advancedFiltersForChipRemoval,
-  advancedStateFromFilter,
   cleanAdvancedFilters,
-  hasAdvancedFilterValue,
-  meaningfulResidualQuery,
-  removeChipFromQuery,
+  advancedStateFromRequest,
+  hasSearchableAdvancedFilterValue,
 } from './search-filter-model'
 
 export type SearchRefinementRequest = {
@@ -46,104 +44,45 @@ export function planChipRemoval(
   chip: SearchChipDto,
   context: RefinementContext
 ): SearchRefinementPlan {
-  const nextAdvancedFilters = advancedFiltersForChipRemoval(
-    context.activeFilters,
-    chip
-  )
-  if (nextAdvancedFilters) {
-    const nextQuery = hasAdvancedFilterValue(nextAdvancedFilters)
-      ? context.activeRequestQuery
-      : context.typedQuery.trim()
-
-    if (!nextQuery && !hasAdvancedFilterValue(nextAdvancedFilters)) {
-      return { kind: 'clear', draft: nextAdvancedFilters }
-    }
-
-    return {
-      kind: 'search',
-      draft: nextAdvancedFilters,
-      request: {
-        query: nextQuery,
-        filters: nextAdvancedFilters,
-      },
-    }
-  }
-
-  const nextQuery = removeChipFromQuery(
-    context.activeRequestQuery || context.metaRawQuery || context.typedQuery,
-    chip
-  )
-
-  if (!nextQuery) return { kind: 'noop' }
-
-  return {
-    kind: 'search',
-    request: {
-      query: nextQuery,
-      filters: context.activeFilters,
-    },
-  }
+  return planSearchAction(chip.action, context)
 }
 
 export function planAmbiguityAction(
   action: SearchAmbiguityActionDto,
   context: RefinementContext
 ): SearchRefinementPlan {
-  const actionFilters = advancedStateFromFilter(action.filter)
-  if (hasAdvancedFilterValue(actionFilters)) {
-    const baseFilters = cleanAdvancedFilters({
-      ...context.activeFilters,
-      ...(context.visibleAdvanced || {}),
-    })
-    if (action.filter.gened) {
-      delete baseFilters.subject
-      delete baseFilters.number
-    }
-    if (action.filter.subject) {
-      delete baseFilters.gened
-    }
-
-    const nextFilters = cleanAdvancedFilters({
-      ...baseFilters,
-      ...actionFilters,
-    })
-
-    return {
-      kind: 'search',
-      draft: nextFilters,
-      request: {
-        query: meaningfulResidualQuery(context.residualQuery || ''),
-        filters: nextFilters,
-      },
-    }
-  }
-
-  return {
-    kind: 'search',
-    request: {
-      query:
-        action.queryPatch?.replaceQuery ||
-        action.queryPatch?.appendText ||
-        action.label,
-      filters: context.activeFilters,
-    },
-  }
+  return planSearchAction(action.action, context)
 }
 
 export function planRecoveryAction(
   group: SearchRecoveryGroup,
   context: RefinementContext
 ): SearchRefinementPlan {
+  return planSearchAction(group.action, context)
+}
+
+function planSearchAction(
+  action: SearchActionDto | undefined,
+  context: RefinementContext
+): SearchRefinementPlan {
+  if (!action) return { kind: 'noop' }
+
+  const nextFilters = advancedStateFromRequest(action.nextRequest)
+  const nextQuery = action.nextRequest.query.trim()
+  const nextSort = action.nextRequest.sort ?? context.sort
+  const draft = cleanAdvancedFilters(nextFilters)
+
+  if (!nextQuery && !hasSearchableAdvancedFilterValue(draft)) {
+    return { kind: 'clear', draft }
+  }
+
   return {
     kind: 'search',
+    draft,
     request: {
-      query:
-        group.queryPatch?.replaceQuery ||
-        group.queryPatch?.appendText ||
-        meaningfulResidualQuery(context.residualQuery || '') ||
-        context.activeRequestQuery,
-      filters: context.activeFilters,
-      sort: context.sort,
+      query: nextQuery,
+      filters: draft,
+      sort: nextSort,
     },
   }
 }

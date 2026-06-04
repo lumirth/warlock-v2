@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeSearchRequest,
   searchPlanFiltersFromRequestFilters,
-  searchPlanRequestCachePayload,
-  searchRequestCachePayload,
 } from "../search-request.js";
 
 describe("search request normalization", () => {
@@ -58,25 +56,4 @@ describe("search request normalization", () => {
     });
   });
 
-  it("builds stable plan and result cache payloads from the canonical request", () => {
-    const left = normalizeSearchRequest({
-      query: " Easy   Online Gen Ed ",
-      filters: { credits: 3, online: true },
-      sort: { field: "gpa", direction: "desc" },
-      scope: "all",
-    });
-    const right = normalizeSearchRequest({
-      query: "easy online gen ed",
-      filters: { online: true, credits: 3 },
-      sort: { field: "gpa", direction: "desc" },
-      scope: "all",
-    });
-
-    expect(searchPlanRequestCachePayload(left)).toEqual(
-      searchPlanRequestCachePayload(right),
-    );
-    expect(searchRequestCachePayload(left)).toEqual(
-      searchRequestCachePayload(right),
-    );
-  });
 });

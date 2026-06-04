@@ -109,6 +109,7 @@ searchRoutes.get("/api/search", async (c) => {
       result.meta.extraction.hints,
       result.meta.plan,
       result.meta.query.residual,
+      request,
     );
     if (request.scope === "all") {
       ui.advanced.scope = request.scope;
@@ -149,6 +150,7 @@ searchRoutes.get("/api/search", async (c) => {
         ...response,
         _debug: {
           extraction: result.meta.extraction,
+          compilerEvents: result.meta.compilerEvents,
           plan: result.meta.plan,
           retrievalPlan: result.meta.retrievalPlan,
           retrievalPlans: result.meta.retrievalPlans,

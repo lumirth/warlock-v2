@@ -88,7 +88,7 @@ export class SearchPipeline {
       );
     }
     const extractionEndTime = performance.now();
-    const { extraction, queryResidual, plan } = deepFreeze(planning);
+    const { extraction, queryResidual, plan, compilerEvents } = deepFreeze(planning);
     const effectiveControls = controlsWithPlanInferredSort(controls, plan);
     const budget = buildSearchCandidateBudget(plan, pageWindow, effectiveControls);
 
@@ -117,7 +117,7 @@ export class SearchPipeline {
     );
     const recoveryGroups = buildRecoveryGroups(
       plan,
-      query,
+      request,
       execution.results.length,
     );
     const searchEndTime = performance.now();
@@ -126,6 +126,7 @@ export class SearchPipeline {
       rawQuery: query,
       queryResidual,
       extractionHints: extraction.hints,
+      compilerEvents,
       plan,
       execution,
       recoveryGroups,

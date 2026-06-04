@@ -1,6 +1,6 @@
 import type { RequirementFilter } from "./course-policy.js";
 import type {
-  SearchRequestFilterPatchDto,
+  SearchRequestFiltersDto,
   SearchSort,
 } from "./search-contract.js";
 
@@ -224,7 +224,7 @@ export interface TermValue {
 export interface Suggestion {
   text: string;
   action: "add_filter" | "remove_filter" | "change_filter";
-  filter?: SearchRequestFilterPatchDto;
+  filter?: Partial<SearchRequestFiltersDto>;
 }
 
 export interface ParsedQuery {

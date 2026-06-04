@@ -1,67 +1,11 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { ExtractedQuery, SearchPlan, QueryHint } from '@uiuc-course-search/query-types/search-planner';
-
-const GENED_SYNONYMS: Record<string, string[]> = {
-  // Composition
-  'CMP': ['comp 1', 'composition', 'writing', 'rhet 105', 'freshman comp', 'comp1'],
-  'ACP': ['adv comp', 'advanced composition', 'advanced comp', 'writing intensive', 'cll'],
-
-  // Humanities & Arts
-  'HUM': ['humanities', 'humanities and the arts', 'arts'],
-  'HP': ['historical', 'philosophical', 'history', 'philosophy', 'historical perspectives'],
-  'LA': ['literature', 'lit', 'literature and the arts'],
-
-  // Natural Sciences
-  'NAT': ['nat sci', 'natural sciences', 'science', 'natural sciences and technology'],
-  'PS': ['physical sciences', 'physical'],
-  'LS': ['life sciences', 'life sci', 'bio', 'biology'],
-
-  // Social & Behavioral Sciences
-  'SBS': ['social science', 'behavioral science', 'social and behavioral', 'social', 'behavioral'],
-  'SS': ['soc sci'],
-  'BSC': ['psych', 'psychology'],
-
-  // Cultural Studies
-  'CS': ['cultural studies', 'cultural'],
-  'NW': ['non-western', 'non western', 'nonwestern'],
-  'US': ['us minority', 'minority cultures', 'us minority cultures'],
-  'WCC': ['western', 'comparative', 'western comparative'],
-
-  // Quantitative Reasoning
-  'QR': ['quantitative', 'quant', 'quantitative reasoning'],
-  'QR1': ['qr1', 'qr 1', 'quant 1', 'quantitative reasoning 1', 'qri'],
-  'QR2': ['qr2', 'qr 2', 'quant 2', 'quantitative reasoning 2', 'qrii'],
-};
-
-// Build reverse lookup
-const GENED_LOOKUP: Record<string, string> = {};
-for (const [code, synonyms] of Object.entries(GENED_SYNONYMS)) {
-  GENED_LOOKUP[code.toLowerCase()] = code;
-  for (const syn of synonyms) {
-    GENED_LOOKUP[syn.toLowerCase()] = code;
-  }
-}
-
-// Subject codes that conflict with GenEd codes
-const SUBJECT_GENED_CONFLICTS = new Set(['CS', 'PS']);
-
-const FUZZY_SUBJECT_NAME_BLOCKLIST = new Set([
-  'science',
-  'sciences',
-  'natural science',
-  'natural sciences',
-  'social science',
-  'social sciences',
-  'behavioral science',
-  'behavioral sciences',
-  'writing',
-  'diversity',
-  'culture',
-  'cultural',
-  'race',
-  'ethnicity',
-]);
+import {
+  FUZZY_SUBJECT_NAME_BLOCKLIST,
+  GENED_LOOKUP,
+  SUBJECT_GENED_CONFLICTS,
+} from './student-language-lexicon.js';
 
 type InterpretationType = 'subject' | 'gened';
 

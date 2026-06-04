@@ -6,6 +6,7 @@ import type {
 import type { Hint, SearchPlan } from "@uiuc-course-search/query-types/search-planner";
 import type { SearchCandidateBudget } from "./search-budget.js";
 import type { SearchExecutionResult } from "./search-executor.js";
+import type { SearchCompilerEvent } from "./search-plan-compiler.js";
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
 import type { SearchResult } from "./search-types.js";
 
@@ -19,6 +20,7 @@ export interface SearchPipelineResult {
     extraction: {
       hints: Hint[];
     };
+    compilerEvents: SearchCompilerEvent[];
     plan: SearchPlan;
     retrievalPlan: RetrievalPlan;
     retrievalPlans: RetrievalPlan[];
@@ -43,6 +45,7 @@ export function assembleSearchPipelineResult(input: {
   rawQuery: string;
   queryResidual: string;
   extractionHints: Hint[];
+  compilerEvents: SearchCompilerEvent[];
   plan: SearchPlan;
   execution: SearchExecutionResult;
   recoveryGroups?: SearchRecoveryGroup[];
@@ -64,6 +67,7 @@ export function assembleSearchPipelineResult(input: {
       extraction: {
         hints: input.extractionHints,
       },
+      compilerEvents: input.compilerEvents,
       plan: input.plan,
       retrievalPlan: input.execution.retrievalPlan,
       retrievalPlans: input.execution.retrievalPlans,

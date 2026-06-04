@@ -10,11 +10,11 @@ import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
 import { buildFreshnessSummary } from '../services/freshness.js';
+import { MAX_SYNC_SUBJECTS_PER_REQUEST, type SyncBatchRequest } from '../services/sync-batch-contract.js';
 import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 
 const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-const MAX_SYNC_SUBJECTS_PER_REQUEST = 20;
 
 type Bindings = {
   DB: D1Database;
@@ -261,13 +261,7 @@ syncRoutes.post('/admin/sync-gpa', async (c) => {
 syncRoutes.post('/internal/sync-batch', async (c) => {
   const runId = createRunId('sync-batch');
   try {
-    const { year, term, subjects, status, totalSubjects } = await c.req.json<{
-      year: number;
-      term: string;
-      subjects: string[];
-      status?: TermStateStatus;
-      totalSubjects?: number;
-    }>();
+    const { year, term, subjects, status, totalSubjects } = await c.req.json<SyncBatchRequest>();
 
     if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400);
