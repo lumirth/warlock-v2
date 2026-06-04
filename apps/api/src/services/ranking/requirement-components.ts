@@ -2,21 +2,26 @@ import {
   hasRequirementFilter,
   requirementFilterCodes,
 } from "@uiuc-course-search/query-types";
-import type { Course } from "../../db/types.js";
 import type { SearchFilters, SearchPlan } from "../search-planner-types.js";
-import type { RankingScoreComponent } from "../search-types.js";
+import {
+  matchingRequirementCodes,
+  searchResultRequirementCodes,
+} from "../search-requirements.js";
+import type { RankingScoreComponent, SearchResult } from "../search-types.js";
 import { scoreComponent } from "./score-utils.js";
 
 export function requirementComponent(
-  course: Course,
+  result: SearchResult,
   plan: SearchPlan,
 ): RankingScoreComponent | null {
-  if (matchesRequestedRequirement(course, plan.filters)) {
+  const courseCodes = searchResultRequirementCodes(result);
+  const matchedCodes = matchingRequestedRequirementCodes(courseCodes, plan.filters);
+  if (matchedCodes.length > 0) {
     return scoreComponent(
       "requirement_match",
       0.9,
       "Course satisfies the requested requirement filter.",
-      [course.gened ?? ""].filter(Boolean),
+      matchedCodes,
     );
   }
 
@@ -24,12 +29,12 @@ export function requirementComponent(
     return null;
   }
 
-  if (course.gened) {
+  if (courseCodes.length > 0) {
     return scoreComponent(
       "requirement_match",
       0.25,
       "Course has requirement credit, but not the exact requested bucket.",
-      [course.gened],
+      courseCodes,
     );
   }
 
@@ -48,16 +53,15 @@ function hasRequirementIntent(plan: SearchPlan): boolean {
   );
 }
 
-function matchesRequestedRequirement(
-  course: Course,
+function matchingRequestedRequirementCodes(
+  courseCodes: readonly string[],
   filters: SearchFilters,
-): boolean {
+): string[] {
   const requested = requirementFilterCodes(filters);
 
   if (requested.length === 0) {
-    return false;
+    return [];
   }
 
-  const courseGened = (course.gened ?? "").toUpperCase();
-  return requested.some(value => courseGened.includes(value.toUpperCase()));
+  return matchingRequirementCodes(courseCodes, requested);
 }

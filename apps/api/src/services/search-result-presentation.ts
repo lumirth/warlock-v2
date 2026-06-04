@@ -11,6 +11,10 @@ import {
 import type { Hint, SearchPlan } from './search-planner-types.js';
 import type { SearchResult } from './search.js';
 import { isGenericAnyGenedFilter } from './gened-codes.js';
+import {
+  matchingRequirementCodes,
+  searchResultRequirementCodes,
+} from './search-requirements.js';
 
 export type SearchResultEvidenceContext = {
   plan: SearchPlan;
@@ -79,8 +83,21 @@ function hasHint(hints: Hint[] | undefined, type: Hint['type']): boolean {
   return hints?.some(hint => hint.type === type) ?? false;
 }
 
-function hasStructuredRequirementEvidence(result: SearchResult): boolean {
-  return Boolean(result.laneMatches?.includes('requirement') && result.course.gened);
+function resultRequirementCodes(
+  result: SearchResult,
+  context: SearchResultEvidenceContext,
+): string[] {
+  return searchResultRequirementCodes(result, context.geneds);
+}
+
+function hasStructuredRequirementEvidence(
+  result: SearchResult,
+  context: SearchResultEvidenceContext,
+): boolean {
+  return Boolean(
+    result.laneMatches?.includes('requirement')
+    && resultRequirementCodes(result, context).length > 0,
+  );
 }
 
 export function buildMatchEvidence(
@@ -122,19 +139,24 @@ export function buildMatchEvidence(
 
   const requirement = effectiveRequirementFilter(filters);
   const genedFilters = requirement?.codes ?? [];
+  const courseRequirementCodes = resultRequirementCodes(result, context);
   if (genedFilters.length > 0) {
     const isGenericGened = requirement?.mode === 'any' && isGenericAnyGenedFilter(requirement.codes);
-    addEvidence(
-      evidence,
-      seen,
-      'gened',
-      isGenericGened ? 'Any GenEd' : `GenEd ${genedFilters.join(', ')}`,
-      'filter',
-      'hard',
-      course.gened ?? (isGenericGened ? 'mapped requirement' : genedFilters.join(',')),
-    );
-  } else if (hasHint(context.hints, 'gened') && course.gened) {
-    addEvidence(evidence, seen, 'gened', `GenEd ${course.gened}`, 'query', 'soft', course.gened);
+    const matchedCodes = matchingRequirementCodes(courseRequirementCodes, genedFilters);
+    if (matchedCodes.length > 0) {
+      addEvidence(
+        evidence,
+        seen,
+        'gened',
+        isGenericGened ? 'Any GenEd' : `GenEd ${genedFilters.join(', ')}`,
+        'filter',
+        'hard',
+        matchedCodes.join(', '),
+      );
+    }
+  } else if (hasHint(context.hints, 'gened') && courseRequirementCodes.length > 0) {
+    const value = courseRequirementCodes.join(', ');
+    addEvidence(evidence, seen, 'gened', `GenEd ${value}`, 'query', 'soft', value);
   }
 
   if (filters.days) {
@@ -184,8 +206,9 @@ export function buildMatchEvidence(
     addEvidence(evidence, seen, 'workload', 'Workload evidence match', 'signal', 'soft', claims);
   }
 
-  if (result.laneMatches?.includes('requirement') && course.gened) {
-    addEvidence(evidence, seen, 'gened', `GenEd ${course.gened}`, 'filter', 'soft', course.gened);
+  if (result.laneMatches?.includes('requirement') && courseRequirementCodes.length > 0) {
+    const value = courseRequirementCodes.join(', ');
+    addEvidence(evidence, seen, 'gened', `GenEd ${value}`, 'filter', 'soft', value);
   }
 
   if (result.laneMatches?.includes('structured_section')) {
@@ -277,7 +300,7 @@ export function buildResultExplanation(
   }
 
   const matchedChips = rescue?.assumptions.map(item => item.label) ?? [];
-  const confidenceScore = explanationConfidenceScore(result, context.plan);
+  const confidenceScore = explanationConfidenceScore(result, context);
   const confidenceLabel: ResultExplanation['confidence']['label'] =
     confidenceScore >= 0.82 ? 'high'
       : confidenceScore >= 0.62 ? 'medium'
@@ -291,15 +314,16 @@ export function buildResultExplanation(
     confidence: {
       score: confidenceScore,
       label: confidenceLabel,
-      reasons: explanationConfidenceReasons(result, context.plan),
+      reasons: explanationConfidenceReasons(result, context),
     },
   };
 }
 
-function explanationConfidenceScore(result: SearchResult, plan: SearchPlan): number {
+function explanationConfidenceScore(result: SearchResult, context: SearchResultEvidenceContext): number {
+  const { plan } = context;
   let score = plan.rescue?.confidence ?? 0.72;
   if (result.laneMatches?.includes('exact')) score += 0.12;
-  if (hasStructuredRequirementEvidence(result)) score += 0.08;
+  if (hasStructuredRequirementEvidence(result, context)) score += 0.08;
   if (result.laneMatches?.includes('structured_section')) score += 0.05;
   if (result.laneMatches?.includes('workload_evidence')) score += 0.1;
   if (
@@ -312,10 +336,11 @@ function explanationConfidenceScore(result: SearchResult, plan: SearchPlan): num
   return Math.max(0.1, Math.min(0.98, Number(score.toFixed(2))));
 }
 
-function explanationConfidenceReasons(result: SearchResult, plan: SearchPlan): string[] {
+function explanationConfidenceReasons(result: SearchResult, context: SearchResultEvidenceContext): string[] {
+  const { plan } = context;
   const reasons: string[] = [];
   if (result.laneMatches?.includes('exact')) reasons.push('Exact course lookup is structured.');
-  if (hasStructuredRequirementEvidence(result)) reasons.push('Requirement evidence came from structured mappings.');
+  if (hasStructuredRequirementEvidence(result, context)) reasons.push('Requirement evidence came from structured mappings.');
   if (result.laneMatches?.includes('structured_section')) reasons.push('Schedule or availability evidence came from section data.');
   if (result.laneMatches?.includes('workload_evidence')) reasons.push('Subjective workload preference has an evidence signal.');
   if (

@@ -33,6 +33,7 @@ export interface SearchResult {
   keywordRank?: number;
   laneMatches?: RetrievalLane[];
   laneRanks?: Partial<Record<RetrievalLane, number>>;
+  requirementCodes?: string[];
   supportedSubjectiveClaims?: string[];
   laneResults?: RetrievalLaneResult[];
   scoreComponents?: RankingScoreComponent[];

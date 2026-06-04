@@ -226,6 +226,89 @@ describe('introductory gateway ranking components', () => {
 });
 
 describe('decision-search ranking policy', () => {
+  it('matches requested requirements against loaded course_gened codes, not only the flattened course column', () => {
+    const reranked = applyRankingPolicy([
+      {
+        course: course({
+          id: 'AAS-281',
+          subject: 'AAS',
+          number: '281',
+          title: 'Constructing Race in America',
+          gened: 'CS',
+        }),
+        requirementCodes: ['CS', 'US'],
+        score: 0.4,
+        laneMatches: ['requirement'],
+      },
+      {
+        course: course({
+          id: 'AFST-222',
+          subject: 'AFST',
+          number: '222',
+          title: 'Introduction to Modern Africa',
+          gened: 'CS',
+        }),
+        requirementCodes: ['CS'],
+        score: 0.7,
+        laneMatches: ['requirement'],
+      },
+    ], {
+      filters: { requirement: singleRequirementFilter('US') },
+      semanticQuery: 'us minority',
+      keywordQuery: 'us minority',
+      rescue: {
+        queryTypes: ['requirement'],
+        negativeTerms: [],
+        topicTerms: [],
+        expandedTerms: [],
+        assumptions: [],
+        warnings: [],
+        interpretedLanes: ['requirement'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.82,
+      },
+    });
+
+    expect(reranked[0].course.id).toBe('AAS-281');
+    expect(reranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: 'requirement_match',
+        value: 0.9,
+        evidence: ['US'],
+      }),
+    ]));
+  });
+
+  it('recognizes requirement credit from loaded codes when the flattened column is empty', () => {
+    const reranked = applyRankingPolicy([
+      {
+        course: course({
+          id: 'MACS-150',
+          subject: 'MACS',
+          number: '150',
+          title: 'Introduction to Film',
+          gened: null,
+        }),
+        requirementCodes: ['HUM'],
+        score: 0.4,
+        laneMatches: ['requirement'],
+      },
+    ], {
+      filters: { requirement: singleRequirementFilter('HUM') },
+      semanticQuery: 'humanities movies',
+      keywordQuery: 'humanities movies',
+    });
+
+    expect(reranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: 'requirement_match',
+        value: 0.9,
+        evidence: ['HUM'],
+      }),
+    ]));
+  });
+
   it('prefers evidence-backed low-workload requirement matches over unsupported topical matches', () => {
     const results: SearchResult[] = [
       {

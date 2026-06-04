@@ -179,9 +179,18 @@ describe('search result DTO evidence', () => {
   });
 
   it('labels generic GenEd filters as Any GenEd in result evidence', () => {
-    const dto = searchResultToCourseDto(searchResult({ laneMatches: ['requirement'] }), {
+    const dto = searchResultToCourseDto(searchResult({
+      course: { ...course, gened: null },
+      laneMatches: ['requirement'],
+    }), {
       rawQuery: 'easy cs gened',
       hints: [],
+      geneds: [{
+        categoryId: 'QR',
+        categoryName: 'Quantitative Reasoning',
+        attributeCode: 'QR2',
+        attributeName: 'Quantitative Reasoning II',
+      }],
       plan: {
         filters: {
           subject: 'CS',
@@ -205,12 +214,41 @@ describe('search result DTO evidence', () => {
       },
     });
 
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any GenEd: QR']));
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any GenEd: QR, QR2']));
     expect(dto.match_evidence?.find(item => item.kind === 'gened')).toMatchObject({
       label: 'Any GenEd',
-      value: 'QR',
+      value: 'QR, QR2',
       weight: 'hard',
     });
+    expect(dto.explanation?.confidence.reasons).toContain('Requirement evidence came from structured mappings.');
+  });
+
+  it('explains Cultural Studies sub-attributes from full GenEd DTOs', () => {
+    const dto = searchResultToCourseDto(searchResult({
+      course: { ...course, gened: 'CS' },
+      laneMatches: ['requirement'],
+    }), {
+      rawQuery: 'us minority class',
+      hints: [],
+      geneds: [{
+        categoryId: 'CS',
+        categoryName: 'Cultural Studies',
+        attributeCode: 'US',
+        attributeName: 'US Minority Cultures',
+      }],
+      plan: {
+        filters: { requirement: singleRequirementFilter('US') },
+        keywordQuery: '',
+        semanticQuery: '',
+      },
+    });
+
+    expect(dto.match_evidence?.find(item => item.kind === 'gened')).toMatchObject({
+      label: 'GenEd US',
+      value: 'US',
+      weight: 'hard',
+    });
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['GenEd US: US']));
   });
 
   it('includes explicit sort controls as ordering explanation without changing score evidence', () => {

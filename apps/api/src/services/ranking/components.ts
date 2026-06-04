@@ -27,7 +27,7 @@ export function rankingComponentsForResult(
     titleMatchComponent(result.course, query),
     exactnessComponent(result),
     qualityTierComponent(result.course),
-    requirementComponent(result.course, plan),
+    requirementComponent(result, plan),
     laneMatchComponent(result, "structured_section", "availability_term", 0.35, "Section constraints matched structured offering data."),
     laneMatchComponent(result, "student_language_alias", "student_language", 0.25, "Student-language aliases matched this course."),
     laneMatchComponent(result, "workload_evidence", "workload_evidence", 0.45, "Workload evidence matched the subjective preference."),

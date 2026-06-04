@@ -2,7 +2,10 @@ import type { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 import { searchCourses as semanticSearch } from "./embeddings.js";
 import { errorFields, logger } from "../observability/logger.js";
 import { fuseRetrievalResults } from "./search-fusion.js";
-import { fetchCoursesById } from "./search-loaders.js";
+import {
+  fetchCoursesById,
+  fetchRequirementCodesByCourseId,
+} from "./search-loaders.js";
 import { applyRankingPolicy } from "./ranking/index.js";
 import { laneEnabled, type RetrievalPlan } from "./search-retrieval-plan.js";
 import {
@@ -118,7 +121,11 @@ export async function hybridSearch(
     return [];
   }
 
-  const courseMap = await fetchCoursesById(db, scores.map(score => score.id));
+  const courseIds = scores.map(score => score.id);
+  const [courseMap, requirementCodesByCourseId] = await Promise.all([
+    fetchCoursesById(db, courseIds),
+    fetchRequirementCodesByCourseId(db, courseIds),
+  ]);
 
   const rankedResults: SearchResult[] = [];
   for (const score of scores) {
@@ -131,6 +138,7 @@ export async function hybridSearch(
       keywordRank: score.keywordRank,
       laneMatches: score.laneMatches,
       laneRanks: score.laneRanks,
+      requirementCodes: requirementCodesByCourseId.get(score.id),
       laneResults: score.laneResults,
       supportedSubjectiveClaims: score.supportedSubjectiveClaims,
     });

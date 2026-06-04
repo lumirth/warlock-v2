@@ -1,5 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type { Course } from '../db/types.js';
+import { canonicalGenedCode } from "./gened-codes.js";
 
 const D1_ID_BATCH_SIZE = 50;
 
@@ -32,6 +33,43 @@ export async function fetchCoursesById(
   }
 
   return courseMap;
+}
+
+export async function fetchRequirementCodesByCourseId(
+  db: D1Database,
+  courseIds: string[],
+): Promise<Map<string, string[]>> {
+  const requirementCodesByCourseId = new Map<string, string[]>();
+  if (courseIds.length === 0) {
+    return requirementCodesByCourseId;
+  }
+
+  for (const batch of chunkValues([...new Set(courseIds)], D1_ID_BATCH_SIZE)) {
+    const placeholders = batch.map(() => "?").join(",");
+    const result = await db.prepare(`
+      SELECT course_id, category_id, attribute_code
+      FROM course_gened
+      WHERE course_id IN (${placeholders})
+      ORDER BY category_id, attribute_code
+    `).bind(...batch).all<{
+      course_id: string;
+      category_id: string;
+      attribute_code: string | null;
+    }>();
+
+    for (const row of result.results) {
+      const codes = requirementCodesByCourseId.get(row.course_id) ?? [];
+      for (const value of [row.category_id, row.attribute_code]) {
+        const code = canonicalGenedCode(value);
+        if (code && !codes.includes(code)) {
+          codes.push(code);
+        }
+      }
+      requirementCodesByCourseId.set(row.course_id, codes);
+    }
+  }
+
+  return requirementCodesByCourseId;
 }
 
 export function chunkValues<T>(values: T[], size: number): T[][] {
