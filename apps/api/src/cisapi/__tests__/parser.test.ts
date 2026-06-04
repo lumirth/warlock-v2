@@ -281,6 +281,37 @@ describe('parseCourseDetailXml', () => {
       typeCode: '',
     });
   });
+
+  it('parses genEd sub-attributes in live course detail XML', () => {
+    const result = parseCourseDetailXml(`
+      <course id="CLCV 100">
+        <subject id="CLCV">Classics</subject>
+        <label>Classical Mythology</label>
+        <genEdCategories>
+          <genEdCategory id="CS">
+            <description>Cultural Studies</description>
+            <genEdAttributes>
+              <genEdAttribute code="WCC">Western/Comparative Cultures</genEdAttribute>
+              <ns2:genEdAttr id="1US">
+                <description>US Minority Cultures</description>
+              </ns2:genEdAttr>
+            </genEdAttributes>
+          </genEdCategory>
+        </genEdCategories>
+      </course>
+    `);
+
+    expect(result?.genEdCategories).toEqual([
+      {
+        id: 'CS',
+        description: 'Cultural Studies',
+        attributes: [
+          { code: 'WCC', description: 'Western/Comparative Cultures' },
+          { code: '1US', description: 'US Minority Cultures' },
+        ],
+      },
+    ]);
+  });
 });
 
 // This test specifically documents the bug that was fixed

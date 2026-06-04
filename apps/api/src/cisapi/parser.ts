@@ -38,6 +38,16 @@ function tagText(xml: string, tag: string): string {
   return decodeXmlText(match?.[1]).trim();
 }
 
+function textWithoutTags(xml: string): string {
+  return decodeXmlText(xml.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+function xmlAttribute(openTagAttributes: string, name: string): string {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`\\b${escaped}="([^"]*)"`).exec(openTagAttributes);
+  return decodeXmlText(match?.[1]).trim();
+}
+
 export function parseSubjectsXml(xml: string): CISAPISubject[] {
   const subjects: CISAPISubject[] = [];
   const subjectRegex = /<subject\s+id="([^"]+)"\s+href="([^"]+)"[^>]*>([^<]*)<\/subject>/g;
@@ -87,11 +97,10 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
     const id = genEdMatch[1];
     const content = genEdMatch[2];
     const descMatch = content.match(/<(?:[\w]+:)?description>([^<]*)<\/(?:[\w]+:)?description>/);
-    // Attributes are not easily regexable without nested loop, leaving empty for now in this simple parser
     genEdCategories.push({
       id: id,
       description: decodeXmlText(descMatch?.[1]),
-      attributes: []
+      attributes: parseGenEdAttributesXml(content)
     });
   }
 
@@ -113,6 +122,25 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
     genEdCategories,
     sections
   };
+}
+
+function parseGenEdAttributesXml(genEdCategoryXml: string): CISAPIGenEd['attributes'] {
+  const attributes: CISAPIGenEd['attributes'] = [];
+  const attributeRegex = /<(?:[\w]+:)?(?:genEdAttribute|genEdAttr|attribute)\b([^>]*)>([\s\S]*?)<\/(?:[\w]+:)?(?:genEdAttribute|genEdAttr|attribute)>/g;
+  let attributeMatch;
+
+  while ((attributeMatch = attributeRegex.exec(genEdCategoryXml)) !== null) {
+    const openTagAttributes = attributeMatch[1];
+    const content = attributeMatch[2];
+    const code = xmlAttribute(openTagAttributes, 'code') || xmlAttribute(openTagAttributes, 'id');
+    const description = tagText(content, 'description') || textWithoutTags(content);
+
+    if (code || description) {
+      attributes.push({ code, description });
+    }
+  }
+
+  return attributes;
 }
 
 function parseSectionsXml(xml: string): CISAPISection[] {
