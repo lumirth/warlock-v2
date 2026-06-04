@@ -75,6 +75,7 @@ describe('search cache', () => {
         keywordQuery: '',
         semanticQuery: '',
       },
+      fallbackPlans: [],
       compilerEvents: [],
     };
     const retrievalPlan: RetrievalPlan = {

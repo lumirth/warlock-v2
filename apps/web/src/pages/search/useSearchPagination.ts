@@ -19,9 +19,10 @@ export function useSearchPagination({
       state.pagination.nextOffset ??
       state.pagination.offset + state.pagination.limit
 
-    executeSearch(derived.activeRequestQuery, {
+    executeSearch({
+      type: 'append',
+      query: derived.activeRequestQuery,
       offset: nextOffset,
-      mode: 'append',
       filters: state.activeAdvancedFilters,
       sort: state.sort,
     })

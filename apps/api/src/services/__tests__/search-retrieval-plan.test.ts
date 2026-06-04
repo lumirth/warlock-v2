@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { singleRequirementFilter } from "@uiuc-course-search/query-types";
-import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchPlan } from "../search-planner-types.js";
 import { buildSearchCandidateBudget } from "../search-budget.js";
 import { normalizeSearchControls } from "../search-controls.js";
 import { buildRetrievalPlan, laneEnabled } from "../search-retrieval-plan.js";

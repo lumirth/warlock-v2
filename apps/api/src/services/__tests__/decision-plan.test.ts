@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
-import type { SearchPlan } from '@uiuc-course-search/query-types/search-planner';
+import type { SearchPlan } from '../search-planner-types.js';
 import { applyDecisionSearchRescue } from '../decision-plan.js';
 import { GENERIC_GENED_CODES } from '../gened-codes.js';
 

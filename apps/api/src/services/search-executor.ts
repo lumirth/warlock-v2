@@ -1,21 +1,18 @@
 import type { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
-import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchPlan } from "./search-planner-types.js";
 import {
   buildSearchCandidateBudget,
   type SearchCandidateBudget,
   type SearchPageWindow,
 } from "./search-budget.js";
 import { applySearchControls, type AppliedSearchControls } from "./search-controls.js";
-import { compareRankedSearchResults } from "./search-ranking-policy.js";
+import { compareRankedSearchResults } from "./ranking/index.js";
 import {
   buildRetrievalPlan,
   type RetrievalPlan,
 } from "./search-retrieval-plan.js";
 import { hybridSearchWithTermRanking } from "./search-term-ranking.js";
-import { sanitizeFtsQuery } from "./search-text.js";
 import type { SearchResult } from "./search-types.js";
-import { expandTopics } from "./topic-registry.js";
-import { deepFreeze } from "./search-request.js";
 
 export type SearchExecutionResult = {
   results: SearchResult[];
@@ -34,7 +31,7 @@ export async function executeSearchPlan(
   plan: SearchPlan,
   page: SearchPageWindow,
   controls: AppliedSearchControls,
-  queryResidual: string,
+  fallbackPlans: readonly SearchPlan[],
   budget: SearchCandidateBudget = buildSearchCandidateBudget(plan, page, controls),
 ): Promise<SearchExecutionResult> {
   const retrievalPlan = buildRetrievalPlan(plan, controls, budget);
@@ -52,11 +49,10 @@ export async function executeSearchPlan(
   const originalResultCount = results.length;
 
   if (!isNavigational && results.length < 3) {
-    const expandedPlan = expansionPlan(plan, queryResidual);
-    if (expandedPlan) {
+    for (const fallbackPlan of fallbackPlans) {
       tierReached = 3;
       const expandedRetrievalPlan = buildRetrievalPlan(
-        expandedPlan,
+        fallbackPlan,
         controls,
         budget,
       );
@@ -68,6 +64,9 @@ export async function executeSearchPlan(
         expandedRetrievalPlan,
       );
       results = mergeResults(results, expandedResults, budget.executionResultLimit);
+      if (results.length >= 3) {
+        break;
+      }
     }
   }
 
@@ -84,27 +83,6 @@ export async function executeSearchPlan(
     retrievalPlan,
     retrievalPlans,
   };
-}
-
-function expansionPlan(plan: SearchPlan, queryResidual: string): SearchPlan | null {
-  const existingExpansions = Array.isArray(plan.softPreferences?.topicExpansions)
-    ? plan.softPreferences.topicExpansions
-    : [];
-  const expandedKeywords =
-    existingExpansions.length > 0 ? [] : expandTopics(queryResidual);
-  if (expandedKeywords.length === 0) {
-    return null;
-  }
-
-  return deepFreeze({
-    ...plan,
-    keywordQuery: sanitizeFtsQuery(
-      `${plan.keywordQuery} ${expandedKeywords.join(" ")}`,
-    ),
-    semanticQuery: sanitizeFtsQuery(
-      `${plan.semanticQuery} ${expandedKeywords.join(" ")}`,
-    ),
-  });
 }
 
 function mergeResults(

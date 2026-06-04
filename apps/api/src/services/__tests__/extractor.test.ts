@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extract } from '../extractor.js';
-import type { Hint } from '@uiuc-course-search/query-types/search-planner';
+import type { Hint } from '../search-planner-types.js';
 
 describe('extract', () => {
   describe('phase 1: entities', () => {

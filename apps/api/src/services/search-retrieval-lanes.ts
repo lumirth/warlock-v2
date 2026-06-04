@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { hasRequirementFilter } from "@uiuc-course-search/query-types";
-import type { RetrievalLane, SearchFilters, SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { RetrievalLane, SearchFilters, SearchPlan } from "./search-planner-types.js";
 import { buildFilterClauses } from "./search-filters.js";
 import type { RankedLaneRow, WorkloadLaneRow } from "./search-fusion.js";
 import { chunkValues } from "./search-loaders.js";

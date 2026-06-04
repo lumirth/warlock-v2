@@ -17,7 +17,7 @@ import type {
 import type {
   Hint,
   SearchPlan,
-} from '@uiuc-course-search/query-types/search-planner';
+} from '../services/search-planner-types.js';
 import {
   buildCourseExplorerCourseUrl,
   buildCourseExplorerSectionUrl,

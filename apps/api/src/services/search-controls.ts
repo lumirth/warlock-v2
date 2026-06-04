@@ -5,8 +5,8 @@ import {
   type SearchScope,
   type SearchSort,
 } from "@uiuc-course-search/query-types";
-import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
-import { isSearchSort, sortValueForResult } from "./search-ranking-policy.js";
+import type { SearchPlan } from "./search-planner-types.js";
+import { isSearchSort, sortValueForResult } from "./ranking/index.js";
 import type { SearchResult } from "./search-types.js";
 
 export interface SearchControls {

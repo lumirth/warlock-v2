@@ -5,7 +5,7 @@ import type {
   SearchPlanWarning,
   SearchPlanWarningKind,
   SearchRelaxationStep,
-} from '@uiuc-course-search/query-types/search-planner';
+} from './search-planner-types.js';
 import {
   hasRequirementFilter,
   requirementFilter,

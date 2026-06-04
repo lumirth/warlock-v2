@@ -8,7 +8,7 @@ const REMOTE_EVAL_REQUEST_DELAY_MS = 650;
 const RATE_LIMIT_RETRY_FALLBACK_MS = 65_000;
 const MAX_RATE_LIMIT_RETRIES = 2;
 
-type Fetcher = (url: string) => Promise<Response>;
+type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 type Sleeper = (ms: number) => Promise<void>;
 
 function sleep(ms: number): Promise<void> {
@@ -40,6 +40,7 @@ export async function fetchWithRateLimitRetry(
   url: string,
   options: {
     fetcher?: Fetcher;
+    init?: RequestInit;
     sleeper?: Sleeper;
     maxRetries?: number;
   } = {},
@@ -49,7 +50,7 @@ export async function fetchWithRateLimitRetry(
   const maxRetries = options.maxRetries ?? MAX_RATE_LIMIT_RETRIES;
 
   for (let attempt = 0; ; attempt++) {
-    const response = await fetcher(url);
+    const response = await fetcher(url, options.init);
     if (response.status !== 429 || attempt >= maxRetries) {
       return response;
     }
@@ -68,11 +69,15 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
 
   const evalResults: EvalResult[] = [];
   const requestDelayMs = requestDelayForBaseUrl(baseUrl);
+  const adminToken = process.env.EVAL_ADMIN_TOKEN ?? process.env.STAGING_ADMIN_TOKEN;
+  const requestInit = adminToken
+    ? { headers: { Authorization: `Bearer ${adminToken}` } }
+    : undefined;
 
   for (const [index, query] of GOLDEN_QUERIES.entries()) {
     try {
-      const url = `${baseUrl}/api/search?q=${encodeURIComponent(query.query)}&limit=20&debug=planner`;
-      const response = await fetchWithRateLimitRetry(url);
+      const url = `${baseUrl}/admin/debug/search-plan?q=${encodeURIComponent(query.query)}&limit=20`;
+      const response = await fetchWithRateLimitRetry(url, { init: requestInit });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
@@ -118,6 +123,7 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
 // CLI entry point
 declare const process: {
   argv: string[];
+  env: Record<string, string | undefined>;
   exitCode?: number;
 };
 

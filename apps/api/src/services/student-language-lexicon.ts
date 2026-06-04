@@ -6,7 +6,7 @@ import type {
   SearchPlanWarning,
   SearchPlanWarningKind,
   SearchSoftPreferences,
-} from "@uiuc-course-search/query-types/search-planner";
+} from "./search-planner-types.js";
 
 export type StudentLanguageRescueRule = {
   queryTypes: DecisionQueryType[];

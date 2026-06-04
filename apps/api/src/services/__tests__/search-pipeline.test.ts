@@ -13,7 +13,7 @@ import { normalizeSearchRequest } from "../search-request.js";
 import type { Course } from "../../db/index.js";
 import type { ExtractionResult } from "../extractor.js";
 import type { SearchResult } from "../search.js";
-import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchPlan } from "../search-planner-types.js";
 
 vi.mock("../extractor.js");
 vi.mock("../query-resolver.js");

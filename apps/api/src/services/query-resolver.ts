@@ -1,11 +1,12 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { singleRequirementFilter } from '@uiuc-course-search/query-types';
-import type { ExtractedQuery, SearchPlan, QueryHint } from '@uiuc-course-search/query-types/search-planner';
+import type { ExtractedQuery, SearchPlan, QueryHint } from './search-planner-types.js';
 import {
   FUZZY_SUBJECT_NAME_BLOCKLIST,
   GENED_LOOKUP,
   SUBJECT_GENED_CONFLICTS,
 } from './student-language-lexicon.js';
+import { applyStructuredNegation } from './search-intent-policy.js';
 
 type InterpretationType = 'subject' | 'gened';
 
@@ -154,52 +155,6 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
   }
 
   return plan;
-}
-
-function applyStructuredNegation(field: string, value: string, plan: SearchPlan): void {
-  const normalized = value.trim();
-  if (!normalized) return;
-
-  plan.filters.not = plan.filters.not || {};
-
-  if (field === 'subject') {
-    plan.filters.not.subjects = plan.filters.not.subjects || [];
-    plan.filters.not.subjects.push(normalized.toUpperCase());
-    applyNegativeSoftPreference(normalized, plan);
-    return;
-  }
-
-  if (field === 'gened') {
-    plan.filters.not.geneds = plan.filters.not.geneds || [];
-    plan.filters.not.geneds.push(normalized.toUpperCase());
-    return;
-  }
-
-  if (field === 'keyword' || field === 'workload') {
-    plan.filters.not.keywords = plan.filters.not.keywords || [];
-    plan.filters.not.keywords.push(normalized);
-    applyNegativeSoftPreference(normalized, plan);
-  }
-}
-
-function applyNegativeSoftPreference(value: string, plan: SearchPlan): void {
-  const normalized = value.toLowerCase();
-  const softPreferences = { ...(plan.softPreferences ?? {}) };
-
-  if (/\b(math|calculus|stat|statistics|coding|programming|cs)\b/.test(normalized)) {
-    softPreferences.lowMath = 0.84;
-  }
-  if (/\b(essay|paper|writing|writing heavy|writing-heavy)\b/.test(normalized)) {
-    softPreferences.lowWriting = 0.84;
-  }
-  if (/\b(reading|reading heavy|reading-heavy)\b/.test(normalized)) {
-    softPreferences.lowReading = 0.78;
-  }
-  if (/\b(exam|test|quiz|midterm|final)\b/.test(normalized)) {
-    softPreferences.lowExams = 0.78;
-  }
-
-  plan.softPreferences = softPreferences;
 }
 
 export function parseTermValue(value: string): { term: string; year: number } | null {

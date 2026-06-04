@@ -1,4 +1,4 @@
-import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchPlan } from "./search-planner-types.js";
 import type { AppliedSearchControls } from "./search-controls.js";
 
 export const DEFAULT_MAX_SEARCH_RESULT_WINDOW = 1200;

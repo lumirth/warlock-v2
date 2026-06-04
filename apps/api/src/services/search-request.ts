@@ -7,7 +7,7 @@ import {
   type SearchRequestDto,
   type SearchRequestFiltersDto,
 } from "@uiuc-course-search/query-types";
-import type { SearchFilters } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchFilters } from "./search-planner-types.js";
 
 export type CanonicalSearchRequest = NormalizedSearchRequestDto;
 

@@ -7,19 +7,16 @@ import type {
 } from "@cloudflare/workers-types";
 import { SearchPipeline } from "../services/search-pipeline.js";
 import {
-  type CourseGenedDto,
   type SearchInterpretationDto,
   type SearchResponseDto,
 } from "@uiuc-course-search/query-types";
-import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchPlan } from "../services/search-planner-types.js";
 import { searchResultToCourseDto } from "../dto/course.js";
+import { loadSearchResultGeneds } from "../dto/search-geneds.js";
 import { buildSearchUiPlan } from "../dto/search-ui.js";
 import { parseSearchHttpRequest } from "../http/search-request.js";
 import { getSearchTermSummary } from "../services/term-state.js";
-import { canonicalGenedCode } from "../services/gened-codes.js";
 import { errorFields, logger } from "../observability/logger.js";
-
-const SEARCH_DTO_BATCH_SIZE = 50;
 
 type Bindings = {
   DB: D1Database;
@@ -32,49 +29,6 @@ type Bindings = {
 
 export const searchRoutes = new Hono<{ Bindings: Bindings }>();
 
-async function loadSearchResultGeneds(
-  db: D1Database,
-  courseIds: string[],
-): Promise<Map<string, CourseGenedDto[]>> {
-  const genedsByCourseId = new Map<string, CourseGenedDto[]>();
-  const uniqueIds = [...new Set(courseIds)].filter(Boolean);
-
-  for (let index = 0; index < uniqueIds.length; index += SEARCH_DTO_BATCH_SIZE) {
-    const batch = uniqueIds.slice(index, index + SEARCH_DTO_BATCH_SIZE);
-    const placeholders = batch.map(() => "?").join(",");
-    const result = await db
-      .prepare(
-        `
-        SELECT course_id, category_id, category_name, attribute_code, attribute_name
-        FROM course_gened
-        WHERE course_id IN (${placeholders})
-        ORDER BY category_id, attribute_code
-        `,
-      )
-      .bind(...batch)
-      .all<{
-        course_id: string;
-        category_id: string;
-        category_name: string | null;
-        attribute_code: string | null;
-        attribute_name: string | null;
-      }>();
-
-    for (const row of result.results) {
-      const geneds = genedsByCourseId.get(row.course_id) ?? [];
-      geneds.push({
-        categoryId: row.category_id,
-        categoryName: row.category_name,
-        attributeCode: canonicalGenedCode(row.attribute_code),
-        attributeName: row.attribute_name,
-      });
-      genedsByCourseId.set(row.course_id, geneds);
-    }
-  }
-
-  return genedsByCourseId;
-}
-
 // Hybrid search endpoint (combines semantic + keyword with RRF)
 searchRoutes.get("/api/search", async (c) => {
   const searchParams = new URL(c.req.url).searchParams;
@@ -84,7 +38,6 @@ searchRoutes.get("/api/search", async (c) => {
   }
   const { request, pagination } = parsedRequest.value;
   const { limit, offset } = pagination;
-  const includePlannerDebug = searchParams.get("debug") === "planner";
 
   try {
     const pipeline = new SearchPipeline(
@@ -144,20 +97,6 @@ searchRoutes.get("/api/search", async (c) => {
         nextOffset: hasMore ? offset + limit : null,
       },
     };
-
-    if (includePlannerDebug) {
-      return c.json({
-        ...response,
-        _debug: {
-          extraction: result.meta.extraction,
-          compilerEvents: result.meta.compilerEvents,
-          plan: result.meta.plan,
-          retrievalPlan: result.meta.retrievalPlan,
-          retrievalPlans: result.meta.retrievalPlans,
-          budget: result.meta.budget,
-        },
-      });
-    }
 
     return c.json(response);
   } catch (error) {

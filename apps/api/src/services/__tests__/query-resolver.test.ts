@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { resolveQuery, validateSubject } from '../query-resolver.js';
-import type { ExtractedQuery } from '@uiuc-course-search/query-types/search-planner';
+import type { ExtractedQuery } from '../search-planner-types.js';
 import type { D1Database } from '@cloudflare/workers-types';
 
 const mockDb = {

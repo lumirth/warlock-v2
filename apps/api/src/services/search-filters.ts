@@ -1,4 +1,4 @@
-import type { SearchFilters } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchFilters } from "./search-planner-types.js";
 import {
   WORKLOAD_FILTER_THRESHOLDS,
   effectiveRequirementFilter,

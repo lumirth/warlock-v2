@@ -13,7 +13,7 @@ import {
 import { fuseRetrievalResults } from '../search-fusion.js';
 import type { SearchResult } from '../search.js';
 import type { Course } from '../../db/index.js';
-import type { SearchPlan } from '@uiuc-course-search/query-types/search-planner';
+import type { SearchPlan } from '../search-planner-types.js';
 
 function course(overrides: Partial<Course>): Course {
   return {

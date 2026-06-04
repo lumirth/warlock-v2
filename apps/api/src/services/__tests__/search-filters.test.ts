@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import { requirementFilter, WORKLOAD_FILTER_THRESHOLDS } from '@uiuc-course-search/query-types';
 import { buildFilterClauses, requirementLaneSearch, TIME_RANGES } from '../search.js';
-import type { SearchFilters, SearchPlan } from '@uiuc-course-search/query-types/search-planner';
+import type { SearchFilters, SearchPlan } from '../search-planner-types.js';
 
 describe('buildFilterClauses', () => {
   describe('days filter', () => {

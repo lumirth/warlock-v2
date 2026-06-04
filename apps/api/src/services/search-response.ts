@@ -3,7 +3,7 @@ import type {
   SearchScope,
   SearchSort,
 } from "@uiuc-course-search/query-types";
-import type { Hint, SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { Hint, SearchPlan } from "./search-planner-types.js";
 import type { SearchCandidateBudget } from "./search-budget.js";
 import type { SearchExecutionResult } from "./search-executor.js";
 import type { SearchCompilerEvent } from "./search-plan-compiler.js";

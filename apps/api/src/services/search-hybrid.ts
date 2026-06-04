@@ -3,7 +3,7 @@ import { searchCourses as semanticSearch } from "./embeddings.js";
 import { errorFields, logger } from "../observability/logger.js";
 import { fuseRetrievalResults } from "./search-fusion.js";
 import { fetchCoursesById } from "./search-loaders.js";
-import { applyRankingPolicy } from "./search-ranking-policy.js";
+import { applyRankingPolicy } from "./ranking/index.js";
 import { laneEnabled, type RetrievalPlan } from "./search-retrieval-plan.js";
 import {
   keywordSearch,

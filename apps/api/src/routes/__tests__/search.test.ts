@@ -119,6 +119,46 @@ describe("Search Routes", () => {
     );
   });
 
+  it("does not expose planner debug on the public search endpoint", async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: "CS 225", residual: "" },
+        extraction: { hints: [] },
+        compilerEvents: [],
+        plan: { filters: {}, semanticQuery: "", keywordQuery: "" },
+        retrievalPlan: {},
+        retrievalPlans: [],
+        budget: {},
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+        fallback: { tierReached: 2, constraintsRelaxed: [], originalResultCount: 0 },
+      },
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: searchSpy,
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?q=CS+225&debug=planner",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(200);
+    const data = await res.json() as Record<string, unknown>;
+    expect(data._debug).toBeUndefined();
+  });
+
   it("rejects malformed public search params before running search", async () => {
     const searchSpy = vi.fn();
     vi.mocked(SearchPipeline).mockImplementation(function () {

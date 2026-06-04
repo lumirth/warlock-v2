@@ -1,4 +1,4 @@
-import type { DecisionQueryType, RetrievalLane, SearchPlanWarningKind } from '@uiuc-course-search/query-types/search-planner';
+import type { DecisionQueryType, RetrievalLane, SearchPlanWarningKind } from '../services/search-planner-types.js';
 
 export interface ExpectedRescuePlan {
   queryTypes?: DecisionQueryType[];

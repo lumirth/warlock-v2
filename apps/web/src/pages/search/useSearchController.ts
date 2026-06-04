@@ -51,7 +51,7 @@ export function useSearchController() {
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    executeSearch(state.query)
+    executeSearch({ type: 'submit', query: state.query })
   }
 
   return {
@@ -61,7 +61,8 @@ export function useSearchController() {
       setQuery: (value: string) =>
         dispatch({ type: 'query/changed', value }),
       handleSearchSubmit,
-      runExampleSearch: executeSearch,
+      runExampleSearch: (query: string) =>
+        executeSearch({ type: 'submit', query }),
       ...advancedActions,
       ...refinementActions,
       ...sortingActions,

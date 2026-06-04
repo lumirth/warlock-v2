@@ -37,8 +37,9 @@ export function useSearchSorting({
 
   const applySort = (nextSort: SearchSort) => {
     const normalizedSort = normalizeSearchSort(nextSort)
-    executeSearch(derived.activeRequestQuery, {
-      mode: 'refresh',
+    executeSearch({
+      type: 'refresh',
+      query: derived.activeRequestQuery,
       filters: state.activeAdvancedFilters,
       sort: normalizedSort,
     })

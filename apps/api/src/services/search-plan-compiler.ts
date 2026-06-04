@@ -22,12 +22,16 @@ import type {
   QueryHint,
   QueryHintType,
   SearchPlan,
-} from "@uiuc-course-search/query-types/search-planner";
+} from "./search-planner-types.js";
 import type { ExtractionResult } from "./extractor.js";
 import {
   deepFreeze,
   searchPlanFiltersFromRequestFilters,
 } from "./search-request.js";
+import {
+  applyStructuredNegation,
+  parseBooleanFilterValue,
+} from "./search-intent-policy.js";
 
 export type SearchCompilerEventStage =
   | "parse"
@@ -104,19 +108,6 @@ function appendQueryText(current: string, addition: string): string {
   return [current, addition].filter(Boolean).join(" ").trim();
 }
 
-function parseBoolean(value: string): boolean | undefined {
-  const normalized = value.toLowerCase();
-  if (["true", "yes", "1", "online", "remote"].includes(normalized))
-    return true;
-  if (
-    ["false", "no", "0", "in-person", "in_person", "inperson"].includes(
-      normalized,
-    )
-  )
-    return false;
-  return undefined;
-}
-
 function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
   if (filter.negated) {
     applyStructuredNegation(filter.field, filter.value, plan);
@@ -147,7 +138,7 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
       plan.filters.status = filter.value.toLowerCase();
       break;
     case "online": {
-      const online = parseBoolean(filter.value);
+      const online = parseBooleanFilterValue(filter.value);
       if (online !== undefined) plan.filters.online = online;
       break;
     }
@@ -228,52 +219,6 @@ function applyNegationToken(token: string, plan: SearchPlan): void {
   if (["online", "remote", "virtual"].includes(normalized)) {
     plan.filters.online = false;
   }
-}
-
-function applyStructuredNegation(field: string, value: string, plan: SearchPlan): void {
-  const normalized = value.trim();
-  if (!normalized) return;
-
-  plan.filters.not = plan.filters.not || {};
-
-  if (field === "subject") {
-    plan.filters.not.subjects = plan.filters.not.subjects || [];
-    plan.filters.not.subjects.push(normalized.toUpperCase());
-    applyNegativeSoftPreference(normalized, plan);
-    return;
-  }
-
-  if (field === "gened") {
-    plan.filters.not.geneds = plan.filters.not.geneds || [];
-    plan.filters.not.geneds.push(normalized.toUpperCase());
-    return;
-  }
-
-  if (field === "keyword" || field === "workload") {
-    plan.filters.not.keywords = plan.filters.not.keywords || [];
-    plan.filters.not.keywords.push(normalized);
-    applyNegativeSoftPreference(normalized, plan);
-  }
-}
-
-function applyNegativeSoftPreference(value: string, plan: SearchPlan): void {
-  const normalized = value.toLowerCase();
-  const softPreferences = { ...(plan.softPreferences ?? {}) };
-
-  if (/\b(math|calculus|stat|statistics|coding|programming|cs)\b/.test(normalized)) {
-    softPreferences.lowMath = 0.84;
-  }
-  if (/\b(essay|paper|writing|writing heavy|writing-heavy)\b/.test(normalized)) {
-    softPreferences.lowWriting = 0.84;
-  }
-  if (/\b(reading|reading heavy|reading-heavy)\b/.test(normalized)) {
-    softPreferences.lowReading = 0.78;
-  }
-  if (/\b(exam|test|quiz|midterm|final)\b/.test(normalized)) {
-    softPreferences.lowExams = 0.78;
-  }
-
-  plan.softPreferences = softPreferences;
 }
 
 function removeIntroductoryScaffolding(query: string): string {
@@ -438,6 +383,7 @@ export interface SearchPlanningResult {
   extraction: ExtractionResult;
   queryResidual: string;
   plan: SearchPlan;
+  fallbackPlans: SearchPlan[];
   compilerEvents: SearchCompilerEvent[];
 }
 
@@ -731,6 +677,14 @@ export async function createSearchPlan(
 
   plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);
   plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
+  const fallbackPlans = buildFallbackPlans(plan, queryResidual);
+  if (fallbackPlans.length > 0) {
+    compilerEvents.push(
+      compilerEvent("finalize", "fallback_plans", "Compiled low-result fallback retrieval plans", {
+        fallbackPlans: fallbackPlans.length,
+      }),
+    );
+  }
   compilerEvents.push(
     compilerEvent("finalize", "sanitize_and_freeze", "Sanitized retrieval query text and froze compiled plan"),
   );
@@ -739,8 +693,37 @@ export async function createSearchPlan(
     extraction: planningInput.extraction,
     queryResidual,
     plan,
+    fallbackPlans,
     compilerEvents,
   });
+}
+
+function buildFallbackPlans(plan: SearchPlan, queryResidual: string): SearchPlan[] {
+  const existingExpansions = Array.isArray(plan.softPreferences?.topicExpansions)
+    ? plan.softPreferences.topicExpansions
+    : [];
+  if (existingExpansions.length > 0) {
+    return [];
+  }
+
+  const expandedKeywords = expandTopics(queryResidual);
+  if (expandedKeywords.length === 0) {
+    return [];
+  }
+
+  return [{
+    ...plan,
+    keywordQuery: sanitizeFtsQuery(
+      `${plan.keywordQuery} ${expandedKeywords.join(" ")}`,
+    ),
+    semanticQuery: sanitizeFtsQuery(
+      `${plan.semanticQuery} ${expandedKeywords.join(" ")}`,
+    ),
+    softPreferences: {
+      ...(plan.softPreferences ?? {}),
+      topicExpansions: expandedKeywords,
+    },
+  }];
 }
 
 function compilerEvent(

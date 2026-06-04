@@ -48,8 +48,9 @@ export function useSearchRefinements({
       return
     }
 
-    executeSearch(plan.request.query, {
-      mode: 'refine',
+    executeSearch({
+      type: 'refine',
+      query: plan.request.query,
       filters: plan.request.filters,
       sort: plan.request.sort,
     })

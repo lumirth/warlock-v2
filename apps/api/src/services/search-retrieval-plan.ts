@@ -1,5 +1,5 @@
 import { hasRequirementFilter } from "@uiuc-course-search/query-types";
-import type { RetrievalLane, SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { RetrievalLane, SearchPlan } from "./search-planner-types.js";
 import type { SearchCandidateBudget } from "./search-budget.js";
 import type { AppliedSearchControls } from "./search-controls.js";
 import {

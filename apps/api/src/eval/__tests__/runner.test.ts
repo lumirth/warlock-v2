@@ -11,7 +11,7 @@ describe('eval runner request pacing', () => {
     expect(requestDelayForBaseUrl('http://[::1]:8787')).toBe(0);
   });
 
-  it('paces remote eval runs to avoid public search rate limits', () => {
+  it('paces remote eval runs to avoid API rate limits', () => {
     expect(
       requestDelayForBaseUrl(
         'https://uiuc-course-search-staging.lumirth.workers.dev'
@@ -21,7 +21,7 @@ describe('eval runner request pacing', () => {
 
   it('retries 429 responses after Retry-After before returning success', async () => {
     const fetcher = vi
-      .fn<(url: string) => Promise<Response>>()
+      .fn<(url: string, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValueOnce(
         new Response('rate limited', {
           status: 429,
@@ -40,5 +40,22 @@ describe('eval runner request pacing', () => {
     expect(response.status).toBe(200);
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(sleeper).toHaveBeenCalledWith(2000);
+  });
+
+  it('passes request init through retries', async () => {
+    const fetcher = vi
+      .fn<(url: string, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(new Response('{"ok":true}', { status: 200 }));
+    const init: RequestInit = {
+      headers: { Authorization: 'Bearer test-token' },
+    };
+
+    await fetchWithRateLimitRetry('https://example.test', {
+      fetcher,
+      init,
+      maxRetries: 0,
+    });
+
+    expect(fetcher).toHaveBeenCalledWith('https://example.test', init);
   });
 });

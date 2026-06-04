@@ -12,7 +12,7 @@ import * as embeddings from '../embeddings.js';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import type { Course } from '../../db/index.js';
-import type { SearchFilters, SearchPlan } from '@uiuc-course-search/query-types/search-planner';
+import type { SearchFilters, SearchPlan } from '../search-planner-types.js';
 
 // Mock dependencies
 const mockDb = {

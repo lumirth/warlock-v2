@@ -1,4 +1,4 @@
-import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchPlan } from "./search-planner-types.js";
 
 const SPECIAL_TOKENS: Record<string, string> = {
   "c/c++": "c cplusplus",

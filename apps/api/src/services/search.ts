@@ -42,7 +42,7 @@ export {
   isSearchSort,
   sortValueForResult,
   type RankingTermInfo,
-} from "./search-ranking-policy.js";
+} from "./ranking/index.js";
 export {
   keywordSearch,
   postFilterSemanticResults,

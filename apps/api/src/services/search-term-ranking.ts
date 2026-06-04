@@ -4,7 +4,7 @@ import {
   applyTermRankingPolicy,
   buildTermPriorityMap,
   type RankingTermInfo,
-} from "./search-ranking-policy.js";
+} from "./ranking/index.js";
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
 import type { SearchResult } from "./search-types.js";
 

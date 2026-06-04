@@ -60,7 +60,11 @@ export function useAdvancedSearch({
       dispatch({ type: 'query/changed', value: freeTextQuery })
     }
 
-    executeSearch(nextQuery, { mode: 'refine', filters: nextFilters })
+    executeSearch({
+      type: 'refine',
+      query: nextQuery,
+      filters: nextFilters,
+    })
   }
 
   const resetAdvancedDraft = () => {

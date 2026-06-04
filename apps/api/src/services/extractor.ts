@@ -1,4 +1,4 @@
-import type { Hint, HintType, HintMetadata } from '@uiuc-course-search/query-types/search-planner';
+import type { Hint, HintType, HintMetadata } from './search-planner-types.js';
 import { createDefaultRegistry } from './alias-registry.js';
 import { VALID_SUBJECTS, UNSAFE_LOWERCASE_SUBJECTS } from './data/valid-subjects.js';
 import {

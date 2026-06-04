@@ -14,7 +14,7 @@ import type {
   SearchFilters,
   SearchPlan,
   TermValue,
-} from '@uiuc-course-search/query-types/search-planner';
+} from '../services/search-planner-types.js';
 import {
   effectiveRequirementFilter,
   isSearchDifficultyFilter,

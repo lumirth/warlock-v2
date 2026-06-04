@@ -1,5 +1,5 @@
 import type { SearchRecoveryGroup } from "@uiuc-course-search/query-types";
-import type { SearchPlan } from "@uiuc-course-search/query-types/search-planner";
+import type { SearchPlan } from "./search-planner-types.js";
 import { searchActionFromRequest } from "../dto/search-actions.js";
 import type { CanonicalSearchRequest } from "./search-request.js";
 

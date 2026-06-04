@@ -1,7 +1,17 @@
 import { Hono } from 'hono';
+import type { Ai, D1Database, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
 import { getUpstreamBackoff, resetUpstreamBackoff } from '../services/upstream-backoff.js';
+import { parseSearchHttpRequest } from '../http/search-request.js';
+import { SearchPipeline } from '../services/search-pipeline.js';
+import { loadSearchResultGeneds } from '../dto/search-geneds.js';
+import { getSearchTermSummary } from '../services/term-state.js';
+import { errorFields, logger } from '../observability/logger.js';
 
 type Bindings = {
+  DB: D1Database;
+  VECTORIZE: VectorizeIndex;
+  AI: Ai;
+  SEARCH_CACHE?: KVNamespace;
   CISAPI_BASE: string;
   BACKOFF_BASE_MS: string;
   BACKOFF_MAX_MS: string;
@@ -38,6 +48,64 @@ adminRoutes.post('/admin/reset-upstream-backoff', (c) => {
 
 // Debug routes mounted at /admin/debug
 export const debugRoutes = new Hono<{ Bindings: Bindings }>();
+
+debugRoutes.get('/search-plan', async (c) => {
+  const searchParams = new URL(c.req.url).searchParams;
+  const parsedRequest = parseSearchHttpRequest(searchParams);
+  if (!parsedRequest.ok) {
+    return c.json({ error: parsedRequest.error }, 400);
+  }
+
+  const { request, pagination } = parsedRequest.value;
+  const { limit, offset } = pagination;
+
+  try {
+    const pipeline = new SearchPipeline(
+      c.env.DB,
+      c.env.VECTORIZE,
+      c.env.AI,
+      c.env.SEARCH_CACHE,
+    );
+    const result = await pipeline.search(
+      request,
+      pagination,
+      c.executionCtx.waitUntil.bind(c.executionCtx),
+    );
+    const pageResults = result.results.slice(offset, offset + limit);
+    const genedsByCourseId = await loadSearchResultGeneds(
+      c.env.DB,
+      pageResults.map(searchResult => searchResult.course.id),
+    );
+
+    return c.json({
+      results: pageResults.map(searchResult => ({
+        id: searchResult.course.id,
+        title: searchResult.course.title,
+        subject: searchResult.course.subject,
+        number: searchResult.course.number,
+        avg_gpa: searchResult.course.avg_gpa,
+        geneds: genedsByCourseId.get(searchResult.course.id) ?? [],
+        _score: searchResult.score,
+      })),
+      meta: {
+        query: result.meta.query,
+        fallback: result.meta.fallback,
+        term: await getSearchTermSummary(c.env.DB),
+      },
+      _debug: {
+        extraction: result.meta.extraction,
+        compilerEvents: result.meta.compilerEvents,
+        plan: result.meta.plan,
+        retrievalPlan: result.meta.retrievalPlan,
+        retrievalPlans: result.meta.retrievalPlans,
+        budget: result.meta.budget,
+      },
+    });
+  } catch (error) {
+    logger.error('admin.debug.searchPlan.failed', { ...errorFields(error) });
+    return c.json({ error: 'Search planner debug failed' }, 500);
+  }
+});
 
 debugRoutes.get('/subjects/:year/:term', async (c) => {
   const { year, term } = c.req.param();

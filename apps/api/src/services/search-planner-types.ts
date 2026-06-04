@@ -1,8 +1,4 @@
-import type { RequirementFilter } from "./course-policy.js";
-import type {
-  SearchRequestFiltersDto,
-  SearchSort,
-} from "./search-contract.js";
+import type { RequirementFilter, SearchRequestFiltersDto, SearchSort } from "@uiuc-course-search/query-types";
 
 export type QueryHintType =
   | "instructor"

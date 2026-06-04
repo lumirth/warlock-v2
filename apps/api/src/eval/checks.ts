@@ -1,5 +1,5 @@
 import type { GoldQuery, EvalResult, ResultSelector } from './types.js';
-import type { SearchPlanRescue } from '@uiuc-course-search/query-types/search-planner';
+import type { SearchPlanRescue } from '../services/search-planner-types.js';
 import { canonicalGenedCode } from '../services/gened-codes.js';
 
 export interface ApiSearchResult {
@@ -326,7 +326,7 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
   const results = data.results;
   const plannerDebug = data._debug;
   if (!plannerDebug) {
-    const missingDebug = 'planner debug payload is missing; run eval with debug=planner';
+    const missingDebug = 'planner debug payload is missing; run eval against /admin/debug/search-plan with an admin token';
     return {
       query,
       actualFilters: {},

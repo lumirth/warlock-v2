@@ -34,7 +34,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { parseSubjectCascadeXmlFromString } from '../apps/api/src/cisapi/parser.ts';
-import { makeCourseId, makeTermId } from '../apps/api/src/db/ids.ts';
+import { makeCourseId } from '../apps/api/src/db/ids.ts';
 import { fromSubjectCascade } from '../apps/api/src/transforms/course.ts';
 import {
   courseGenedSqlStatements,
@@ -42,6 +42,15 @@ import {
   subjectSnapshotSqlStatements,
   termStateSqlStatements,
 } from '../apps/api/src/services/course-snapshot-writer.ts';
+import {
+  COURSE_EXPLORER_BROWSER_HEADERS,
+  CoordinatedRateLimitFetcher,
+} from './lib/rate-limit-fetcher.ts';
+import { HistoricalSyncCheckpointStore } from './lib/historical-checkpoint.ts';
+import {
+  discoverHistoricalTerms,
+  getHistoricalSubjects,
+} from './lib/historical-term-discovery.ts';
 
 export { makeCourseId };
 export { courseGenedSqlStatements };
@@ -64,241 +73,6 @@ const CONFIG = {
   START_YEAR: 2004,
   CHECKPOINT_FILE: 'historical-sync-checkpoint.json',
 } as const;
-
-// =============================================================================
-// CHECKPOINT SYSTEM - Resume interrupted syncs
-// =============================================================================
-
-interface Checkpoint {
-  completedItems: string[];  // "year-term-subject" keys
-  completedItemStats?: Record<string, { termId: string; courses: number; sections: number }>;
-  lastUpdated: string;
-}
-
-const completedSet = new Set<string>();
-const completedItemStats = new Map<string, { termId: string; courses: number; sections: number }>();
-
-function makeItemKey(year: number, term: string, subject: string): string {
-  return `${year}-${term}-${subject}`;
-}
-
-function loadCheckpoint(): void {
-  completedSet.clear();
-  completedItemStats.clear();
-  const checkpointPath = path.join(process.cwd(), CONFIG.CHECKPOINT_FILE);
-  try {
-    if (fs.existsSync(checkpointPath)) {
-      const data = JSON.parse(fs.readFileSync(checkpointPath, 'utf-8')) as Checkpoint;
-      for (const key of data.completedItems) {
-        completedSet.add(key);
-      }
-      for (const [key, value] of Object.entries(data.completedItemStats ?? {})) {
-        completedItemStats.set(key, value);
-      }
-      writeLog(`[CHECKPOINT] Loaded ${completedSet.size} completed items from checkpoint`);
-    }
-  } catch (err) {
-    writeLog(`[CHECKPOINT] Could not load checkpoint: ${err}`);
-  }
-}
-
-function saveCheckpoint(): void {
-  const checkpointPath = path.join(process.cwd(), CONFIG.CHECKPOINT_FILE);
-  const checkpoint: Checkpoint = {
-    completedItems: Array.from(completedSet),
-    completedItemStats: Object.fromEntries(completedItemStats),
-    lastUpdated: new Date().toISOString(),
-  };
-  try {
-    fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint));
-  } catch (err) {
-    writeLog(`[CHECKPOINT] Could not save checkpoint: ${err}`);
-  }
-}
-
-function markCompleted(year: number, term: string, subject: string, courses: number, sections: number): void {
-  const key = makeItemKey(year, term, subject);
-  completedSet.add(key);
-  completedItemStats.set(key, {
-    termId: makeTermId(year, term),
-    courses,
-    sections,
-  });
-}
-
-function isCompleted(year: number, term: string, subject: string): boolean {
-  return completedSet.has(makeItemKey(year, term, subject));
-}
-
-function clearCheckpoint(): void {
-  const checkpointPath = path.join(process.cwd(), CONFIG.CHECKPOINT_FILE);
-  try {
-    if (fs.existsSync(checkpointPath)) {
-      fs.unlinkSync(checkpointPath);
-      writeLog(`[CHECKPOINT] Cleared checkpoint file`);
-    }
-    completedSet.clear();
-    completedItemStats.clear();
-  } catch (err) {
-    writeLog(`[CHECKPOINT] Could not clear checkpoint: ${err}`);
-  }
-}
-
-// =============================================================================
-// ROBUST CONNECTION POOL WITH RATE LIMIT COORDINATION
-// =============================================================================
-
-// Global state for rate limiting
-let rateLimitPromise: Promise<void> | null = null;
-let burstStartTime: number | null = null;
-
-// Semaphore for limiting concurrent connections
-let activeConnections = 0;
-const connectionQueue: Array<() => void> = [];
-
-async function acquireConnection(): Promise<void> {
-  // If rate limited, wait for that first
-  if (rateLimitPromise) {
-    await rateLimitPromise;
-  }
-
-  // If under limit, proceed immediately
-  if (activeConnections < CONFIG.MAX_CONCURRENT) {
-    activeConnections++;
-    return;
-  }
-
-  // Otherwise wait in queue
-  return new Promise<void>((resolve) => {
-    connectionQueue.push(() => {
-      activeConnections++;
-      resolve();
-    });
-  });
-}
-
-function releaseConnection(): void {
-  activeConnections--;
-  // Wake up next waiter if any
-  const next = connectionQueue.shift();
-  if (next) next();
-}
-
-function recordBurstStart(): void {
-  if (burstStartTime === null) {
-    burstStartTime = Date.now();
-  }
-}
-
-function getRateLimitWaitTime(): number {
-  const now = Date.now();
-  if (burstStartTime === null) {
-    return CONFIG.RATE_LIMIT_WINDOW_MS + CONFIG.RATE_LIMIT_BUFFER_MS;
-  }
-  const windowExpires = burstStartTime + CONFIG.RATE_LIMIT_WINDOW_MS + CONFIG.RATE_LIMIT_BUFFER_MS;
-  if (now >= windowExpires) {
-    return CONFIG.RATE_LIMIT_BUFFER_MS;
-  }
-  return windowExpires - now;
-}
-
-// Called when ANY request hits 403 - pauses ALL requests
-async function triggerRateLimitWait(): Promise<void> {
-  if (rateLimitPromise) {
-    // Already waiting, just join the existing wait
-    await rateLimitPromise;
-    return;
-  }
-
-  const waitTime = getRateLimitWaitTime();
-  const waitMin = (waitTime / 1000 / 60).toFixed(1);
-  writeLog(`\n[RATE LIMIT] Blocked - pausing all requests for ${waitMin}m...`);
-
-  rateLimitPromise = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      writeLog(`[RATE LIMIT] Window expired - resuming`);
-      burstStartTime = null;
-      rateLimitPromise = null;
-      resolve();
-    }, waitTime);
-  });
-
-  await rateLimitPromise;
-}
-
-// Result type for fetch operations
-type FetchResult =
-  | { ok: true; data: string }
-  | { ok: false; error: 'rate_limited' }
-  | { ok: false; error: 'network'; message: string };
-
-// Single fetch with timeout, no retries (retries handled at batch level)
-async function fetchOnce(url: string): Promise<FetchResult> {
-  await acquireConnection();
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), CONFIG.NETWORK_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(url, {
-        headers: BROWSER_HEADERS,
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-
-      if (response.status === 403 || response.status === 429) {
-        return { ok: false, error: 'rate_limited' };
-      }
-
-      if (!response.ok) {
-        return { ok: false, error: 'network', message: `HTTP ${response.status}` };
-      }
-
-      const data = await response.text();
-      return { ok: true, data };
-    } catch (err) {
-      clearTimeout(timeout);
-      const message = err instanceof Error ? err.message : String(err);
-      return { ok: false, error: 'network', message };
-    }
-  } finally {
-    releaseConnection();
-  }
-}
-
-// Fetch with coordinated rate limit handling
-async function robustFetch(url: string): Promise<string> {
-  while (true) {
-    // Wait if currently rate limited
-    if (rateLimitPromise) {
-      await rateLimitPromise;
-    }
-
-    const result = await fetchOnce(url);
-
-    if (result.ok) {
-      return result.data;
-    }
-
-    if (result.error === 'rate_limited') {
-      stats.retriedRequests++;
-      await triggerRateLimitWait();
-      // Loop and retry
-      continue;
-    }
-
-    // Network error - throw to let caller handle
-    throw new Error(result.message);
-  }
-}
-
-const BROWSER_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Referer': 'https://courses.illinois.edu/',
-};
 
 // Parse command line arguments
 interface Args {
@@ -330,6 +104,11 @@ function writeLog(message: string): void {
     logWriter.write(message + '\n');
   }
 }
+
+const checkpointStore = new HistoricalSyncCheckpointStore(
+  path.join(process.cwd(), CONFIG.CHECKPOINT_FILE),
+  writeLog,
+);
 
 export type SqlOutputPlan = {
   enabled: boolean;
@@ -498,57 +277,28 @@ const stats: SyncStats = {
   termStats: new Map(),
 };
 
-async function getTerms(year: number): Promise<string[]> {
-  // Try AJAX endpoint first (faster, but may be blocked)
-  const ajaxUrl = `${CONFIG.FRONTEND_BASE}/ajax/search/termlist/${year}`;
+const historicalFetcher = new CoordinatedRateLimitFetcher(
+  {
+    maxConcurrent: CONFIG.MAX_CONCURRENT,
+    rateLimitWindowMs: CONFIG.RATE_LIMIT_WINDOW_MS,
+    rateLimitBufferMs: CONFIG.RATE_LIMIT_BUFFER_MS,
+    networkTimeoutMs: CONFIG.NETWORK_TIMEOUT_MS,
+    headers: COURSE_EXPLORER_BROWSER_HEADERS,
+  },
+  {
+    log: writeLog,
+    onRetry: () => {
+      stats.retriedRequests++;
+    },
+  },
+);
 
-  try {
-    const data = await robustFetch(ajaxUrl);
-    // Try to parse as JSON
-    try {
-      const parsed = JSON.parse(data) as Record<string, string>;
-      const terms = Object.values(parsed);
-      if (terms.length > 0) return terms;
-    } catch {
-      // Not JSON, fall through to XML
-    }
-  } catch {
-    // Network error, fall through to XML
-  }
-
-  // Fallback: try known term patterns via XML API
-  const possibleTerms = ['winter', 'spring', 'summer', 'fall'];
-  const validTerms: string[] = [];
-
-  for (const term of possibleTerms) {
-    try {
-      const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}.xml`;
-      const text = await robustFetch(url);
-      if (text.includes('<subject') || text.includes('<ns2:')) {
-        validTerms.push(term);
-      }
-    } catch {
-      // This term doesn't exist or network error, skip
-    }
-  }
-
-  return validTerms;
+function recordBurstStart(): void {
+  historicalFetcher.recordBurstStart();
 }
 
-async function getSubjects(year: number, term: string): Promise<string[]> {
-  const url = `${CONFIG.CISAPI_BASE}/schedule/${year}/${term}.xml`;
-  try {
-    const xml = await robustFetch(url);
-    const subjects: string[] = [];
-    const regex = /<subject id="([^"]+)"/g;
-    let match;
-    while ((match = regex.exec(xml)) !== null) {
-      subjects.push(match[1]);
-    }
-    return subjects;
-  } catch {
-    return [];
-  }
+async function robustFetch(url: string): Promise<string> {
+  return historicalFetcher.fetchText(url);
 }
 
 function printSummary(args: Args, startTime: Date): void {
@@ -602,51 +352,6 @@ function printSummary(args: Args, startTime: Date): void {
   writeLog(`${'='.repeat(60)}\n`);
 }
 
-async function discoverAllTerms(startYear: number, endYear: number, termFilter: string | null): Promise<{ year: number; term: string }[]> {
-  writeLog(`\n[DISCOVERY] Fetching all terms for years ${startYear}-${endYear} in parallel...`);
-
-  const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
-
-  // Fetch all years' terms in parallel
-  const yearTermsResults = await Promise.all(
-    years.map(async (year) => {
-      let terms = await getTerms(year);
-      if (termFilter) {
-        terms = terms.filter(t => t.toLowerCase() === termFilter);
-      }
-      return terms.map(term => ({ year, term }));
-    })
-  );
-
-  // Flatten into single array of { year, term } objects
-  const allTerms = yearTermsResults.flat();
-
-  writeLog(`[DISCOVERY] Found ${allTerms.length} terms across ${years.length} years`);
-  for (const { year, term } of allTerms) {
-    writeLog(`  - ${year}/${term}`);
-  }
-
-  return allTerms;
-}
-
-function termResultsFromCheckpoint(
-  workItems: { year: number; term: string; subject: string }[]
-): Map<string, { courses: number; sections: number; subjects: number }> {
-  const currentKeys = new Set(workItems.map(item => makeItemKey(item.year, item.term, item.subject)));
-  const termResults = new Map<string, { courses: number; sections: number; subjects: number }>();
-
-  for (const [key, itemStats] of completedItemStats) {
-    if (!currentKeys.has(key)) continue;
-    const existing = termResults.get(itemStats.termId) || { courses: 0, sections: 0, subjects: 0 };
-    existing.courses += itemStats.courses;
-    existing.sections += itemStats.sections;
-    existing.subjects += 1;
-    termResults.set(itemStats.termId, existing);
-  }
-
-  return termResults;
-}
-
 function writeSqlHeader(args: Args): void {
   writeSql('-- Historical course data sync');
   writeSql('-- Generated: ' + new Date().toISOString());
@@ -680,13 +385,23 @@ async function main() {
 
   // Load or clear checkpoint
   if (args.fresh) {
-    clearCheckpoint();
+    checkpointStore.clear();
   } else {
-    loadCheckpoint();
+    checkpointStore.load();
   }
 
   // PHASE 1: Discover all terms upfront in parallel
-  const allTerms = await discoverAllTerms(args.startYear, args.endYear, args.termFilter);
+  const allTerms = await discoverHistoricalTerms({
+    startYear: args.startYear,
+    endYear: args.endYear,
+    termFilter: args.termFilter,
+    config: {
+      frontendBase: CONFIG.FRONTEND_BASE,
+      cisapiBase: CONFIG.CISAPI_BASE,
+    },
+    fetchText: robustFetch,
+    log: writeLog,
+  });
 
   if (allTerms.length === 0) {
     writeLog(`[WARNING] No terms found in range ${args.startYear}-${args.endYear}`);
@@ -698,7 +413,12 @@ async function main() {
   writeLog(`\n[SUBJECTS] Fetching subject lists for all ${allTerms.length} terms in parallel...`);
   const termSubjectsResults = await Promise.all(
     allTerms.map(async ({ year, term }) => {
-      const subjects = await getSubjects(year, term);
+      const subjects = await getHistoricalSubjects(
+        year,
+        term,
+        { cisapiBase: CONFIG.CISAPI_BASE },
+        robustFetch,
+      );
       return { year, term, subjects };
     })
   );
@@ -720,16 +440,11 @@ async function main() {
 
   // Filter out already-completed items (checkpoint resume)
   const pendingWorkItems = allWorkItems.filter(
-    ({ year, term, subject }) => !isCompleted(year, term, subject)
+    item => !checkpointStore.isCompleted(item)
   );
   const skippedCount = allWorkItems.length - pendingWorkItems.length;
-  const termResults = termResultsFromCheckpoint(allWorkItems);
-  const checkpointedWithoutStats = allWorkItems.filter(
-    ({ year, term, subject }) => {
-      const key = makeItemKey(year, term, subject);
-      return completedSet.has(key) && !completedItemStats.has(key);
-    }
-  ).length;
+  const termResults = checkpointStore.termResultsFromCheckpoint(allWorkItems);
+  const checkpointedWithoutStats = checkpointStore.checkpointedWithoutStats(allWorkItems);
 
   if (!args.dryRun && checkpointedWithoutStats > 0) {
     throw new Error('[CHECKPOINT] Existing checkpoint does not include SQL generation stats. Re-run with --fresh or restore a checkpoint created by the current script.');
@@ -834,7 +549,11 @@ async function main() {
         }
 
         // Mark this item as completed in checkpoint after its SQL has been written.
-        markCompleted(result.year, result.term, result.subject, result.coursesCount, result.sectionsCount);
+        checkpointStore.markCompleted(result, {
+          termId: result.termId,
+          courses: result.coursesCount,
+          sections: result.sectionsCount,
+        });
 
         // Accumulate per-term stats
         const existing = termResults.get(result.termId) || { courses: 0, sections: 0, subjects: 0 };
@@ -855,7 +574,7 @@ async function main() {
     }
 
     // Save checkpoint after each batch
-    saveCheckpoint();
+    checkpointStore.save();
 
     writeLog(`[BATCH ${batchNum}/${totalBatches}] Complete: ${batchSuccess} succeeded, ${batchFailed} failed`);
   }

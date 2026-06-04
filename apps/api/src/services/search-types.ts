@@ -1,4 +1,4 @@
-import type { RetrievalLane } from "@uiuc-course-search/query-types/search-planner";
+import type { RetrievalLane } from "./search-planner-types.js";
 import type { Course } from '../db/types.js';
 
 export type RankingScoreComponentName =
