@@ -14,6 +14,7 @@ import {
   normalizeSearchRequestDto,
   toNormalizedQualityScore,
   WORKLOAD_FILTER_THRESHOLDS,
+  WORKLOAD_TIER_THRESHOLDS,
 } from './index.js';
 
 describe('shared external link builders', () => {
@@ -87,11 +88,30 @@ describe('shared course score tiers', () => {
   });
 
   it('keeps workload filter thresholds in the shared policy layer', () => {
-    expect(WORKLOAD_FILTER_THRESHOLDS.easy.max_workload).toBe(30);
-    expect(WORKLOAD_FILTER_THRESHOLDS.easy.fallback_min_gpa).toBe(3.5);
-    expect(WORKLOAD_FILTER_THRESHOLDS.hard.min_workload).toBe(70);
-    expect(WORKLOAD_FILTER_THRESHOLDS.hard.fallback_max_gpa).toBe(3.0);
+    expect(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive).toBe(
+      WORKLOAD_TIER_THRESHOLDS.MODERATE,
+    );
+    expect(WORKLOAD_FILTER_THRESHOLDS.easy.fallbackMinGpa).toBe(3.5);
+    expect(WORKLOAD_FILTER_THRESHOLDS.hard.minScoreExclusive).toBe(
+      WORKLOAD_TIER_THRESHOLDS.HARD,
+    );
+    expect(WORKLOAD_FILTER_THRESHOLDS.hard.fallbackMaxGpa).toBe(3.0);
     expect(normalizeGpaWorkload(3.5)).toBe(0);
+  });
+
+  it('keeps workload filters aligned with displayed workload tiers', () => {
+    expect(
+      getWorkloadTierLabel(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive),
+    ).toBe('Easy');
+    expect(
+      getWorkloadTierLabel(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive + 1),
+    ).toBe('Moderate');
+    expect(
+      getWorkloadTierLabel(WORKLOAD_FILTER_THRESHOLDS.hard.minScoreExclusive),
+    ).toBe('Moderate');
+    expect(
+      getWorkloadTierLabel(WORKLOAD_FILTER_THRESHOLDS.hard.minScoreExclusive + 1),
+    ).toBe('Hard');
   });
 
   it('names usefulness policy thresholds instead of spreading raw score cutoffs', () => {

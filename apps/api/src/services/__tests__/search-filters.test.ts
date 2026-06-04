@@ -105,15 +105,15 @@ describe('buildFilterClauses', () => {
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
       expect(result.where.some(w => w.includes('c.difficulty_score <= ?'))).toBe(true);
-      expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.easy.max_workload);
+      expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive);
     });
 
     it('generates workload-only SQL for difficulty=hard', () => {
       const filters: SearchFilters = { difficulty: 'hard' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
-      expect(result.where.some(w => w.includes('c.difficulty_score >= ?'))).toBe(true);
-      expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.hard.min_workload);
+      expect(result.where.some(w => w.includes('c.difficulty_score > ?'))).toBe(true);
+      expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.hard.minScoreExclusive);
     });
   });
 

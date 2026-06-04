@@ -183,13 +183,17 @@ export function buildFilterClauses(
   if (filters.difficulty) {
     const thresholds = WORKLOAD_FILTER_THRESHOLDS[filters.difficulty];
 
-    if ("min_workload" in thresholds) {
-      where.push("(c.difficulty_score >= ? OR (c.difficulty_score IS NULL AND c.avg_gpa <= ?))");
-      params.push(thresholds.min_workload, thresholds.fallback_max_gpa);
+    if ("minScoreExclusive" in thresholds) {
+      where.push(
+        "(c.difficulty_score > ? OR (c.difficulty_score IS NULL AND c.avg_gpa <= ?))",
+      );
+      params.push(thresholds.minScoreExclusive, thresholds.fallbackMaxGpa);
     }
-    if ("max_workload" in thresholds) {
-      where.push("(c.difficulty_score <= ? OR (c.difficulty_score IS NULL AND c.avg_gpa >= ?))");
-      params.push(thresholds.max_workload, thresholds.fallback_min_gpa);
+    if ("maxScoreInclusive" in thresholds) {
+      where.push(
+        "(c.difficulty_score <= ? OR (c.difficulty_score IS NULL AND c.avg_gpa >= ?))",
+      );
+      params.push(thresholds.maxScoreInclusive, thresholds.fallbackMinGpa);
     }
   }
 

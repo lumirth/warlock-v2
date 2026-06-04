@@ -93,8 +93,14 @@ export const WORKLOAD_TIER_THRESHOLDS = {
 } as const;
 
 export const WORKLOAD_FILTER_THRESHOLDS = {
-  easy: { max_workload: 30, fallback_min_gpa: 3.5 },
-  hard: { min_workload: 70, fallback_max_gpa: 3.0 },
+  easy: {
+    maxScoreInclusive: WORKLOAD_TIER_THRESHOLDS.MODERATE,
+    fallbackMinGpa: 3.5,
+  },
+  hard: {
+    minScoreExclusive: WORKLOAD_TIER_THRESHOLDS.HARD,
+    fallbackMaxGpa: 3.0,
+  },
 } as const;
 
 export type WorkloadTierLabel = "Easy" | "Moderate" | "Hard";
