@@ -16,7 +16,8 @@ export type RankingScoreComponentName =
   | "eligibility"
   | "negative_preference_penalty"
   | "null_data_penalty"
-  | "term_tie_breaker";
+  | "term_tie_breaker"
+  | "attribute_sort";
 
 export interface RankingScoreComponent {
   name: RankingScoreComponentName;

@@ -6,7 +6,7 @@ import {
   type SearchSort,
 } from "@uiuc-course-search/query-types";
 import type { SearchPlan } from "./search-planner-types.js";
-import { isSearchSort, sortValueForResult } from "./ranking/index.js";
+import { applyFinalOrderingControls, isSearchSort } from "./ranking/index.js";
 import type { SearchResult } from "./search-types.js";
 
 export interface SearchControls {
@@ -45,37 +45,7 @@ export function applySearchControls(
   context: { hasExplicitTermFilter?: boolean } = {},
 ): SearchResult[] {
   const applied = normalizeSearchControls(controls);
-  const scopedResults =
-    applied.scope === "active" && !context.hasExplicitTermFilter
-      ? results.filter((result) => result.historical !== true)
-      : [...results];
-
-  if (applied.sort.field === "relevance") {
-    return scopedResults;
-  }
-
-  return scopedResults
-    .map((result, relevanceIndex) => ({
-      result,
-      relevanceIndex,
-      value: sortValueForResult(result, applied.sort.field),
-    }))
-    .sort((left, right) => {
-      if (left.value === null && right.value === null) {
-        return left.relevanceIndex - right.relevanceIndex;
-      }
-      if (left.value === null) return 1;
-      if (right.value === null) return -1;
-
-      if (left.value !== right.value) {
-        return applied.sort.direction === "asc"
-          ? left.value - right.value
-          : right.value - left.value;
-      }
-
-      return left.relevanceIndex - right.relevanceIndex;
-    })
-    .map((item) => item.result);
+  return applyFinalOrderingControls(results, applied, context);
 }
 
 export function controlsWithPlanInferredSort(

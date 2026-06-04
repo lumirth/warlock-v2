@@ -248,9 +248,16 @@ export function buildResultExplanation(
       ? `${component.reason}: ${component.evidence.slice(0, 2).join(', ')}`
       : component.reason
     ) ?? [];
+  const orderingReasons = result.scoreComponents
+    ?.filter(component => component.name === 'attribute_sort' || component.name === 'term_tie_breaker')
+    .map(component => component.evidence?.length
+      ? `${component.reason}: ${component.evidence.slice(0, 2).join(', ')}`
+      : component.reason
+    ) ?? [];
   const whyMatched = Array.from(new Set([
     ...evidenceReasons,
     ...rankingReasons,
+    ...orderingReasons,
   ])).slice(0, 7);
 
   const watchOut = [

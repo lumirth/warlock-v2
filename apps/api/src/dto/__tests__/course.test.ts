@@ -213,6 +213,30 @@ describe('search result DTO evidence', () => {
     });
   });
 
+  it('includes explicit sort controls as ordering explanation without changing score evidence', () => {
+    const dto = searchResultToCourseDto(searchResult({
+      scoreComponents: [{
+        name: 'attribute_sort',
+        value: 0,
+        reason: 'Sorted by Avg GPA (descending); relevance breaks ties.',
+        evidence: ['Avg GPA: 3.50.'],
+      }],
+    }), {
+      rawQuery: 'easy gen ed',
+      hints: [],
+      plan: {
+        filters: {},
+        keywordQuery: '',
+        semanticQuery: '',
+      },
+    });
+
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining([
+      'Sorted by Avg GPA (descending); relevance breaks ties.: Avg GPA: 3.50.',
+    ]));
+    expect(dto.explanation?.confidence.score).toBe(0.72);
+  });
+
   it('does not claim requirement evidence for unmapped courses', () => {
     const dto = searchResultToCourseDto(searchResult({
       course: { ...course, gened: null },

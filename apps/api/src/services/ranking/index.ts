@@ -13,6 +13,10 @@ export {
   isSearchSort,
   sortValueForResult,
 } from "./sort-policy.js";
+export {
+  applyFinalOrderingControls,
+  type FinalOrderingControls,
+} from "./final-ordering.js";
 
 export function applyRankingPolicy(
   results: SearchResult[],

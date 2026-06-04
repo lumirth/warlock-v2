@@ -43,6 +43,7 @@ const result = (
   course: course({ id, ...overrides }),
   score: searchOverrides.score ?? 1,
   historical: searchOverrides.historical,
+  scoreComponents: searchOverrides.scoreComponents,
 });
 
 describe('applySearchControls', () => {
@@ -73,6 +74,22 @@ describe('applySearchControls', () => {
       'middle',
       'missing',
     ]);
+    expect(sorted[0].score).toBe(1);
+    expect(sorted[0].scoreComponents).toEqual([
+      expect.objectContaining({
+        name: 'attribute_sort',
+        value: 0,
+        reason: 'Sorted by Avg GPA (descending); relevance breaks ties.',
+        evidence: ['Avg GPA: 3.90.'],
+      }),
+    ]);
+    expect(sorted[2].scoreComponents).toEqual([
+      expect.objectContaining({
+        name: 'attribute_sort',
+        value: 0,
+        evidence: ['Avg GPA unavailable; sorted after courses with data.'],
+      }),
+    ]);
   });
 
   it('uses relevance order as the tiebreaker for equal sort values', () => {
@@ -90,6 +107,10 @@ describe('applySearchControls', () => {
     expect(sorted.map((item) => item.course.id)).toEqual([
       'relevance-first',
       'relevance-second',
+    ]);
+    expect(sorted.map(item => item.scoreComponents?.[0]?.name)).toEqual([
+      'attribute_sort',
+      'attribute_sort',
     ]);
   });
 
@@ -171,6 +192,25 @@ describe('applySearchControls', () => {
       'gateway',
       'senior',
       'grad',
+    ]);
+  });
+
+  it('replaces stale sort trace components when controls are reapplied', () => {
+    const firstPass = applySearchControls(
+      [result('course', { avg_gpa: 3.9, credit_hours: 4 })],
+      { sort: { field: 'gpa', direction: 'desc' }, scope: 'all' },
+    );
+    const secondPass = applySearchControls(
+      firstPass,
+      { sort: { field: 'credits', direction: 'asc' }, scope: 'all' },
+    );
+
+    expect(secondPass[0].scoreComponents).toEqual([
+      expect.objectContaining({
+        name: 'attribute_sort',
+        reason: 'Sorted by Credits (ascending); relevance breaks ties.',
+        evidence: ['Credits: 4.'],
+      }),
     ]);
   });
 });
