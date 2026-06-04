@@ -18,11 +18,11 @@ import {
   buildRmpSearchUrl,
 } from '@uiuc-course-search/query-types';
 import type { SearchResult } from '../services/search.js';
-import { canonicalGenedCode } from '../services/gened-codes.js';
 import {
   buildSearchResultPresentation,
   type SearchResultEvidenceContext,
 } from '../services/search-result-presentation.js';
+import { courseSnapshotRequirementEvidence } from '../transforms/course-requirements.js';
 import { formatInstructorName, type CourseSnapshot } from '../transforms/course.js';
 
 type CourseSource = Pick<
@@ -250,12 +250,7 @@ export function courseSnapshotToCourseDto(
 }
 
 function snapshotGenedsToDto(snapshot: CourseSnapshot): CourseGenedDto[] {
-  return snapshot.genEdCategories.map(gened => ({
-    categoryId: gened.categoryId,
-    categoryName: gened.categoryName,
-    attributeCode: canonicalGenedCode(gened.attributeCode),
-    attributeName: gened.attributeName,
-  }));
+  return courseSnapshotRequirementEvidence(snapshot).geneds;
 }
 
 function snapshotSectionsToDto(

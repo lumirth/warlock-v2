@@ -1,7 +1,7 @@
 import type { VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import type { SearchFilters } from './search-planner-types.js';
 import type { CourseSnapshot } from '../transforms/course.js';
-import { courseRequirementCodes } from './search-requirements.js';
+import { courseSnapshotRequirementEvidence } from '../transforms/course-requirements.js';
 
 export interface CourseEmbeddingData {
   id: string;
@@ -16,10 +16,7 @@ export interface CourseEmbeddingData {
 }
 
 export function courseSnapshotToEmbeddingData(snapshot: CourseSnapshot): CourseEmbeddingData {
-  const requirementLabels = snapshot.genEdCategories.flatMap(gened => [
-    gened.categoryName,
-    gened.attributeName,
-  ]).filter((value): value is string => Boolean(value));
+  const requirements = courseSnapshotRequirementEvidence(snapshot);
 
   return {
     id: snapshot.course.id,
@@ -27,15 +24,9 @@ export function courseSnapshotToEmbeddingData(snapshot: CourseSnapshot): CourseE
     number: snapshot.course.number,
     title: snapshot.course.title,
     description: snapshot.course.description,
-    gened: snapshot.course.gened,
-    requirementCodes: courseRequirementCodes(
-      snapshot.course,
-      snapshot.genEdCategories.flatMap(gened => [
-        gened.categoryId,
-        gened.attributeCode ?? '',
-      ]),
-    ),
-    requirementLabels: uniqueStrings(requirementLabels),
+    gened: requirements.summaryCode,
+    requirementCodes: requirements.codes,
+    requirementLabels: requirements.labels,
     primary_instructor: snapshot.course.primary_instructor,
   };
 }
@@ -61,10 +52,6 @@ export function createCourseEmbeddingText(course: CourseEmbeddingData): string {
   ];
 
   return parts.filter(Boolean).join(' ').slice(0, 512); // Limit length
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  return [...new Set(values)];
 }
 
 export async function generateEmbedding(ai: Ai, text: string): Promise<number[]> {

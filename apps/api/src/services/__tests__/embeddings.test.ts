@@ -55,6 +55,7 @@ describe('course embeddings', () => {
     const embeddingData = courseSnapshotToEmbeddingData(snapshot());
     const text = createCourseEmbeddingText(embeddingData);
 
+    expect(embeddingData.gened).toBe('CS');
     expect(embeddingData.requirementCodes).toEqual(['CS', 'US', 'HUM']);
     expect(text).toContain('AAS 281');
     expect(text).toContain('Constructing Race in America');
@@ -73,5 +74,18 @@ describe('course embeddings', () => {
     expect(text.length).toBeLessThanOrEqual(512);
     expect(text).toContain('Requirements: CS US HUM');
     expect(text).toContain('US Minority Cultures');
+  });
+
+  it('does not let stale flat course.gened leak into rich snapshot requirement evidence', () => {
+    const courseSnapshot = snapshot();
+    courseSnapshot.course.gened = 'QR';
+
+    const embeddingData = courseSnapshotToEmbeddingData(courseSnapshot);
+    const text = createCourseEmbeddingText(embeddingData);
+
+    expect(embeddingData.gened).toBe('CS');
+    expect(embeddingData.requirementCodes).toEqual(['CS', 'US', 'HUM']);
+    expect(text).toContain('Requirements: CS US HUM');
+    expect(text).not.toContain('Requirements: QR');
   });
 });
