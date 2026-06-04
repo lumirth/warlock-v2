@@ -45,10 +45,11 @@ The short result TTL keeps open-seat and term-ranking data from staying stale fo
 - topic and expanded terms
 - assumptions rendered as interpreted chips
 - warnings for missing evidence or student-profile needs
-- retrieval lanes to run
+- interpreted evidence lanes that explain what kind of evidence the query needs
 - relaxation steps for no-result recovery
 
 Rules live in `apps/api/src/services/decision-plan.ts`. Keep them explicit and testable. Avoid scattering regexes across route or ranking code.
+Executable retrieval lanes are derived later by `apps/api/src/services/search-retrieval-plan.ts`; `SearchPlan.rescue` is explanation/intent metadata, not execution configuration.
 
 ## Student-Language Rules
 
@@ -129,7 +130,7 @@ Add a course alias:
 Add a workload signal:
 
 1. Insert into `course_signals` with `signal_type`, `value`, `source`, `confidence`, and `explanation`.
-2. Extend `workloadSignalTypes()` in `apps/api/src/services/search.ts` if the signal is a new preference family.
+2. Extend `workloadSignalTypes()` in `apps/api/src/services/search-retrieval-lanes.ts` if the signal is a new preference family.
 3. Add a ranking test when the signal should change order.
 
 ## Validation
