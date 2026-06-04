@@ -343,7 +343,7 @@ function searchResponse(query: string, limit: number, offset: number): SearchRes
           ? [{ kind: 'introductory_gateway', label: 'Introductory courses', confidence: 0.72, source: 'rule' }]
           : [],
         warnings: [],
-        retrievalLanes: ['official_text'],
+        evidenceLanes: ['official_text'],
         relaxationPlan: [],
         needsStudentProfile: false,
         confidence: 0.78,
