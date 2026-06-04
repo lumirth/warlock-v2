@@ -18,7 +18,7 @@ export type SearchInterpretationQueryType =
   | "comparison"
   | "help_or_how_to";
 
-export type SearchInterpretationRetrievalLane =
+export type SearchInterpretationEvidenceLane =
   | "exact"
   | "official_text"
   | "requirement"
@@ -73,8 +73,8 @@ export type SearchInterpretationDto = {
   expandedTerms: string[];
   assumptions: SearchInterpretationAssumptionDto[];
   warnings: SearchInterpretationWarningDto[];
-  /** Student-facing interpretation of useful evidence lanes, not executable retrieval config. */
-  retrievalLanes: SearchInterpretationRetrievalLane[];
+  /** Student-facing evidence categories implied by the query, not executable retrieval config. */
+  evidenceLanes: SearchInterpretationEvidenceLane[];
   relaxationPlan: SearchInterpretationRelaxationStepDto[];
   needsStudentProfile: boolean;
   confidence: number;

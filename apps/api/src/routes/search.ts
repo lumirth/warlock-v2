@@ -116,7 +116,7 @@ function searchPlanToPublicInterpretation(
         expandedTerms: plan.rescue.expandedTerms,
         assumptions: plan.rescue.assumptions,
         warnings: plan.rescue.warnings,
-        retrievalLanes: plan.rescue.interpretedLanes,
+        evidenceLanes: plan.rescue.interpretedLanes,
         relaxationPlan: plan.rescue.relaxationPlan,
         needsStudentProfile: plan.rescue.needsStudentProfile,
         confidence: plan.rescue.confidence,
