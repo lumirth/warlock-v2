@@ -15,7 +15,6 @@ describe('ApiClient', () => {
       title: 'Data Structures',
       description: null,
       credit_hours: 4,
-      gened: null,
       year: 2026,
       term: 'spring',
       primary_instructor: null,
@@ -87,7 +86,9 @@ describe('ApiClient', () => {
     } as Response)
 
     const client = new ApiClient('https://api.example.test')
-    await expect(client.search('cs')).rejects.toThrow('Invalid limit')
+    await expect(client.search({ query: 'cs' })).rejects.toThrow(
+      'Invalid limit'
+    )
   })
 
   it('sends search pagination parameters when provided', async () => {
@@ -97,12 +98,6 @@ describe('ApiClient', () => {
         results: [],
         meta: {
           query: { raw: 'intro to CS', residual: '' },
-          extraction: { hints: [] },
-          plan: {
-            filters: { subject: 'CS' },
-            semanticQuery: '',
-            keywordQuery: '',
-          },
           timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
         },
         pagination: {
@@ -117,11 +112,13 @@ describe('ApiClient', () => {
 
     const controller = new AbortController()
     const client = new ApiClient('https://api.example.test')
-    await client.search('intro to CS', {
-      limit: 20,
-      offset: 20,
-      signal: controller.signal,
-    })
+    await client.search(
+      {
+        query: 'intro to CS',
+        pagination: { limit: 20, offset: 20 },
+      },
+      { signal: controller.signal }
+    )
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.test/api/search?q=intro+to+CS&limit=20&offset=20',
@@ -136,12 +133,6 @@ describe('ApiClient', () => {
         results: [],
         meta: {
           query: { raw: 'algorithms', residual: 'algorithms' },
-          extraction: { hints: [] },
-          plan: {
-            filters: { subject: 'CS' },
-            semanticQuery: 'algorithms',
-            keywordQuery: 'algorithms',
-          },
           timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
         },
         pagination: {
@@ -153,9 +144,9 @@ describe('ApiClient', () => {
     } as Response)
 
     const client = new ApiClient('https://api.example.test')
-    await client.search('algorithms', {
-      limit: 20,
-      offset: 0,
+    await client.search({
+      query: 'algorithms',
+      pagination: { limit: 20, offset: 0 },
       filters: {
         subject: 'CS',
         number: '225',
@@ -170,8 +161,8 @@ describe('ApiClient', () => {
         status: 'open',
         difficulty: 'easy',
         level: 400,
-        scope: 'all',
       },
+      scope: 'all',
       sort: { field: 'gpa', direction: 'desc' },
     })
 

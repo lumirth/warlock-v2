@@ -5,6 +5,7 @@ import {
   checkSmokeResultsText,
   checkStagingConfigText,
 } from '../cloudflare-staging-preflight.js';
+import { STAGING_SMOKE_CHECK_NAMES } from '../staging-smoke.js';
 
 const VALID_STAGING_CONFIG = `
 [env.staging]
@@ -70,19 +71,16 @@ describe('Cloudflare staging preflight', () => {
   });
 
   it('requires all staging smoke checks to pass', () => {
-    const smokeResults = [
-      'health',
-      'search public route',
-      'course public route',
-      'admin rejects missing token',
-      'admin accepts staging token',
-      'admin sync status accepts staging token',
-      'internal rejects missing token',
-      'internal accepts staging token',
-    ].map(name => ({ name, ok: true }));
+    const smokeResults = STAGING_SMOKE_CHECK_NAMES.map(name => ({ name, ok: true }));
 
     expect(checkSmokeResultsText(JSON.stringify(smokeResults)).ok).toBe(true);
     expect(checkSmokeResultsText(JSON.stringify(smokeResults.slice(0, -1))).ok).toBe(false);
+    expect(checkSmokeResultsText(JSON.stringify(
+      smokeResults.filter(result => result.name !== 'professor search route')
+    )).ok).toBe(false);
+    expect(checkSmokeResultsText(JSON.stringify(
+      smokeResults.filter(result => result.name !== 'feedback public route')
+    )).ok).toBe(false);
   });
 
   it('requires concrete staging, WAF, and D1 restore evidence', () => {
@@ -145,6 +143,18 @@ describe('Cloudflare staging preflight', () => {
       'Abuse Control Action: log'
     );
     expect(checkEvidenceReportText(weakAction).find(result => result.name === 'WAF or rate-limit action evidence')?.ok).toBe(false);
+
+    const loggingOnlyAction = validEvidence.replace(
+      'Abuse Control Action: Worker Rate Limiting returns 429 JSON block response',
+      'Abuse Control Action: rate limit logging only'
+    );
+    expect(checkEvidenceReportText(loggingOnlyAction).find(result => result.name === 'WAF or rate-limit action evidence')?.ok).toBe(false);
+
+    const monitorOnlyAction = validEvidence.replace(
+      'Abuse Control Action: Worker Rate Limiting returns 429 JSON block response',
+      'Abuse Control Action: rate limit monitor mode'
+    );
+    expect(checkEvidenceReportText(monitorOnlyAction).find(result => result.name === 'WAF or rate-limit action evidence')?.ok).toBe(false);
 
     const weakThresholds = validEvidence.replace(
       'Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP',

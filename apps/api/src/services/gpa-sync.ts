@@ -1,5 +1,5 @@
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
-import { getSyncState, upsertSyncState } from '../db/index.js';
+import { getSyncState, upsertSyncState } from '../db/sync-state-repository.js';
 import { errorFields, logger } from '../observability/logger.js';
 
 const GPA_DATASET_URL = 'https://cdn.jsdelivr.net/gh/wadefagen/datasets@main/gpa/uiuc-gpa-dataset.csv';
@@ -18,6 +18,7 @@ const WEIGHTS: Record<string, number> = {
 };
 
 interface GpaRecord {
+  rowKey: string;
   subject: string;
   number: string;
   instructor: string | null;
@@ -30,6 +31,38 @@ export interface SyncResult {
   rowsProcessed: number;
   message: string;
   isComplete: boolean;
+}
+
+function currentUnixSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+function hashCsvLine(line: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < line.length; index += 1) {
+    hash ^= line.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+async function ensureGpaSourceTable(db: D1Database): Promise<void> {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS gpa_source_rows (
+      row_key TEXT PRIMARY KEY,
+      subject TEXT NOT NULL,
+      number TEXT NOT NULL,
+      instructor TEXT,
+      avg_gpa REAL NOT NULL,
+      sample_size INTEGER NOT NULL,
+      last_updated INTEGER
+    )
+  `).run();
+
+  await db.prepare(`
+    CREATE INDEX IF NOT EXISTS idx_gpa_source_rows_course_instructor
+    ON gpa_source_rows(subject, number, instructor)
+  `).run();
 }
 
 /**
@@ -70,7 +103,7 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
 
     await upsertSyncState(db, {
       id: 'gpa',
-      last_sync: Date.now(),
+      last_sync: currentUnixSeconds(),
       last_status: 'completed',
       items_synced: (state?.items_synced || 0),
       cursor: cursor, // Keep cursor at end
@@ -126,7 +159,7 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
   // 6. Update state
   await upsertSyncState(db, {
     id: 'gpa',
-    last_sync: Date.now(),
+    last_sync: currentUnixSeconds(),
     last_status: 'in_progress',
     items_synced: (state?.items_synced || 0) + inserted,
     cursor: nextCursor,
@@ -173,6 +206,9 @@ export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<str
 
   // 4. Reset
   await kv.delete(KV_KEY);
+  await ensureGpaSourceTable(db);
+  await db.prepare('DELETE FROM gpa_source_rows').run();
+  await db.prepare('DELETE FROM gpa_stats').run();
   await upsertSyncState(db, {
     id: 'gpa',
     last_sync: null,
@@ -189,7 +225,7 @@ export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<str
  * Processor: Parses lines and batch-inserts into D1.
  * Kept local to avoid dispatch overhead.
  */
-async function processGpaBatch(db: D1Database, lines: string[]): Promise<{ inserted: number }> {
+export async function processGpaBatch(db: D1Database, lines: string[]): Promise<{ inserted: number }> {
   const records: GpaRecord[] = [];
 
   for (const line of lines) {
@@ -225,6 +261,7 @@ async function processGpaBatch(db: D1Database, lines: string[]): Promise<{ inser
 
     if (totalStudents > 0) {
       records.push({
+        rowKey: hashCsvLine(line),
         subject,
         number,
         instructor: normalizeInstructor(instructorRaw),
@@ -236,6 +273,7 @@ async function processGpaBatch(db: D1Database, lines: string[]): Promise<{ inser
 
   // Batch insert into D1
   if (records.length === 0) return { inserted: 0 };
+  await ensureGpaSourceTable(db);
 
   // Use smaller chunks for D1 inserts to avoid parameter limits (100 params max)
   const chunks = chunkArray(records, D1_BATCH_SIZE);
@@ -243,15 +281,17 @@ async function processGpaBatch(db: D1Database, lines: string[]): Promise<{ inser
 
   for (const chunk of chunks) {
     const statements = chunk.map(r => {
-      // Idempotent UPSERT
       return db.prepare(`
-        INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, sample_size, last_updated)
-        VALUES (?, ?, ?, ?, ?, unixepoch())
-        ON CONFLICT(subject, number, instructor) DO UPDATE SET
+        INSERT INTO gpa_source_rows (row_key, subject, number, instructor, avg_gpa, sample_size, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+        ON CONFLICT(row_key) DO UPDATE SET
+          subject = excluded.subject,
+          number = excluded.number,
+          instructor = excluded.instructor,
           avg_gpa = excluded.avg_gpa,
           sample_size = excluded.sample_size,
           last_updated = excluded.last_updated
-      `).bind(r.subject, r.number, r.instructor, r.avgGpa, r.sampleSize);
+      `).bind(r.rowKey, r.subject, r.number, r.instructor, r.avgGpa, r.sampleSize);
     });
 
     try {
@@ -263,6 +303,40 @@ async function processGpaBatch(db: D1Database, lines: string[]): Promise<{ inser
       // We don't want to skip data in the stream.
       throw err;
     }
+  }
+
+  const affectedGroups = new Map<string, Pick<GpaRecord, 'subject' | 'number' | 'instructor'>>();
+  for (const record of records) {
+    affectedGroups.set(`${record.subject}\0${record.number}\0${record.instructor ?? ''}`, {
+      subject: record.subject,
+      number: record.number,
+      instructor: record.instructor,
+    });
+  }
+
+  for (const group of affectedGroups.values()) {
+    await db.prepare(`
+      DELETE FROM gpa_stats
+      WHERE subject = ?
+        AND number = ?
+        AND ((instructor IS NULL AND ? IS NULL) OR instructor = ?)
+    `).bind(group.subject, group.number, group.instructor, group.instructor).run();
+
+    await db.prepare(`
+      INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, sample_size, last_updated)
+      SELECT
+        subject,
+        number,
+        instructor,
+        CAST(SUM(avg_gpa * sample_size) AS REAL) / SUM(sample_size) AS avg_gpa,
+        SUM(sample_size) AS sample_size,
+        unixepoch() AS last_updated
+      FROM gpa_source_rows
+      WHERE subject = ?
+        AND number = ?
+        AND ((instructor IS NULL AND ? IS NULL) OR instructor = ?)
+      GROUP BY subject, number, instructor
+    `).bind(group.subject, group.number, group.instructor, group.instructor).run();
   }
 
   return { inserted: totalInserted };

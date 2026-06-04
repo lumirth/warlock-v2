@@ -24,6 +24,24 @@ describe('Subject Extraction Rules', () => {
     expect(subject).toBeUndefined();
   });
 
+  it.each([
+    'last semester',
+    'career path',
+    'lead discussion',
+    'scan open classes',
+    'port',
+  ])('ignores newly unsafe lowercase subject-code prose "%s"', (query) => {
+    const result = extract(query);
+    expect(result.hints.find(h => h.type === 'subject')).toBeUndefined();
+  });
+
+  it.each(['LAST', 'LEAD', 'PATH', 'PORT', 'SCAN'])('still extracts uppercase unsafe subject code "%s"', (code) => {
+    const result = extract(`${code} courses`);
+    expect(result.hints).toContainEqual(
+      expect.objectContaining({ type: 'subject', value: code })
+    );
+  });
+
   it('extracts uppercase UP', () => {
     const result = extract("classes about UP");
     const subject = result.hints.find(h => h.type === 'subject');

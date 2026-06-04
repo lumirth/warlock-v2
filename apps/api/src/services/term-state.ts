@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { makeTermId, type TermStateStatus } from '../db/index.js';
+import { makeTermId } from '../db/ids.js';
+import type { TermStateStatus } from '../db/types.js';
 
 export type TermStatus = TermStateStatus | 'requested' | 'fallback';
 

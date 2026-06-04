@@ -1,4 +1,4 @@
-import type { SyncState, TermState } from '../db/index.js';
+import type { SyncState, TermState } from '../db/types.js';
 
 const TERM_ORDER: Record<string, number> = {
   winter: 1,

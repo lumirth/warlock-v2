@@ -8,7 +8,7 @@ import { syncRoutes } from './routes/sync.js';
 import { courseRoutes } from './routes/course.js';
 import { feedbackRoutes } from './routes/feedback.js';
 import { adminRoutes, debugRoutes } from './routes/debug.js';
-import { getTermsByStatus, touchTermStateChecked } from './db/index.js';
+import { getTermsByStatus, touchTermStateChecked } from './db/term-state-repository.js';
 import { getSubjectsForTerm } from './services/parallel-sync.js';
 import { discoverAndClassifyTerms } from './services/term-discovery.js';
 import { internalAuthHeaders, requireBearerToken } from './middleware/auth.js';

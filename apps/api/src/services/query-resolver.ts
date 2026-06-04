@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { ExtractedQuery, SearchPlan, QueryHint } from '@uiuc-course-search/query-types';
+import { singleRequirementFilter } from '@uiuc-course-search/query-types';
+import type { ExtractedQuery, SearchPlan, QueryHint } from '@uiuc-course-search/query-types/search-planner';
 
 const GENED_SYNONYMS: Record<string, string[]> = {
   // Composition
@@ -281,7 +282,11 @@ async function resolveCourseCode(
   const subject = hint.metadata?.subject;
   const number = hint.metadata?.number;
 
-  if (!subject || !number) return;
+  if (!number) return;
+  if (!subject) {
+    plan.filters.number = number;
+    return;
+  }
 
   // Validate subject exists
   const validSubject = await validateSubject(db, subject);
@@ -328,7 +333,7 @@ async function resolveSubjectHint(
 
   if (decision.preferred === 'gened') {
     delete plan.filters.subject;
-    plan.filters.gened_code = genedCode;
+    plan.filters.requirement = singleRequirementFilter(genedCode);
     await addSubjectGenedAmbiguity(db, plan, {
       term: String(hint.metadata?.raw ?? hint.value),
       chosen: 'gened',
@@ -564,10 +569,10 @@ function resolveGened(value: string, plan: SearchPlan): void {
   const code = GENED_LOOKUP[normalized];
 
   if (code) {
-    plan.filters.gened_code = code;
+    plan.filters.requirement = singleRequirementFilter(code);
   } else {
-    // Keep raw value as fallback
-    plan.filters.gened_code = value.toUpperCase();
+    // Keep raw value as fallback.
+    plan.filters.requirement = singleRequirementFilter(value);
   }
 }
 

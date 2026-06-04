@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "generate:subjects": "tsx scripts/generate-subjects.ts",
-    "dev": "npm run generate:subjects && concurrently \"npm run dev -w @uiuc-course-search/api\" \"npm run dev -w @uiuc-course-search/web\"",
+    "dev": "concurrently \"npm run dev -w @uiuc-course-search/api\" \"npm run dev -w @uiuc-course-search/web\"",
     "build": "npm run build --workspaces",
     "build:with-generated-subjects": "npm run generate:subjects && npm run build",
     "test": "npm test --workspaces && npm run test:scripts",

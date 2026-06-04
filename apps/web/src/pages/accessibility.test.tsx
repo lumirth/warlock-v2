@@ -24,7 +24,6 @@ function course(overrides: Partial<CourseDto> = {}): CourseDto {
     title: 'Data Structures',
     description: 'A course',
     credit_hours: 4,
-    gened: 'QR',
     year: 2026,
     term: 'spring',
     primary_instructor: 'Lovelace, A',
@@ -40,7 +39,14 @@ function course(overrides: Partial<CourseDto> = {}): CourseDto {
     date_range_text: null,
     registration_notes: null,
     approval_code: null,
-    geneds: [],
+    geneds: [
+      {
+        categoryId: 'QR',
+        categoryName: 'Quantitative Reasoning',
+        attributeCode: null,
+        attributeName: null,
+      },
+    ],
     instructor_links: {},
     sections: [],
     ...overrides,
@@ -93,8 +99,6 @@ describe('page accessibility', () => {
       results: [course()],
       meta: {
         query: { raw: 'cs 225', residual: 'cs 225' },
-        extraction: { hints: [] },
-        plan: { filters: {}, semanticQuery: 'cs 225', keywordQuery: 'cs 225' },
         timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
         appliedSort: { field: 'relevance', direction: 'desc' },
         appliedScope: 'active',

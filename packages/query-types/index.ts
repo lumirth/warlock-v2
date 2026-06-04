@@ -1,177 +1,14 @@
-export type QueryHintType =
-  | "instructor"
-  | "gened"
-  | "subject"
-  | "credits"
-  | "term"
-  | "level"
-  | "levelBoost"
-  | "course_code"
-  | "crn"
-  | "days"
-  | "time"
-  | "difficulty"
-  | "online"
-  | "status"
-  | "negation"
-  | "partOfTerm";
+import type {
+  AdvancedSearchStateDto,
+  SearchRequestFilterPatchDto,
+  SearchScope,
+  SearchSort,
+} from "./search-contract.js";
 
-export interface QueryHint {
-  type: QueryHintType;
-  value: string | number | boolean | NegationValue | TermValue;
-  confidence: number;
-  isExplicit?: boolean;
-  metadata?: Record<string, string>; // For course_code: { subject: 'CS', number: '225' }
-}
+export * from "./course-policy.js";
+export * from "./search-contract.js";
 
-export interface ExtractedQuery {
-  rawQuery: string;
-  hints: QueryHint[];
-  residual: string;
-}
-
-export interface SearchFilters {
-  // Entity filters
-  instructor_ids?: number[];
-  subject?: string;
-  number?: string;
-  crn?: string;
-  gened_code?: string;
-  gened_any?: string[]; // Course has ANY of these geneds
-  gened_all?: string[]; // Course has ALL of these geneds
-
-  // Schedule filters
-  days?: string;
-  time?: string; // morning, afternoon, evening, early, midday
-  partOfTerm?: string; // A, B, 1, etc.
-
-  // Attribute filters
-  level?: number;
-  credits?: number;
-  online?: boolean;
-  status?: string;
-  difficulty?: "easy" | "hard";
-
-  // Negations
-  not?: {
-    time?: string[];
-    days?: string[];
-    instructor_ids?: number[];
-    subjects?: string[];
-    geneds?: string[];
-    keywords?: string[];
-  };
-
-  // Term filters
-  term?: string;
-  year?: number;
-}
-
-export const SEARCH_SORT_FIELDS = [
-  "relevance",
-  "gpa",
-  "quality",
-  "workload",
-  "instructor_rating",
-  "level",
-  "credits",
-] as const;
-
-export type SortField = (typeof SEARCH_SORT_FIELDS)[number];
-
-export type SortDirection = "asc" | "desc";
-
-export type SearchSort = {
-  field: SortField;
-  direction: SortDirection;
-};
-
-export const SEARCH_SORT_DEFAULT_DIRECTIONS: Record<
-  SortField,
-  SortDirection
-> = {
-  relevance: "desc",
-  gpa: "desc",
-  quality: "desc",
-  workload: "asc",
-  instructor_rating: "desc",
-  level: "asc",
-  credits: "asc",
-} as const;
-
-export const DEFAULT_SEARCH_SORT: SearchSort = {
-  field: "relevance",
-  direction: SEARCH_SORT_DEFAULT_DIRECTIONS.relevance,
-} as const;
-
-export const SEARCH_SCOPE_VALUES = ["active", "all"] as const;
-
-export type SearchScope = (typeof SEARCH_SCOPE_VALUES)[number];
-
-export const DEFAULT_SEARCH_SCOPE: SearchScope = "active";
-
-export const QUALITY_TIER_THRESHOLDS = {
-  EXCELLENT: 85,
-  GOOD: 70,
-  FAIR: 50,
-} as const;
-
-export type QualityTierLabel = "Excellent" | "Good" | "Fair" | "Low";
-
-export function getQualityTierLabel(
-  score: number | null | undefined,
-): QualityTierLabel | null {
-  if (typeof score !== "number") return null;
-  if (score >= QUALITY_TIER_THRESHOLDS.EXCELLENT) return "Excellent";
-  if (score >= QUALITY_TIER_THRESHOLDS.GOOD) return "Good";
-  if (score >= QUALITY_TIER_THRESHOLDS.FAIR) return "Fair";
-  return "Low";
-}
-
-export function getQualityTierRank(
-  score: number | null | undefined,
-): number | null {
-  const label = getQualityTierLabel(score);
-  if (label === "Excellent") return 4;
-  if (label === "Good") return 3;
-  if (label === "Fair") return 2;
-  if (label === "Low") return 1;
-  return null;
-}
-
-export const WORKLOAD_TIER_THRESHOLDS = {
-  HARD: 75,
-  MODERATE: 45,
-} as const;
-
-export type WorkloadTierLabel = "Easy" | "Moderate" | "Hard";
-
-export function getWorkloadTierLabel(
-  score: number | null | undefined,
-): WorkloadTierLabel | null {
-  if (typeof score !== "number") return null;
-  if (score > WORKLOAD_TIER_THRESHOLDS.HARD) return "Hard";
-  if (score > WORKLOAD_TIER_THRESHOLDS.MODERATE) return "Moderate";
-  return "Easy";
-}
-
-export function getWorkloadTierRank(
-  score: number | null | undefined,
-): number | null {
-  const label = getWorkloadTierLabel(score);
-  if (label === "Easy") return 1;
-  if (label === "Moderate") return 2;
-  if (label === "Hard") return 3;
-  return null;
-}
-
-export interface Ambiguity {
-  term: string;
-  chosen: { type: string; value: string; label: string };
-  alternatives: { type: string; value: string; label: string }[];
-}
-
-export type DecisionQueryType =
+export type SearchInterpretationQueryType =
   | "exact_course"
   | "requirement"
   | "schedule"
@@ -183,17 +20,18 @@ export type DecisionQueryType =
   | "comparison"
   | "help_or_how_to";
 
-export type RetrievalLane =
+export type SearchInterpretationRetrievalLane =
   | "exact"
   | "official_text"
   | "requirement"
+  | "section_text"
   | "structured_section"
   | "student_language_alias"
   | "topic_semantic"
   | "workload_evidence"
   | "help_path";
 
-export type SearchPlanWarningKind =
+export type SearchInterpretationWarningKind =
   | "student_profile_required"
   | "workload_evidence_incomplete"
   | "writing_evidence_incomplete"
@@ -201,38 +39,25 @@ export type SearchPlanWarningKind =
   | "prereq_evidence_incomplete"
   | "math_risk_inferred";
 
-export interface SearchPlanAssumption {
+export type SearchInterpretationAssumptionDto = {
   kind: string;
   label: string;
   confidence: number;
   source: "rule" | "alias" | "fallback";
-}
+};
 
-export interface SearchPlanWarning {
-  kind: SearchPlanWarningKind;
+export type SearchInterpretationWarningDto = {
+  kind: SearchInterpretationWarningKind;
   message: string;
   confidence: number;
-}
+};
 
-export interface SearchRelaxationStep {
+export type SearchInterpretationRelaxationStepDto = {
   id: string;
   label: string;
   relaxes: string[];
   keeps: string[];
-}
-
-export interface SearchPlanRescue {
-  queryTypes: DecisionQueryType[];
-  negativeTerms: string[];
-  topicTerms: string[];
-  expandedTerms: string[];
-  assumptions: SearchPlanAssumption[];
-  warnings: SearchPlanWarning[];
-  retrievalLanes: RetrievalLane[];
-  relaxationPlan: SearchRelaxationStep[];
-  needsStudentProfile: boolean;
-  confidence: number;
-}
+};
 
 export type SearchRecoveryGroup = {
   id: string;
@@ -247,43 +72,21 @@ export type SearchRecoveryGroup = {
   };
 };
 
-export interface SearchPlan {
-  rawQuery?: string;
-  filters: SearchFilters;
-  softPreferences?: Record<string, unknown>;
-  intents?: SearchIntent[];
-  semanticQuery: string;
-  keywordQuery: string;
-  ambiguities?: Ambiguity[];
-  rescue?: SearchPlanRescue;
-}
-
-export type SearchIntent = "introductory_gateway" | "query_rescue";
-
-// === NEW TYPES FOR UNIFIED QUERY SYSTEM ===
-
-// Hint metadata with source tracking
-export interface HintMetadata {
-  source: "regex" | "alias" | "nlp" | "manual";
-  span?: [number, number];
+export type SearchInterpretationDto = {
+  queryTypes: SearchInterpretationQueryType[];
+  negativeTerms: string[];
+  topicTerms: string[];
+  expandedTerms: string[];
+  assumptions: SearchInterpretationAssumptionDto[];
+  warnings: SearchInterpretationWarningDto[];
+  /** Student-facing interpretation of useful evidence lanes, not executable retrieval config. */
+  retrievalLanes: SearchInterpretationRetrievalLane[];
+  relaxationPlan: SearchInterpretationRelaxationStepDto[];
+  needsStudentProfile: boolean;
   confidence: number;
-  raw: string;
-}
+};
 
-// Rich hint structure
-export interface Hint {
-  type: HintType;
-  value:
-    | string
-    | number
-    | boolean
-    | NegationValue
-    | CourseCodeValue
-    | TermValue;
-  metadata: HintMetadata;
-}
-
-export type HintType =
+export type SearchChipType =
   | "courseCode"
   | "crn"
   | "subject"
@@ -299,52 +102,11 @@ export type HintType =
   | "gened"
   | "term"
   | "partOfTerm"
-  | "negation";
-
-export interface NegationValue {
-  target: HintType | "keyword" | "workload";
-  value: string;
-}
-
-export interface CourseCodeValue {
-  subject: string;
-  number: string;
-}
-
-export interface TermValue {
-  term: string;
-  year: number;
-}
-
-// Suggestion for ambiguous terms
-export interface Suggestion {
-  text: string;
-  action: "add_filter" | "remove_filter" | "change_filter";
-  filter?: Partial<SearchFilters>;
-}
-
-// Parsed query from power-user syntax
-export interface ParsedQuery {
-  raw: string;
-  clauses: ParsedClause[];
-}
-
-export interface ParsedClause {
-  filters: FieldFilter[];
-  negations: string[];
-  phrases: string[];
-  genedMode?: {
-    any?: string[];
-    all?: string[];
-  };
-  residual: string;
-}
-
-export interface FieldFilter {
-  field: string;
-  value: string;
-  negated?: boolean;
-}
+  | "negation"
+  | "semantic"
+  | "score"
+  | "assumption"
+  | "unknown";
 
 export type InstructorLinkDto = {
   instructor_name: string | null;
@@ -480,7 +242,6 @@ export type CourseDto = {
   title: string;
   description: string | null;
   credit_hours: number | null;
-  gened: string | null;
   year: number;
   term: string;
   primary_instructor: string | null;
@@ -521,11 +282,7 @@ export type SearchMetaDto = {
     raw: string;
     residual: string;
   };
-  extraction: {
-    hints: Hint[];
-  };
-  plan: SearchPlan;
-  ambiguities?: Ambiguity[];
+  interpretation?: SearchInterpretationDto;
   timing: {
     extraction_ms: number;
     search_ms: number;
@@ -568,13 +325,13 @@ export type SearchChipSource =
 
 export type SearchChipDto = {
   id: string;
-  type: HintType | "semantic" | "score" | "assumption" | "unknown";
+  type: SearchChipType;
   label: string;
   value: string;
   source: SearchChipSource;
   removable: boolean;
   editable: boolean;
-  filter?: Partial<SearchFilters>;
+  filter?: SearchRequestFilterPatchDto;
   queryPatch?: {
     removeText?: string;
     appendText?: string;
@@ -586,29 +343,11 @@ export type SearchAmbiguityActionDto = {
   id: string;
   term: string;
   label: string;
-  filter: Partial<SearchFilters>;
+  filter: SearchRequestFilterPatchDto;
   queryPatch?: {
     appendText?: string;
     replaceQuery?: string;
   };
-};
-
-export type AdvancedSearchStateDto = {
-  subject?: string;
-  number?: string;
-  instructor?: string;
-  term?: string;
-  year?: number;
-  gened?: string;
-  credits?: number;
-  days?: string;
-  time?: string;
-  partOfTerm?: string;
-  online?: boolean;
-  status?: string;
-  difficulty?: "easy" | "hard";
-  level?: number;
-  scope?: SearchScope;
 };
 
 export type SearchUiPlanDto = {

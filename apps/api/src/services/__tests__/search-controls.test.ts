@@ -4,7 +4,7 @@ import type { SearchResult } from '../search.js';
 import {
   applySearchControls,
   normalizeSearchControls,
-} from '../search-pipeline.js';
+} from '../search-controls.js';
 
 const course = (overrides: Partial<Course>): Course => ({
   id: 'COURSE-1',

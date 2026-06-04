@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { Course } from '../../db/index.js';
 import type { SearchResult } from '../../services/search.js';
-import { buildMatchEvidence, buildResultWarnings, searchResultToCourseDto, toCourseDto, toInstructorLinkDto } from '../course.js';
+import type { CourseSnapshot } from '../../transforms/course.js';
+import {
+  buildMatchEvidence,
+  buildResultWarnings,
+  courseSnapshotToCourseDto,
+  searchResultToCourseDto,
+  toCourseDto,
+  toInstructorLinkDto,
+} from '../course.js';
 
 const course: Course = {
   id: 'CS-225-2026-spring',
@@ -51,7 +60,7 @@ describe('search result DTO evidence', () => {
         filters: {
           subject: 'CS',
           number: '225',
-          gened_code: 'QR',
+          requirement: singleRequirementFilter('QR'),
           days: 'MWF',
           time: 'morning',
           online: true,
@@ -89,6 +98,20 @@ describe('search result DTO evidence', () => {
     expect(evidence.map(item => item.label).join(' ')).not.toMatch(/Quality \d/);
   });
 
+  it('does not add title evidence for empty raw queries', () => {
+    const evidence = buildMatchEvidence(searchResult(), {
+      rawQuery: '   ',
+      hints: [],
+      plan: {
+        filters: {},
+        keywordQuery: '',
+        semanticQuery: '',
+      },
+    });
+
+    expect(evidence.some(item => item.kind === 'title')).toBe(false);
+  });
+
   it('attaches result evidence and historical warnings to search DTOs', () => {
     const dto = searchResultToCourseDto(searchResult({ historical: true }), {
       rawQuery: 'CS 225',
@@ -118,7 +141,7 @@ describe('search result DTO evidence', () => {
       rawQuery: 'easy online gen ed no essays',
       hints: [],
       plan: {
-        filters: { gened_code: 'QR', online: true },
+        filters: { requirement: singleRequirementFilter('QR'), online: true },
         keywordQuery: '',
         semanticQuery: '',
         rescue: {
@@ -133,7 +156,7 @@ describe('search result DTO evidence', () => {
           warnings: [
             { kind: 'writing_evidence_incomplete', message: 'Essay and writing workload evidence is incomplete for many courses.', confidence: 0.78 },
           ],
-          retrievalLanes: ['requirement', 'structured_section', 'student_language_alias', 'workload_evidence'],
+          interpretedLanes: ['requirement', 'structured_section', 'student_language_alias', 'workload_evidence'],
           relaxationPlan: [],
           needsStudentProfile: false,
           confidence: 0.82,
@@ -161,7 +184,19 @@ describe('search result DTO evidence', () => {
         filters: {
           subject: 'CS',
           difficulty: 'easy',
-          gened_any: ['HUM', 'NAT', 'SBS', 'CS', 'QR', 'QR1', 'QR2', 'NW', 'US', 'WCC', 'ACP'],
+          requirement: requirementFilter('any', [
+            'HUM',
+            'NAT',
+            'SBS',
+            'CS',
+            'QR',
+            'QR1',
+            'QR2',
+            'NW',
+            'US',
+            'WCC',
+            'ACP',
+          ]),
         },
         keywordQuery: '',
         semanticQuery: '',
@@ -194,7 +229,7 @@ describe('search result DTO evidence', () => {
           expandedTerms: [],
           assumptions: [],
           warnings: [],
-          retrievalLanes: ['requirement'],
+          interpretedLanes: ['requirement'],
           relaxationPlan: [],
           needsStudentProfile: false,
           confidence: 0.74,
@@ -204,6 +239,9 @@ describe('search result DTO evidence', () => {
 
     expect(dto.match_evidence?.map(item => item.label)).not.toContain('Requirement lane match');
     expect(dto.match_evidence?.some(item => item.kind === 'gened')).toBe(false);
+    expect(dto.explanation?.confidence.reasons).not.toContain('Requirement evidence came from structured mappings.');
+    expect(dto.explanation?.confidence.score).toBe(0.74);
+    expect(dto.explanation?.confidence.label).toBe('medium');
   });
 
   it('keeps warning construction narrow and non-secret', () => {
@@ -247,5 +285,110 @@ describe('search result DTO evidence', () => {
 
     expect(link.rmp_url).toBe('https://www.ratemyprofessors.com/professor/85515');
     expect(link.rmp_search_url).toBe('https://www.ratemyprofessors.com/search/professors/1112?q=Fagen-Ulmschneider%2C%20W');
+  });
+
+  it('converts fresh course snapshots to the same visible DTO surface as cached rows', () => {
+    const { created_at: _createdAt, updated_at: _updatedAt, ...snapshotCourse } = course;
+    const snapshot: CourseSnapshot = {
+      course: {
+        ...snapshotCourse,
+        subject_id: 'CS',
+        course_info: 'Prerequisite: CS 173.',
+        degree_attributes: 'Quantitative Reasoning II.',
+        class_schedule_info: 'Register for a lecture and discussion.',
+        date_range_text: 'Jan 20 - May 06',
+        registration_notes: 'Restricted to majors.',
+        approval_code: 'Department Approval Required',
+      },
+      genEdCategories: [{
+        categoryId: 'QR',
+        categoryName: 'Quantitative Reasoning',
+        attributeCode: '1QR2',
+        attributeName: 'Quantitative Reasoning II',
+      }],
+      sections: [{
+        section: {
+          id: '2026-spring-12345',
+          crn: '12345',
+          course_id: 'CS-225-2026-spring',
+          term_id: '2026-spring',
+          section_number: 'AL1',
+          status: 'Open',
+          type: 'Lecture',
+          days: 'MWF',
+          start_time: '09:00',
+          end_time: '09:50',
+          location: 'Siebel Center 1404',
+          instructor: 'Lovelace, A',
+          instructor_rmp: null,
+          instructor_gpa: null,
+          section_title: 'Data Structures Lecture',
+          status_code: 'A',
+          section_status_code: 'A',
+          section_text: 'Lecture notes.',
+          section_notes: 'Majors first.',
+          capp_area: 'CS',
+          date_range_text: 'Jan 20 - May 06',
+          part_of_term: '1',
+          start_date: '2026-01-20',
+          end_date: '2026-05-06',
+          credit_hours: '4',
+          last_synced: 1,
+        },
+        meetings: [{
+          section_id: '2026-spring-12345',
+          meeting_index: 0,
+          type_code: 'LEC',
+          type_name: 'Lecture',
+          days: 'MWF',
+          start_time: '09:00',
+          end_time: '09:50',
+          building_name: 'Siebel Center',
+          room_number: '1404',
+          date_range_text: 'Jan 20 - May 06',
+          instructors: [{ firstName: 'Ada', lastName: 'Lovelace' }],
+        }],
+      }],
+    };
+
+    const dto = courseSnapshotToCourseDto(snapshot, {
+      instructorLinks: {
+        'Lovelace, A': toInstructorLinkDto({
+          instructor_name: 'Lovelace, A',
+          rmp_rating: 4.8,
+          avg_gpa: 3.62,
+          gpa_sample_size: 820,
+          num_ratings: 12,
+        }),
+      },
+      medianGpa: 3.6,
+      cached: false,
+    });
+
+    expect(dto).toMatchObject({
+      id: 'CS-225-2026-spring',
+      course_info: 'Prerequisite: CS 173.',
+      median_gpa: 3.6,
+      _cached: false,
+    });
+    expect(dto.geneds).toEqual([{
+      categoryId: 'QR',
+      categoryName: 'Quantitative Reasoning',
+      attributeCode: 'QR2',
+      attributeName: 'Quantitative Reasoning II',
+    }]);
+    expect(dto.sections?.[0]).toMatchObject({
+      sectionNumber: 'AL1',
+      partOfTerm: '1',
+      sectionNotes: 'Majors first.',
+      instructorRmp: 4.8,
+      instructorGpa: 3.62,
+    });
+    expect(dto.sections?.[0]?.meetings[0]).toMatchObject({
+      typeCode: 'LEC',
+      buildingName: 'Siebel Center',
+      instructorNames: ['Lovelace, A'],
+      instructors: [expect.objectContaining({ instructor_name: 'Lovelace, A' })],
+    });
   });
 });

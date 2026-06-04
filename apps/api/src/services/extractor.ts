@@ -1,4 +1,4 @@
-import type { Hint, HintType, HintMetadata } from '@uiuc-course-search/query-types';
+import type { Hint, HintType, HintMetadata } from '@uiuc-course-search/query-types/search-planner';
 import { createDefaultRegistry } from './alias-registry.js';
 import { VALID_SUBJECTS, UNSAFE_LOWERCASE_SUBJECTS } from './data/valid-subjects.js';
 
@@ -141,6 +141,16 @@ const CONTEXTUAL_GENED_RULES: Array<{
   { code: 'CS', pattern: /\b(?:cultural\s+studies|diversity|race\s+and\s+ethnicity|race|ethnicity|other\s+cultures|culture\s+class|cultural\s+requirement)\b/gi, confidence: 0.78 },
 ];
 
+const POSITIVE_NO_NOT_ALIASES: Array<{
+  pattern: RegExp;
+  type: Extract<HintType, 'difficulty' | 'status'>;
+  value: 'easy' | 'open';
+}> = [
+  { pattern: /\bnot\s+hard\b/gi, type: 'difficulty', value: 'easy' },
+  { pattern: /\bnot\s+full\b/gi, type: 'status', value: 'open' },
+  { pattern: /\bno\s+waitlist\b/gi, type: 'status', value: 'open' },
+];
+
 /**
  * Extract structured hints from natural language text.
  * Multi-pass extraction to ensure order independence.
@@ -151,6 +161,7 @@ export function extract(text: string): ExtractionResult {
 
   // Pass 1: Negations & Strict Entities (Course Codes, CRNs)
   // We extract negations early so they can capture terms before they are removed by aliases
+  residual = extractPositiveNoNotAliases(residual, hints);
   residual = extractNegations(residual, hints);
   residual = extractCourseCodesAndCrns(residual, hints);
   residual = extractQuestionScaffolding(residual);
@@ -193,6 +204,30 @@ export const extractQuery = extract;
  */
 function maskRange(text: string, start: number, length: number): string {
   return text.slice(0, start) + ' '.repeat(length) + text.slice(start + length);
+}
+
+function extractPositiveNoNotAliases(text: string, hints: Hint[]): string {
+  let residual = text;
+
+  for (const alias of POSITIVE_NO_NOT_ALIASES) {
+    const matches: { index: number; length: number }[] = [];
+    const pattern = new RegExp(alias.pattern.source, alias.pattern.flags);
+    let match;
+    while ((match = pattern.exec(residual)) !== null) {
+      hints.push({
+        type: alias.type,
+        value: alias.value,
+        metadata: createMetadata('alias', match[0], 0.88),
+      });
+      matches.push({ index: match.index, length: match[0].length });
+    }
+
+    for (let index = matches.length - 1; index >= 0; index -= 1) {
+      residual = maskRange(residual, matches[index].index, matches[index].length);
+    }
+  }
+
+  return residual;
 }
 
 function extractNegations(text: string, hints: Hint[]): string {

@@ -71,7 +71,7 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
 
   for (const [index, query] of GOLDEN_QUERIES.entries()) {
     try {
-      const url = `${baseUrl}/api/search?q=${encodeURIComponent(query.query)}&limit=20`;
+      const url = `${baseUrl}/api/search?q=${encodeURIComponent(query.query)}&limit=20&debug=planner`;
       const response = await fetchWithRateLimitRetry(url);
 
       if (!response.ok) {

@@ -1,5 +1,5 @@
 import type { GoldQuery, EvalResult, ResultSelector } from './types.js';
-import type { SearchPlanRescue } from '@uiuc-course-search/query-types';
+import type { SearchPlanRescue } from '@uiuc-course-search/query-types/search-planner';
 import { canonicalGenedCode } from '../services/gened-codes.js';
 
 export interface ApiSearchResult {
@@ -8,7 +8,6 @@ export interface ApiSearchResult {
   subject: string;
   number: string;
   avg_gpa?: number;
-  gened?: string | null;
   geneds?: Array<{
     categoryId?: string;
     category_id?: string;
@@ -21,14 +20,6 @@ export interface ApiSearchResult {
 export interface SearchResponseForEval {
   results: ApiSearchResult[];
   meta: {
-    plan: {
-      filters: Record<string, unknown>;
-      softPreferences?: Record<string, unknown>;
-      rescue?: SearchPlanRescue;
-    };
-    extraction: {
-      hints: unknown[];
-    };
     query: {
       residual: string;
     };
@@ -42,6 +33,16 @@ export interface SearchResponseForEval {
       registrableTermId: string | null;
       activeTermIds?: string[];
       registrableTermIds?: string[];
+    };
+  };
+  _debug?: {
+    plan: {
+      filters: Record<string, unknown>;
+      softPreferences?: Record<string, unknown>;
+      rescue?: SearchPlanRescue;
+    };
+    extraction: {
+      hints: unknown[];
     };
   };
 }
@@ -128,7 +129,7 @@ export function checkExpectedRescue(query: GoldQuery, rescue: SearchPlanRescue |
     ...checkExpectedArraySubset('rescue.queryTypes', expected.queryTypes, rescue?.queryTypes),
     ...checkExpectedArraySubset('rescue.negativeTerms', expected.negativeTerms, rescue?.negativeTerms),
     ...checkExpectedArraySubset('rescue.warnings', expected.warnings, rescue?.warnings.map(warning => warning.kind)),
-    ...checkExpectedArraySubset('rescue.retrievalLanes', expected.retrievalLanes, rescue?.retrievalLanes),
+    ...checkExpectedArraySubset('rescue.interpretedLanes', expected.interpretedLanes, rescue?.interpretedLanes),
     ...checkExpectedArraySubset('rescue.relaxationPlan', expected.relaxationSteps, rescue?.relaxationPlan.map(step => step.id)),
     ...checkExpectedArraySubset('rescue.assumptions', expected.assumptions, rescue?.assumptions.map(assumption => assumption.kind)),
   ];
@@ -175,6 +176,10 @@ export function checkInvariants(query: GoldQuery, results: ApiSearchResult[]): s
     if (query.invariants.no_subject && result.subject === query.invariants.no_subject) {
       violations.push(`Result ${result.id} has forbidden subject=${query.invariants.no_subject}`);
     }
+
+    if (query.invariants.gened && !resultHasGened(result, query.invariants.gened)) {
+      violations.push(`Result ${result.id} does not satisfy GenEd ${query.invariants.gened}`);
+    }
   }
 
   return violations;
@@ -188,7 +193,6 @@ function resultLevel(result: ApiSearchResult): number | null {
 function resultHasGened(result: ApiSearchResult, gened: string): boolean {
   const canonical = canonicalGenedCode(gened);
   if (!canonical) return false;
-  if (canonicalGenedCode(result.gened) === canonical) return true;
   return (result.geneds ?? []).some(entry =>
     canonicalGenedCode(entry.categoryId ?? entry.category_id) === canonical
     || canonicalGenedCode(entry.attributeCode ?? entry.attribute_code) === canonical
@@ -266,7 +270,7 @@ export function checkResultCoherence(query: GoldQuery, results: ApiSearchResult[
   if (expected.all_top_k?.gened) {
     for (const result of topResults) {
       if (!resultHasGened(result, expected.all_top_k.gened)) {
-        violations.push(`Result ${result.id} gened=${result.gened}, expected ${expected.all_top_k.gened}`);
+        violations.push(`Result ${result.id} does not include GenEd ${expected.all_top_k.gened}`);
       }
     }
   }
@@ -320,11 +324,27 @@ export function calculateReciprocalRank(query: GoldQuery, results: ApiSearchResu
 
 export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseForEval): EvalResult {
   const results = data.results;
+  const plannerDebug = data._debug;
+  if (!plannerDebug) {
+    const missingDebug = 'planner debug payload is missing; run eval with debug=planner';
+    return {
+      query,
+      actualFilters: {},
+      actualResidual: data.meta.query.residual,
+      results,
+      reciprocalRank: calculateReciprocalRank(query, results),
+      violations: [missingDebug],
+      parseViolations: [missingDebug],
+      resultViolations: [],
+      tierReached: data.meta.fallback?.tierReached ?? null,
+    };
+  }
+
   const parseViolations = [
-    ...checkExpectedObject('filters', query.expected_filters, data.meta.plan.filters),
-    ...checkExpectedKeys('filters', query.expected_filter_keys, data.meta.plan.filters),
-    ...checkExpectedObject('softPreferences', query.expected_soft_preferences, data.meta.plan.softPreferences),
-    ...checkExpectedRescue(query, data.meta.plan.rescue),
+    ...checkExpectedObject('filters', query.expected_filters, plannerDebug.plan.filters),
+    ...checkExpectedKeys('filters', query.expected_filter_keys, plannerDebug.plan.filters),
+    ...checkExpectedObject('softPreferences', query.expected_soft_preferences, plannerDebug.plan.softPreferences),
+    ...checkExpectedRescue(query, plannerDebug.plan.rescue),
     ...checkExpectedResidual(query, data.meta.query.residual),
   ];
   const resultViolations = [
@@ -344,7 +364,7 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
 
   return {
     query,
-    actualFilters: data.meta.plan.filters,
+    actualFilters: plannerDebug.plan.filters,
     actualResidual: data.meta.query.residual,
     results,
     reciprocalRank: calculateReciprocalRank(query, results),

@@ -1247,7 +1247,6 @@ export const SUBJECT_ALIASES: Array<{ subject: string; aliases: string[] }> = [
   {
     "subject": "LAST",
     "aliases": [
-      "last",
       "latin american and caribbean studies",
       "latin american caribbean studies"
     ]
@@ -1273,7 +1272,6 @@ export const SUBJECT_ALIASES: Array<{ subject: string; aliases: string[] }> = [
   {
     "subject": "LEAD",
     "aliases": [
-      "lead",
       "organizational and community leadership",
       "organizational community leadership"
     ]
@@ -1451,7 +1449,6 @@ export const SUBJECT_ALIASES: Array<{ subject: string; aliases: string[] }> = [
   {
     "subject": "PATH",
     "aliases": [
-      "path",
       "pathobiology"
     ]
   },
@@ -1493,7 +1490,6 @@ export const SUBJECT_ALIASES: Array<{ subject: string; aliases: string[] }> = [
   {
     "subject": "PORT",
     "aliases": [
-      "port",
       "portuguese"
     ]
   },
@@ -1591,7 +1587,6 @@ export const SUBJECT_ALIASES: Array<{ subject: string; aliases: string[] }> = [
   {
     "subject": "SCAN",
     "aliases": [
-      "scan",
       "scandinavian"
     ]
   },
@@ -1797,6 +1792,8 @@ export const UNSAFE_LOWERCASE_SUBJECTS = new Set([
   "IS",
   "IT",
   "LAW",
+  "LAST",
+  "LEAD",
   "ME",
   "MY",
   "NO",
@@ -1806,7 +1803,10 @@ export const UNSAFE_LOWERCASE_SUBJECTS = new Set([
   "ON",
   "ONE",
   "OR",
+  "PATH",
+  "PORT",
   "SAME",
+  "SCAN",
   "SE",
   "SIX",
   "SO",

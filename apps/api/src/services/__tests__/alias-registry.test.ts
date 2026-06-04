@@ -124,6 +124,19 @@ describe('AliasRegistry', () => {
       const matches = registry.match('this is a test for me about art and law');
       expect(matches.filter(match => match.kind === 'subject')).toHaveLength(0);
     });
+
+    it.each([
+      ['last semester', 'LAST'],
+      ['career path', 'PATH'],
+      ['lead discussion', 'LEAD'],
+      ['scan open classes', 'SCAN'],
+      ['port', 'PORT'],
+    ])('does not match common prose "%s" as subject %s', (query, subject) => {
+      const matches = registry.match(query);
+      expect(matches).not.toContainEqual(
+        expect.objectContaining({ kind: 'subject', canonical: subject })
+      );
+    });
   });
 
   describe('days aliases', () => {

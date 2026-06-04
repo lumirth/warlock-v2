@@ -1,5 +1,41 @@
 // apps/api/src/eval/golden-queries.ts
+import {
+  requirementFilter as buildRequirementFilter,
+  singleRequirementFilter,
+} from '@uiuc-course-search/query-types';
 import type { GoldQuery } from './types.js';
+
+const ALL_GENED_CODES = [
+  "HUM",
+  "NAT",
+  "SBS",
+  "CS",
+  "QR",
+  "QR1",
+  "QR2",
+  "NW",
+  "US",
+  "WCC",
+  "ACP",
+] as const;
+
+function requirement(code: string) {
+  const filter = singleRequirementFilter(code);
+  if (!filter) throw new Error(`Invalid golden requirement code: ${code}`);
+  return filter;
+}
+
+function anyRequirement(codes: readonly string[]) {
+  const filter = buildRequirementFilter("any", codes);
+  if (!filter) throw new Error("Invalid golden any-requirement filter");
+  return filter;
+}
+
+function allRequirement(codes: readonly string[]) {
+  const filter = buildRequirementFilter("all", codes);
+  if (!filter) throw new Error("Invalid golden all-requirement filter");
+  return filter;
+}
 
 export const GOLDEN_QUERIES: GoldQuery[] = [
   // === NAVIGATIONAL (Course Codes) ===
@@ -86,9 +122,9 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 11,
     query: "easy humanities gen ed",
-    expected_filters: { difficulty: "easy", gened_code: "HUM" },
+    expected_filters: { difficulty: "easy", requirement: requirement("HUM") },
     expected_residual: "",
-    invariants: { gened_code: "HUM" },
+    invariants: { gened: "HUM" },
     category: "structured",
     notes: "Residual should NOT contain 'gen ed'"
   },
@@ -140,14 +176,14 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 18,
     query: "quantitative reasoning",
-    expected_filters: { gened_code: "QR" },
+    expected_filters: { requirement: requirement("QR") },
     expected_residual: "",
     category: "structured"
   },
   {
     id: 19,
     query: "natural sciences gen ed",
-    expected_filters: { gened_code: "NAT" },
+    expected_filters: { requirement: requirement("NAT") },
     expected_residual: "",
     category: "structured"
   },
@@ -172,9 +208,9 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 22,
     query: "easy humanities MWF afternoon",
-    expected_filters: { difficulty: "easy", gened_code: "HUM", days: "MWF", time: "afternoon" },
+    expected_filters: { difficulty: "easy", requirement: requirement("HUM"), days: "MWF", time: "afternoon" },
     expected_residual: "",
-    invariants: { gened_code: "HUM" },
+    invariants: { gened: "HUM" },
     category: "structured"
   },
   {
@@ -245,28 +281,28 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 31,
     query: "gened:HUM",
-    expected_filters: { gened_code: "HUM" },
+    expected_filters: { requirement: requirement("HUM") },
     expected_residual: "",
     category: "power_syntax"
   },
   {
     id: 32,
     query: "gened:HUM easy",
-    expected_filters: { gened_code: "HUM", difficulty: "easy" },
+    expected_filters: { requirement: requirement("HUM"), difficulty: "easy" },
     expected_residual: "",
     category: "power_syntax"
   },
   {
     id: 33,
     query: "gened:any(HUM,US)",
-    expected_filters: { gened_any: ["HUM", "US"] },
+    expected_filters: { requirement: anyRequirement(["HUM", "US"]) },
     expected_residual: "",
     category: "power_syntax"
   },
   {
     id: 34,
     query: "gened:any(HUM, US) morning",
-    expected_filters: { gened_any: ["HUM", "US"], time: "morning" },
+    expected_filters: { requirement: anyRequirement(["HUM", "US"]), time: "morning" },
     expected_residual: "",
     category: "power_syntax"
   },
@@ -338,14 +374,14 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 43,
     query: "cultural studies gened",
-    expected_filters: { gened_code: "CS" },
+    expected_filters: { requirement: requirement("CS") },
     expected_residual: "",
     category: "disambiguation"
   },
   {
     id: 44,
     query: "humanities gen ed",
-    expected_filters: { gened_code: "HUM" },
+    expected_filters: { requirement: requirement("HUM") },
     expected_residual: "",
     category: "disambiguation"
   },
@@ -397,7 +433,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 49,
     query: "writing intensive courses",
-    expected_filters: { gened_code: "ACP" },
+    expected_filters: { requirement: requirement("ACP") },
     expected_residual: "",
     category: "structured",
     notes: "Residual should NOT contain 'courses'"
@@ -422,7 +458,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 51,
     query: "gened:all(HUM,US)",
-    expected_filters: { gened_all: ["HUM", "US"] },
+    expected_filters: { requirement: allRequirement(["HUM", "US"]) },
     expected_residual: "",
     category: "power_syntax"
   },
@@ -476,7 +512,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
       queryTypes: ["avoidance", "subjective_vibe"],
       negativeTerms: ["exam_heavy", "tests", "exams"],
       warnings: ["exam_evidence_incomplete"],
-      retrievalLanes: ["student_language_alias", "workload_evidence"],
+      interpretedLanes: ["student_language_alias", "workload_evidence"],
       assumptions: ["low_exams"]
     },
     invariants: { subject: "CS" },
@@ -564,7 +600,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 66,
     query: "easy 3 credit humanities",
-    expected_filters: { difficulty: "easy", credits: 3, gened_code: "HUM" },
+    expected_filters: { difficulty: "easy", credits: 3, requirement: requirement("HUM") },
     expected_residual: "",
     category: "score"
   },
@@ -883,13 +919,13 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_filters: {
       difficulty: "easy",
       online: true,
-      gened_any: ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"]
+      requirement: anyRequirement(ALL_GENED_CODES)
     },
     expected_residual: "",
     expected_rescue: {
       queryTypes: ["requirement", "schedule", "subjective_vibe"],
       warnings: ["workload_evidence_incomplete"],
-      retrievalLanes: ["requirement", "structured_section", "student_language_alias", "workload_evidence"],
+      interpretedLanes: ["requirement", "structured_section", "student_language_alias", "workload_evidence"],
       relaxationSteps: ["evidence-backed-workload", "any-delivery"],
       assumptions: ["low_workload", "online_preferred"]
     },
@@ -900,13 +936,13 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     query: "easy cs gened",
     expected_filters: {
       difficulty: "easy",
-      gened_code: "CS"
+      requirement: requirement("CS")
     },
     expected_residual: "",
     expected_rescue: {
       queryTypes: ["requirement", "subjective_vibe"],
       warnings: ["workload_evidence_incomplete"],
-      retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
+      interpretedLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
       assumptions: ["low_workload", "requirement_match"]
     },
     category: "decision",
@@ -917,13 +953,13 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     query: "easy cs",
     expected_filters: {
       difficulty: "easy",
-      gened_code: "CS"
+      requirement: requirement("CS")
     },
     expected_residual: "",
     expected_rescue: {
       queryTypes: ["requirement", "subjective_vibe"],
       warnings: ["workload_evidence_incomplete"],
-      retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
+      interpretedLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
       assumptions: ["low_workload", "requirement_match"]
     },
     category: "disambiguation",
@@ -939,7 +975,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
       queryTypes: ["topic", "subjective_vibe", "avoidance"],
       negativeTerms: ["writing_heavy", "essays", "papers"],
       warnings: ["writing_evidence_incomplete"],
-      retrievalLanes: ["official_text", "student_language_alias", "topic_semantic", "workload_evidence"],
+      interpretedLanes: ["official_text", "student_language_alias", "topic_semantic", "workload_evidence"],
       relaxationSteps: ["evidence-backed-workload"],
       assumptions: ["low_writing"]
     },
@@ -953,14 +989,14 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 105,
     query: "not math but counts for science",
-    expected_filters: { gened_code: "NAT", not: { subjects: ["MATH"] } },
+    expected_filters: { requirement: requirement("NAT"), not: { subjects: ["MATH"] } },
     expected_soft_preferences: { lowMath: 0.86 },
     expected_residual: "",
     expected_rescue: {
       queryTypes: ["requirement", "avoidance", "subjective_vibe", "degree_progress"],
       negativeTerms: ["math_heavy", "calculus", "statistics", "formal_logic", "quantitative"],
       warnings: ["math_risk_inferred", "student_profile_required"],
-      retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
+      interpretedLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
       assumptions: ["low_math", "requirement_match"],
       needsStudentProfile: true
     },
@@ -981,7 +1017,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_rescue: {
       queryTypes: ["schedule", "subjective_vibe"],
       warnings: ["workload_evidence_incomplete"],
-      retrievalLanes: ["structured_section", "student_language_alias", "workload_evidence"],
+      interpretedLanes: ["structured_section", "student_language_alias", "workload_evidence"],
       assumptions: ["low_workload", "credit_count", "startAfterMinutes"]
     },
     category: "decision"
@@ -989,12 +1025,12 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 107,
     query: "does this count for humanities",
-    expected_filters: { gened_code: "HUM" },
+    expected_filters: { requirement: requirement("HUM") },
     expected_residual: "",
     expected_rescue: {
       queryTypes: ["requirement", "degree_progress"],
       warnings: ["student_profile_required"],
-      retrievalLanes: ["official_text", "requirement", "help_path"],
+      interpretedLanes: ["official_text", "requirement", "help_path"],
       assumptions: ["requirement_match"],
       needsStudentProfile: true
     },
@@ -1009,7 +1045,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_rescue: {
       queryTypes: ["avoidance"],
       negativeTerms: ["biology_heavy", "bio"],
-      retrievalLanes: ["student_language_alias", "workload_evidence"],
+      interpretedLanes: ["student_language_alias", "workload_evidence"],
       assumptions: ["low_biology"]
     },
     category: "decision"
@@ -1024,7 +1060,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
       queryTypes: ["eligibility", "subjective_vibe", "avoidance"],
       negativeTerms: ["prerequisites", "restricted_access", "writing_heavy", "essays", "papers"],
       warnings: ["prereq_evidence_incomplete", "writing_evidence_incomplete"],
-      retrievalLanes: ["student_language_alias", "workload_evidence"],
+      interpretedLanes: ["student_language_alias", "workload_evidence"],
       assumptions: ["no_listed_prereq", "low_writing"]
     },
     category: "decision"
@@ -1032,13 +1068,13 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 110,
     query: "easy US minority no tests",
-    expected_filters: { difficulty: "easy", gened_code: "US" },
+    expected_filters: { difficulty: "easy", requirement: requirement("US") },
     expected_residual: "",
     expected_rescue: {
       queryTypes: ["requirement", "subjective_vibe", "avoidance"],
       negativeTerms: ["exam_heavy", "tests", "exams"],
       warnings: ["workload_evidence_incomplete", "exam_evidence_incomplete"],
-      retrievalLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
+      interpretedLanes: ["official_text", "requirement", "student_language_alias", "workload_evidence"],
       assumptions: ["low_workload", "low_exams", "requirement_match"]
     },
     expected_results: {
@@ -1058,7 +1094,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     expected_rescue: {
       queryTypes: ["requirement", "schedule", "degree_progress"],
       warnings: ["student_profile_required"],
-      retrievalLanes: ["official_text", "requirement", "structured_section", "help_path"],
+      interpretedLanes: ["official_text", "requirement", "structured_section", "help_path"],
       relaxationSteps: ["strict", "any-delivery", "adjacent-requirements"],
       assumptions: ["online_preferred", "compressed_term", "requirement_match"],
       needsStudentProfile: true
@@ -1068,14 +1104,14 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 112,
     query: "online us minority no exams no essays 8 week",
-    expected_filters: { online: true, gened_code: "US" },
+    expected_filters: { online: true, requirement: requirement("US") },
     expected_soft_preferences: { lowWriting: 0.9, lowExams: 0.88, compressedTerm: true },
     expected_residual: "",
     expected_rescue: {
       queryTypes: ["requirement", "schedule", "subjective_vibe", "avoidance"],
       negativeTerms: ["writing_heavy", "essays", "papers", "exam_heavy", "tests", "exams"],
       warnings: ["writing_evidence_incomplete", "exam_evidence_incomplete"],
-      retrievalLanes: ["official_text", "requirement", "structured_section", "student_language_alias", "workload_evidence"],
+      interpretedLanes: ["official_text", "requirement", "structured_section", "student_language_alias", "workload_evidence"],
       relaxationSteps: ["strict", "evidence-backed-workload", "any-delivery", "adjacent-requirements"],
       assumptions: ["online_preferred", "low_writing", "low_exams", "compressed_term", "requirement_match"]
     },
@@ -1105,7 +1141,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 115,
     query: "easy science but no math",
-    expected_filters: { difficulty: "easy", gened_code: "NAT", not: { subjects: ["MATH"] } },
+    expected_filters: { difficulty: "easy", requirement: requirement("NAT"), not: { subjects: ["MATH"] } },
     expected_soft_preferences: { lowMath: 0.86 },
     expected_residual: "",
     expected_results: {
@@ -1120,7 +1156,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 116,
     query: "social science class",
-    expected_filters: { gened_code: "SBS" },
+    expected_filters: { requirement: requirement("SBS") },
     expected_residual: "",
     expected_results: {
       non_empty: true,
@@ -1133,7 +1169,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 117,
     query: "diversity",
-    expected_filters: { gened_code: "CS" },
+    expected_filters: { requirement: requirement("CS") },
     expected_residual: "",
     expected_results: {
       non_empty: true,
@@ -1146,7 +1182,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 123,
     query: "non western",
-    expected_filters: { gened_code: "NW" },
+    expected_filters: { requirement: requirement("NW") },
     expected_residual: "",
     expected_results: {
       non_empty: true,
@@ -1174,7 +1210,7 @@ export const GOLDEN_QUERIES: GoldQuery[] = [
     query: "what's an easy gen ed",
     expected_filters: {
       difficulty: "easy",
-      gened_any: ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"]
+      requirement: anyRequirement(ALL_GENED_CODES)
     },
     expected_residual: "",
     expected_results: {

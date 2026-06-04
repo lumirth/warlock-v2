@@ -1,35 +1,47 @@
 #!/usr/bin/env npx tsx
 /**
- * Convert INSERT statements to CSV files for fast SQLite import
- * Usage: npx tsx sql-to-csv.ts input.sql output_dir/
+ * Convert INSERT statements to CSV files for fast SQLite import.
+ * Usage: npx tsx scripts/sql-to-csv.ts input.sql output_dir/
  */
 
-import { createReadStream, createWriteStream, mkdirSync } from 'fs';
-import { createInterface } from 'readline';
-import { join } from 'path';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import { pathToFileURL } from 'node:url';
 
-const inputFile = process.argv[2] || 'history_chunks/clean_history.sql';
-const outputDir = process.argv[3] || 'history_chunks/csv';
+type InsertValues = {
+  table: string;
+  columns: string;
+  values: string;
+};
 
-mkdirSync(outputDir, { recursive: true });
+type ConversionSummary = {
+  counts: Map<string, number>;
+  skipped: number;
+  postImportStatements: number;
+};
 
-// Track file handles per table
-const writers: Map<string, ReturnType<typeof createWriteStream>> = new Map();
-const counts: Map<string, number> = new Map();
-const headers: Map<string, string> = new Map(); // Track headers per table
+type Writer = ReturnType<typeof createWriteStream>;
 
-// Parse INSERT statement and extract table name, columns, and values
-function parseInsert(line: string): { table: string; columns: string; values: string } | null {
-  // Match: INSERT OR REPLACE INTO tablename (cols) VALUES (...);
-  // or: INSERT OR IGNORE INTO tablename (cols) VALUES (...);
+export function parseInsert(line: string): InsertValues | null {
   const match = line.match(/^INSERT OR (?:REPLACE|IGNORE) INTO (\w+) \(([^)]+)\) VALUES \((.+)\);$/);
   if (!match) return null;
   return { table: match[1], columns: match[2], values: match[3] };
 }
 
-// Convert SQL values to CSV row
-// SQL uses single quotes, CSV uses double quotes
-function sqlValuesToCsv(values: string): string {
+function isPostImportInsert(line: string): boolean {
+  return /^INSERT OR (?:REPLACE|IGNORE) INTO \w+ \([^)]+\) SELECT\b/i.test(line);
+}
+
+function closeWriter(writer: Writer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    writer.once('error', reject);
+    writer.end(resolve);
+  });
+}
+
+export function sqlValuesToCsv(values: string): string {
   const result: string[] = [];
   let current = '';
   let inString = false;
@@ -53,15 +65,12 @@ function sqlValuesToCsv(values: string): string {
       }
     } else {
       if (char === "'" && values[i + 1] === "'") {
-        // Escaped single quote
         current += "'";
-        i++;
+        i += 1;
       } else if (char === "'") {
-        // End of string
         current += '"';
         inString = false;
       } else if (char === '"') {
-        // Escape double quote for CSV
         current += '""';
       } else if (char === '\n') {
         current += '\\n';
@@ -69,70 +78,95 @@ function sqlValuesToCsv(values: string): string {
         current += char;
       }
     }
-    i++;
+    i += 1;
   }
   result.push(current.trim());
 
   return result.join(',');
 }
 
-async function main() {
-  console.log(`Converting ${inputFile} to CSV files in ${outputDir}/`);
+export async function convertSqlToCsv(inputFile: string, outputDir: string): Promise<ConversionSummary> {
+  await mkdir(outputDir, { recursive: true });
+
+  const writers = new Map<string, Writer>();
+  const counts = new Map<string, number>();
+  let postImportWriter: Writer | null = null;
+  let lineNum = 0;
+  let skipped = 0;
+  let postImportStatements = 0;
+
+  function writerForTable(table: string, columns: string): Writer {
+    const existing = writers.get(table);
+    if (existing) return existing;
+
+    const writer = createWriteStream(join(outputDir, `${table}.csv`));
+    writers.set(table, writer);
+    counts.set(table, 0);
+    writer.write(`${columns.split(',').map(column => column.trim()).join(',')}\n`);
+    return writer;
+  }
+
+  function writePostImport(line: string): void {
+    postImportWriter ??= createWriteStream(join(outputDir, 'post-import.sql'));
+    postImportWriter.write(`${line}\n`);
+    postImportStatements += 1;
+  }
 
   const rl = createInterface({
     input: createReadStream(inputFile),
-    crlfDelay: Infinity
+    crlfDelay: Infinity,
   });
 
-  let lineNum = 0;
-  let skipped = 0;
-
   for await (const line of rl) {
-    lineNum++;
+    lineNum += 1;
     if (lineNum % 100000 === 0) {
       console.log(`  Processed ${lineNum.toLocaleString()} lines...`);
     }
 
-    // Skip SELECT subqueries (meeting_instructors uses them)
-    if (line.includes('SELECT')) {
-      skipped++;
+    if (isPostImportInsert(line)) {
+      writePostImport(line);
       continue;
     }
 
     const parsed = parseInsert(line);
     if (!parsed) {
-      skipped++;
+      skipped += 1;
       continue;
     }
 
-    const { table, columns, values } = parsed;
-
-    // Get or create writer for this table
-    if (!writers.has(table)) {
-      const filePath = join(outputDir, `${table}.csv`);
-      const writer = createWriteStream(filePath);
-      writers.set(table, writer);
-      counts.set(table, 0);
-      // Write header row (strip spaces from column names)
-      headers.set(table, columns);
-      writer.write(columns.split(',').map(c => c.trim()).join(',') + '\n');
-    }
-
-    const csvRow = sqlValuesToCsv(values);
-    writers.get(table)!.write(csvRow + '\n');
-    counts.set(table, (counts.get(table) || 0) + 1);
+    const writer = writerForTable(parsed.table, parsed.columns);
+    writer.write(`${sqlValuesToCsv(parsed.values)}\n`);
+    counts.set(parsed.table, (counts.get(parsed.table) ?? 0) + 1);
   }
 
-  // Close all writers
-  for (const writer of writers.values()) {
-    writer.end();
-  }
+  await Promise.all([
+    ...Array.from(writers.values()).map(closeWriter),
+    postImportWriter ? closeWriter(postImportWriter) : Promise.resolve(),
+  ]);
 
-  console.log(`\nDone! Created CSV files:`);
-  for (const [table, count] of counts) {
-    console.log(`  ${table}: ${count.toLocaleString()} rows`);
-  }
-  console.log(`\nSkipped ${skipped.toLocaleString()} lines (SELECT subqueries, etc.)`);
+  return { counts, skipped, postImportStatements };
 }
 
-main().catch(console.error);
+async function main(): Promise<void> {
+  const inputFile = process.argv[2] || 'history_chunks/clean_history.sql';
+  const outputDir = process.argv[3] || 'history_chunks/csv';
+
+  console.log(`Converting ${inputFile} to CSV files in ${outputDir}/`);
+  const summary = await convertSqlToCsv(inputFile, outputDir);
+
+  console.log('\nDone! Created CSV files:');
+  for (const [table, count] of summary.counts) {
+    console.log(`  ${table}: ${count.toLocaleString()} rows`);
+  }
+  if (summary.postImportStatements > 0) {
+    console.log(`  post-import.sql: ${summary.postImportStatements.toLocaleString()} preserved INSERT ... SELECT statement(s)`);
+  }
+  console.log(`\nSkipped ${summary.skipped.toLocaleString()} non-insert line(s).`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

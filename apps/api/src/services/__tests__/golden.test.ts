@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parseQuery } from '../query-parser.js';
 import { extract } from '../extractor.js';
 import goldenQueries from './golden-queries.json';
-import type { SearchFilters } from '@uiuc-course-search/query-types';
+import type { SearchFilters } from '@uiuc-course-search/query-types/search-planner';
 
 interface GoldenTestCase {
   input: string;

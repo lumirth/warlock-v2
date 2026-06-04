@@ -53,7 +53,6 @@ function course(overrides: Partial<CourseDto>): CourseDto {
     title: 'Data Structures',
     description: 'A course',
     credit_hours: 4,
-    gened: null,
     year: 2026,
     term: 'spring',
     primary_instructor: null,
@@ -80,8 +79,6 @@ function searchResponse(results: CourseDto[]): SearchResponseDto {
     results,
     meta: {
       query: { raw: 'cs', residual: 'cs' },
-      extraction: { hints: [] },
-      plan: { filters: {}, semanticQuery: 'cs', keywordQuery: 'cs' },
       timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
     },
     pagination: { total: results.length, limit: 20, offset: 0 },
@@ -106,6 +103,23 @@ function setQuery(value: string) {
 
 function submitSearch() {
   fireEvent.submit(screen.getByRole('search'))
+}
+
+function expectSearchCalledWithRequest(
+  request: Record<string, unknown>,
+  options = expect.objectContaining({ signal: expect.any(AbortSignal) })
+) {
+  expect(api.search).toHaveBeenCalledWith(
+    expect.objectContaining(request),
+    options
+  )
+}
+
+function expectLastSearchCalledWithRequest(request: Record<string, unknown>) {
+  expect(api.search).toHaveBeenLastCalledWith(
+    expect.objectContaining(request),
+    expect.objectContaining({ signal: expect.any(AbortSignal) })
+  )
 }
 
 afterEach(() => {
@@ -138,13 +152,10 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'CS 225' }))
 
     await screen.findByText(/CS 225: Data Structures/i)
-    expect(api.search).toHaveBeenCalledWith(
-      'CS 225',
-      expect.objectContaining({
-        limit: 20,
-        offset: 0,
-      })
-    )
+    expectSearchCalledWithRequest({
+      query: 'CS 225',
+      pagination: { limit: 20, offset: 0 },
+    })
     expect(
       screen.queryByText(/search uiuc courses the way you'd describe them/i)
     ).not.toBeInTheDocument()
@@ -169,9 +180,8 @@ describe('SearchPage request state', () => {
 
     vi.mocked(api.search)
       .mockImplementationOnce(() => first.promise)
-      .mockImplementationOnce((_query, options) => {
-        secondSignal =
-          options instanceof AbortSignal ? options : options?.signal
+      .mockImplementationOnce((_request, options) => {
+        secondSignal = options?.signal
         return second.promise
       })
       .mockImplementationOnce(() => third.promise)
@@ -195,6 +205,57 @@ describe('SearchPage request state', () => {
     expect(secondSignal?.aborted).toBe(true)
   })
 
+  it('ignores a stale search response when the older request resolves late', async () => {
+    const first = deferred<SearchResponseDto>()
+    const second = deferred<SearchResponseDto>()
+
+    vi.mocked(api.search)
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise)
+
+    renderSearchPage()
+
+    setQuery('first')
+    submitSearch()
+
+    setQuery('second')
+    submitSearch()
+
+    await act(async () => {
+      second.resolve(
+        searchResponse([
+          course({
+            id: 'STAT-100-2026-spring',
+            subject: 'STAT',
+            number: '100',
+            title: 'Statistics',
+          }),
+        ])
+      )
+      await second.promise
+    })
+
+    await screen.findByText(/STAT 100: Statistics/i)
+
+    await act(async () => {
+      first.resolve(
+        searchResponse([
+          course({
+            id: 'CS-225-2026-spring',
+            number: '225',
+            title: 'Data Structures',
+          }),
+        ])
+      )
+      await first.promise
+    })
+
+    expect(screen.getByText(/STAT 100: Statistics/i)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/CS 225: Data Structures/i)
+    ).not.toBeInTheDocument()
+  })
+
   it('submits the primary search through the form without a standalone search button', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(
       searchResponse([
@@ -212,13 +273,10 @@ describe('SearchPage request state', () => {
     submitSearch()
 
     await screen.findByText(/CS 225: Data Structures/i)
-    expect(api.search).toHaveBeenCalledWith(
-      'cs 225',
-      expect.objectContaining({
-        limit: 20,
-        offset: 0,
-      })
-    )
+    expectSearchCalledWithRequest({
+      query: 'cs 225',
+      pagination: { limit: 20, offset: 0 },
+    })
     expect(
       screen.queryByRole('button', { name: /^search$/i })
     ).not.toBeInTheDocument()
@@ -389,15 +447,11 @@ describe('SearchPage request state', () => {
     )
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        'online stats class',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-          sort: { field: 'gpa', direction: 'desc' },
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: 'online stats class',
+        pagination: { limit: 20, offset: 0 },
+        sort: { field: 'gpa', direction: 'desc' },
+      })
     })
     expect(
       screen.getByRole('columnheader', { name: /avg gpa/i })
@@ -496,14 +550,10 @@ describe('SearchPage request state', () => {
     )
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        'algorithms',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: 'algorithms',
+        pagination: { limit: 20, offset: 0 },
+      })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
       'professor fagen algorithms'
@@ -525,7 +575,7 @@ describe('SearchPage request state', () => {
                 id: '0-0-gened-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                filter: { gened_code: 'CS' },
+                filter: { gened: 'CS' },
                 queryPatch: { replaceQuery: 'gened:CS' },
               },
             ],
@@ -546,15 +596,11 @@ describe('SearchPage request state', () => {
     )
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        '',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-          filters: expect.objectContaining({ gened: 'CS' }),
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: '',
+        pagination: { limit: 20, offset: 0 },
+        filters: expect.objectContaining({ gened: 'CS' }),
+      })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
       'CS gened'
@@ -630,15 +676,11 @@ describe('SearchPage request state', () => {
     )
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        'class about movies',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-          filters: undefined,
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: 'class about movies',
+        pagination: { limit: 20, offset: 0 },
+        filters: undefined,
+      })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
       'class about movies no essays'
@@ -651,16 +693,12 @@ describe('SearchPage request state', () => {
     )
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        'class about movies',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-          filters: undefined,
-          sort: { field: 'gpa', direction: 'desc' },
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: 'class about movies',
+        pagination: { limit: 20, offset: 0 },
+        filters: undefined,
+        sort: { field: 'gpa', direction: 'desc' },
+      })
     })
   })
 
@@ -699,7 +737,7 @@ describe('SearchPage request state', () => {
                 id: '0-0-gened-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                filter: { gened_code: 'CS' },
+                filter: { gened: 'CS' },
                 queryPatch: { replaceQuery: 'gened:CS' },
               },
             ],
@@ -724,15 +762,11 @@ describe('SearchPage request state', () => {
         screen.queryByRole('button', { name: /use cultural studies/i })
       ).not.toBeInTheDocument()
     })
-    expect(api.search).toHaveBeenLastCalledWith(
-      '',
-      expect.objectContaining({
-        signal: expect.any(AbortSignal),
-        limit: 20,
-        offset: 0,
-        filters: { gened: 'CS' },
-      })
-    )
+    expectLastSearchCalledWithRequest({
+      query: '',
+      pagination: { limit: 20, offset: 0 },
+      filters: { gened: 'CS' },
+    })
 
     await act(async () => {
       culturalStudiesResponse.resolve({
@@ -742,7 +776,6 @@ describe('SearchPage request state', () => {
             subject: 'ANTH',
             number: '103',
             title: 'Anthropology in a Changing World',
-            gened: 'CS',
           }),
         ]),
         meta: {
@@ -758,7 +791,7 @@ describe('SearchPage request state', () => {
                 source: 'natural_language',
                 removable: true,
                 editable: true,
-                filter: { gened_code: 'CS' },
+                filter: { gened: 'CS' },
                 queryPatch: { removeText: 'CS' },
               },
             ],
@@ -780,16 +813,12 @@ describe('SearchPage request state', () => {
       screen.getByRole('button', { name: /sort by avg gpa, descending/i })
     )
 
-    expect(api.search).toHaveBeenLastCalledWith(
-      '',
-      expect.objectContaining({
-        signal: expect.any(AbortSignal),
-        limit: 20,
-        offset: 0,
-        filters: { gened: 'CS' },
-        sort: { field: 'gpa', direction: 'desc' },
-      })
-    )
+    expectLastSearchCalledWithRequest({
+      query: '',
+      pagination: { limit: 20, offset: 0 },
+      filters: { gened: 'CS' },
+      sort: { field: 'gpa', direction: 'desc' },
+    })
     expect(screen.queryByLabelText('Searching courses')).not.toBeInTheDocument()
     expect(screen.getByText(/ANTH 103/i)).toBeInTheDocument()
     expect(screen.getByText(/updating results/i)).toBeInTheDocument()
@@ -802,7 +831,6 @@ describe('SearchPage request state', () => {
             subject: 'AFST',
             number: '222',
             title: 'Introduction to Modern Africa',
-            gened: 'CS',
             avg_gpa: 3.76,
           }),
         ]),
@@ -820,7 +848,7 @@ describe('SearchPage request state', () => {
                 source: 'natural_language',
                 removable: true,
                 editable: true,
-                filter: { gened_code: 'CS' },
+                filter: { gened: 'CS' },
                 queryPatch: { removeText: 'CS' },
               },
             ],
@@ -834,6 +862,110 @@ describe('SearchPage request state', () => {
 
     await screen.findByText('AFST 222')
     expect(screen.getByText('Introduction to Modern Africa')).toBeInTheDocument()
+  })
+
+  it('returns to the typed query when removing the last accepted ambiguity filter', async () => {
+    vi.mocked(api.search)
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({
+            id: 'CS-100-2026-spring',
+            number: '100',
+            title: 'Freshman Orientation',
+          }),
+        ]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: 'CS', residual: '' },
+          ui: {
+            chips: [
+              {
+                id: 'subject-0',
+                type: 'subject',
+                label: 'Subject CS',
+                value: 'CS',
+                source: 'natural_language',
+                removable: true,
+                editable: true,
+                filter: { subject: 'CS' },
+                queryPatch: { removeText: 'CS' },
+              },
+            ],
+            advanced: { subject: 'CS' },
+            ambiguityActions: [
+              {
+                id: '0-0-gened-CS',
+                term: 'CS',
+                label: 'Cultural Studies',
+                filter: { gened: 'CS' },
+                queryPatch: { replaceQuery: 'gened:CS' },
+              },
+            ],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ...searchResponse([
+          course({
+            id: 'ANTH-103-2026-spring',
+            subject: 'ANTH',
+            number: '103',
+            title: 'Anthropology in a Changing World',
+          }),
+        ]),
+        meta: {
+          ...searchResponse([]).meta,
+          query: { raw: '', residual: '' },
+          ui: {
+            chips: [
+              {
+                id: 'gened-0',
+                type: 'gened',
+                label: 'GenEd CS',
+                value: 'CS',
+                source: 'natural_language',
+                removable: true,
+                editable: true,
+                filter: { gened: 'CS' },
+                queryPatch: { removeText: 'CS' },
+              },
+            ],
+            advanced: { gened: 'CS' },
+            ambiguityActions: [],
+          },
+        },
+      })
+      .mockResolvedValueOnce(
+        searchResponse([
+          course({
+            id: 'CS-100-2026-spring',
+            number: '100',
+            title: 'Freshman Orientation',
+          }),
+        ])
+      )
+
+    renderSearchPage()
+
+    setQuery('CS')
+    submitSearch()
+
+    await screen.findByRole('button', { name: /use cultural studies/i })
+    fireEvent.click(
+      screen.getByRole('button', { name: /use cultural studies/i })
+    )
+    await screen.findByText(/ANTH 103: Anthropology in a Changing World/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /remove gened cs/i }))
+
+    await waitFor(() => {
+      expectLastSearchCalledWithRequest({
+        query: 'CS',
+        pagination: { limit: 20, offset: 0 },
+        filters: undefined,
+      })
+    })
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('CS')
   })
 
   it('switches ambiguity actions by clearing the competing subject or GenEd filter', async () => {
@@ -871,15 +1003,11 @@ describe('SearchPage request state', () => {
     )
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        '',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-          filters: { subject: 'CS', difficulty: 'easy' },
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: '',
+        pagination: { limit: 20, offset: 0 },
+        filters: { subject: 'CS', difficulty: 'easy' },
+      })
     })
   })
 
@@ -924,22 +1052,19 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        'algorithms',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-          filters: expect.objectContaining({
-            subject: 'CS',
-            number: '225',
-            instructor: 'Fagen',
-            credits: 4,
-            level: 400,
-            scope: 'all',
-          }),
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: 'algorithms',
+        pagination: { limit: 20, offset: 0 },
+        filters: expect.objectContaining({
+          subject: 'CS',
+          number: '225',
+          instructor: 'Fagen',
+          credits: 4,
+          level: 400,
+        }),
+        scope: 'all',
+        sort: { field: 'relevance', direction: 'desc' },
+      })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
       'algorithms'
@@ -986,15 +1111,11 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        '',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-          filters: expect.objectContaining({ subject: 'PHIL' }),
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: '',
+        pagination: { limit: 20, offset: 0 },
+        filters: expect.objectContaining({ subject: 'PHIL' }),
+      })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue('')
   })
@@ -1039,15 +1160,11 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
 
     await waitFor(() => {
-      expect(api.search).toHaveBeenLastCalledWith(
-        'algorithms',
-        expect.objectContaining({
-          signal: expect.any(AbortSignal),
-          limit: 20,
-          offset: 0,
-          filters: expect.objectContaining({ subject: 'PHIL' }),
-        })
-      )
+      expectLastSearchCalledWithRequest({
+        query: 'algorithms',
+        pagination: { limit: 20, offset: 0 },
+        filters: expect.objectContaining({ subject: 'PHIL' }),
+      })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
       'algorithms'
@@ -1174,14 +1291,10 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /show more results/i }))
 
     await screen.findByText(/CS 473: Algorithms/i)
-    expect(api.search).toHaveBeenLastCalledWith(
-      'algorithms',
-      expect.objectContaining({
-        signal: expect.any(AbortSignal),
-        limit: 20,
-        offset: 20,
-      })
-    )
+    expectLastSearchCalledWithRequest({
+      query: 'algorithms',
+      pagination: { limit: 20, offset: 20 },
+    })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
       'professor fagen algorithms'
     )
@@ -1234,14 +1347,10 @@ describe('SearchPage request state', () => {
     expect(
       screen.getByText(/CS 100: Freshman Orientation/i)
     ).toBeInTheDocument()
-    expect(api.search).toHaveBeenLastCalledWith(
-      'intro to CS',
-      expect.objectContaining({
-        signal: expect.any(AbortSignal),
-        limit: 20,
-        offset: 20,
-      })
-    )
+    expectLastSearchCalledWithRequest({
+      query: 'intro to CS',
+      pagination: { limit: 20, offset: 20 },
+    })
   })
 
   it('falls back to offset plus limit when a hasMore page omits nextOffset', async () => {
@@ -1276,13 +1385,9 @@ describe('SearchPage request state', () => {
     fireEvent.click(screen.getByRole('button', { name: /show more results/i }))
 
     await screen.findByText(/CS 101: Intro Computing/i)
-    expect(api.search).toHaveBeenLastCalledWith(
-      'intro to CS',
-      expect.objectContaining({
-        signal: expect.any(AbortSignal),
-        limit: 20,
-        offset: 20,
-      })
-    )
+    expectLastSearchCalledWithRequest({
+      query: 'intro to CS',
+      pagination: { limit: 20, offset: 20 },
+    })
   })
 })

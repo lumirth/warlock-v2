@@ -27,7 +27,6 @@ function course(overrides: Partial<CourseDto> = {}): CourseDto {
     title: 'Data Structures',
     description: 'A course',
     credit_hours: 4,
-    gened: null,
     year: 2026,
     term: 'spring',
     primary_instructor: null,

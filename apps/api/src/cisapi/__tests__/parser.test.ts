@@ -145,6 +145,14 @@ describe('parseSubjectCascadeXml', () => {
     expect(cs225?.genEdCategories[0].id).toBe('QR');
   });
 
+  it('does not let gen-ed descriptions overwrite course descriptions', async () => {
+    const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
+    const cs225 = result?.courses.find(c => c.id === '225');
+
+    expect(cs225?.description).toBe('Data abstractions and algorithms.');
+    expect(cs225?.genEdCategories[0].name).toBe('Quantitative Reasoning I');
+  });
+
   it('parses cultural-studies genEd sub-attributes', async () => {
     const result = await parseSubjectCascadeXml(createStream(`
       <ns2:subject xmlns:ns2="http://example.com" id="CLCV" href="http://example.com">
@@ -200,7 +208,7 @@ describe('parseCourseDetailXml', () => {
       <course id="CS 374">
         <subject id="CS">Computer Science</subject>
         <label>Introduction to Algorithms &amp; Models of Computation</label>
-        <description>Algorithms &amp; proofs use &lt;models&gt;.</description>
+        <description>Algorithms &amp; proofs use &lt;models&gt; and decimal &#39;quotes&#39;.</description>
         <creditHours>4 hours.</creditHours>
         <detailedSection id="12345">
           <sectionNumber>AL1</sectionNumber>
@@ -216,9 +224,62 @@ describe('parseCourseDetailXml', () => {
     `);
 
     expect(result?.label).toBe('Introduction to Algorithms & Models of Computation');
-    expect(result?.description).toBe('Algorithms & proofs use <models>.');
+    expect(result?.description).toBe("Algorithms & proofs use <models> and decimal 'quotes'.");
     expect(result?.sections[0].meetings[0].type).toBe('Lecture & Lab');
     expect(result?.sections[0].meetings[0].buildingName).toBe('Electrical & Computer Eng Bldg');
+  });
+
+  it('extracts declared course and section metadata in course detail XML', () => {
+    const result = parseCourseDetailXml(`
+      <course id="CS 225">
+        <subject id="CS">Computer Science</subject>
+        <label>Data Structures</label>
+        <description>Data abstractions and algorithms.</description>
+        <creditHours>4 hours.</creditHours>
+        <courseSectionInformation>Prerequisite: CS 173.</courseSectionInformation>
+        <classScheduleInformation>Students must attend lecture.</classScheduleInformation>
+        <sectionDegreeAttributes>Quantitative Reasoning I course.</sectionDegreeAttributes>
+        <sectionDateRange>01/20/2026 - 05/06/2026</sectionDateRange>
+        <sectionRegistrationNotes>Majors only.</sectionRegistrationNotes>
+        <sectionApprovalCode>DP</sectionApprovalCode>
+        <detailedSection id="12345">
+          <sectionNumber>AL1</sectionNumber>
+          <sectionTitle>Honors</sectionTitle>
+          <statusCode>A</statusCode>
+          <sectionStatusCode>A</sectionStatusCode>
+          <enrollmentStatus>Open</enrollmentStatus>
+          <sectionText>Lecture section text.</sectionText>
+          <sectionNotes>Bring laptop.</sectionNotes>
+          <sectionCappArea>CS Area</sectionCappArea>
+          <sectionDateRange>03/01/2026 - 05/01/2026</sectionDateRange>
+          <partOfTerm>B</partOfTerm>
+          <startDate>2026-03-01Z</startDate>
+          <endDate>2026-05-01Z</endDate>
+          <creditHours>4</creditHours>
+          <meeting>
+            <type>Lecture</type>
+          </meeting>
+        </detailedSection>
+      </course>
+    `);
+
+    expect(result).toMatchObject({
+      sectionDegreeAttributes: 'Quantitative Reasoning I course.',
+      sectionDateRange: '01/20/2026 - 05/06/2026',
+      sectionRegistrationNotes: 'Majors only.',
+      sectionApprovalCode: 'DP',
+    });
+    expect(result?.sections[0]).toMatchObject({
+      sectionText: 'Lecture section text.',
+      sectionNotes: 'Bring laptop.',
+      sectionCappArea: 'CS Area',
+      sectionDateRange: '03/01/2026 - 05/01/2026',
+      partOfTerm: 'B',
+    });
+    expect(result?.sections[0].meetings[0]).toMatchObject({
+      type: 'Lecture',
+      typeCode: '',
+    });
   });
 });
 

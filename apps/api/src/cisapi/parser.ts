@@ -15,7 +15,7 @@ import { Parser } from 'htmlparser2';
 function decodeXmlText(value: string | undefined): string {
   if (!value) return '';
 
-  return value.replace(/&(#x[0-9a-f]+|#\\d+|amp|lt|gt|quot|apos);/gi, (entity, code: string) => {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (entity, code: string) => {
     const normalizedCode = code.toLowerCase();
     if (normalizedCode === 'amp') return '&';
     if (normalizedCode === 'lt') return '<';
@@ -30,6 +30,12 @@ function decodeXmlText(value: string | undefined): string {
     }
     return entity;
   });
+}
+
+function tagText(xml: string, tag: string): string {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`<(?:[\\w]+:)?${escaped}[^>]*>([\\s\\S]*?)<\\/(?:[\\w]+:)?${escaped}>`).exec(xml);
+  return decodeXmlText(match?.[1]).trim();
 }
 
 export function parseSubjectsXml(xml: string): CISAPISubject[] {
@@ -70,11 +76,6 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
   // Handle optional namespaces (e.g. ns2:course) and attributes in any order
   const idMatch = xml.match(/<(?:[\w]+:)?course[^>]*\s+id="([^"]+)"/);
   const subjectMatch = xml.match(/<(?:[\w]+:)?subject[^>]*\s+id="([^"]+)"/);
-  const labelMatch = xml.match(/<(?:[\w]+:)?label>([^<]+)<\/(?:[\w]+:)?label>/);
-  const descMatch = xml.match(/<(?:[\w]+:)?description>([^<]*)<\/(?:[\w]+:)?description>/s);
-  const creditMatch = xml.match(/<(?:[\w]+:)?creditHours>([^<]*)<\/(?:[\w]+:)?creditHours>/);
-  const courseInfoMatch = xml.match(/<(?:[\w]+:)?courseSectionInformation>([^<]*)<\/(?:[\w]+:)?courseSectionInformation>/s);
-  const classScheduleInfoMatch = xml.match(/<(?:[\w]+:)?classScheduleInformation>([^<]*)<\/(?:[\w]+:)?classScheduleInformation>/s);
 
   if (!idMatch || !subjectMatch) return null;
 
@@ -100,15 +101,15 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
   return {
     id: idMatch[1],
     subjectId: subjectMatch[1],
-    label: decodeXmlText(labelMatch?.[1]),
-    description: decodeXmlText(descMatch?.[1]).trim(),
-    creditHours: decodeXmlText(creditMatch?.[1]),
-    courseSectionInformation: decodeXmlText(courseInfoMatch?.[1]).trim(),
-    classScheduleInformation: decodeXmlText(classScheduleInfoMatch?.[1]).trim(),
-    sectionDegreeAttributes: '', // Not implemented in regex parser yet
-    sectionDateRange: '',        // Not implemented in regex parser yet
-    sectionRegistrationNotes: '', // Not implemented in regex parser yet
-    sectionApprovalCode: '',      // Not implemented in regex parser yet
+    label: tagText(xml, 'label'),
+    description: tagText(xml, 'description'),
+    creditHours: tagText(xml, 'creditHours'),
+    courseSectionInformation: tagText(xml, 'courseSectionInformation'),
+    classScheduleInformation: tagText(xml, 'classScheduleInformation'),
+    sectionDegreeAttributes: tagText(xml, 'sectionDegreeAttributes'),
+    sectionDateRange: tagText(xml, 'sectionDateRange'),
+    sectionRegistrationNotes: tagText(xml, 'sectionRegistrationNotes'),
+    sectionApprovalCode: tagText(xml, 'sectionApprovalCode'),
     genEdCategories,
     sections
   };
@@ -126,33 +127,23 @@ function parseSectionsXml(xml: string): CISAPISection[] {
     const block = sectionMatch[0];
     const crn = sectionMatch[1];
 
-    const sectionNumberMatch = block.match(/<(?:[\w]+:)?sectionNumber>([^<]*)<\/(?:[\w]+:)?sectionNumber>/);
-    const statusCodeMatch = block.match(/<(?:[\w]+:)?statusCode>([^<]*)<\/(?:[\w]+:)?statusCode>/);
-    const enrollmentStatusMatch = block.match(/<(?:[\w]+:)?enrollmentStatus>([^<]*)<\/(?:[\w]+:)?enrollmentStatus>/);
-    const startDateMatch = block.match(/<(?:[\w]+:)?startDate>([^<]*)<\/(?:[\w]+:)?startDate>/);
-    const endDateMatch = block.match(/<(?:[\w]+:)?endDate>([^<]*)<\/(?:[\w]+:)?endDate>/);
-    const partOfTermMatch = block.match(/<(?:[\w]+:)?partOfTerm>([^<]*)<\/(?:[\w]+:)?partOfTerm>/);
-    const sectionStatusCodeMatch = block.match(/<(?:[\w]+:)?sectionStatusCode>([^<]*)<\/(?:[\w]+:)?sectionStatusCode>/);
-    const sectionTitleMatch = block.match(/<(?:[\w]+:)?sectionTitle>([^<]*)<\/(?:[\w]+:)?sectionTitle>/);
-    const creditHoursMatch = block.match(/<(?:[\w]+:)?creditHours>([^<]*)<\/(?:[\w]+:)?creditHours>/);
-
     const meetings = parseMeetingsXml(block);
 
     sections.push({
       crn,
-      sectionNumber: decodeXmlText(sectionNumberMatch?.[1]),
-      sectionTitle: decodeXmlText(sectionTitleMatch?.[1]),
-      statusCode: decodeXmlText(statusCodeMatch?.[1]),
-      sectionStatusCode: decodeXmlText(sectionStatusCodeMatch?.[1]),
-      enrollmentStatus: decodeXmlText(enrollmentStatusMatch?.[1]) || 'Unknown',
-      sectionText: '', // Not implemented in regex parser
-      sectionNotes: '', // Not implemented in regex parser
-      sectionCappArea: '', // Not implemented in regex parser
-      sectionDateRange: '', // Not implemented in regex parser
-      startDate: decodeXmlText(startDateMatch?.[1]),
-      endDate: decodeXmlText(endDateMatch?.[1]),
-      partOfTerm: decodeXmlText(partOfTermMatch?.[1]),
-      creditHours: decodeXmlText(creditHoursMatch?.[1]),
+      sectionNumber: tagText(block, 'sectionNumber'),
+      sectionTitle: tagText(block, 'sectionTitle'),
+      statusCode: tagText(block, 'statusCode'),
+      sectionStatusCode: tagText(block, 'sectionStatusCode'),
+      enrollmentStatus: tagText(block, 'enrollmentStatus') || 'Unknown',
+      sectionText: tagText(block, 'sectionText'),
+      sectionNotes: tagText(block, 'sectionNotes'),
+      sectionCappArea: tagText(block, 'sectionCappArea'),
+      sectionDateRange: tagText(block, 'sectionDateRange'),
+      startDate: tagText(block, 'startDate'),
+      endDate: tagText(block, 'endDate'),
+      partOfTerm: tagText(block, 'partOfTerm'),
+      creditHours: tagText(block, 'creditHours'),
       meetings
     });
   }
@@ -170,25 +161,20 @@ function parseMeetingsXml(sectionXml: string): CISAPIMeeting[] {
   while ((meetingMatch = meetingBlockRegex.exec(sectionXml)) !== null) {
     const block = meetingMatch[0];
 
-    const typeMatch = block.match(/<(?:[\w]+:)?type[^>]*\s+code="([^"]*)"[^>]*>([^<]*)<\/(?:[\w]+:)?type>/);
-    const startMatch = block.match(/<(?:[\w]+:)?start>([^<]*)<\/(?:[\w]+:)?start>/);
-    const endMatch = block.match(/<(?:[\w]+:)?end>([^<]*)<\/(?:[\w]+:)?end>/);
-    const daysMatch = block.match(/<(?:[\w]+:)?daysOfTheWeek>([^<]*)<\/(?:[\w]+:)?daysOfTheWeek>/);
-    const roomMatch = block.match(/<(?:[\w]+:)?roomNumber>([^<]*)<\/(?:[\w]+:)?roomNumber>/);
-    const buildingMatch = block.match(/<(?:[\w]+:)?buildingName>([^<]*)<\/(?:[\w]+:)?buildingName>/);
-    const dateRangeMatch = block.match(/<(?:[\w]+:)?meetingDateRange>([^<]*)<\/(?:[\w]+:)?meetingDateRange>/);
+    const typeMatch = block.match(/<(?:[\w]+:)?type([^>]*)>([\s\S]*?)<\/(?:[\w]+:)?type>/);
+    const typeCodeMatch = typeMatch?.[1].match(/\bcode="([^"]*)"/);
 
     const instructors = parseInstructorsXml(block);
 
     meetings.push({
       type: decodeXmlText(typeMatch?.[2]),
-      typeCode: decodeXmlText(typeMatch?.[1]),
-      start: convertTo24Hour(decodeXmlText(startMatch?.[1])),
-      end: convertTo24Hour(decodeXmlText(endMatch?.[1])),
-      daysOfTheWeek: decodeXmlText(daysMatch?.[1]),
-      roomNumber: decodeXmlText(roomMatch?.[1]),
-      buildingName: decodeXmlText(buildingMatch?.[1]),
-      meetingDateRange: decodeXmlText(dateRangeMatch?.[1]),
+      typeCode: decodeXmlText(typeCodeMatch?.[1]),
+      start: convertTo24Hour(tagText(block, 'start')),
+      end: convertTo24Hour(tagText(block, 'end')),
+      daysOfTheWeek: tagText(block, 'daysOfTheWeek'),
+      roomNumber: tagText(block, 'roomNumber'),
+      buildingName: tagText(block, 'buildingName'),
+      meetingDateRange: tagText(block, 'meetingDateRange'),
       instructors
     });
   }
@@ -465,7 +451,7 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
       }
 
       // Course-level fields
-      if (currentCourse && !currentSection) {
+      if (currentCourse && !currentSection && !currentGenEd) {
         if (name === 'label') currentCourse.title = text;
         if (name === 'description') currentCourse.description = text;
         if (name === 'creditHours') currentCourse.creditHours = text;

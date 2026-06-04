@@ -1,23 +1,19 @@
 import type {
-  AdvancedSearchStateDto,
   CourseDto,
   FeedbackResponseDto,
   FeedbackSubmitDto,
-  SearchSort,
+  SearchRequestDto,
   SearchResponseDto,
 } from '@uiuc-course-search/query-types'
+import { searchRequestToQueryEntries } from '@uiuc-course-search/query-types'
 
 // Allow base URL configuration via env var
 const DEFAULT_API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.PROD ? 'https://uiuc-course-search.lumirth.workers.dev' : '')
 
-export type SearchRequestOptions = {
+export type ApiRequestOptions = {
   signal?: AbortSignal
-  limit?: number
-  offset?: number
-  filters?: AdvancedSearchStateDto
-  sort?: SearchSort
 }
 
 export class ApiClient {
@@ -56,21 +52,15 @@ export class ApiClient {
   }
 
   async search(
-    query: string,
-    options?: SearchRequestOptions | AbortSignal
+    request: SearchRequestDto,
+    options: ApiRequestOptions = {}
   ): Promise<SearchResponseDto> {
-    const requestOptions: SearchRequestOptions =
-      options instanceof AbortSignal ? { signal: options } : (options ?? {})
-    const params = new URLSearchParams({ q: query })
-    if (requestOptions.limit !== undefined)
-      params.set('limit', requestOptions.limit.toString())
-    if (requestOptions.offset !== undefined)
-      params.set('offset', requestOptions.offset.toString())
-    appendSearchFilters(params, requestOptions.filters)
-    appendSearchSort(params, requestOptions.sort)
+    const params = new URLSearchParams(
+      searchRequestToQueryEntries(request).map(([key, value]) => [key, value])
+    )
 
     return this.fetch<SearchResponseDto>(`api/search?${params.toString()}`, {
-      signal: requestOptions.signal,
+      signal: options.signal,
     })
   }
 
@@ -103,37 +93,6 @@ export class ApiClient {
       signal,
     })
   }
-}
-
-function appendSearchFilters(
-  params: URLSearchParams,
-  filters: AdvancedSearchStateDto | undefined
-) {
-  if (!filters) return
-
-  if (filters.subject) params.set('subject', filters.subject)
-  if (filters.number) params.set('number', filters.number)
-  if (filters.instructor) params.set('instructor', filters.instructor)
-  if (filters.term) params.set('term', filters.term)
-  if (filters.year !== undefined) params.set('year', filters.year.toString())
-  if (filters.gened) params.set('gened', filters.gened)
-  if (filters.credits !== undefined)
-    params.set('credits', filters.credits.toString())
-  if (filters.days) params.set('days', filters.days)
-  if (filters.time) params.set('time', filters.time)
-  if (filters.partOfTerm) params.set('partOfTerm', filters.partOfTerm)
-  if (filters.online !== undefined) params.set('online', String(filters.online))
-  if (filters.status) params.set('status', filters.status)
-  if (filters.difficulty) params.set('difficulty', filters.difficulty)
-  if (filters.level !== undefined) params.set('level', filters.level.toString())
-  if (filters.scope) params.set('scope', filters.scope)
-}
-
-function appendSearchSort(params: URLSearchParams, sort: SearchSort | undefined) {
-  if (!sort || sort.field === 'relevance') return
-
-  params.set('sort', sort.field)
-  params.set('direction', sort.direction)
 }
 
 export const api = new ApiClient()

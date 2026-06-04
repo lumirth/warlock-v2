@@ -1,6 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { errorFields, logger } from '../observability/logger.js';
-import { upsertTermState, makeTermId, type TermStateStatus } from '../db/index.js';
+import { makeTermId } from '../db/ids.js';
+import { upsertTermState } from '../db/term-state-repository.js';
+import type { TermStateStatus } from '../db/types.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
 

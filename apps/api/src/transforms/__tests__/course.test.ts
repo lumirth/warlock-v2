@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { formatInstructorName, fromSubjectCascade } from '../course.js';
+import { formatInstructorName, fromCourseDetail, fromSubjectCascade } from '../course.js';
 import type { ParsedSubjectCascade } from '../../cisapi/parser.js';
+import type { CISAPICourseDetail } from '../../cisapi/types.js';
 
 describe('formatInstructorName', () => {
   it('formats full name as "LastName, F"', () => {
@@ -135,8 +136,8 @@ describe('fromSubjectCascade', () => {
     expect(result.subject.contact_name).toBe('Nancy Amato');
 
     // Verify Courses
-    expect(result.coursesWithSections).toHaveLength(1);
-    const cs225 = result.coursesWithSections[0];
+    expect(result.courses).toHaveLength(1);
+    const cs225 = result.courses[0];
     expect(cs225.course.id).toBe('CS-225-2026-spring');
     expect(cs225.course.title).toBe('Data Structures');
 
@@ -152,7 +153,7 @@ describe('fromSubjectCascade', () => {
 
   it('sets primary_instructor from first lecture section', () => {
     const result = fromSubjectCascade(sampleParsed, 2026, 'spring');
-    expect(result.coursesWithSections[0].course.primary_instructor).toBe('Fagen, W');
+    expect(result.courses[0].course.primary_instructor).toBe('Fagen, W');
   });
 
   it('keeps gen-ed categories even when the source has no sub-attributes', () => {
@@ -174,7 +175,7 @@ describe('fromSubjectCascade', () => {
 
     const result = fromSubjectCascade(parsed, 2026, 'spring');
 
-    expect(result.coursesWithSections[0].genEdCategories).toEqual([
+    expect(result.courses[0].genEdCategories).toEqual([
       {
         categoryId: 'HUM',
         categoryName: 'Humanities - Lit Arts',
@@ -206,7 +207,7 @@ describe('fromSubjectCascade', () => {
 
     const result = fromSubjectCascade(parsed, 2026, 'spring');
 
-    expect(result.coursesWithSections[0].genEdCategories).toEqual([
+    expect(result.courses[0].genEdCategories).toEqual([
       {
         categoryId: 'CS',
         categoryName: 'Cultural Studies',
@@ -247,8 +248,8 @@ describe('fromSubjectCascade', () => {
     };
 
     const result = fromSubjectCascade(multiInstructorParsed, 2026, 'spring');
-    const course = result.coursesWithSections[0].course;
-    const section = result.coursesWithSections[0].sections[0].section;
+    const course = result.courses[0].course;
+    const section = result.courses[0].sections[0].section;
 
     expect(course.primary_instructor).toBe('Fagen, W; Challen, G');
     expect(section.instructor).toBe('Fagen, W; Challen, G');
@@ -256,7 +257,7 @@ describe('fromSubjectCascade', () => {
 
   it('transforms all sections with new fields', () => {
     const result = fromSubjectCascade(sampleParsed, 2026, 'spring');
-    const sectionsWithDetails = result.coursesWithSections[0].sections;
+    const sectionsWithDetails = result.courses[0].sections;
 
     expect(sectionsWithDetails).toHaveLength(2);
     expect(sectionsWithDetails[0].section.id).toBe('2026-spring-12345');
@@ -272,5 +273,86 @@ describe('fromSubjectCascade', () => {
     expect(sectionsWithDetails[0].meetings[0].type_code).toBe('LEC');
     expect(sectionsWithDetails[0].meetings[0].instructors).toHaveLength(1);
     expect(sectionsWithDetails[0].meetings[0].instructors[0].lastName).toBe('Fagen');
+  });
+});
+
+describe('fromCourseDetail', () => {
+  it('uses the canonical snapshot mapping for live course detail data', () => {
+    const parsed: CISAPICourseDetail = {
+      id: 'CS 225',
+      subjectId: 'CS',
+      label: 'Data Structures',
+      description: 'Data abstractions and algorithms.',
+      creditHours: '4 hours.',
+      courseSectionInformation: 'Prerequisite: CS 173.',
+      classScheduleInformation: 'Register for one lecture and one discussion.',
+      sectionDegreeAttributes: 'Quantitative Reasoning II.',
+      sectionDateRange: 'Jan 20 - May 06',
+      sectionRegistrationNotes: 'Restricted to majors.',
+      sectionApprovalCode: 'Department Approval Required',
+      genEdCategories: [{
+        id: 'QR',
+        description: 'Quantitative Reasoning',
+        attributes: [{ code: '1QR2', description: 'Quantitative Reasoning II' }],
+      }],
+      sections: [{
+        crn: '12345',
+        sectionNumber: 'AL1',
+        sectionTitle: 'Lecture 1',
+        statusCode: 'A',
+        sectionStatusCode: 'A',
+        enrollmentStatus: 'Open',
+        sectionText: 'Lecture notes.',
+        sectionNotes: 'Majors first.',
+        sectionCappArea: 'CS',
+        sectionDateRange: 'Jan 20 - May 06',
+        partOfTerm: '1',
+        startDate: '2026-01-20',
+        endDate: '2026-05-06',
+        creditHours: '4',
+        meetings: [{
+          type: 'Lecture',
+          typeCode: 'LEC',
+          start: '09:00',
+          end: '09:50',
+          daysOfTheWeek: 'MWF',
+          roomNumber: '1404',
+          buildingName: 'Siebel Center',
+          meetingDateRange: 'Jan 20 - May 06',
+          instructors: [{ firstName: 'Ada', lastName: 'Lovelace' }],
+        }],
+      }],
+    };
+
+    const snapshot = fromCourseDetail(parsed, 'CS', '225', 2026, 'spring', {
+      syncTimestamp: 1234567890,
+    });
+
+    expect(snapshot.course).toMatchObject({
+      id: 'CS-225-2026-spring',
+      primary_instructor: 'Lovelace, A',
+      course_info: 'Prerequisite: CS 173.',
+      registration_notes: 'Restricted to majors.',
+      approval_code: 'Department Approval Required',
+      last_synced: 1234567890,
+    });
+    expect(snapshot.genEdCategories).toEqual([{
+      categoryId: 'QR',
+      categoryName: 'Quantitative Reasoning',
+      attributeCode: '1QR2',
+      attributeName: 'Quantitative Reasoning II',
+    }]);
+    expect(snapshot.sections[0].section).toMatchObject({
+      id: '2026-spring-12345',
+      section_title: 'Lecture 1',
+      part_of_term: '1',
+      instructor: 'Lovelace, A',
+    });
+    expect(snapshot.sections[0].meetings[0]).toMatchObject({
+      type_code: 'LEC',
+      type_name: 'Lecture',
+      start_time: '09:00',
+      instructors: [{ firstName: 'Ada', lastName: 'Lovelace' }],
+    });
   });
 });

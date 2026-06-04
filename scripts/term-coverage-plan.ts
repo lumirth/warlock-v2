@@ -218,6 +218,30 @@ function backfillCommand(row: TermCoverageRow): string {
   ].join(' ');
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function freshnessAuditCommand(
+  statusSource: string | null,
+  retentionSource: string | null,
+  expectedHistoricalTerms: number
+): string {
+  const input = statusSource ?? 'artifacts/sync-status.json';
+  const parts = [
+    'npm run data:freshness:audit --',
+    `--input ${shellQuote(input)}`,
+  ];
+
+  if (retentionSource) {
+    parts.push(`--retention-input ${shellQuote(retentionSource)}`);
+  } else {
+    parts.push(`--min-historical-terms ${expectedHistoricalTerms}`);
+  }
+
+  return parts.join(' ');
+}
+
 function buildRow(
   term: AvailableTerm,
   stored: JsonRecord | undefined,
@@ -444,9 +468,11 @@ export async function buildTermCoverageReport(
     terms,
     warnings: discovered.warnings,
     backfill_commands: needingBackfill.map(backfillCommand),
-    freshness_audit_command: retentionResult.source
-      ? `npm run data:freshness:audit -- --input artifacts/sync-status.json --retention-input ${retentionResult.source}`
-      : `npm run data:freshness:audit -- --input artifacts/sync-status.json --min-historical-terms ${expectedHistoricalTerms}`,
+    freshness_audit_command: freshnessAuditCommand(
+      statusResult.source,
+      retentionResult.source,
+      expectedHistoricalTerms
+    ),
   };
 }
 

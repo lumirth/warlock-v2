@@ -3,7 +3,9 @@ import type { D1Database, VectorizeIndex, Ai, Fetcher, KVNamespace } from '@clou
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { syncTerm, syncSubjects } from '../services/parallel-sync.js';
 import { validateSyncResult } from '../services/validation.js';
-import { getTermsByStatus, getTermState, upsertTermState, makeTermId, TERM_STATUSES, type SyncState, type TermState, type TermStateStatus } from '../db/index.js';
+import { makeTermId } from '../db/ids.js';
+import { getTermsByStatus, getTermState, upsertTermState } from '../db/term-state-repository.js';
+import { TERM_STATUSES, type SyncState, type TermState, type TermStateStatus } from '../db/types.js';
 import { resumeGpaSync, resetGpaSync } from '../services/gpa-sync.js';
 import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from '../services/enrichment.js';
 import { coordinateRmpSync, processRmpBatch, RmpTeacherNode } from '../services/rmp-sync.js';
@@ -270,6 +272,24 @@ syncRoutes.post('/internal/sync-batch', async (c) => {
     if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400);
     }
+    if (subjects.length > MAX_SYNC_SUBJECTS_PER_REQUEST) {
+      return c.json({ error: `subjects must contain at most ${MAX_SYNC_SUBJECTS_PER_REQUEST} entries` }, 400);
+    }
+
+    const parsedYear = typeof year === 'number' && Number.isInteger(year) && year >= 2004 && year <= new Date().getFullYear() + 5
+      ? year
+      : null;
+    if (parsedYear === null) {
+      return c.json({ error: 'year must be an integer between 2004 and five years from now' }, 400);
+    }
+
+    const parsedTerm = typeof term === 'string' ? parseEnumParam(term.toLowerCase(), 'term', TERMS) : { ok: false as const, error: 'term must be one of: winter, spring, summer, fall' };
+    if (!parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
+
+    const normalizedSubjects = subjects.map(subject => typeof subject === 'string' ? subject.trim().toUpperCase() : '');
+    if (normalizedSubjects.some(subject => !/^[A-Z]{2,4}$/.test(subject))) {
+      return c.json({ error: 'subjects must be 2-4 letter subject codes' }, 400);
+    }
 
     let requestedStatus: TermStateStatus | undefined;
     if (status !== undefined) {
@@ -280,7 +300,7 @@ syncRoutes.post('/internal/sync-batch', async (c) => {
 
     const parsedTotalSubjects = totalSubjects === undefined
       ? null
-      : Number.isInteger(totalSubjects) && totalSubjects >= subjects.length
+      : Number.isInteger(totalSubjects) && totalSubjects >= normalizedSubjects.length
         ? totalSubjects
         : undefined;
     if (parsedTotalSubjects === undefined) {
@@ -291,36 +311,36 @@ syncRoutes.post('/internal/sync-batch', async (c) => {
       cisapiBase: c.env.CISAPI_BASE,
       concurrency: parseInt(c.env.SYNC_CONCURRENCY) || 25,
       offset: 0,
-      limit: subjects.length,
+      limit: normalizedSubjects.length,
     };
 
-    logger.info('internal.syncBatch.start', { runId, year, term, subjectCount: subjects.length });
+    logger.info('internal.syncBatch.start', { runId, year: parsedYear, term: parsedTerm.value, subjectCount: normalizedSubjects.length });
 
     const result = await syncSubjects(
       c.env.DB,
       config,
-      year,
-      term,
-      subjects,
+      parsedYear,
+      parsedTerm.value,
+      normalizedSubjects,
       syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.VECTORIZE : undefined,
       syncEmbeddingsEnabled(c.env.SYNC_EMBEDDINGS) ? c.env.AI : undefined
     );
 
-    const termId = makeTermId(year, term);
+    const termId = makeTermId(parsedYear, parsedTerm.value);
     const existingTerm = await getTermState(c.env.DB, termId);
     const aggregateCounts = await readTermAggregateCounts(
       c.env.DB,
       termId,
-      year,
-      term,
-      parsedTotalSubjects ?? existingTerm?.subjects_count ?? result.pagination?.total ?? subjects.length
+      parsedYear,
+      parsedTerm.value,
+      parsedTotalSubjects ?? existingTerm?.subjects_count ?? result.pagination?.total ?? normalizedSubjects.length
     );
     const now = Math.floor(Date.now() / 1000);
 
     await upsertTermState(c.env.DB, {
       term_id: termId,
-      year,
-      term,
+      year: parsedYear,
+      term: parsedTerm.value,
       status: resolveManualSyncTermStatus(existingTerm, requestedStatus),
       last_checked: now,
       last_synced: refreshedSubjectCount(result) > 0 ? now : existingTerm?.last_synced ?? null,

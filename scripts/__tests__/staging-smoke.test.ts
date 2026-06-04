@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { formatReport, runStagingSmoke } from '../staging-smoke.js';
+import { formatReport, runStagingSmoke, STAGING_SMOKE_CHECK_NAMES } from '../staging-smoke.js';
 
 type MockOptions = {
   syncStatusBody?: unknown;
@@ -98,18 +98,7 @@ describe('staging smoke', () => {
     });
 
     expect(results.every(result => result.ok)).toBe(true);
-    expect(results.map(result => result.name)).toEqual([
-      'health',
-      'search public route',
-      'professor search route',
-      'course public route',
-      'feedback public route',
-      'admin rejects missing token',
-      'admin accepts staging token',
-      'admin sync status accepts staging token',
-      'internal rejects missing token',
-      'internal accepts staging token',
-    ]);
+    expect(results.map(result => result.name)).toEqual([...STAGING_SMOKE_CHECK_NAMES]);
     expect(fetcher).toHaveBeenCalledTimes(10);
     expect(formatReport(results)).toContain('Passing checks: 10');
   });

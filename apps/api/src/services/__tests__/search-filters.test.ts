@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
-import { buildFilterClauses, requirementLaneSearch, TIME_RANGES, DIFFICULTY_THRESHOLDS } from '../search.js';
-import type { SearchFilters, SearchPlan } from '@uiuc-course-search/query-types';
+import { requirementFilter, WORKLOAD_FILTER_THRESHOLDS } from '@uiuc-course-search/query-types';
+import { buildFilterClauses, requirementLaneSearch, TIME_RANGES } from '../search.js';
+import type { SearchFilters, SearchPlan } from '@uiuc-course-search/query-types/search-planner';
 
 describe('buildFilterClauses', () => {
   describe('days filter', () => {
@@ -104,7 +105,7 @@ describe('buildFilterClauses', () => {
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
       expect(result.where.some(w => w.includes('c.difficulty_score <= ?'))).toBe(true);
-      expect(result.params).toContain(DIFFICULTY_THRESHOLDS.easy.max_difficulty);
+      expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.easy.max_workload);
     });
 
     it('generates workload-only SQL for difficulty=hard', () => {
@@ -112,13 +113,13 @@ describe('buildFilterClauses', () => {
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
       expect(result.where.some(w => w.includes('c.difficulty_score >= ?'))).toBe(true);
-      expect(result.params).toContain(DIFFICULTY_THRESHOLDS.hard.min_difficulty);
+      expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.hard.min_workload);
     });
   });
 
-  describe('gened_any filter', () => {
-    it('generates SQL for gened_any', () => {
-      const filters: SearchFilters = { gened_any: ['HUM', 'US'] };
+  describe('requirement filter', () => {
+    it('generates SQL for any requirement codes', () => {
+      const filters: SearchFilters = { requirement: requirementFilter('any', ['HUM', 'US']) };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('cg.category_id IN') && w.includes('SUBSTR(cg.attribute_code, 2)'))).toBe(true);
       expect(result.params.filter(param => param === 'HUM')).toHaveLength(2);
@@ -126,11 +127,12 @@ describe('buildFilterClauses', () => {
     });
 
     it('normalizes source-prefixed gen-ed attribute codes before matching', () => {
-      const filters: SearchFilters = { gened_code: '1WCC', gened_all: ['1QR1', 'US'] };
+      const filters: SearchFilters = { requirement: requirementFilter('all', ['1WCC', '1QR1', 'US']) };
       const result = buildFilterClauses(filters);
-      expect(result.where.join('\n')).toContain('SUBSTR(cg.attribute_code, 2)');
+      expect(result.where.join('\n')).toContain('SUBSTR(cg_all_0.attribute_code, 2)');
       expect(result.where.join('\n')).toContain('cg_all_0');
       expect(result.where.join('\n')).toContain('cg_all_1');
+      expect(result.where.join('\n')).toContain('cg_all_2');
       expect(result.params.filter(param => param === 'WCC')).toHaveLength(2);
       expect(result.params.filter(param => param === 'QR1')).toHaveLength(2);
       expect(result.params.filter(param => param === 'US')).toHaveLength(2);
@@ -231,16 +233,16 @@ describe('requirementLaneSearch', () => {
         expandedTerms: [],
         assumptions: [],
         warnings: [],
-        retrievalLanes: ['requirement'],
+        interpretedLanes: ['requirement'],
         relaxationPlan: [],
         needsStudentProfile: false,
         confidence: 0.74,
       },
     };
 
-    await requirementLaneSearch(db, plan);
+    const rows = await requirementLaneSearch(db, plan);
 
-    expect(capturedSql).toContain('JOIN course_gened cg_requirement');
-    expect(capturedSql).toContain('c.subject = ?');
+    expect(rows).toEqual([]);
+    expect(capturedSql).toBe('');
   });
 });

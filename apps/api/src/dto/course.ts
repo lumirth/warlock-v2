@@ -1,11 +1,10 @@
-import type { Course, Meeting, Section } from '../db/index.js';
+import type { Course, Meeting, Section } from '../db/types.js';
 import type {
   CourseSectionMeetingDto,
   CourseExplorerUrlInput,
   CourseDto,
   CourseGenedDto,
   CourseSectionDto,
-  Hint,
   InstructorLinkDto,
   MatchEvidence,
   MatchEvidenceKind,
@@ -13,17 +12,22 @@ import type {
   MatchEvidenceWeight,
   ResultExplanation,
   ResultWarning,
-  SearchPlan,
   SectionMatchDto,
 } from '@uiuc-course-search/query-types';
+import type {
+  Hint,
+  SearchPlan,
+} from '@uiuc-course-search/query-types/search-planner';
 import {
   buildCourseExplorerCourseUrl,
   buildCourseExplorerSectionUrl,
   buildRmpProfessorUrl,
   buildRmpSearchUrl,
+  effectiveRequirementFilter,
 } from '@uiuc-course-search/query-types';
 import type { SearchResult } from '../services/search.js';
-import { isGenericAnyGenedFilter } from '../services/gened-codes.js';
+import { canonicalGenedCode, isGenericAnyGenedFilter } from '../services/gened-codes.js';
+import { formatInstructorName, type CourseSnapshot } from '../transforms/course.js';
 
 type CourseSource = Pick<
   Course,
@@ -94,7 +98,8 @@ export type CourseDtoOptions = {
   sectionMatches?: SectionMatchDto[];
 };
 
-type SectionMeetingWithStats = Meeting & {
+type SectionMeetingWithStats = Omit<Meeting, 'id'> & {
+  id?: Meeting['id'];
   instructor_names?: string | null;
   instructor_stats?: InstructorLinkDto[] | null;
 };
@@ -211,7 +216,6 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     title: course.title,
     description: course.description ?? null,
     credit_hours: course.credit_hours ?? null,
-    gened: course.gened ?? null,
     year: course.year,
     term: course.term,
     primary_instructor: course.primary_instructor ?? null,
@@ -246,6 +250,72 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     warnings: options.warnings,
     section_matches: options.sectionMatches,
   };
+}
+
+export function courseSnapshotToCourseDto(
+  snapshot: CourseSnapshot,
+  options: CourseDtoOptions = {}
+): CourseDto {
+  const {
+    sections: providedSections,
+    geneds: providedGeneds,
+    instructorLinks = {},
+    ...courseOptions
+  } = options;
+
+  return toCourseDto(snapshot.course, {
+    ...courseOptions,
+    instructorLinks,
+    geneds: providedGeneds ?? snapshotGenedsToDto(snapshot),
+    sections: providedSections ?? snapshotSectionsToDto(snapshot, instructorLinks),
+  });
+}
+
+function snapshotGenedsToDto(snapshot: CourseSnapshot): CourseGenedDto[] {
+  return snapshot.genEdCategories.map(gened => ({
+    categoryId: gened.categoryId,
+    categoryName: gened.categoryName,
+    attributeCode: canonicalGenedCode(gened.attributeCode),
+    attributeName: gened.attributeName,
+  }));
+}
+
+function snapshotSectionsToDto(
+  snapshot: CourseSnapshot,
+  linksMap: Record<string, InstructorLinkDto>
+): CourseSectionDto[] {
+  return snapshot.sections.map(({ section, meetings }) => {
+    const instructorStats = instructorStatsForNames(section.instructor, linksMap);
+    const primaryStats = instructorStats[0];
+
+    return toCourseSectionDto({
+      ...section,
+      instructor_stats: instructorStats,
+      instructor_rmp: primaryStats?.rmp_rating ?? section.instructor_rmp,
+      instructor_gpa: primaryStats?.avg_gpa ?? section.instructor_gpa,
+      meetings: meetings.map(meeting => {
+        const instructorNames = meeting.instructors
+          .map(formatInstructorName)
+          .filter((name): name is string => Boolean(name));
+
+        return {
+          ...meeting,
+          instructor_names: instructorNames.join(';'),
+          instructor_stats: instructorNames.map(name => linksMap[name]).filter(Boolean),
+        };
+      }),
+    });
+  });
+}
+
+function instructorStatsForNames(
+  instructorNames: string | null | undefined,
+  linksMap: Record<string, InstructorLinkDto>
+): InstructorLinkDto[] {
+  const names = instructorNames
+    ? instructorNames.split(';').map(name => name.trim()).filter(Boolean)
+    : [];
+  return names.map(name => linksMap[name]).filter(Boolean);
 }
 
 function normalizeTopTags(value: string | string[] | null | undefined): string[] | null {
@@ -326,6 +396,10 @@ function hasHint(hints: Hint[] | undefined, type: Hint['type']): boolean {
   return hints?.some(hint => hint.type === type) ?? false;
 }
 
+function hasStructuredRequirementEvidence(result: SearchResult): boolean {
+  return Boolean(result.laneMatches?.includes('requirement') && result.course.gened);
+}
+
 export function buildMatchEvidence(
   result: SearchResult,
   context: SearchResultEvidenceContext
@@ -359,17 +433,14 @@ export function buildMatchEvidence(
     addEvidence(evidence, seen, 'crn', `CRN ${filters.crn}`, 'filter', 'hard', filters.crn);
   }
 
-  if (normalizedTitle && (normalizedRaw.includes(normalizedTitle) || normalizedTitle.includes(normalizedRaw))) {
+  if (normalizedRaw && normalizedTitle && (normalizedRaw.includes(normalizedTitle) || normalizedTitle.includes(normalizedRaw))) {
     addEvidence(evidence, seen, 'title', `Title match: ${course.title}`, 'keyword', 'rank', course.title);
   }
 
-  const genedFilters = [
-    filters.gened_code,
-    ...(filters.gened_any ?? []),
-    ...(filters.gened_all ?? []),
-  ].filter((value): value is string => Boolean(value));
+  const requirement = effectiveRequirementFilter(filters);
+  const genedFilters = requirement?.codes ?? [];
   if (genedFilters.length > 0) {
-    const isGenericGened = isGenericAnyGenedFilter(filters.gened_any) && !filters.gened_code && !filters.gened_all?.length;
+    const isGenericGened = requirement?.mode === 'any' && isGenericAnyGenedFilter(requirement.codes);
     addEvidence(
       evidence,
       seen,
@@ -524,7 +595,7 @@ export function buildResultExplanation(
 function explanationConfidenceScore(result: SearchResult, plan: SearchPlan): number {
   let score = plan.rescue?.confidence ?? 0.72;
   if (result.laneMatches?.includes('exact')) score += 0.12;
-  if (result.laneMatches?.includes('requirement')) score += 0.08;
+  if (hasStructuredRequirementEvidence(result)) score += 0.08;
   if (result.laneMatches?.includes('structured_section')) score += 0.05;
   if (result.laneMatches?.includes('workload_evidence')) score += 0.1;
   if (
@@ -540,7 +611,7 @@ function explanationConfidenceScore(result: SearchResult, plan: SearchPlan): num
 function explanationConfidenceReasons(result: SearchResult, plan: SearchPlan): string[] {
   const reasons: string[] = [];
   if (result.laneMatches?.includes('exact')) reasons.push('Exact course lookup is structured.');
-  if (result.laneMatches?.includes('requirement')) reasons.push('Requirement evidence came from structured mappings.');
+  if (hasStructuredRequirementEvidence(result)) reasons.push('Requirement evidence came from structured mappings.');
   if (result.laneMatches?.includes('structured_section')) reasons.push('Schedule or availability evidence came from section data.');
   if (result.laneMatches?.includes('workload_evidence')) reasons.push('Subjective workload preference has an evidence signal.');
   if (

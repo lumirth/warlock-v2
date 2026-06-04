@@ -3,9 +3,14 @@ import type {
   RetrievalLane,
   SearchPlan,
   SearchPlanAssumption,
+  SearchSoftPreferences,
   SearchPlanWarning,
   SearchPlanWarningKind,
   SearchRelaxationStep,
+} from '@uiuc-course-search/query-types/search-planner';
+import {
+  hasRequirementFilter,
+  requirementFilter,
 } from '@uiuc-course-search/query-types';
 import { GENERIC_GENED_CODES } from './gened-codes.js';
 
@@ -14,7 +19,7 @@ type RescueRule = {
   patterns: RegExp[];
   removePatterns?: RegExp[];
   negativeTerms?: string[];
-  softPreferences?: Record<string, unknown>;
+  softPreferences?: Partial<SearchSoftPreferences>;
   assumptions?: SearchPlanAssumption[];
   warnings?: SearchPlanWarning[];
 };
@@ -177,7 +182,7 @@ export function applyDecisionSearchRescue(
   const negativeTerms = new Set<string>();
   const assumptions = new Map<string, SearchPlanAssumption>();
   const warnings = new Map<SearchPlanWarningKind, SearchPlanWarning>();
-  const retrievalLanes = new Set<RetrievalLane>();
+  const interpretedLanes = new Set<RetrievalLane>();
   const relaxations = new Map<string, SearchRelaxationStep>();
   const removePatterns: RegExp[] = [];
   const normalizedRaw = rawQuery.toLowerCase();
@@ -199,8 +204,8 @@ export function applyDecisionSearchRescue(
     queryTypes.add('exact_course');
   }
 
-  if (hasGenericGenedIntent(rawQuery) && !hasGenedFilter(plan)) {
-    plan.filters.gened_any = [...GENERIC_GENED_CODES];
+  if (hasGenericGenedIntent(rawQuery) && !hasRequirementFilter(plan.filters)) {
+    plan.filters.requirement = requirementFilter("any", GENERIC_GENED_CODES);
   }
 
   if (hasRequirementIntent(plan, rawQuery)) {
@@ -312,7 +317,7 @@ export function applyDecisionSearchRescue(
     queryTypes.add('topic');
   }
 
-  addRetrievalLanes(retrievalLanes, queryTypes);
+  addInterpretedLanes(interpretedLanes, queryTypes);
   buildRelaxations(relaxations, {
     hasRequirement: queryTypes.has('requirement'),
     hasSchedule: queryTypes.has('schedule'),
@@ -336,7 +341,7 @@ export function applyDecisionSearchRescue(
     expandedTerms: expansionTermsFrom(plan.softPreferences?.topicExpansions),
     assumptions: Array.from(assumptions.values()),
     warnings: Array.from(warnings.values()),
-    retrievalLanes: Array.from(retrievalLanes),
+    interpretedLanes: Array.from(interpretedLanes),
     relaxationPlan: Array.from(relaxations.values()),
     needsStudentProfile,
     confidence: rescueConfidence(queryTypes, normalizedRaw),
@@ -360,12 +365,8 @@ export function syncDecisionSearchExpansions(plan: SearchPlan, expansions: strin
 }
 
 function hasRequirementIntent(plan: SearchPlan, rawQuery: string): boolean {
-  return hasGenedFilter(plan)
+  return hasRequirementFilter(plan.filters)
     || REQUIREMENT_PATTERNS.some(pattern => pattern.test(rawQuery));
-}
-
-function hasGenedFilter(plan: SearchPlan): boolean {
-  return Boolean(plan.filters.gened_code || plan.filters.gened_any?.length || plan.filters.gened_all?.length);
 }
 
 function hasGenericGenedIntent(rawQuery: string): boolean {
@@ -383,7 +384,7 @@ function hasScheduleIntent(plan: SearchPlan, rawQuery: string): boolean {
   ) || COMPRESSED_TERM_PATTERNS.some(pattern => pattern.test(rawQuery));
 }
 
-function addRetrievalLanes(lanes: Set<RetrievalLane>, queryTypes: Set<DecisionQueryType>): void {
+function addInterpretedLanes(lanes: Set<RetrievalLane>, queryTypes: Set<DecisionQueryType>): void {
   if (queryTypes.has('exact_course')) lanes.add('exact');
   if (queryTypes.has('topic') || queryTypes.has('requirement') || queryTypes.has('comparison')) lanes.add('official_text');
   if (queryTypes.has('requirement') || queryTypes.has('degree_progress')) lanes.add('requirement');

@@ -275,7 +275,31 @@ describe('term coverage plan', () => {
     expect(report.backfill_commands).toEqual([
       expect.stringContaining('--year 2026 --term fall --status active'),
     ]);
-    expect(report.freshness_audit_command).toContain('--retention-input artifacts/term-retention-plan.json');
+    expect(report.freshness_audit_command).toBe(
+      "npm run data:freshness:audit -- --input 'sync-status.json' --retention-input 'artifacts/term-retention-plan.json'"
+    );
+  });
+
+  it('builds the freshness gate command from the actual status and retention sources', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring' }));
+
+    const report = await buildTermCoverageReport(args({
+      fromYear: 2026,
+      toYear: 2026,
+      statusInput: 'ignored-status.json',
+      retentionInput: 'ignored-retention.json',
+    }), {
+      fetcher,
+      status: { termStates: [], freshness: { staleTermIds: [] } },
+      statusSource: 'bundle/sync-status.json',
+      retention: { retained_term_ids: ['2026-spring'] },
+      retentionSource: 'bundle/term-retention-plan.json',
+    });
+
+    expect(report.status_source).toBe('bundle/sync-status.json');
+    expect(report.freshness_audit_command).toBe(
+      "npm run data:freshness:audit -- --input 'bundle/sync-status.json' --retention-input 'bundle/term-retention-plan.json'"
+    );
   });
 
   it('formats a readable markdown coverage report', async () => {

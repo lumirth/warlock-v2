@@ -1,17 +1,28 @@
 import type {
   AdvancedSearchStateDto,
+  SearchAmbiguityActionDto,
+  SearchChipDto,
+  SearchRequestFilterPatchDto,
+  SearchUiPlanDto,
+} from '@uiuc-course-search/query-types';
+import type {
   Ambiguity,
   CourseCodeValue,
   Hint,
   NegationValue,
-  SearchAmbiguityActionDto,
-  SearchChipDto,
   SearchFilters,
   SearchPlan,
-  SearchUiPlanDto,
   TermValue,
+} from '@uiuc-course-search/query-types/search-planner';
+import {
+  effectiveRequirementFilter,
+  isSearchDifficultyFilter,
+  isSearchLevelFilter,
+  isSearchStatusFilter,
+  isSearchTermFilter,
+  isSearchTimeFilter,
 } from '@uiuc-course-search/query-types';
-import { GENERIC_GENED_CODES, isGenericAnyGenedFilter } from '../services/gened-codes.js';
+import { isGenericAnyGenedFilter } from '../services/gened-codes.js';
 
 export function buildSearchUiPlan(hints: Hint[], plan: SearchPlan, residual: string): SearchUiPlanDto {
   return {
@@ -45,9 +56,6 @@ function buildSearchChips(hints: Hint[], plan: SearchPlan, residual: string): Se
       source: 'natural_language',
       removable: true,
       editable: false,
-      filter: {
-        gened_any: [...GENERIC_GENED_CODES],
-      },
       queryPatch: {
         removeText: 'gened',
       },
@@ -115,8 +123,9 @@ function shouldHideAssumptionChip(kind: string, hints: Hint[], filters: SearchFi
 }
 
 function shouldShowGenericGenedChip(hints: Hint[], filters: SearchFilters): boolean {
-  return isGenericAnyGenedFilter(filters.gened_any)
-    && !filters.gened_code
+  const requirement = effectiveRequirementFilter(filters);
+  return requirement?.mode === 'any'
+    && isGenericAnyGenedFilter(requirement.codes)
     && !hints.some(hint => hint.type === 'gened');
 }
 
@@ -137,17 +146,43 @@ function buildAdvancedState(hints: Hint[], filters: SearchFilters, residual: str
     subject: filters.subject,
     number: filters.number,
     instructor: instructorHint ? formatDisplayHintValue(instructorHint, residual) : undefined,
-    term: filters.term,
+    term: publicTerm(filters.term),
     year: filters.year,
-    gened: filters.gened_code ?? (isGenericAnyGenedFilter(filters.gened_any) ? undefined : filters.gened_any?.[0]) ?? filters.gened_all?.[0],
+    gened: publicRequirementCode(filters),
     credits: filters.credits,
     days: filters.days,
-    time: filters.time,
+    time: publicTime(filters.time),
     online: filters.online,
-    status: filters.status,
+    status: publicStatus(filters.status),
     difficulty: filters.difficulty,
-    level: filters.level,
+    level: publicLevel(filters.level),
+    partOfTerm: filters.partOfTerm,
   };
+}
+
+function publicRequirementCode(filters: SearchFilters): string | undefined {
+  const requirement = effectiveRequirementFilter(filters);
+  if (!requirement) return undefined;
+  if (requirement.mode === 'any' && isGenericAnyGenedFilter(requirement.codes)) {
+    return undefined;
+  }
+  return requirement.codes[0];
+}
+
+function publicTerm(value: string | undefined): AdvancedSearchStateDto['term'] {
+  return isSearchTermFilter(value) ? value : undefined;
+}
+
+function publicTime(value: string | undefined): AdvancedSearchStateDto['time'] {
+  return isSearchTimeFilter(value) ? value : undefined;
+}
+
+function publicStatus(value: string | undefined): AdvancedSearchStateDto['status'] {
+  return isSearchStatusFilter(value) ? value : undefined;
+}
+
+function publicLevel(value: number | undefined): AdvancedSearchStateDto['level'] {
+  return isSearchLevelFilter(value) ? value : undefined;
 }
 
 function buildAmbiguityActions(ambiguities: Ambiguity[]): SearchAmbiguityActionDto[] {
@@ -168,25 +203,25 @@ function buildAmbiguityActions(ambiguities: Ambiguity[]): SearchAmbiguityActionD
   );
 }
 
-function ambiguityFilter(type: string, value: string): Partial<SearchFilters> {
+function ambiguityFilter(type: string, value: string): SearchRequestFilterPatchDto {
   if (type === 'subject') {
     return { subject: value.toUpperCase() };
   }
 
   if (type === 'gened') {
-    return { gened_code: value.toUpperCase() };
+    return { gened: value.toUpperCase() };
   }
 
   return {};
 }
 
-function queryForFilter(filter: Partial<SearchFilters>): string {
+function queryForFilter(filter: SearchRequestFilterPatchDto): string {
   if (filter.subject) {
     return `subject:${filter.subject}`;
   }
 
-  if (filter.gened_code) {
-    return `gened:${filter.gened_code}`;
+  if (filter.gened) {
+    return `gened:${filter.gened}`;
   }
 
   return '';
@@ -305,7 +340,7 @@ function formatHintValue(value: Hint['value']): string {
   return String(value);
 }
 
-function filterFromHint(hint: Hint): Partial<SearchFilters> {
+function filterFromHint(hint: Hint): SearchRequestFilterPatchDto {
   switch (hint.type) {
     case 'courseCode': {
       const value = hint.value as CourseCodeValue;
@@ -317,26 +352,37 @@ function filterFromHint(hint: Hint): Partial<SearchFilters> {
     case 'subject':
       return { subject: formatHintValue(hint.value).toUpperCase() };
     case 'crn':
-      return { crn: formatHintValue(hint.value) };
+      return {};
     case 'days':
       return { days: formatHintValue(hint.value) };
-    case 'time':
-      return { time: formatHintValue(hint.value) };
+    case 'time': {
+      const time = formatHintValue(hint.value);
+      return isSearchTimeFilter(time) ? { time } : {};
+    }
     case 'credits':
       return { credits: Number(hint.value) };
-    case 'level':
-      return { level: Number(hint.value) };
+    case 'level': {
+      const level = Number(hint.value);
+      return isSearchLevelFilter(level) ? { level } : {};
+    }
     case 'online':
       return { online: Boolean(hint.value) };
-    case 'status':
-      return { status: formatHintValue(hint.value) };
+    case 'status': {
+      const status = formatHintValue(hint.value);
+      return isSearchStatusFilter(status) ? { status } : {};
+    }
     case 'difficulty':
-      return { difficulty: hint.value as 'easy' | 'hard' };
+      return isSearchDifficultyFilter(hint.value)
+        ? { difficulty: hint.value }
+        : {};
     case 'gened':
-      return { gened_code: formatHintValue(hint.value).toUpperCase() };
+      return { gened: formatHintValue(hint.value).toUpperCase() };
     case 'term': {
       const value = hint.value as TermValue;
-      return { term: value.term, year: value.year };
+      return {
+        ...(isSearchTermFilter(value.term) ? { term: value.term } : {}),
+        year: value.year,
+      };
     }
     case 'partOfTerm':
       return { partOfTerm: formatHintValue(hint.value) };
@@ -345,18 +391,20 @@ function filterFromHint(hint: Hint): Partial<SearchFilters> {
   }
 }
 
-function resolvedFilterFromHint(hint: Hint, plan: SearchPlan): Partial<SearchFilters> {
+function resolvedFilterFromHint(hint: Hint, plan: SearchPlan): SearchRequestFilterPatchDto {
   if (isSubjectHintResolvedAsGened(hint, plan)) {
-    return { gened_code: formatHintValue(hint.value).toUpperCase() };
+    return { gened: formatHintValue(hint.value).toUpperCase() };
   }
 
   return filterFromHint(hint);
 }
 
 function isSubjectHintResolvedAsGened(hint: Hint, plan: SearchPlan): boolean {
+  const requirement = effectiveRequirementFilter(plan.filters);
   return hint.type === 'subject'
     && !plan.filters.subject
-    && plan.filters.gened_code === formatHintValue(hint.value).toUpperCase();
+    && requirement?.mode === 'single'
+    && requirement.codes[0] === formatHintValue(hint.value).toUpperCase();
 }
 
 function isEditableHint(hint: Hint): boolean {

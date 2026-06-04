@@ -100,16 +100,21 @@ describe("Search Routes", () => {
     const data = (await res.json()) as SearchResponseDto;
     expect(data.results).toBeDefined();
     expect(data.results[0].id).toBe("CS-225-2026-spring");
+    expect("plan" in data.meta).toBe(false);
+    expect("extraction" in data.meta).toBe(false);
     expect(data.meta.ui).toEqual({
       chips: [],
       advanced: {},
       ambiguityActions: [],
     });
     expect(searchSpy).toHaveBeenCalledWith(
-      "CS 225",
-      40,
-      {},
-      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
+      expect.objectContaining({
+        query: "CS 225",
+        filters: {},
+        sort: { field: "relevance", direction: "desc" },
+        scope: "active",
+      }),
+      { limit: 20, offset: 0 },
       expect.any(Function),
     );
   });
@@ -175,24 +180,27 @@ describe("Search Routes", () => {
 
     expect(res.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(
-      "systems",
-      40,
-      {
-        subject: "CS",
-        number: "225",
-        instructorName: "Fagen",
-        term: "spring",
-        year: 2026,
-        gened_code: "HUM",
-        credits: 4,
-        days: "MWF",
-        time: "morning",
-        online: true,
-        status: "open",
-        difficulty: "easy",
-        level: 400,
-      },
-      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
+      expect.objectContaining({
+        query: "systems",
+        filters: {
+          subject: "CS",
+          number: "225",
+          instructor: "Fagen",
+          term: "spring",
+          year: 2026,
+          gened: "HUM",
+          credits: 4,
+          days: "MWF",
+          time: "morning",
+          online: true,
+          status: "open",
+          difficulty: "easy",
+          level: 400,
+        },
+        sort: { field: "relevance", direction: "desc" },
+        scope: "active",
+      }),
+      { limit: 20, offset: 0 },
       expect.any(Function),
     );
   });
@@ -233,10 +241,13 @@ describe("Search Routes", () => {
 
     expect(res.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(
-      "",
-      40,
-      { credits: 3, online: true },
-      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
+      expect.objectContaining({
+        query: "",
+        filters: { credits: 3, online: true },
+        sort: { field: "relevance", direction: "desc" },
+        scope: "active",
+      }),
+      { limit: 20, offset: 0 },
       expect.any(Function),
     );
   });
@@ -277,10 +288,13 @@ describe("Search Routes", () => {
 
     expect(res.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(
-      "history",
-      1200,
-      { level: 500 },
-      { sort: { field: "gpa", direction: "asc" }, scope: "all" },
+      expect.objectContaining({
+        query: "history",
+        filters: { level: 500 },
+        sort: { field: "gpa", direction: "asc" },
+        scope: "all",
+      }),
+      { limit: 5, offset: 0 },
       expect.any(Function),
     );
 
@@ -329,12 +343,87 @@ describe("Search Routes", () => {
 
     expect(res.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(
-      "history",
-      40,
-      {},
-      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
+      expect.objectContaining({
+        query: "history",
+        filters: {},
+        sort: { field: "relevance", direction: "desc" },
+        scope: "active",
+      }),
+      { limit: 20, offset: 0 },
       expect.any(Function),
     );
+  });
+
+  it("does not apply level filters with trailing malformed characters", async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: "history", residual: "history" },
+        extraction: { hints: [] },
+        plan: {
+          filters: {},
+          semanticQuery: "history",
+          keywordQuery: "history",
+        },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+      },
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: searchSpy,
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?q=history&level=100abc",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(200);
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "history",
+        filters: {},
+        sort: { field: "relevance", direction: "desc" },
+        scope: "active",
+      }),
+      { limit: 20, offset: 0 },
+      expect.any(Function),
+    );
+  });
+
+  it("returns a stable generic response for internal search failures", async () => {
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: vi.fn().mockRejectedValue(new Error("D1_ERROR: private detail")),
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?q=history",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual({ error: "Search failed" });
   });
 
   it("returns a sliced page with hasMore and nextOffset", async () => {
@@ -394,10 +483,13 @@ describe("Search Routes", () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as SearchResponseDto;
     expect(searchSpy).toHaveBeenCalledWith(
-      "intro to CS",
-      30,
-      {},
-      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
+      expect.objectContaining({
+        query: "intro to CS",
+        filters: {},
+        sort: { field: "relevance", direction: "desc" },
+        scope: "active",
+      }),
+      { limit: 5, offset: 10 },
       expect.any(Function),
     );
     expect(data.results.map((result) => result.id)).toEqual([
@@ -451,10 +543,13 @@ describe("Search Routes", () => {
     );
     expect(ok.status).toBe(200);
     expect(searchSpy).toHaveBeenCalledWith(
-      "history",
-      1200,
-      {},
-      { sort: { field: "relevance", direction: "desc" }, scope: "active" },
+      expect.objectContaining({
+        query: "history",
+        filters: {},
+        sort: { field: "relevance", direction: "desc" },
+        scope: "active",
+      }),
+      { limit: 20, offset: 1000 },
       expect.any(Function),
     );
 

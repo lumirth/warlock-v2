@@ -17,10 +17,10 @@ function redactFields(fields: LogFields = {}): Record<string, string | number | 
 
 function emit(level: LogLevel, event: string, fields?: LogFields): void {
   const payload = {
+    ...redactFields(fields),
     level,
     event,
     timestamp: new Date().toISOString(),
-    ...redactFields(fields),
   };
   const line = JSON.stringify(payload);
 

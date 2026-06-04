@@ -18,7 +18,6 @@ const culturalStudiesResult = {
   title: 'Classical Mythology',
   subject: 'CLCV',
   number: '100',
-  gened: 'CS',
   geneds: [
     {
       categoryId: 'CS',
@@ -56,20 +55,7 @@ describe('result coherence checks', () => {
     expect(violations).toEqual([]);
   });
 
-  it('keeps supporting legacy flattened gen-ed checks', () => {
-    const violations = checkResultCoherence(
-      query({
-        top_k: 1,
-        must_include: [{ gened: 'CS' }],
-        all_top_k: { gened: 'CS' },
-      }),
-      [culturalStudiesResult],
-    );
-
-    expect(violations).toEqual([]);
-  });
-
-  it('fails when neither flattened nor full gen-ed data satisfies the expectation', () => {
+  it('fails when the full gen-ed set does not satisfy the expectation', () => {
     const violations = checkResultCoherence(
       query({
         top_k: 1,
@@ -79,7 +65,7 @@ describe('result coherence checks', () => {
     );
 
     expect(violations).toEqual([
-      'Result 2026-spring-CLCV-100 gened=CS, expected US',
+      'Result 2026-spring-CLCV-100 does not include GenEd US',
     ]);
   });
 });

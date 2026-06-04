@@ -3,6 +3,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { pathToFileURL } from 'node:url';
 
 // Configuration
 const CONFIG = {
@@ -13,7 +14,8 @@ const CONFIG = {
     "IS", "UP", "ME", "IT", "ON", "OR", "AS", "IF", "IN", "BY", "AN", "AT",
     "DO", "GO", "HE", "HI", "ID", "MY", "NO", "OF", "OH", "OK", "SO", "TO",
     "US", "WE", "AM", "BE", "LAW", "ART", "BUS", "ENG", "HIS", "HUM", "SAME",
-    "SE", "ONE", "TWO", "SIX", "TEN", "THE", "A", "I"
+    "SE", "ONE", "TWO", "SIX", "TEN", "THE", "LAST", "LEAD", "PATH", "PORT",
+    "SCAN", "A", "I"
   ]),
   // Subjects that MUST be allowed in lowercase because they are extremely common search terms
   // and unlikely to be used as normal words in a course search context
@@ -22,6 +24,32 @@ const CONFIG = {
     "PHIL", "HIST", "ENGL", "ASTR", "ANTH", "SOC", "POL", "GEOL", "LING", "MUS",
     "FIN", "BADM", "NRES", "CHBE", "JOUR", "ARCH", "DANCE", "THEA"
   ])
+};
+
+const HARDCODED_FALLBACK_SUBJECT_IDS = [
+  "AAS", "ABE", "ACCY", "ACE", "ACES", "ADV", "AE", "AFAS", "AFRO", "AFST",
+  "AGCM", "AGED", "AHS", "AIS", "ALEC", "ANSC", "ANTH", "ARAB", "ARCH", "ART",
+  "ARTD", "ARTE", "ARTF", "ARTH", "ARTJ", "ARTS", "ASRM", "ASST", "ASTR", "ATMS",
+  "BADM", "BASQ", "BCOG", "BCS", "BDI", "BIOC", "BIOE", "BIOP", "BSE", "BTW",
+  "BUS", "CAS", "CB", "CDB", "CEE", "CGGE", "CHBE", "CHEM", "CHIN", "CHP",
+  "CI", "CIC", "CLCV", "CLE", "CMN", "CPSC", "CS", "CSE", "CW", "CWL",
+  "DANC", "DTX", "EALC", "ECE", "ECON", "EDPR", "EDUC", "EIL", "ENG", "ENGL",
+  "ENSU", "ENT", "ENVS", "EPOL", "EPSY", "ERAM", "ESE", "ESL", "ETMA", "EURO",
+  "EXP", "FAA", "FIN", "FLTE", "FR", "FSHN", "GC", "GEOL", "GER", "GGIS",
+  "GLBL", "GMC", "GRK", "GRKM", "GSD", "GWS", "HBSE", "HDFS", "HEBR", "HIST",
+  "HK", "HNDI", "HORT", "HT", "HUM", "IB", "IE", "INFO", "IS", "ITAL",
+  "JAPN", "JOUR", "JS", "KOR", "LA", "LAS", "LAST", "LAT", "LAW", "LCTL",
+  "LEAD", "LER", "LING", "LLS", "MACS", "MATH", "MBA", "MCB", "MDIA", "MDVL",
+  "ME", "MICR", "MILS", "MIP", "MSE", "MUS", "MUSC", "MUSE", "NE", "NEUR",
+  "NPRE", "NRES", "NS", "NUTR", "PATH", "PERS", "PHIL", "PHYS", "PLPA", "POL",
+  "PORT", "PS", "PSM", "PSYC", "QUEC", "REES", "REL", "RHET", "RMLG", "RST",
+  "RUSS", "SAME", "SBC", "SCAN", "SE", "SHS", "SLAV", "SLCL", "SOC", "SOCW",
+  "SPAN", "SPED", "STAT", "SWAH", "TAM", "TE", "THEA", "TMGT", "TRST", "TURK",
+  "UKR", "UP", "VCM", "VM", "WLOF", "WRIT", "YDSH"
+];
+
+type GenerateSubjectsArgs = {
+  allowHardcodedFallback: boolean;
 };
 
 interface D1Result {
@@ -91,12 +119,14 @@ function subjectAliases(subject: SubjectRow): string[] {
   return uniqueSorted(Array.from(aliases));
 }
 
-function fetchSubjectsFromD1(): SubjectRow[] {
+export function fetchSubjectsFromD1(
+  runCommand: typeof execSync = execSync
+): SubjectRow[] {
   console.log(`Fetching subjects from D1 database (${CONFIG.DB_NAME})...`);
   try {
     // Execute SQL query via Wrangler
     const cmd = `npx wrangler d1 execute ${CONFIG.DB_NAME} --command="SELECT DISTINCT id, COALESCE(name, id) AS name FROM subjects ORDER BY id" --json --remote`;
-    const output = execSync(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const output = String(runCommand(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }));
 
     const parsed = JSON.parse(output) as D1Result[];
 
@@ -120,7 +150,9 @@ function decodeXmlText(value: string): string {
     .replace(/&gt;/g, '>');
 }
 
-async function fetchSubjectsFromCisApi(): Promise<SubjectRow[]> {
+export async function fetchSubjectsFromCisApi(
+  fetcher: typeof fetch = fetch
+): Promise<SubjectRow[]> {
   console.log('Fetching subjects from CISAPI (fallback)...');
   const year = new Date().getFullYear();
   // Actually, better to fetch all terms for current year?
@@ -138,7 +170,7 @@ async function fetchSubjectsFromCisApi(): Promise<SubjectRow[]> {
     for (const t of terms) {
       try {
         const url = `https://courses.illinois.edu/cisapp/explorer/schedule/${y}/${t}.xml`;
-        const response = await fetch(url);
+        const response = await fetcher(url);
         if (!response.ok) continue;
 
         const text = await response.text();
@@ -154,34 +186,17 @@ async function fetchSubjectsFromCisApi(): Promise<SubjectRow[]> {
   }
 
   if (subjects.size === 0) {
-     // Fallback to hardcoded list if EVERYTHING fails (network offline)
-     console.warn('CISAPI fetch failed. Using fallback list.');
-     return [
-       "AAS", "ABE", "ACCY", "ACE", "ACES", "ADV", "AE", "AFAS", "AFRO", "AFST",
-       "AGCM", "AGED", "AHS", "AIS", "ALEC", "ANSC", "ANTH", "ARAB", "ARCH", "ART",
-       "ARTD", "ARTE", "ARTF", "ARTH", "ARTJ", "ARTS", "ASRM", "ASST", "ASTR", "ATMS",
-       "BADM", "BASQ", "BCOG", "BCS", "BDI", "BIOC", "BIOE", "BIOP", "BSE", "BTW",
-       "BUS", "CAS", "CB", "CDB", "CEE", "CGGE", "CHBE", "CHEM", "CHIN", "CHP",
-       "CI", "CIC", "CLCV", "CLE", "CMN", "CPSC", "CS", "CSE", "CW", "CWL",
-       "DANC", "DTX", "EALC", "ECE", "ECON", "EDPR", "EDUC", "EIL", "ENG", "ENGL",
-       "ENSU", "ENT", "ENVS", "EPOL", "EPSY", "ERAM", "ESE", "ESL", "ETMA", "EURO",
-       "EXP", "FAA", "FIN", "FLTE", "FR", "FSHN", "GC", "GEOL", "GER", "GGIS",
-       "GLBL", "GMC", "GRK", "GRKM", "GSD", "GWS", "HBSE", "HDFS", "HEBR", "HIST",
-       "HK", "HNDI", "HORT", "HT", "HUM", "IB", "IE", "INFO", "IS", "ITAL",
-       "JAPN", "JOUR", "JS", "KOR", "LA", "LAS", "LAST", "LAT", "LAW", "LCTL",
-       "LEAD", "LER", "LING", "LLS", "MACS", "MATH", "MBA", "MCB", "MDIA", "MDVL",
-       "ME", "MICR", "MILS", "MIP", "MSE", "MUS", "MUSC", "MUSE", "NE", "NEUR",
-       "NPRE", "NRES", "NS", "NUTR", "PATH", "PERS", "PHIL", "PHYS", "PLPA", "POL",
-       "PORT", "PS", "PSM", "PSYC", "QUEC", "REES", "REL", "RHET", "RMLG", "RST",
-       "RUSS", "SAME", "SBC", "SCAN", "SE", "SHS", "SLAV", "SLCL", "SOC", "SOCW",
-       "SPAN", "SPED", "STAT", "SWAH", "TAM", "TE", "THEA", "TMGT", "TRST", "TURK",
-       "UKR", "UP", "VCM", "VM", "WLOF", "WRIT", "YDSH"
-     ].map(id => ({ id, name: id }));
+     console.warn('CISAPI fetch returned no subjects.');
+     return [];
   }
 
   return Array.from(subjects.entries())
     .map(([id, name]) => ({ id, name }))
     .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function hardcodedFallbackSubjects(): SubjectRow[] {
+  return HARDCODED_FALLBACK_SUBJECT_IDS.map(id => ({ id, name: id }));
 }
 
 function generateFileContent(subjects: SubjectRow[]): string {
@@ -223,12 +238,40 @@ ${safeList.map(s => `  "${s}"`).join(',\n')}
 `;
 }
 
-async function main() {
-  let subjects = await fetchSubjectsFromCisApi();
+export function parseGenerateSubjectsArgs(argv: string[]): GenerateSubjectsArgs {
+  return {
+    allowHardcodedFallback: argv.includes('--allow-hardcoded-fallback'),
+  };
+}
 
-  if (subjects.length === 0) {
-    subjects = fetchSubjectsFromD1();
+export async function resolveSubjects(options: {
+  fetchFromCisApi?: () => Promise<SubjectRow[]>;
+  fetchFromD1?: () => SubjectRow[];
+  allowHardcodedFallback?: boolean;
+} = {}): Promise<SubjectRow[]> {
+  const subjectsFromCisApi = await (options.fetchFromCisApi ?? fetchSubjectsFromCisApi)();
+  if (subjectsFromCisApi.length > 0) {
+    return subjectsFromCisApi;
   }
+
+  const subjectsFromD1 = (options.fetchFromD1 ?? fetchSubjectsFromD1)();
+  if (subjectsFromD1.length > 0) {
+    return subjectsFromD1;
+  }
+
+  if (options.allowHardcodedFallback) {
+    console.warn('Using explicit hardcoded subject fallback.');
+    return hardcodedFallbackSubjects();
+  }
+
+  throw new Error('No authoritative subject source returned data. Refusing to overwrite generated subjects.');
+}
+
+async function main() {
+  const args = parseGenerateSubjectsArgs(process.argv.slice(2));
+  const subjects = await resolveSubjects({
+    allowHardcodedFallback: args.allowHardcodedFallback,
+  });
 
   finish(subjects);
 }
@@ -248,4 +291,9 @@ function finish(subjects: SubjectRow[]) {
   console.log(`Generated ${CONFIG.OUTPUT_PATH}`);
 }
 
-void main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main().catch(error => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

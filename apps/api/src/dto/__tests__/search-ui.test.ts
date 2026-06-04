@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Hint, SearchPlan } from '@uiuc-course-search/query-types';
+import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
+import type { Hint, SearchPlan } from '@uiuc-course-search/query-types/search-planner';
 import { buildSearchUiPlan } from '../search-ui.js';
 
 describe('buildSearchUiPlan', () => {
@@ -64,7 +65,7 @@ describe('buildSearchUiPlan', () => {
       id: '0-0-gened-CS',
       term: 'CS',
       label: 'Cultural Studies',
-      filter: { gened_code: 'CS' },
+      filter: { gened: 'CS' },
       queryPatch: { replaceQuery: 'gened:CS' },
     }]);
   });
@@ -83,7 +84,7 @@ describe('buildSearchUiPlan', () => {
       },
     ];
     const plan: SearchPlan = {
-      filters: { difficulty: 'easy', gened_code: 'CS' },
+      filters: { difficulty: 'easy', requirement: singleRequirementFilter('CS') },
       keywordQuery: '',
       semanticQuery: '',
       ambiguities: [{
@@ -96,7 +97,7 @@ describe('buildSearchUiPlan', () => {
     const ui = buildSearchUiPlan(hints, plan, '');
 
     expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'GenEd CS']);
-    expect(ui.chips[1].filter).toEqual({ gened_code: 'CS' });
+    expect(ui.chips[1].filter).toEqual({ gened: 'CS' });
     expect(ui.advanced.gened).toBe('CS');
     expect(ui.advanced.subject).toBeUndefined();
   });
@@ -157,7 +158,7 @@ describe('buildSearchUiPlan', () => {
           { kind: 'low_writing', label: 'Low writing preferred', confidence: 0.82, source: 'rule' },
         ],
         warnings: [],
-        retrievalLanes: ['structured_section', 'student_language_alias', 'workload_evidence'],
+        interpretedLanes: ['structured_section', 'student_language_alias', 'workload_evidence'],
         relaxationPlan: [],
         needsStudentProfile: false,
         confidence: 0.82,
@@ -189,7 +190,7 @@ describe('buildSearchUiPlan', () => {
           { kind: 'low_workload', label: 'Low workload preferred', confidence: 0.82, source: 'rule' },
         ],
         warnings: [],
-        retrievalLanes: ['student_language_alias', 'workload_evidence'],
+        interpretedLanes: ['student_language_alias', 'workload_evidence'],
         relaxationPlan: [],
         needsStudentProfile: false,
         confidence: 0.74,
@@ -204,7 +205,19 @@ describe('buildSearchUiPlan', () => {
   it('shows a concrete Any GenEd chip for generic gened intent without polluting advanced state', () => {
     const plan = buildSearchUiPlan([], {
       filters: {
-        gened_any: ['HUM', 'NAT', 'SBS', 'CS', 'QR', 'QR1', 'QR2', 'NW', 'US', 'WCC', 'ACP'],
+        requirement: requirementFilter('any', [
+          'HUM',
+          'NAT',
+          'SBS',
+          'CS',
+          'QR',
+          'QR1',
+          'QR2',
+          'NW',
+          'US',
+          'WCC',
+          'ACP',
+        ]),
       },
       keywordQuery: '',
       semanticQuery: '',
@@ -217,7 +230,7 @@ describe('buildSearchUiPlan', () => {
           { kind: 'requirement_match', label: 'Requirement match matters', confidence: 0.78, source: 'rule' },
         ],
         warnings: [],
-        retrievalLanes: ['official_text', 'requirement'],
+        interpretedLanes: ['official_text', 'requirement'],
         relaxationPlan: [],
         needsStudentProfile: false,
         confidence: 0.74,
@@ -229,9 +242,28 @@ describe('buildSearchUiPlan', () => {
         id: 'gened-any',
         type: 'gened',
         label: 'Any GenEd',
-        filter: expect.objectContaining({ gened_any: expect.arrayContaining(['HUM', 'US', 'ACP']) }),
       }),
     ]);
     expect(plan.advanced.gened).toBeUndefined();
+  });
+
+  it('preserves part-of-term filters in chips and advanced state', () => {
+    const plan = buildSearchUiPlan([{
+      type: 'partOfTerm',
+      value: 'B',
+      metadata: { source: 'regex', confidence: 0.8, raw: 'part B' },
+    }], {
+      filters: { partOfTerm: 'B' },
+      keywordQuery: '',
+      semanticQuery: '',
+    }, '');
+
+    expect(plan.chips).toEqual([
+      expect.objectContaining({
+        type: 'partOfTerm',
+        filter: { partOfTerm: 'B' },
+      }),
+    ]);
+    expect(plan.advanced.partOfTerm).toBe('B');
   });
 });

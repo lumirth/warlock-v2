@@ -265,4 +265,29 @@ describe('data freshness audit', () => {
     expect(report.checks.every(check => check.ok)).toBe(true);
     expect(readFileSync(outputFile.replace(/\.json$/i, '.md'), 'utf8')).toContain('Data Freshness Audit');
   });
+
+  it('keeps JSON and markdown distinct for extensionless output paths', () => {
+    const inputFile = makeTempFile('sync-status.json', JSON.stringify(status()));
+    const outputFile = join(tempRoot!, 'audit');
+
+    const result = spawnSync('npx', [
+      'tsx',
+      'scripts/data-freshness-audit.ts',
+      '--input',
+      inputFile,
+      '--output',
+      outputFile,
+      '--min-historical-terms',
+      '10',
+    ], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(readFileSync(outputFile, 'utf8'))).toEqual(expect.objectContaining({
+      source: inputFile,
+    }));
+    expect(readFileSync(`${outputFile}.md`, 'utf8')).toContain('Data Freshness Audit');
+  });
 });

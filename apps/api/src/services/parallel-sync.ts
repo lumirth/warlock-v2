@@ -1,31 +1,17 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
-import {
-  upsertSubject,
-  prepareUpsertCourse,
-  prepareUpsertSection,
-  prepareInsertCourseGened,
-  prepareUpsertMeeting,
-  prepareUpsertInstructor,
-  prepareLinkMeetingInstructorByKeys
-} from '../db/index.js';
+import { writeSubjectSnapshotToD1 } from './course-snapshot-writer.js';
 import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
-import { fromSubjectCascade, formatInstructorName, type CourseWithSections } from '../transforms/course.js';
+import { fromSubjectCascade } from '../transforms/course.js';
 import { errorFields, logger } from '../observability/logger.js';
 
-type GenEdCleanup = {
-  courseId: string;
-  currentKeys: { categoryId: string; attributeCode: string | null }[];
-};
+export { pruneStaleCourseGeneds, pruneStaleSubjectRows } from './course-snapshot-writer.js';
 
 const SUBJECT_SYNC_LOCK_TTL_SECONDS = 30 * 60;
 const SUBJECT_CASCADE_TIMEOUT_MS = 60_000;
 const SUBJECT_LIST_TIMEOUT_MS = 30_000;
-const D1_WRITE_BATCH_SIZE = 100;
-
-type CourseForEmbedding = CourseWithSections['course'];
 
 export interface ParallelSyncConfig {
   cisapiBase: string;
@@ -124,106 +110,9 @@ async function saveSubjectData(
   vectorize?: VectorizeIndex,
   ai?: Ai
 ): Promise<{ coursesCount: number; sectionsCount: number }> {
-  const { subject, coursesWithSections } = fromSubjectCascade(parsed, year, term);
-  const syncTimestamp = coursesWithSections[0]?.course.last_synced ?? Math.floor(Date.now() / 1000);
-  await upsertSubject(db, subject);
-
-  let coursesCount = 0;
-  let sectionsCount = 0;
-
-  const courseStatements: D1PreparedStatement[] = [];
-  const genedStatements: D1PreparedStatement[] = [];
-  const genedNullAttributeCleanup: D1PreparedStatement[] = [];
-  const sectionStatements: D1PreparedStatement[] = [];
-  const meetingStatements: D1PreparedStatement[] = [];
-  const instructorStatements: D1PreparedStatement[] = [];
-  const linkStatements: D1PreparedStatement[] = [];
-  const genedCleanup: GenEdCleanup[] = [];
-
-  const coursesForEmbedding: CourseForEmbedding[] = [];
-  const uniqueInstructors = new Set<string>();
-
-  for (const { course, sections, genEdCategories } of coursesWithSections) {
-    coursesCount++;
-    courseStatements.push(prepareUpsertCourse(db, course));
-
-    for (const cat of genEdCategories) {
-      if (cat.attributeCode === null) {
-        genedNullAttributeCleanup.push(preparePruneCourseGenedNullAttribute(db, course.id, cat.categoryId));
-      }
-      genedStatements.push(prepareInsertCourseGened(db, {
-        course_id: course.id,
-        category_id: cat.categoryId,
-        category_name: cat.categoryName,
-        attribute_code: cat.attributeCode,
-        attribute_name: cat.attributeName
-      }));
-    }
-    genedCleanup.push({
-      courseId: course.id,
-      currentKeys: genEdCategories.map(cat => ({
-        categoryId: cat.categoryId,
-        attributeCode: cat.attributeCode,
-      })),
-    });
-
-    if (vectorize && ai) {
-      coursesForEmbedding.push(course);
-    }
-
-    for (const { section, meetings } of sections) {
-      sectionsCount++;
-      sectionStatements.push(prepareUpsertSection(db, section));
-
-      for (const meetingData of meetings) {
-        const { instructors, ...meeting } = meetingData;
-        meetingStatements.push(prepareUpsertMeeting(db, meeting));
-
-        for (const instructor of instructors) {
-          const instructorKey = `${instructor.lastName}|${instructor.firstName || ''}`;
-          if (!uniqueInstructors.has(instructorKey)) {
-            uniqueInstructors.add(instructorKey);
-            instructorStatements.push(prepareUpsertInstructor(db, {
-              first_name: instructor.firstName || null,
-              last_name: instructor.lastName,
-              display_name: formatInstructorName(instructor) || instructor.lastName,
-              rmp_rating: null,
-              rmp_difficulty: null,
-              avg_gpa: null,
-              gpa_sample_size: null
-            }));
-          }
-
-          linkStatements.push(prepareLinkMeetingInstructorByKeys(
-            db,
-            meeting.section_id,
-            meeting.meeting_index,
-            instructor.lastName,
-            instructor.firstName || null
-          ));
-        }
-      }
-    }
-  }
-
-  // Execute batches in chunks to avoid limits
-  const executeBatch = async (stmts: D1PreparedStatement[]) => {
-    for (let i = 0; i < stmts.length; i += D1_WRITE_BATCH_SIZE) {
-      const chunk = stmts.slice(i, i + D1_WRITE_BATCH_SIZE);
-      if (chunk.length > 0) await db.batch(chunk);
-    }
-  };
-
-  // Order matters for FK constraints and linking logic
-  await executeBatch(courseStatements);
-  await executeBatch(genedNullAttributeCleanup);
-  await executeBatch(genedStatements);
-  await executeBatch(genedCleanup.map(cleanup => preparePruneStaleCourseGeneds(db, cleanup)));
-  await executeBatch(sectionStatements);
-  await executeBatch(instructorStatements); // Upsert instructors first so they exist for linking
-  await executeBatch(meetingStatements);    // Upsert meetings so they exist for linking
-  await executeBatch(linkStatements);       // Link using subqueries
-  await pruneStaleSubjectRows(db, subject.id, year, term, syncTimestamp);
+  const snapshot = fromSubjectCascade(parsed, year, term);
+  const { coursesCount, sectionsCount, coursesForEmbedding } =
+    await writeSubjectSnapshotToD1(db, snapshot);
 
   // Process Embeddings
   if (vectorize && ai) {
@@ -251,95 +140,6 @@ async function saveSubjectData(
   }
 
   return { coursesCount, sectionsCount };
-}
-
-function preparePruneCourseGenedNullAttribute(
-  db: D1Database,
-  courseId: string,
-  categoryId: string,
-): D1PreparedStatement {
-  return db.prepare(`
-    DELETE FROM course_gened
-    WHERE course_id = ?
-      AND category_id = ?
-      AND attribute_code IS NULL
-  `).bind(courseId, categoryId);
-}
-
-export async function pruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): Promise<void> {
-  await preparePruneStaleCourseGeneds(db, cleanup).run();
-}
-
-function preparePruneStaleCourseGeneds(db: D1Database, cleanup: GenEdCleanup): D1PreparedStatement {
-  if (cleanup.currentKeys.length === 0) {
-    return db.prepare('DELETE FROM course_gened WHERE course_id = ?')
-      .bind(cleanup.courseId);
-  }
-
-  const keepClauses = cleanup.currentKeys
-    .map(() => '(category_id = ? AND COALESCE(attribute_code, \'\') = ?)')
-    .join(' OR ');
-  const params = cleanup.currentKeys.flatMap(key => [key.categoryId, key.attributeCode ?? '']);
-
-  return db.prepare(`
-    DELETE FROM course_gened
-    WHERE course_id = ?
-      AND NOT (${keepClauses})
-  `).bind(cleanup.courseId, ...params);
-}
-
-export async function pruneStaleSubjectRows(
-  db: D1Database,
-  subjectId: string,
-  year: number,
-  term: string,
-  syncTimestamp: number
-): Promise<void> {
-  await db.prepare(`
-    DELETE FROM meeting_instructors
-    WHERE meeting_id IN (
-      SELECT m.id
-      FROM meetings m
-      JOIN sections s ON s.id = m.section_id
-      JOIN courses c ON c.id = s.course_id
-      WHERE c.subject = ? AND c.year = ? AND c.term = ?
-        AND (s.last_synced IS NULL OR s.last_synced != ?)
-    )
-  `).bind(subjectId, year, term, syncTimestamp).run();
-
-  await db.prepare(`
-    DELETE FROM meetings
-    WHERE section_id IN (
-      SELECT s.id
-      FROM sections s
-      JOIN courses c ON c.id = s.course_id
-      WHERE c.subject = ? AND c.year = ? AND c.term = ?
-        AND (s.last_synced IS NULL OR s.last_synced != ?)
-    )
-  `).bind(subjectId, year, term, syncTimestamp).run();
-
-  await db.prepare(`
-    DELETE FROM sections
-    WHERE course_id IN (
-      SELECT id FROM courses WHERE subject = ? AND year = ? AND term = ?
-    )
-      AND (last_synced IS NULL OR last_synced != ?)
-  `).bind(subjectId, year, term, syncTimestamp).run();
-
-  await db.prepare(`
-    DELETE FROM course_gened
-    WHERE course_id IN (
-      SELECT id FROM courses
-      WHERE subject = ? AND year = ? AND term = ?
-        AND (last_synced IS NULL OR last_synced != ?)
-    )
-  `).bind(subjectId, year, term, syncTimestamp).run();
-
-  await db.prepare(`
-    DELETE FROM courses
-    WHERE subject = ? AND year = ? AND term = ?
-      AND (last_synced IS NULL OR last_synced != ?)
-  `).bind(subjectId, year, term, syncTimestamp).run();
 }
 
 export async function getSubjectsForTerm(

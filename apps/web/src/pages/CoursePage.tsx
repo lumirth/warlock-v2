@@ -124,12 +124,7 @@ export function CoursePage() {
   }
 
   const details = detailRows(course)
-  const genedBadges =
-    course.geneds.length > 0
-      ? course.geneds.map(genedLabel)
-      : course.gened
-        ? [course.gened]
-        : []
+  const genedBadges = course.geneds.map(genedLabel)
 
   return (
     <PageContainer className="py-8">

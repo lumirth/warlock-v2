@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { resolveQuery, validateSubject } from '../query-resolver.js';
-import type { ExtractedQuery } from '@uiuc-course-search/query-types';
+import type { ExtractedQuery } from '@uiuc-course-search/query-types/search-planner';
 import type { D1Database } from '@cloudflare/workers-types';
 
 const mockDb = {
@@ -82,6 +82,24 @@ describe('resolveQuery', () => {
       expect(plan.filters.number).toBeUndefined();
       // Query should fall back to semantic search
       expect(plan.semanticQuery).toBe('XYZ 999');
+    });
+
+    it('keeps standalone course-number hints as number filters', async () => {
+      const extracted: ExtractedQuery = {
+        rawQuery: '225 course',
+        hints: [{
+          type: 'course_code',
+          value: '225',
+          confidence: 0.7,
+          metadata: { subject: '', number: '225' }
+        }],
+        residual: ''
+      };
+
+      const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
+
+      expect(plan.filters.subject).toBeUndefined();
+      expect(plan.filters.number).toBe('225');
     });
   });
 
@@ -195,8 +213,7 @@ describe('resolveQuery', () => {
       };
 
       const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
-      // For now, we expect it to map 'humanities' to a known code or keep it
-      expect(plan.filters.gened_code).toBeDefined();
+      expect(plan.filters.requirement).toEqual({ mode: 'single', codes: ['HUM'] });
       expect(plan.semanticQuery).toBe('easy');
     });
   });
@@ -239,7 +256,7 @@ describe('resolveQuery', () => {
       const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
 
       expect(plan.filters.subject).toBeUndefined();
-      expect(plan.filters.gened_code).toBe('CS');
+      expect(plan.filters.requirement).toEqual({ mode: 'single', codes: ['CS'] });
       expect(plan.ambiguities).toEqual([{
         term: 'cs',
         chosen: { type: 'gened', value: 'CS', label: 'Cultural Studies' },
@@ -264,7 +281,7 @@ describe('resolveQuery', () => {
       const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
 
       expect(plan.filters.subject).toBe('CS');
-      expect(plan.filters.gened_code).toBeUndefined();
+      expect(plan.filters.requirement).toBeUndefined();
       expect(plan.ambiguities).toEqual([{
         term: 'CS',
         chosen: { type: 'subject', value: 'CS', label: 'Computer Science' },
@@ -289,7 +306,7 @@ describe('resolveQuery', () => {
       const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
 
       expect(plan.filters.subject).toBe('CS');
-      expect(plan.filters.gened_code).toBeUndefined();
+      expect(plan.filters.requirement).toBeUndefined();
       expect(plan.ambiguities?.[0]).toMatchObject({
         chosen: { type: 'subject', value: 'CS', label: 'Computer Science' },
         alternatives: [{ type: 'gened', value: 'CS', label: 'Cultural Studies' }],
@@ -313,7 +330,7 @@ describe('resolveQuery', () => {
       const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
 
       expect(plan.filters.subject).toBe('CS');
-      expect(plan.filters.gened_code).toBeUndefined();
+      expect(plan.filters.requirement).toBeUndefined();
       expect(plan.ambiguities).toBeUndefined();
     });
 
@@ -334,7 +351,7 @@ describe('resolveQuery', () => {
       const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
 
       expect(plan.filters.subject).toBeUndefined();
-      expect(plan.filters.gened_code).toBe('PS');
+      expect(plan.filters.requirement).toEqual({ mode: 'single', codes: ['PS'] });
       expect(plan.ambiguities?.[0]).toMatchObject({
         chosen: { type: 'gened', value: 'PS', label: 'Physical Sciences' },
         alternatives: [{ type: 'subject', value: 'PS', label: 'Political Science' }],

@@ -1,6 +1,11 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 import { errorFields, logger } from '../observability/logger.js';
-import { SCORING, normalizeGpa, normalizeGpaDifficulty, normalizeRmp } from './scoring-constants.js';
+import {
+  SCORING,
+  normalizeGpa,
+  normalizeGpaDifficulty,
+  normalizeRmp,
+} from '@uiuc-course-search/query-types';
 
 const SCORE_UPDATE_BATCH_SIZE = 500;
 
@@ -163,6 +168,11 @@ export async function rebuildInstructorCourseLinks(
     )
   `).bind(options.termId, options.year, options.term).first<{ context_count: number }>();
 
+  await db.prepare(`
+    DELETE FROM instructor_course_links
+    WHERE term_id = ?
+  `).bind(options.termId).run();
+
   const insertResult = await db.prepare(`
     WITH RECURSIVE split(term_id, subject, number, rest, instructor_name) AS (
       SELECT ?, subject, number, primary_instructor || ';', ''
@@ -304,6 +314,11 @@ async function updateEnrichmentState(
 export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
   try {
     await db.prepare(`
+      DELETE FROM gpa_stats
+      WHERE instructor IS NULL
+    `).run();
+
+    await db.prepare(`
       INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, median_gpa, sample_size, last_updated)
       SELECT
         subject,
@@ -316,10 +331,6 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
       FROM gpa_stats
       WHERE instructor IS NOT NULL
       GROUP BY subject, number
-      ON CONFLICT(subject, number, instructor) DO UPDATE SET
-        avg_gpa = excluded.avg_gpa,
-        sample_size = excluded.sample_size,
-        last_updated = excluded.last_updated
     `).run();
   } catch (err) {
     logger.error('enrichment.aggregateCourseStats.failed', { ...errorFields(err) });

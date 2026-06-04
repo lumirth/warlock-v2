@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { parseSubjectCascadeXmlFromString } from '../../apps/api/src/cisapi/parser.js';
-import { courseGenedSqlStatements, escapeSQL, makeCourseId } from '../historical-sync.js';
+import { subjectSnapshotSqlStatements } from '../../apps/api/src/services/course-snapshot-writer.js';
+import { fromSubjectCascade } from '../../apps/api/src/transforms/course.js';
+import { chooseSqlOutputPlan, courseGenedSqlStatements, escapeSQL, makeCourseId } from '../historical-sync.js';
 
 // Real XML sample from ~/cisapp (trimmed to 1 course with 2 sections)
 const REAL_CS_CASCADE_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -83,22 +85,54 @@ www.cs.illinois.edu</collegeDepartmentDescription>
   </cascadingCourses>
 </ns2:subject>`;
 
-function makeTermId(year: number, term: string): string {
-  return `${year}-${term}`;
+async function sampleSqlStatements(now = 1234567890): Promise<string[]> {
+  const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
+  const snapshot = fromSubjectCascade(parsed, 2026, 'spring', {
+    syncTimestamp: now,
+  });
+  return subjectSnapshotSqlStatements(snapshot);
 }
 
-function makeSectionId(termId: string, crn: string): string {
-  return `${termId}-${crn}`;
-}
-
-function formatInstructorName(inst: { firstName: string; lastName: string }): string {
-  if (inst.firstName) {
-    return `${inst.lastName}, ${inst.firstName.charAt(0)}`;
-  }
-  return inst.lastName;
+function findSqlStatement(statements: string[], needle: string): string {
+  const statement = statements.find(sql => sql.includes(needle));
+  expect(statement, `Expected SQL statement containing ${needle}`).toBeDefined();
+  return statement as string;
 }
 
 describe('Historical Sync SQL Generation', () => {
+  it('appends resumed SQL output when checkpointed work already exists', () => {
+    expect(chooseSqlOutputPlan({
+      dryRun: false,
+      fresh: false,
+      skippedCount: 1,
+      sqlFileExists: true,
+      sqlFileHasCommit: false,
+    })).toEqual({
+      enabled: true,
+      flags: 'a',
+      writeHeader: false,
+      mode: 'resume',
+    });
+  });
+
+  it('refuses checkpoint resume when the previous SQL artifact is unavailable or already closed', () => {
+    expect(() => chooseSqlOutputPlan({
+      dryRun: false,
+      fresh: false,
+      skippedCount: 1,
+      sqlFileExists: false,
+      sqlFileHasCommit: false,
+    })).toThrow('SQL file is missing');
+
+    expect(() => chooseSqlOutputPlan({
+      dryRun: false,
+      fresh: false,
+      skippedCount: 1,
+      sqlFileExists: true,
+      sqlFileHasCommit: true,
+    })).toThrow('already contains COMMIT');
+  });
+
   it('parses real CISAPI cascade XML correctly', async () => {
     const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
 
@@ -112,11 +146,7 @@ describe('Historical Sync SQL Generation', () => {
   });
 
   it('generates valid SQL for subjects table', async () => {
-    const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
-    const meta = parsed.subjectMetadata;
-    const now = 1234567890;
-
-    const sql = `INSERT OR REPLACE INTO subjects (id, name, college_code, department_code, unit_name, contact_name, contact_title, address_line1, address_line2, phone_number, website_url, description, last_synced) VALUES (${escapeSQL(parsed.subjectId)}, ${escapeSQL(parsed.subjectLabel || meta.label)}, ${escapeSQL(meta.collegeCode)}, ${escapeSQL(meta.departmentCode)}, ${escapeSQL(meta.unitName)}, ${escapeSQL(meta.contactName)}, ${escapeSQL(meta.contactTitle)}, ${escapeSQL(meta.addressLine1)}, ${escapeSQL(meta.addressLine2)}, ${escapeSQL(meta.phoneNumber)}, ${escapeSQL(meta.websiteUrl)}, ${escapeSQL(meta.description)}, ${now});`;
+    const sql = findSqlStatement(await sampleSqlStatements(), 'INSERT INTO subjects');
 
     // Should contain all expected values
     expect(sql).toContain("'CS'");
@@ -132,24 +162,7 @@ describe('Historical Sync SQL Generation', () => {
   });
 
   it('generates valid SQL for courses table', async () => {
-    const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
-    const course = parsed.courses[0];
-    const year = 2026;
-    const term = 'spring';
-    const courseId = makeCourseId(parsed.subjectId, course.id, year, term);
-    const now = 1234567890;
-
-    // Get primary instructor from lecture section
-    const lectureSection = course.sections.find(s =>
-      s.meetings.some(m => m.typeName.toLowerCase().includes('lecture'))
-    ) || course.sections[0];
-    const primaryInstructor = lectureSection?.meetings[0]?.instructors[0];
-    const primaryInstructorName = primaryInstructor ? formatInstructorName(primaryInstructor) : null;
-
-    const creditHours = parseInt(course.creditHours) || null;
-    const firstGenEd = course.genEdCategories[0]?.id || null;
-
-    const sql = `INSERT OR REPLACE INTO courses (id, subject, number, title, description, credit_hours, gened, subject_id, course_info, degree_attributes, class_schedule_info, date_range_text, registration_notes, approval_code, year, term, primary_instructor, last_synced) VALUES (${escapeSQL(courseId)}, ${escapeSQL(parsed.subjectId)}, ${escapeSQL(course.id)}, ${escapeSQL(course.title)}, ${escapeSQL(course.description)}, ${creditHours ?? 'NULL'}, ${escapeSQL(firstGenEd)}, ${escapeSQL(parsed.subjectId)}, ${escapeSQL(course.courseInfo)}, ${escapeSQL(course.degreeAttributes)}, ${escapeSQL(course.classScheduleInfo)}, ${escapeSQL(course.dateRangeText)}, ${escapeSQL(course.registrationNotes)}, ${escapeSQL(course.approvalCode)}, ${year}, ${escapeSQL(term)}, ${escapeSQL(primaryInstructorName)}, ${now});`;
+    const sql = findSqlStatement(await sampleSqlStatements(), 'INSERT INTO courses');
 
     expect(sql).toContain("'CS-101-2026-spring'");
     expect(sql).toContain("'CS'");
@@ -157,26 +170,16 @@ describe('Historical Sync SQL Generation', () => {
     expect(sql).toContain("'Intro Computing: Engrg & Sci'");
     expect(sql).toContain("'QR1'");
     expect(sql).toContain("'Fagen-Ulmschneider, W'"); // Primary instructor from lecture
+    expect(sql).toContain("'Prerequisite: One of MATH 220 or MATH 221.'");
+    expect(sql).toContain("'Quantitative Reasoning I course.'");
     expect(sql).toContain("2026");
     expect(sql).toContain("'spring'");
+    expect(sql).toContain('ON CONFLICT(id) DO UPDATE SET');
+    expect(sql).not.toContain('INSERT OR REPLACE INTO courses');
   });
 
   it('generates valid SQL for sections table', async () => {
-    const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
-    const course = parsed.courses[0];
-    const section = course.sections[0];
-    const year = 2026;
-    const term = 'spring';
-    const courseId = makeCourseId(parsed.subjectId, course.id, year, term);
-    const termId = makeTermId(year, term);
-    const sectionId = makeSectionId(termId, section.crn);
-    const now = 1234567890;
-
-    const firstMeeting = section.meetings[0];
-    const instructorName = firstMeeting?.instructors[0] ? formatInstructorName(firstMeeting.instructors[0]) : null;
-    const location = `${firstMeeting?.buildingName || ''} ${firstMeeting?.roomNumber || ''}`.trim();
-
-    const sql = `INSERT OR REPLACE INTO sections (id, crn, course_id, term_id, section_number, status, type, days, start_time, end_time, location, instructor, section_title, status_code, section_status_code, section_text, section_notes, capp_area, date_range_text, part_of_term, start_date, end_date, credit_hours, last_synced) VALUES (${escapeSQL(sectionId)}, ${escapeSQL(section.crn)}, ${escapeSQL(courseId)}, ${escapeSQL(termId)}, ${escapeSQL(section.sectionNumber)}, ${escapeSQL(section.enrollmentStatus)}, ${escapeSQL(firstMeeting?.typeName)}, ${escapeSQL(firstMeeting?.days)}, ${escapeSQL(firstMeeting?.startTime)}, ${escapeSQL(firstMeeting?.endTime)}, ${escapeSQL(location)}, ${escapeSQL(instructorName)}, ${escapeSQL(section.sectionTitle)}, ${escapeSQL(section.statusCode)}, ${escapeSQL(section.sectionStatusCode)}, ${escapeSQL(section.sectionText)}, ${escapeSQL(section.sectionNotes)}, ${escapeSQL(section.cappArea)}, ${escapeSQL(section.dateRangeText)}, ${escapeSQL(section.partOfTerm)}, ${escapeSQL(section.startDate)}, ${escapeSQL(section.endDate)}, ${escapeSQL(section.creditHours)}, ${now});`;
+    const sql = findSqlStatement(await sampleSqlStatements(), "'2026-spring-31115'");
 
     expect(sql).toContain("'2026-spring-31115'"); // Section ID
     expect(sql).toContain("'31115'"); // CRN
@@ -190,46 +193,42 @@ describe('Historical Sync SQL Generation', () => {
     expect(sql).toContain("'Fowler, M'");
     expect(sql).toContain("'This section is for engineering students only.'");
     expect(sql).toContain("'Major restrictions apply.'");
+    expect(sql).toContain('ON CONFLICT(id) DO UPDATE SET');
+    expect(sql).not.toContain('INSERT OR REPLACE INTO sections');
   });
 
   it('generates valid SQL for meetings table', async () => {
-    const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
-    const section = parsed.courses[0].sections[0];
-    const meeting = section.meetings[0];
-    const sectionId = makeSectionId(makeTermId(2026, 'spring'), section.crn);
+    const statements = await sampleSqlStatements();
+    const sql = statements.find(statement =>
+      statement.startsWith('INSERT INTO meetings')
+      && statement.includes("'2026-spring-31115'")
+    );
+    expect(sql).toBeDefined();
 
-    const sql = `INSERT OR REPLACE INTO meetings (section_id, meeting_index, type_code, type_name, days, start_time, end_time, building_name, room_number, date_range_text) VALUES (${escapeSQL(sectionId)}, 0, ${escapeSQL(meeting.typeCode)}, ${escapeSQL(meeting.typeName)}, ${escapeSQL(meeting.days)}, ${escapeSQL(meeting.startTime)}, ${escapeSQL(meeting.endTime)}, ${escapeSQL(meeting.buildingName)}, ${escapeSQL(meeting.roomNumber)}, ${escapeSQL(meeting.dateRangeText)});`;
-
-    expect(sql).toContain("'2026-spring-31115'");
-    expect(sql).toContain("'LBD'");
-    expect(sql).toContain("'Laboratory-Discussion'");
-    expect(sql).toContain("'Armory'");
-    expect(sql).toContain("'432'");
+    expect(sql as string).toContain("'2026-spring-31115'");
+    expect(sql as string).toContain("'LBD'");
+    expect(sql as string).toContain("'Laboratory-Discussion'");
+    expect(sql as string).toContain("'Armory'");
+    expect(sql as string).toContain("'432'");
+    expect(sql as string).toContain('ON CONFLICT(section_id, meeting_index) DO UPDATE SET');
   });
 
   it('generates valid SQL for instructors table', async () => {
-    const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
-    const instructor = parsed.courses[0].sections[0].meetings[0].instructors[0];
-    const displayName = formatInstructorName(instructor);
-
-    const sql = `INSERT OR IGNORE INTO instructors (first_name, last_name, display_name) VALUES (${escapeSQL(instructor.firstName)}, ${escapeSQL(instructor.lastName)}, ${escapeSQL(displayName)});`;
+    const sql = findSqlStatement(await sampleSqlStatements(), 'INSERT INTO instructors');
 
     expect(sql).toContain("'M'");
     expect(sql).toContain("'Fowler'");
     expect(sql).toContain("'Fowler, M'");
+    expect(sql).toContain('ON CONFLICT(last_name, first_name) DO UPDATE SET');
   });
 
   it('generates valid SQL for course_gened table', async () => {
-    const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
-    const course = parsed.courses[0];
-    const courseId = makeCourseId(parsed.subjectId, course.id, 2026, 'spring');
-    const genEd = course.genEdCategories[0];
-
-    const sql = `INSERT OR REPLACE INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES (${escapeSQL(courseId)}, ${escapeSQL(genEd.id)}, ${escapeSQL(genEd.name)}, ${escapeSQL(genEd.attributes[0]?.code)}, ${escapeSQL(genEd.attributes[0]?.name)});`;
+    const sql = findSqlStatement(await sampleSqlStatements(), 'INSERT INTO course_gened');
 
     expect(sql).toContain("'CS-101-2026-spring'");
     expect(sql).toContain("'QR1'");
     expect(sql).toContain("'Quantitative Reasoning I'");
+    expect(sql).toContain('ON CONFLICT(course_id, category_id, attribute_code) DO UPDATE SET');
   });
 
   it('pre-cleans nullable GenEd attribute rows before historical SQL insert', () => {
@@ -243,8 +242,35 @@ describe('Historical Sync SQL Generation', () => {
 
     expect(sql).toEqual([
       "DELETE FROM course_gened WHERE course_id = 'CLCV-100-2026-spring' AND category_id = 'HUM' AND attribute_code IS NULL;",
-      "INSERT OR REPLACE INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES ('CLCV-100-2026-spring', 'HUM', 'Humanities - Lit Arts', NULL, NULL);",
+      "INSERT INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES ('CLCV-100-2026-spring', 'HUM', 'Humanities - Lit Arts', NULL, NULL) ON CONFLICT(course_id, category_id, attribute_code) DO UPDATE SET category_name = excluded.category_name, attribute_name = excluded.attribute_name;",
+      "DELETE FROM course_gened WHERE course_id = 'CLCV-100-2026-spring' AND NOT ((category_id = 'HUM' AND COALESCE(attribute_code, '') = ''));",
     ]);
+  });
+
+  it('prunes stale GenEd rows from historical SQL artifacts', () => {
+    const courseId = makeCourseId('AAS', '100', 2026, 'spring');
+
+    expect(courseGenedSqlStatements(courseId, [])).toEqual([
+      "DELETE FROM course_gened WHERE course_id = 'AAS-100-2026-spring';",
+    ]);
+
+    const sql = courseGenedSqlStatements(courseId, [
+      {
+        categoryId: 'CS',
+        categoryName: 'Cultural Studies',
+        attributeCode: 'US',
+        attributeName: 'US Minority Cultures',
+      },
+      {
+        categoryId: 'SBS',
+        categoryName: 'Social & Behavioral Sciences',
+        attributeCode: null,
+        attributeName: null,
+      },
+    ]);
+    expect(sql.at(-1)).toBe(
+      "DELETE FROM course_gened WHERE course_id = 'AAS-100-2026-spring' AND NOT ((category_id = 'CS' AND COALESCE(attribute_code, '') = 'US') OR (category_id = 'SBS' AND COALESCE(attribute_code, '') = ''));"
+    );
   });
 
   it('handles special characters in SQL escaping', async () => {
@@ -266,25 +292,35 @@ describe('Historical Sync SQL Generation', () => {
   });
 
   it('handles meeting_instructors link SQL correctly', async () => {
-    const sectionId = '2026-spring-31115';
-    const meetingIndex = 0;
-    const inst = { firstName: 'M', lastName: 'Fowler' };
-
-    // With first name
-    const firstName = inst.firstName || '';
-
-    const sql = `INSERT OR IGNORE INTO meeting_instructors (meeting_id, instructor_id) SELECT m.id, i.id FROM meetings m, instructors i WHERE m.section_id = ${escapeSQL(sectionId)} AND m.meeting_index = ${meetingIndex} AND i.last_name = ${escapeSQL(inst.lastName)} AND i.first_name = ${escapeSQL(firstName)};`;
+    const sql = findSqlStatement(await sampleSqlStatements(), 'INSERT INTO meeting_instructors');
 
     expect(sql).toContain("m.section_id = '2026-spring-31115'");
     expect(sql).toContain("i.first_name = 'M'");
     expect(sql).not.toContain("IS NULL");
+    expect(sql).toContain('ON CONFLICT(meeting_id, instructor_id) DO NOTHING');
+  });
 
-    // Without first name
-    const instNoFirst = { firstName: '', lastName: 'Smith' };
-    const noFirstName = instNoFirst.firstName || '';
+  it('uses empty first-name keys when canonical SQL links instructors without a first name', async () => {
+    const parsed = await parseSubjectCascadeXmlFromString(REAL_CS_CASCADE_XML);
+    parsed.courses[0].sections[0].meetings[0].instructors = [{ firstName: '', lastName: 'Smith' }];
+    const snapshot = fromSubjectCascade(parsed, 2026, 'spring', {
+      syncTimestamp: 1234567890,
+    });
+    const sql = findSqlStatement(subjectSnapshotSqlStatements(snapshot), 'INSERT INTO meeting_instructors');
 
-    const sql2 = `INSERT OR IGNORE INTO meeting_instructors (meeting_id, instructor_id) SELECT m.id, i.id FROM meetings m, instructors i WHERE m.section_id = ${escapeSQL(sectionId)} AND m.meeting_index = ${meetingIndex} AND i.last_name = ${escapeSQL(instNoFirst.lastName)} AND i.first_name = ${escapeSQL(noFirstName)};`;
+    expect(sql).toContain("i.last_name = 'Smith'");
+    expect(sql).toContain("i.first_name = ''");
+  });
 
-    expect(sql2).toContain("i.first_name = ''");
+  it('includes subject-level stale pruning in historical SQL artifacts', async () => {
+    const sql = await sampleSqlStatements();
+
+    expect(sql.slice(-5).map(statement => statement.replace(/\s+/g, ' '))).toEqual([
+      expect.stringContaining('DELETE FROM meeting_instructors WHERE meeting_id IN'),
+      expect.stringContaining('DELETE FROM meetings WHERE section_id IN'),
+      expect.stringContaining('DELETE FROM sections WHERE course_id IN'),
+      expect.stringContaining('DELETE FROM course_gened WHERE course_id IN'),
+      expect.stringContaining('DELETE FROM courses WHERE subject ='),
+    ]);
   });
 });

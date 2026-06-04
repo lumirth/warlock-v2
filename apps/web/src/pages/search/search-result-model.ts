@@ -1,0 +1,145 @@
+import {
+  getWorkloadTierLabel,
+  type CourseDto,
+  type CourseGenedDto,
+  type SearchChipDto,
+  type SearchRecoveryGroup,
+} from '@uiuc-course-search/query-types'
+import { getQualityLabel, getQualityTone } from '../../utils/grading'
+import { cn } from '@/lib/utils'
+
+export type Tone = 'success' | 'warning' | 'destructive' | 'muted'
+
+export type CourseResultMetric = {
+  label: string
+  value: string
+  tone?: Tone
+  title?: string
+}
+
+export function getDifficultyLabel(score: number): string {
+  return getWorkloadTierLabel(score) ?? 'Easy'
+}
+
+export function getDifficultyTone(score: number): Tone {
+  const label = getWorkloadTierLabel(score)
+  if (label === 'Hard') return 'destructive'
+  if (label === 'Moderate') return 'warning'
+  return 'success'
+}
+
+export function toneTextClass(tone?: Tone): string {
+  return cn(
+    tone === 'success' && 'text-success',
+    tone === 'warning' && 'text-warning',
+    tone === 'destructive' && 'text-destructive',
+    tone === 'muted' && 'text-muted-foreground'
+  )
+}
+
+export function getCourseKey(course: CourseDto): string {
+  return (
+    course.id ||
+    `${course.subject}-${course.number}-${course.term}-${course.year}`
+  )
+}
+
+export function getCoursePath(course: CourseDto): string {
+  return `/course/${course.subject}/${course.number}?term=${course.term}&year=${course.year}`
+}
+
+export function getCourseMetrics(course: CourseDto): CourseResultMetric[] {
+  const qualityScore = course.quality_score
+  const difficultyScore = course.difficulty_score
+  const primaryInstructorRmp = course.primary_instructor_rmp
+  const avgGpa = course.avg_gpa
+  const stats: CourseResultMetric[] = []
+
+  if (typeof qualityScore === 'number') {
+    const qualityLabel = getQualityLabel(qualityScore)
+    stats.push({
+      label: 'Quality',
+      value: qualityLabel,
+      tone: getQualityTone(qualityLabel),
+      title:
+        typeof course.gpa_sample_size === 'number'
+          ? `Based on ${course.gpa_sample_size.toLocaleString()} records`
+          : undefined,
+    })
+  }
+  if (typeof difficultyScore === 'number') {
+    stats.push({
+      label: 'Workload',
+      value: getDifficultyLabel(difficultyScore),
+      tone: getDifficultyTone(difficultyScore),
+    })
+  }
+  if (typeof primaryInstructorRmp === 'number') {
+    stats.push({ label: 'Instructor', value: primaryInstructorRmp.toFixed(1) })
+  }
+  if (typeof avgGpa === 'number') {
+    stats.push({
+      label: 'Avg GPA',
+      value: avgGpa.toFixed(2),
+      title:
+        typeof course.gpa_sample_size === 'number'
+          ? `Based on ${course.gpa_sample_size.toLocaleString()} GPA records`
+          : undefined,
+    })
+  }
+
+  return stats
+}
+
+export function getChipClass(chip: SearchChipDto): string {
+  return cn(
+    chip.type === 'instructor' &&
+      'border-primary/30 bg-primary/5 text-foreground',
+    chip.type === 'difficulty' &&
+      'border-warning/30 bg-warning/10 text-foreground',
+    (chip.type === 'courseCode' || chip.type === 'subject') &&
+      'border-primary/30 bg-primary/5 text-foreground',
+    chip.type === 'semantic' && 'text-muted-foreground'
+  )
+}
+
+export function formatTermLabel(term: string, year: number): string {
+  return `${term.charAt(0).toUpperCase()}${term.slice(1).toLowerCase()} ${year}`
+}
+
+export function genedLabel(gened: CourseGenedDto): string {
+  const category = gened.categoryName ?? gened.categoryId
+  if (gened.attributeName) return `${category}: ${gened.attributeName}`
+  if (gened.attributeCode) return `${category}: ${gened.attributeCode}`
+  return category
+}
+
+export function courseGenedLabels(course: CourseDto): string[] {
+  if (course.geneds.length > 0) {
+    return course.geneds.map(genedLabel)
+  }
+  return []
+}
+
+export function formatCourseLevel(course: CourseDto): string {
+  const number = parseInt(course.number, 10)
+  if (Number.isNaN(number)) return '-'
+
+  const level = Math.floor(number / 100) * 100
+  return level >= 500 ? '500+' : String(level)
+}
+
+export function formatNumber(
+  value: number | null | undefined,
+  digits: number
+): string {
+  return typeof value === 'number' ? value.toFixed(digits) : '-'
+}
+
+export function formatCredits(value: number | null): string {
+  return typeof value === 'number' ? String(value) : '-'
+}
+
+export function recoveryButtonLabel(group: SearchRecoveryGroup): string {
+  return group.label.startsWith('Show ') ? group.label : `Try: ${group.label}`
+}

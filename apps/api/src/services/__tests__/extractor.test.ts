@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extract } from '../extractor.js';
-import type { Hint } from '@uiuc-course-search/query-types';
+import type { Hint } from '@uiuc-course-search/query-types/search-planner';
 
 describe('extract', () => {
   describe('phase 1: entities', () => {
@@ -240,6 +240,18 @@ describe('extract', () => {
       const result = extract('no morning');
       const timeHints = result.hints.filter(h => h.type === 'time');
       expect(timeHints).toHaveLength(0);
+    });
+
+    it('extracts positive no/not aliases before generic negation masking', () => {
+      expect(extract('not hard').hints).toContainEqual(
+        expect.objectContaining({ type: 'difficulty', value: 'easy' })
+      );
+      expect(extract('not full').hints).toContainEqual(
+        expect.objectContaining({ type: 'status', value: 'open' })
+      );
+      expect(extract('no waitlist').hints).toContainEqual(
+        expect.objectContaining({ type: 'status', value: 'open' })
+      );
     });
 
     it('extracts workload negations instead of searching them as positive text', () => {

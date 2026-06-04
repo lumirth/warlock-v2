@@ -1,4 +1,4 @@
-import type { ParsedQuery, ParsedClause, FieldFilter } from '@uiuc-course-search/query-types';
+import type { ParsedQuery, ParsedClause, FieldFilter } from '@uiuc-course-search/query-types/search-planner';
 
 const SUPPORTED_FIELD_FILTERS = new Set([
   'subject',

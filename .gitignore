@@ -8,6 +8,8 @@ artifacts/
 .clawpatch/patches/
 .clawpatch/reports/
 .clawpatch/locks/
+.clawpatch/features/
+.clawpatch/findings/
 
 # OS files
 .DS_Store

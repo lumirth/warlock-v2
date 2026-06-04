@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { calculateCourseScores, coordinateEnrichment, enrichCoursesWithScores } from '../enrichment.js';
+import { calculateCourseScores, coordinateEnrichment, enrichCoursesWithGpa, enrichCoursesWithScores } from '../enrichment.js';
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 
 function createSetBasedDb() {
   const stateWrites: unknown[][] = [];
   const linkRebuildBinds: unknown[][] = [];
+  const linkDeleteBinds: unknown[][] = [];
   const updateBinds: unknown[][] = [];
 
   const db = {
@@ -57,6 +58,10 @@ function createSetBasedDb() {
               linkRebuildBinds.push(args);
               return { meta: { changes: 7734 } };
             }
+            if (sql.includes('DELETE FROM instructor_course_links')) {
+              linkDeleteBinds.push(args);
+              return { meta: { changes: 12 } };
+            }
             return {};
           }),
           all: vi.fn(async () => ({ success: true, results: [] })),
@@ -66,12 +71,12 @@ function createSetBasedDb() {
     batch: vi.fn(async () => []),
   };
 
-  return { db, stateWrites, linkRebuildBinds, updateBinds };
+  return { db, stateWrites, linkRebuildBinds, linkDeleteBinds, updateBinds };
 }
 
 describe('coordinateEnrichment', () => {
   it('rebuilds every registrable or active term in set-based passes and recomputes scores once', async () => {
-    const { db, stateWrites, linkRebuildBinds, updateBinds } = createSetBasedDb();
+    const { db, stateWrites, linkRebuildBinds, linkDeleteBinds, updateBinds } = createSetBasedDb();
     const selfBinding: { fetch: ReturnType<typeof vi.fn> } = {
       fetch: vi.fn(),
     };
@@ -93,6 +98,10 @@ describe('coordinateEnrichment', () => {
       ['2026-fall', 2026, 'fall'],
       ['2026-summer', 2026, 'summer'],
     ]);
+    expect(linkDeleteBinds).toEqual([
+      ['2026-fall'],
+      ['2026-summer'],
+    ]);
     expect(updateBinds).toEqual([[85.3, 25, 4.5, 'CS-225-2026-spring']]);
     expect(stateWrites).toEqual([
       ['enrichment:2026-fall', 'running', 0, 1, '2026-fall'],
@@ -104,6 +113,27 @@ describe('coordinateEnrichment', () => {
 });
 
 describe('course score enrichment', () => {
+  it('rebuilds course-average GPA rows instead of relying on NULL conflict keys', async () => {
+    const executedSql: string[] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        run: vi.fn(async () => {
+          executedSql.push(sql);
+          return {};
+        }),
+        all: vi.fn(async () => ({ success: true, results: [] })),
+      })),
+      batch: vi.fn(async () => []),
+    };
+
+    await enrichCoursesWithGpa(db as unknown as D1Database);
+
+    expect(executedSql[0]).toContain('DELETE FROM gpa_stats');
+    expect(executedSql[0]).toContain('instructor IS NULL');
+    expect(executedSql[1]).toContain('INSERT INTO gpa_stats');
+    expect(executedSql[1]).not.toContain('ON CONFLICT(subject, number, instructor)');
+  });
+
   it('normalizes GPA and RMP data into 0-100 quality and difficulty scores', () => {
     expect(calculateCourseScores({
       id: 'CS-225-2026-spring',

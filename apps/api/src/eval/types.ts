@@ -1,10 +1,10 @@
-import type { DecisionQueryType, RetrievalLane, SearchPlanWarningKind } from '@uiuc-course-search/query-types';
+import type { DecisionQueryType, RetrievalLane, SearchPlanWarningKind } from '@uiuc-course-search/query-types/search-planner';
 
 export interface ExpectedRescuePlan {
   queryTypes?: DecisionQueryType[];
   negativeTerms?: string[];
   warnings?: SearchPlanWarningKind[];
-  retrievalLanes?: RetrievalLane[];
+  interpretedLanes?: RetrievalLane[];
   relaxationSteps?: string[];
   assumptions?: string[];
   needsStudentProfile?: boolean;
@@ -52,7 +52,7 @@ export interface GoldQuery {
     subject?: string;
     level_gte?: number;
     level_lte?: number;
-    gened_code?: string;
+    gened?: string;
     no_subject?: string;
   };
   category:

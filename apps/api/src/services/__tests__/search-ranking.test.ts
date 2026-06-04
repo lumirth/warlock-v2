@@ -1,8 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import { applySearchIntentBoosts, applyTitleBoost, applyUsefulnessRerank, buildTermPriorityMap, hybridSearch } from '../search.js';
+import { singleRequirementFilter } from '@uiuc-course-search/query-types';
+import {
+  applySearchIntentBoosts,
+  applyTitleBoost,
+  applyUsefulnessRerank,
+  buildRetrievalPlan,
+  buildSearchCandidateBudget,
+  buildTermPriorityMap,
+  hybridSearch,
+  normalizeSearchControls,
+} from '../search.js';
 import type { SearchResult } from '../search.js';
 import type { Course } from '../../db/index.js';
+import type { SearchPlan } from '@uiuc-course-search/query-types/search-planner';
 
 function course(overrides: Partial<Course>): Course {
   return {
@@ -33,6 +44,12 @@ function course(overrides: Partial<Course>): Course {
     updated_at: 0,
     ...overrides,
   };
+}
+
+async function retrievalPlan(db: D1Database, plan: SearchPlan, limit = 20) {
+  const controls = normalizeSearchControls();
+  const budget = buildSearchCandidateBudget(plan, { limit, offset: 0 }, controls);
+  return buildRetrievalPlan(db, plan, controls, budget);
 }
 
 describe('exact-title boost', () => {
@@ -228,7 +245,7 @@ describe('decision-search usefulness reranking', () => {
     ];
 
     const reranked = applyUsefulnessRerank(results, {
-      filters: { gened_code: 'HUM' },
+      filters: { requirement: singleRequirementFilter('HUM') },
       semanticQuery: 'movies',
       keywordQuery: 'movies',
       rescue: {
@@ -238,7 +255,7 @@ describe('decision-search usefulness reranking', () => {
         expandedTerms: ['film cinema media documentary television pop culture visual culture'],
         assumptions: [],
         warnings: [],
-        retrievalLanes: ['requirement', 'student_language_alias', 'topic_semantic', 'workload_evidence'],
+        interpretedLanes: ['requirement', 'student_language_alias', 'topic_semantic', 'workload_evidence'],
         relaxationPlan: [],
         needsStudentProfile: false,
         confidence: 0.82,
@@ -353,11 +370,17 @@ describe('search SQL batching', () => {
       }),
     } as unknown as D1Database;
 
-    const results = await hybridSearch(db, {} as VectorizeIndex, {} as Ai, {
+    const plan: SearchPlan = {
       filters: {},
       keywordQuery: '',
       semanticQuery: '',
-    }, 120);
+    };
+    const results = await hybridSearch(
+      db,
+      {} as VectorizeIndex,
+      {} as Ai,
+      await retrievalPlan(db, plan, 120),
+    );
 
     expect(results).toHaveLength(120);
     expect(Math.max(...bindCounts)).toBe(50);

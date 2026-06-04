@@ -37,4 +37,19 @@ describe('structured logger', () => {
       errorMessage: 'nope',
     });
   });
+
+  it('does not let caller fields overwrite logger metadata', () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    logger.info('actual.event', {
+      level: 'warn',
+      event: 'fake.event',
+      timestamp: null,
+    });
+
+    const payload = JSON.parse(logSpy.mock.calls[0][0] as string) as Record<string, unknown>;
+    expect(payload.level).toBe('info');
+    expect(payload.event).toBe('actual.event');
+    expect(payload.timestamp).toEqual(expect.any(String));
+  });
 });

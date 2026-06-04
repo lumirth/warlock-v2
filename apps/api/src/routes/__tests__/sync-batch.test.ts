@@ -153,6 +153,24 @@ describe('internal sync batch route', () => {
     expect(termUpsert?.params.slice(6, 9)).toEqual([187, 42, 99]);
   });
 
+  it('rejects malformed year and term before syncing or upserting term_state', async () => {
+    const runCalls: RunCall[] = [];
+
+    const response = await app().request('/internal/sync-batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        year: '2026',
+        term: 'autumn',
+        subjects: ['CS'],
+        totalSubjects: 1,
+      }),
+    }, createEnv(termState(), runCalls));
+
+    expect(response.status).toBe(400);
+    expect(vi.mocked(syncSubjects)).not.toHaveBeenCalled();
+    expect(runCalls).toEqual([]);
+  });
+
   it('does not mark sync-active skipped-only terms as freshly synced', async () => {
     vi.mocked(syncTerm).mockResolvedValue({
       termId: '2026-fall',

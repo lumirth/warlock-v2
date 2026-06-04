@@ -18,16 +18,37 @@ type ThemeMode = 'light' | 'dark'
 
 const THEME_STORAGE_KEY = 'uiuc-course-search-theme'
 
+function readStoredTheme(): ThemeMode | null {
+  try {
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+    return storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredTheme(themeMode: ThemeMode): void {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
+  } catch {
+    // Theme persistence is optional; the applied document theme still works.
+  }
+}
+
 function getInitialTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'light'
 
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
-  if (storedTheme === 'light' || storedTheme === 'dark') {
+  const storedTheme = readStoredTheme()
+  if (storedTheme) {
     return storedTheme
   }
 
-  if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-    return 'dark'
+  try {
+    if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+      return 'dark'
+    }
+  } catch {
+    return 'light'
   }
 
   return 'light'
@@ -43,7 +64,7 @@ function App() {
     const root = document.documentElement
     root.classList.toggle('dark', themeMode === 'dark')
     root.style.colorScheme = themeMode
-    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
+    writeStoredTheme(themeMode)
   }, [themeMode])
 
   return (

@@ -54,10 +54,14 @@ export async function browserFetch(
       const response = await fetchWithTimeout(url, fetchOptions, headers, timeoutMs);
 
       // Check for WAF challenge - retry if challenged
-      if (isWafChallenge(response) && attempt < retries) {
-        logger.warn('browserFetch.wafChallenge', { attempt: attempt + 1 });
-        await sleep(retryDelay * (attempt + 1));
-        continue;
+      if (isWafChallenge(response)) {
+        response.body?.cancel().catch(() => undefined);
+        if (attempt < retries) {
+          logger.warn('browserFetch.wafChallenge', { attempt: attempt + 1 });
+          await sleep(retryDelay * (attempt + 1));
+          continue;
+        }
+        throw new Error(`WAF challenge persisted for ${url} after ${retries + 1} attempts`);
       }
 
       return response;

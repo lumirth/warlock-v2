@@ -1,18 +1,14 @@
 import { Hono } from 'hono';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import type { CourseGenedDto, CourseSectionDto, InstructorLinkDto } from '@uiuc-course-search/query-types';
-import { buildCourseExplorerSectionUrl } from '@uiuc-course-search/query-types';
-import {
-  makeCourseId,
-  type Course,
-  type Meeting,
-  type Section
-} from '../db/index.js';
+import type { CourseGenedDto, InstructorLinkDto } from '@uiuc-course-search/query-types';
+import { makeCourseId } from '../db/ids.js';
+import type { Course, Meeting, Section } from '../db/types.js';
 import { getUpstreamBackoff } from '../services/upstream-backoff.js';
-import { parseCourseDetailXml, convertTo24Hour } from '../cisapi/parser.js';
+import { parseCourseDetailXml } from '../cisapi/parser.js';
 import { browserFetch } from '../http/browser-fetch.js';
-import { formatInstructorName, formatInstructors } from '../transforms/course.js';
+import { fromCourseDetail } from '../transforms/course.js';
 import {
+  courseSnapshotToCourseDto,
   toCourseDto,
   toCourseSectionDto,
   toInstructorLinkMap,
@@ -324,10 +320,50 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
     const response = await browserFetch(url);
 
     if (!response.ok) {
-      if (upstreamBackoff.isRateLimited(response.status)) {
+      const shouldUseStale = upstreamBackoff.isRateLimited(response.status) || response.status >= 500;
+      if (shouldUseStale) {
         upstreamBackoff.recordFailure(`${subject} ${number}: ${response.status}`, response.status);
+        const existing = await c.env.DB.prepare(
+          'SELECT *, (unixepoch() - last_synced) as age_seconds FROM courses WHERE id = ?'
+        ).bind(courseId).first<Course & { age_seconds: number }>();
+
+        if (existing) {
+          const linksMap = await loadInstructorLinks(c.env.DB, termId, subject, number);
+          const [enrichedSections, medianGpa, geneds] = await Promise.all([
+            loadSectionsWithDetails(c.env.DB, courseId, linksMap),
+            loadCourseMedianGpa(c.env.DB, subject, number),
+            loadCourseGeneds(c.env.DB, courseId),
+          ]);
+
+          return c.json(toCourseDto(existing, {
+            sections: enrichedSections,
+            instructorLinks: linksMap,
+            geneds,
+            medianGpa,
+            stale: true,
+            staleReason: `upstream returned ${response.status}`,
+            ageSeconds: existing.age_seconds,
+            termStatus: resolvedTerm.status,
+          }), 200, {
+            'X-Cache': 'STALE',
+            'X-Stale-Reason': 'upstream-unavailable'
+          });
+        }
+
+        return c.json({
+          error: 'Upstream course data unavailable',
+          upstreamStatus: response.status,
+        }, response.status === 429 || response.status === 503 ? 503 : 502);
       }
-      return c.json({ error: `Course not found: ${response.status}` }, 404);
+
+      if (response.status === 404) {
+        return c.json({ error: 'Course not found' }, 404);
+      }
+
+      return c.json({
+        error: 'Upstream course data unavailable',
+        upstreamStatus: response.status,
+      }, 502);
     }
 
     upstreamBackoff.recordSuccess();
@@ -346,115 +382,10 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const creditHours = parseInt(parsed.creditHours) || null;
-
-    // Get all unique instructors for the course (prefer lectures)
-    const allInstructors = new Set<string>();
-    const lectureInstructors = new Set<string>();
-
-    parsed.sections.forEach(s => {
-      const isLecture = s.meetings.some(m => m.typeCode === 'LEC' || m.type === 'Lecture');
-      s.meetings.forEach(m => {
-        m.instructors.forEach(inst => {
-          const name = formatInstructorName(inst);
-          if (name) {
-            allInstructors.add(name);
-            if (isLecture) lectureInstructors.add(name);
-          }
-        });
-      });
+    const snapshot = fromCourseDetail(parsed, subject, number, resolvedTerm.year, term, {
+      syncTimestamp: now,
     });
-
-    const primaryInstructorName = lectureInstructors.size > 0
-      ? formatInstructors(Array.from(lectureInstructors))
-      : formatInstructors(Array.from(allInstructors));
-
     const linksMap = await loadInstructorLinks(c.env.DB, termId, subject, number);
-    const sectionResults: CourseSectionDto[] = [];
-    for (const section of parsed.sections) {
-      const sectionInstructors = new Set<string>();
-      section.meetings.forEach(m => {
-        m.instructors.forEach(inst => {
-          const name = formatInstructorName(inst);
-          if (name) sectionInstructors.add(name);
-        });
-      });
-
-      const instructorName = formatInstructors(Array.from(sectionInstructors));
-      const sectionStats = Array.from(sectionInstructors)
-        .map(name => linksMap[name])
-        .filter(Boolean);
-      const primaryStats = sectionStats[0];
-
-      const firstMeeting = section.meetings[0];
-
-      sectionResults.push({
-        crn: section.crn,
-        sectionNumber: section.sectionNumber || '?',
-        status: section.enrollmentStatus || 'Unknown',
-        type: firstMeeting?.type || '?',
-        days: firstMeeting?.daysOfTheWeek,
-        startTime: convertTo24Hour(firstMeeting?.start || '') || null,
-        endTime: convertTo24Hour(firstMeeting?.end || '') || null,
-        location: firstMeeting ? `${firstMeeting.buildingName} ${firstMeeting.roomNumber}`.trim() || 'TBA' : 'TBA',
-        instructor: instructorName || 'TBA',
-        instructorRmp: primaryStats?.rmp_rating ?? null,
-        instructorGpa: primaryStats?.avg_gpa ?? null,
-        instructorStats: sectionStats,
-        sectionTitle: section.sectionTitle || null,
-        statusCode: section.statusCode || null,
-        sectionStatusCode: section.sectionStatusCode || null,
-        sectionText: section.sectionText || null,
-        sectionNotes: section.sectionNotes || null,
-        cappArea: section.sectionCappArea || null,
-        dateRangeText: section.sectionDateRange || null,
-        partOfTerm: section.partOfTerm || null,
-        startDate: section.startDate || null,
-        endDate: section.endDate || null,
-        creditHours: section.creditHours || null,
-        meetings: section.meetings.map((meeting) => {
-          const instructors = meeting.instructors
-            .map(formatInstructorName)
-            .filter((name): name is string => Boolean(name))
-            .map(name => linksMap[name])
-            .filter(Boolean);
-
-          return {
-            typeCode: meeting.typeCode || null,
-            typeName: meeting.type || null,
-            days: meeting.daysOfTheWeek || null,
-            startTime: convertTo24Hour(meeting.start || '') || null,
-            endTime: convertTo24Hour(meeting.end || '') || null,
-            buildingName: meeting.buildingName || null,
-            roomNumber: meeting.roomNumber || null,
-            dateRangeText: meeting.meetingDateRange || null,
-            instructorNames: meeting.instructors
-              .map(formatInstructorName)
-              .filter((name): name is string => Boolean(name)),
-            instructors,
-          };
-        }),
-        course_explorer_url: buildCourseExplorerSectionUrl({
-          year: resolvedTerm.year,
-          term,
-          subject,
-          number,
-          crn: section.crn,
-        }),
-      });
-    }
-    const sectionsWithStats = sectionResults.map(section => {
-      const names = section.instructor.split(';').map(s => s.trim()).filter(Boolean);
-      const stats = names.map(name => linksMap[name]).filter(Boolean);
-      const primaryStats = stats[0];
-
-      return {
-        ...section,
-        instructorStats: stats,
-        instructorRmp: primaryStats?.rmp_rating ?? section.instructorRmp,
-        instructorGpa: primaryStats?.avg_gpa ?? section.instructorGpa,
-      };
-    });
 
     const existingMetadata = await c.env.DB.prepare(`
       SELECT avg_gpa, gpa_sample_size, primary_instructor_rmp, quality_score, difficulty_score
@@ -468,48 +399,19 @@ courseRoutes.get('/api/course/:subject/:number', async (c) => {
       | 'difficulty_score'
     >>();
     const medianGpa = await loadCourseMedianGpa(c.env.DB, subject, number);
-    const geneds = parsed.genEdCategories.flatMap(category =>
-      category.attributes.length > 0
-        ? category.attributes.map(attribute => ({
-          categoryId: category.id,
-          categoryName: category.description || null,
-          attributeCode: attribute.code || null,
-          attributeName: attribute.description || null,
-        }))
-        : [{
-          categoryId: category.id,
-          categoryName: category.description || null,
-          attributeCode: null,
-          attributeName: null,
-        }]
-    );
 
-    return c.json(toCourseDto({
-      id: courseId,
-      subject,
-      number,
-      title: parsed.label,
-      description: parsed.description,
-      credit_hours: creditHours,
-      gened: parsed.genEdCategories[0]?.id ?? null,
-      year: resolvedTerm.year,
-      term,
-      avg_gpa: existingMetadata?.avg_gpa ?? firstInstructorMetric(linksMap, 'avg_gpa'),
-      gpa_sample_size: existingMetadata?.gpa_sample_size ?? firstInstructorMetric(linksMap, 'gpa_sample_size'),
-      primary_instructor: primaryInstructorName,
-      primary_instructor_rmp: existingMetadata?.primary_instructor_rmp ?? firstInstructorMetric(linksMap, 'rmp_rating'),
-      quality_score: existingMetadata?.quality_score ?? null,
-      difficulty_score: existingMetadata?.difficulty_score ?? null,
-      course_info: parsed.courseSectionInformation || null,
-      degree_attributes: parsed.sectionDegreeAttributes || null,
-      class_schedule_info: parsed.classScheduleInformation || null,
-      date_range_text: parsed.sectionDateRange || null,
-      registration_notes: parsed.sectionRegistrationNotes || null,
-      approval_code: parsed.sectionApprovalCode || null,
+    return c.json(courseSnapshotToCourseDto({
+      ...snapshot,
+      course: {
+        ...snapshot.course,
+        avg_gpa: existingMetadata?.avg_gpa ?? firstInstructorMetric(linksMap, 'avg_gpa'),
+        gpa_sample_size: existingMetadata?.gpa_sample_size ?? firstInstructorMetric(linksMap, 'gpa_sample_size'),
+        primary_instructor_rmp: existingMetadata?.primary_instructor_rmp ?? firstInstructorMetric(linksMap, 'rmp_rating'),
+        quality_score: existingMetadata?.quality_score ?? null,
+        difficulty_score: existingMetadata?.difficulty_score ?? null,
+      },
     }, {
-      sections: sectionsWithStats,
       instructorLinks: linksMap,
-      geneds,
       medianGpa,
       cached: false,
       fetchedAt: now,

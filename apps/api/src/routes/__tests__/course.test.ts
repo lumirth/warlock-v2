@@ -81,6 +81,12 @@ describe('course routes', () => {
         instructorRmp: number | null;
         instructorGpa: number | null;
         course_explorer_url: string;
+        meetings: Array<{
+          typeCode: string | null;
+          buildingName: string | null;
+          roomNumber: string | null;
+          instructorNames: string[];
+        }>;
       }>;
     } & Record<string, unknown>;
 
@@ -102,10 +108,42 @@ describe('course routes', () => {
       instructorGpa: 3.62,
       course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
     });
+    expect(data.sections[0].meetings[0]).toMatchObject({
+      typeCode: 'LEC',
+      buildingName: 'Siebel Center',
+      roomNumber: '1404',
+      instructorNames: ['Lovelace, A'],
+    });
+  });
+
+  it('returns stale cached course data instead of 404 on first upstream rate limit', async () => {
+    vi.mocked(browserFetch).mockResolvedValueOnce(new Response('', { status: 429 }));
+
+    const env = {
+      DB: fakeDb({ existingCourse: true }),
+      CURRENT_YEAR: '2026',
+      CURRENT_TERM: 'spring',
+      CISAPI_BASE: 'https://courses.example.test',
+      CLIENT_CACHE_TTL_MS: '0',
+      BACKOFF_BASE_MS: '1',
+      BACKOFF_MAX_MS: '1',
+      MAX_RETRIES: '1',
+    };
+
+    const res = await app().request('/api/course/CS/225?term=spring&year=2026&fresh=true', {}, env);
+    const data = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Cache')).toBe('STALE');
+    expect(data).toMatchObject({
+      id: 'CS-225-2026-spring',
+      _stale: true,
+      _stale_reason: 'upstream returned 429',
+    });
   });
 });
 
-function fakeDb() {
+function fakeDb(options: { existingCourse?: boolean } = {}) {
   return {
     prepare(sql: string) {
       const statement = {
@@ -122,6 +160,29 @@ function fakeDb() {
               term: 'spring',
               status: 'active',
             };
+          }
+
+          if (sql.includes('SELECT *, (unixepoch() - last_synced) as age_seconds FROM courses')) {
+            return options.existingCourse
+              ? {
+                id: 'CS-225-2026-spring',
+                subject: 'CS',
+                number: '225',
+                title: 'Data Structures',
+                description: 'Data abstractions and algorithms.',
+                credit_hours: 4,
+                gened: null,
+                year: 2026,
+                term: 'spring',
+                avg_gpa: 3.62,
+                gpa_sample_size: 820,
+                primary_instructor: 'Lovelace, A',
+                primary_instructor_rmp: 4.8,
+                quality_score: 88,
+                difficulty_score: 42,
+                age_seconds: 999999,
+              }
+              : null;
           }
 
           if (sql.includes('SELECT rmp_rating, avg_gpa FROM instructors')) {

@@ -1,5 +1,5 @@
 import type { VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import type { SearchFilters } from '@uiuc-course-search/query-types';
+import type { SearchFilters } from '@uiuc-course-search/query-types/search-planner';
 
 export interface CourseEmbeddingData {
   id: string;

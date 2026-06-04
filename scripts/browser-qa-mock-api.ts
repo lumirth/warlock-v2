@@ -10,7 +10,6 @@ const course: CourseDto = {
   title: 'Data Structures',
   description: 'Data abstractions: elementary data structures and their implementation using an object-oriented programming language.',
   credit_hours: 4,
-  gened: 'QR',
   year: 2026,
   term: 'spring',
   primary_instructor: 'Lovelace, A; Hopper, G',
@@ -196,7 +195,7 @@ function searchUi(query: string): SearchUiPlanDto {
       id: 'gened-CS-alternative',
       term: 'CS',
       label: 'Cultural Studies',
-      filter: { gened_code: 'CS' },
+      filter: { gened: 'CS' },
       queryPatch: { replaceQuery: 'gened:CS' },
     });
   }
@@ -294,7 +293,6 @@ function defaultResults(query: string): CourseDto[] {
       title: 'Discrete Structures',
       description: 'Discrete mathematical structures frequently encountered in computer science.',
       credit_hours: 3,
-      gened: null,
       primary_instructor: null,
       _score: 0.82,
       match_evidence: [
@@ -316,26 +314,19 @@ function searchResponse(query: string, limit: number, offset: number): SearchRes
     results: pageResults,
     meta: {
       query: { raw: query, residual: query.toLowerCase().includes('cs 225') || isIntroCs ? '' : query },
-      extraction: {
-        hints: isIntroCs
-          ? [
-              { type: 'levelBoost', value: 100, metadata: { source: 'regex', confidence: 0.5, raw: 'intro' } },
-              { type: 'subject', value: 'CS', metadata: { source: 'alias', confidence: 0.9, raw: lower.includes('comp sci') ? 'comp sci' : 'CS' } },
-            ]
-          : query.toLowerCase().includes('cs 225')
-          ? [{
-              type: 'courseCode',
-              value: { subject: 'CS', number: '225' },
-              metadata: { source: 'regex', confidence: 0.95, raw: 'CS 225' },
-            }]
+      interpretation: {
+        queryTypes: isIntroCs ? ['topic'] : query.toLowerCase().includes('cs 225') ? ['exact_course'] : ['topic'],
+        negativeTerms: [],
+        topicTerms: isIntroCs ? ['computer science'] : [],
+        expandedTerms: [],
+        assumptions: isIntroCs
+          ? [{ kind: 'introductory_gateway', label: 'Introductory courses', confidence: 0.72, source: 'rule' }]
           : [],
-      },
-      plan: {
-        filters: isIntroCs ? { subject: 'CS' } : query.toLowerCase().includes('cs 225') ? { subject: 'CS', number: '225' } : {},
-        semanticQuery: isIntroCs ? '' : query,
-        keywordQuery: isIntroCs ? '' : query,
-        intents: isIntroCs ? ['introductory_gateway'] : undefined,
-        softPreferences: isIntroCs ? { levelBoost: 100, introductoryIntent: 'gateway' } : undefined,
+        warnings: [],
+        retrievalLanes: ['official_text'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.78,
       },
       timing: { extraction_ms: 2, search_ms: 6, total_ms: 8 },
       fallback: { tierReached: 1, constraintsRelaxed: [], originalResultCount: allResults.length },

@@ -289,6 +289,12 @@ export function formatFreshnessAuditReport(report: FreshnessAuditReport): string
   return `${lines.join('\n')}\n`;
 }
 
+function markdownOutputPath(jsonOutputPath: string): string {
+  return /\.json$/i.test(jsonOutputPath)
+    ? jsonOutputPath.replace(/\.json$/i, '.md')
+    : `${jsonOutputPath}.md`;
+}
+
 async function loadStatus(args: Args): Promise<{ source: string; status: JsonRecord }> {
   if (args.input) {
     const body = await readFile(args.input, 'utf8');
@@ -362,7 +368,7 @@ async function main(): Promise<void> {
   if (args.output) {
     mkdirSync(dirname(args.output), { recursive: true });
     writeFileSync(args.output, body);
-    writeFileSync(args.output.replace(/\.json$/i, '.md'), markdown);
+    writeFileSync(markdownOutputPath(args.output), markdown);
   } else {
     process.stdout.write(markdown);
   }

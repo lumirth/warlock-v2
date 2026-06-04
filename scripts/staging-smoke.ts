@@ -8,6 +8,19 @@ export type SmokeResult = {
   detail: string;
 };
 
+export const STAGING_SMOKE_CHECK_NAMES = [
+  'health',
+  'search public route',
+  'professor search route',
+  'course public route',
+  'feedback public route',
+  'admin rejects missing token',
+  'admin accepts staging token',
+  'admin sync status accepts staging token',
+  'internal rejects missing token',
+  'internal accepts staging token',
+] as const;
+
 type JsonRecord = Record<string, unknown>;
 type Fetcher = (request: Request) => Promise<Response>;
 

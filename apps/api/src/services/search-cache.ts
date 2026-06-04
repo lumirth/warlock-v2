@@ -1,59 +1,50 @@
 import type { KVNamespace } from "@cloudflare/workers-types";
+import type { SearchPipelineResult } from "./search-response.js";
 import type {
-  SearchPipelineResult,
   SearchPlanningResult,
-} from "./search-pipeline.js";
+} from "./search-plan-compiler.js";
+import {
+  searchPlanRequestCachePayload,
+  searchRequestCachePayload,
+  type CanonicalSearchRequest,
+} from "./search-request.js";
 
-const SEARCH_CACHE_VERSION = "v10";
+const SEARCH_CACHE_VERSION = "v11";
 const SEARCH_PLAN_TTL_SECONDS = 5 * 60;
 const SEARCH_RESULT_TTL_SECONDS = 30;
 
-type CacheableOverrides = object;
-
-export function searchPlanCacheKey(
-  rawQuery: string,
-  overrides?: CacheableOverrides,
-): string {
-  return cacheKey("plan", {
-    query: normalizeQuery(rawQuery),
-    overrides: stableRecord(overrides),
-  });
+export function searchPlanCacheKey(request: CanonicalSearchRequest): string {
+  return cacheKey("plan", searchPlanRequestCachePayload(request));
 }
 
 export function searchResultCacheKey(
-  rawQuery: string,
+  request: CanonicalSearchRequest,
   limit: number,
-  overrides?: CacheableOverrides,
-  controls?: CacheableOverrides,
 ): string {
   return cacheKey("result", {
-    query: normalizeQuery(rawQuery),
+    ...searchRequestCachePayload(request),
     limit,
-    overrides: stableRecord(overrides),
-    controls: stableRecord(controls),
   });
 }
 
 export async function getCachedSearchPlan(
   kv: KVNamespace | undefined,
-  rawQuery: string,
-  overrides?: CacheableOverrides,
+  request: CanonicalSearchRequest,
 ): Promise<SearchPlanningResult | null> {
   return getJson<SearchPlanningResult>(
     kv,
-    searchPlanCacheKey(rawQuery, overrides),
+    searchPlanCacheKey(request),
   );
 }
 
 export function cacheSearchPlan(
   kv: KVNamespace | undefined,
-  rawQuery: string,
+  request: CanonicalSearchRequest,
   planning: SearchPlanningResult,
-  overrides?: CacheableOverrides,
 ): Promise<void> {
   return putJson(
     kv,
-    searchPlanCacheKey(rawQuery, overrides),
+    searchPlanCacheKey(request),
     planning,
     SEARCH_PLAN_TTL_SECONDS,
   );
@@ -61,28 +52,24 @@ export function cacheSearchPlan(
 
 export async function getCachedSearchResult(
   kv: KVNamespace | undefined,
-  rawQuery: string,
+  request: CanonicalSearchRequest,
   limit: number,
-  overrides?: CacheableOverrides,
-  controls?: CacheableOverrides,
 ): Promise<SearchPipelineResult | null> {
   return getJson<SearchPipelineResult>(
     kv,
-    searchResultCacheKey(rawQuery, limit, overrides, controls),
+    searchResultCacheKey(request, limit),
   );
 }
 
 export function cacheSearchResult(
   kv: KVNamespace | undefined,
-  rawQuery: string,
+  request: CanonicalSearchRequest,
   limit: number,
   result: SearchPipelineResult,
-  overrides?: CacheableOverrides,
-  controls?: CacheableOverrides,
 ): Promise<void> {
   return putJson(
     kv,
-    searchResultCacheKey(rawQuery, limit, overrides, controls),
+    searchResultCacheKey(request, limit),
     result,
     SEARCH_RESULT_TTL_SECONDS,
   );
@@ -93,21 +80,6 @@ function cacheKey(
   payload: Record<string, unknown>,
 ): string {
   return `search:${SEARCH_CACHE_VERSION}:${kind}:${hashStableJson(payload)}`;
-}
-
-function normalizeQuery(value: string): string {
-  return value.toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function stableRecord(
-  value: CacheableOverrides | undefined,
-): Record<string, unknown> {
-  if (!value) return {};
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([, item]) => item !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right)),
-  );
 }
 
 function hashStableJson(value: unknown): string {

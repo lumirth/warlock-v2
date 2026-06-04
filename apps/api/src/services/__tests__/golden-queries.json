@@ -14,7 +14,7 @@
         { "type": "difficulty", "value": "easy" },
         { "type": "gened", "value": "HUM" }
       ],
-      "filters": { "difficulty": "easy", "gened_code": "HUM" },
+      "filters": { "difficulty": "easy", "requirement": { "mode": "single", "codes": ["HUM"] } },
       "residual": ""
     },
     "note": "Cue words like 'gen ed' are now removed from residual"
@@ -23,7 +23,7 @@
     "input": "humanities",
     "expected": {
       "hints": [{ "type": "gened", "value": "HUM" }],
-      "filters": { "gened_code": "HUM" },
+      "filters": { "requirement": { "mode": "single", "codes": ["HUM"] } },
       "residual": ""
     },
     "note": "Common GenEd terms like 'humanities' are now extracted without cues"
@@ -62,7 +62,7 @@
       "filters": {
         "difficulty": "easy",
         "online": true,
-        "gened_any": ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"]
+        "requirement": { "mode": "any", "codes": ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"] }
       },
       "residual": ""
     },
@@ -93,7 +93,7 @@
     "input": "gened:HUM easy",
     "expected": {
       "hints": [{ "type": "difficulty", "value": "easy" }],
-      "filters": { "gened_code": "HUM", "difficulty": "easy" },
+      "filters": { "requirement": { "mode": "single", "codes": ["HUM"] }, "difficulty": "easy" },
       "residual": ""
     },
     "note": "Power-user syntax gened:HUM"
@@ -102,7 +102,7 @@
     "input": "gened:any(HUM,US) morning",
     "expected": {
       "hints": [{ "type": "time", "value": "morning" }],
-      "filters": { "gened_any": ["HUM", "US"], "time": "morning" },
+      "filters": { "requirement": { "mode": "any", "codes": ["HUM", "US"] }, "time": "morning" },
       "residual": ""
     }
   },

@@ -3,7 +3,7 @@ import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types'
 import { GOLDEN_QUERIES } from '../apps/api/src/eval/golden-queries.js';
 import { checkExpectedKeys, checkExpectedObject, checkExpectedRescue, checkExpectedResidual } from '../apps/api/src/eval/checks.js';
 import { evaluateCorpusCoverage, findDuplicateQueryIds, formatCorpusCoverageReport } from '../apps/api/src/eval/corpus-coverage.js';
-import { createSearchPlan } from '../apps/api/src/services/search-pipeline.js';
+import { createSearchPlan } from '../apps/api/src/services/search-plan-compiler.js';
 import { SUBJECT_NAMES, VALID_SUBJECTS } from '../apps/api/src/services/data/valid-subjects.js';
 import type { EvalResult } from '../apps/api/src/eval/types.js';
 

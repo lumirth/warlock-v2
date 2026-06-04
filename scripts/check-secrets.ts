@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 
 type Finding = {
   file: string;
@@ -22,7 +23,7 @@ const EXCLUDED_PATHS = [
 const SECRET_PATTERNS: SecretPattern[] = [
   {
     name: 'named secret assignment',
-    regex: /\b(?:ADMIN_TOKEN|INTERNAL_TOKEN|RMP_AUTH_TOKEN|CLOUDFLARE_API_TOKEN|CF_API_TOKEN|CF_ACCOUNT_ID|OPENAI_API_KEY)\b\s*[:=]\s*["']?([A-Za-z0-9_./+=-]{16,})["']?/g,
+    regex: /["']?\b(?:ADMIN_TOKEN|INTERNAL_TOKEN|RMP_AUTH_TOKEN|CLOUDFLARE_API_TOKEN|CF_API_TOKEN|CF_ACCOUNT_ID|OPENAI_API_KEY)\b["']?\s*[:=]\s*["']?([A-Za-z0-9_./+=-]{16,})["']?/g,
   },
   { name: 'OpenAI-style API key', regex: /\bsk-[A-Za-z0-9_-]{20,}\b/g },
   { name: 'GitHub token', regex: /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g },
@@ -51,7 +52,7 @@ function lineNumberFor(contents: string, index: number): number {
   return contents.slice(0, index).split('\n').length;
 }
 
-async function scanFile(file: string): Promise<Finding[]> {
+export async function scanFile(file: string): Promise<Finding[]> {
   const contents = await readFile(file, 'utf8').catch(() => '');
   const findings: Finding[] = [];
 
@@ -83,7 +84,9 @@ async function main(): Promise<void> {
   console.log('Secret scan passed: no committed secret-looking values found.');
 }
 
-main().catch(error => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

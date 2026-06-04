@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { STAGING_SMOKE_CHECK_NAMES } from './staging-smoke.js';
 
 export type CheckResult = {
   name: string;
@@ -27,16 +28,7 @@ const REQUIRED_STAGING_ENV = [
   'EVAL_BASE_URL',
 ];
 
-const REQUIRED_SMOKE_CHECKS = [
-  'health',
-  'search public route',
-  'course public route',
-  'admin rejects missing token',
-  'admin accepts staging token',
-  'admin sync status accepts staging token',
-  'internal rejects missing token',
-  'internal accepts staging token',
-];
+const REQUIRED_SMOKE_CHECKS = STAGING_SMOKE_CHECK_NAMES;
 
 function result(name: string, ok: boolean, detail: string): CheckResult {
   return { name, ok, detail };
@@ -146,12 +138,14 @@ function hasPublicReadRoutes(value: string | null): boolean {
 function hasEnforcingAction(value: string | null): boolean {
   if (!value || isPlaceholder(value)) return false;
   const normalized = value.toLowerCase();
-  return normalized.includes('block')
-    || normalized.includes('429')
-    || normalized.includes('rate limit')
-    || normalized.includes('managed_challenge')
-    || normalized.includes('js_challenge')
-    || normalized.includes('challenge');
+  if (/\b(?:log|logging|monitor|count|observe|audit)\b/.test(normalized)) {
+    return false;
+  }
+  return /\b429\b/.test(normalized)
+    || /\bblock(?:ed|ing)?\b/.test(normalized)
+    || /\bmanaged_challenge\b/.test(normalized)
+    || /\bjs_challenge\b/.test(normalized)
+    || /\bchallenge\b/.test(normalized);
 }
 
 function hasThresholdEvidence(value: string | null): boolean {
