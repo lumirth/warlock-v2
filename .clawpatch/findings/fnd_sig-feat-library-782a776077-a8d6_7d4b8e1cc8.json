@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-782a776077-a8d6_7d4b8e1cc8",
+  "featureId": "feat_library_782a776077",
+  "title": "Theme persistence can crash the app when browser storage is unavailable",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "apps/web/src/App.tsx",
+      "startLine": 21,
+      "endLine": 24,
+      "symbol": "getInitialTheme",
+      "quote": "const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "startLine": 42,
+      "endLine": 46,
+      "symbol": "App",
+      "quote": "window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)"
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "startLine": 33,
+      "endLine": 47,
+      "symbol": "App shell test",
+      "quote": "expect(window.localStorage.getItem('uiuc-course-search-theme')).toBe('dark')"
+    }
+  ],
+  "reasoning": "The app treats localStorage as always readable and writable. In browsers where storage is disabled, blocked by policy, unavailable for the origin, or throws while writing, getInitialTheme throws during the state initializer before the shell can render, and the effect can also throw after a theme change. The app can still function without persisted theme state, so this turns a recoverable persistence failure into a white-screen or unhandled runtime error.",
+  "reproduction": "Mock window.localStorage.getItem or setItem to throw a SecurityError, then render <App /> inside a router. The current initializer/effect propagates the exception instead of falling back to a non-persisted light/dark mode.",
+  "recommendation": "Wrap theme storage reads and writes in a small safe helper with try/catch. Fall back to matchMedia/default light when reads fail, and ignore write failures after applying the root class and colorScheme.",
+  "whyTestsDoNotAlreadyCoverThis": "The App shell test clears and asserts normal localStorage behavior, but it never simulates getItem or setItem throwing, so the crash path is invisible to the current suite.",
+  "suggestedRegressionTest": "Add an App shell test that stubs localStorage.getItem and localStorage.setItem to throw, renders App inside MemoryRouter/TestUiProvider, asserts the brand heading still renders, and asserts clicking the theme button still toggles document.documentElement without exposing the storage exception.",
+  "minimumFixScope": "apps/web/src/App.tsx theme storage helper and one App shell regression test",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-782a776077_a8d6b68922",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:11:58.350Z",
+  "updatedAt": "2026-06-04T00:11:58.350Z"
+}

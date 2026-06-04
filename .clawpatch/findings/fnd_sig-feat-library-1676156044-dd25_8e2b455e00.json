@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-1676156044-dd25_8e2b455e00",
+  "featureId": "feat_library_1676156044",
+  "title": "InputGroup addons do not focus textarea controls",
+  "category": "bug",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "apps/web/src/components/ui/input-group.tsx",
+      "startLine": 55,
+      "endLine": 60,
+      "symbol": "InputGroupAddon",
+      "quote": "e.currentTarget.parentElement?.querySelector('input')?.focus()"
+    },
+    {
+      "path": "apps/web/src/components/ui/input-group.tsx",
+      "startLine": 131,
+      "endLine": 143,
+      "symbol": "InputGroupTextarea",
+      "quote": "function InputGroupTextarea({\n  className,\n  ...props\n}: React.ComponentProps<'textarea'>)"
+    }
+  ],
+  "reasoning": "InputGroupAddon presents a text-cursor click target and implements click-to-focus behavior, while the same module exports InputGroupTextarea as a supported group control. The click handler only searches for an input element, so textarea-only input groups silently fail to focus the control when the addon is clicked.",
+  "reproduction": null,
+  "recommendation": "Update the addon click handler to focus the grouped control by data-slot or by both input and textarea selectors, for example querying `[data-slot=input-group-control], input, textarea` and focusing the matched HTMLElement. Preserve the existing button-child guard.",
+  "whyTestsDoNotAlreadyCoverThis": "No linked tests were provided for these UI primitives, and there is no included test covering addon click focus behavior for textarea groups.",
+  "suggestedRegressionTest": "Render InputGroup with InputGroupAddon and InputGroupTextarea, click the addon text, and assert the textarea has focus.",
+  "minimumFixScope": "apps/web/src/components/ui/input-group.tsx",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-1676156044_dd25b1cc15",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:14:20.985Z",
+  "updatedAt": "2026-06-04T00:14:20.985Z"
+}

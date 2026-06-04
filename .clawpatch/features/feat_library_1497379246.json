@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_1497379246",
+  "title": "Node source apps/web/src/utils",
+  "summary": "Node/TypeScript source group apps/web/src/utils with 2 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/web/package.json",
+      "symbol": "apps/web/src/utils",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/web/src/utils/formatters.ts",
+      "reason": "source group apps/web/src/utils"
+    },
+    {
+      "path": "apps/web/src/utils/grading.ts",
+      "reason": "source group apps/web/src/utils"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "apps/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "apps/web/src/utils/grading.test.ts",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "apps/web/src/utils/grading.test.ts",
+      "command": "npm --prefix apps/web run test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@uiuc-course-search/web",
+    "project-root:apps/web"
+  ],
+  "trustBoundaries": [],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-feat-library-1497379246-8729_7f7406aef5"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260604T000951-d4a932",
+      "kind": "review",
+      "summary": "1 finding(s)",
+      "provider": "codex",
+      "model": null,
+      "reasoningEffort": null,
+      "createdAt": "2026-06-04T00:10:38.869Z"
+    }
+  ],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:10:38.869Z"
+}

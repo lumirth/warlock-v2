@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_release_accf8dfaca",
+  "title": "Package script build (@uiuc-course-search/api)",
+  "summary": "Package script 'build' in apps/api/package.json: tsc --noEmit",
+  "kind": "release",
+  "source": "package-json-script",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/api/package.json",
+      "symbol": "build",
+      "route": null,
+      "command": "build"
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/api/package.json",
+      "reason": "entrypoint"
+    }
+  ],
+  "contextFiles": [],
+  "tests": [],
+  "tags": [
+    "node",
+    "package-script",
+    "project:@uiuc-course-search/api",
+    "project-root:apps/api"
+  ],
+  "trustBoundaries": [
+    "process-exec",
+    "filesystem"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:08:45.658Z"
+}

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_release_e7e520ea4b",
+  "title": "Package script build (@uiuc-course-search/query-types)",
+  "summary": "Package script 'build' in packages/query-types/package.json: tsc --noEmit",
+  "kind": "release",
+  "source": "package-json-script",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "packages/query-types/package.json",
+      "symbol": "build",
+      "route": null,
+      "command": "build"
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "packages/query-types/package.json",
+      "reason": "entrypoint"
+    }
+  ],
+  "contextFiles": [],
+  "tests": [],
+  "tags": [
+    "node",
+    "package-script",
+    "project:@uiuc-course-search/query-types",
+    "project-root:packages/query-types"
+  ],
+  "trustBoundaries": [
+    "process-exec",
+    "filesystem"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:08:45.658Z"
+}

@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_route_b5bb60c910",
+  "title": "Hono route POST /admin/sync-active",
+  "summary": "Hono route POST /admin/sync-active declared in apps/api/src/routes/sync.ts.",
+  "kind": "route",
+  "source": "hono-route",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/api/src/routes/sync.ts",
+      "symbol": null,
+      "route": "POST /admin/sync-active",
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/api/src/routes/sync.ts",
+      "reason": "Hono route declaration"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "apps/api/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "apps/api/README.md",
+      "reason": "package context"
+    },
+    {
+      "path": "apps/api/tsconfig.json",
+      "reason": "package context"
+    },
+    {
+      "path": "apps/api/vitest.config.ts",
+      "reason": "test configuration"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/course.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/debug.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/feedback.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/health.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/rmp-batch.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/search.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/sync-batch.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/sync-status.test.ts",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "apps/api/src/routes/__tests__/course.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/debug.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/feedback.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/health.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/rmp-batch.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/search.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/sync-batch.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/sync-status.test.ts",
+      "command": "npm --prefix apps/api run test"
+    }
+  ],
+  "tags": [
+    "node",
+    "hono",
+    "route",
+    "api",
+    "project:@uiuc-course-search/api",
+    "project-root:apps/api"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization",
+    "auth"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:08:45.658Z"
+}

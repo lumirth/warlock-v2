@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_e9ba1a3092",
+  "title": "Node source apps/web/src/test",
+  "summary": "Node/TypeScript source group apps/web/src/test with 2 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/web/package.json",
+      "symbol": "apps/web/src/test",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/web/src/test/TestUiProvider.tsx",
+      "reason": "source group apps/web/src/test"
+    },
+    {
+      "path": "apps/web/src/test/setup.ts",
+      "reason": "source group apps/web/src/test"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "apps/web/package.json",
+      "reason": "package manifest"
+    }
+  ],
+  "tests": [],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@uiuc-course-search/web",
+    "project-root:apps/web"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:08:45.658Z"
+}

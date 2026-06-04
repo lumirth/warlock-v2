@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_service_1e40670be0",
+  "title": "Node source apps/api/src/db",
+  "summary": "Node/TypeScript source file apps/api/src/db/index.ts.",
+  "kind": "service",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/api/package.json",
+      "symbol": "apps/api/src/db",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/api/src/db/index.ts",
+      "reason": "source group apps/api/src/db"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "apps/api/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "apps/api/src/db/__tests__/term-state.test.ts",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "apps/api/src/db/__tests__/term-state.test.ts",
+      "command": "npm --prefix apps/api run test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@uiuc-course-search/api",
+    "project-root:apps/api"
+  ],
+  "trustBoundaries": [
+    "filesystem",
+    "database"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:08:45.658Z"
+}

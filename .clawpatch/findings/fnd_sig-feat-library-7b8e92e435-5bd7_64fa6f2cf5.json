@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-7b8e92e435-5bd7_64fa6f2cf5",
+  "featureId": "feat_library_7b8e92e435",
+  "title": "Empty evidence queries produce title matches for every course",
+  "category": "bug",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "apps/api/src/dto/course.ts",
+      "startLine": 338,
+      "endLine": 340,
+      "symbol": "buildMatchEvidence",
+      "quote": "const normalizedRaw = normalizeText(context.rawQuery);"
+    },
+    {
+      "path": "apps/api/src/dto/course.ts",
+      "startLine": 362,
+      "endLine": 363,
+      "symbol": "buildMatchEvidence",
+      "quote": "if (normalizedTitle && (normalizedRaw.includes(normalizedTitle) || normalizedTitle.includes(normalizedRaw))) {"
+    }
+  ],
+  "reasoning": "When `context.rawQuery` is empty or whitespace, `normalizedRaw` becomes an empty string. Since every non-empty title includes the empty string, the title-match condition adds `Title match: ...` evidence for every course even though the user provided no title text. This can mislead filter-only or advanced-search responses by manufacturing keyword evidence.",
+  "reproduction": "Call `buildMatchEvidence` with a course titled `Data Structures`, `rawQuery: ''`, and an otherwise empty plan. The returned evidence includes a `title` item even though there is no raw query text to match.",
+  "recommendation": "Require a non-empty normalized raw query before checking title containment. Consider token-aware matching or a minimum normalized query length to avoid similarly broad one-character title matches.",
+  "whyTestsDoNotAlreadyCoverThis": "The course DTO evidence tests exercise non-empty raw queries such as `CS 225`, `easy ...`, and `counts for something`; they do not cover empty or whitespace-only raw queries.",
+  "suggestedRegressionTest": "Add a `buildMatchEvidence` test with `rawQuery: ''` and another with whitespace, asserting that no `title` evidence is produced.",
+  "minimumFixScope": "Tighten the title-match condition in `apps/api/src/dto/course.ts`.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-7b8e92e435_5bd763a7f3",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:16:16.493Z",
+  "updatedAt": "2026-06-04T00:16:16.493Z"
+}

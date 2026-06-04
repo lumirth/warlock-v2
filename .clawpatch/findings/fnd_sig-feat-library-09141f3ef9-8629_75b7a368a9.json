@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-09141f3ef9-8629_75b7a368a9",
+  "featureId": "feat_library_09141f3ef9",
+  "title": "Search failures are returned verbatim to public clients",
+  "category": "security",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "apps/api/src/routes/search.ts",
+      "startLine": 388,
+      "endLine": 390,
+      "symbol": "searchRoutes.get('/api/search')",
+      "quote": "return c.json({ error: String(error) }, 500);"
+    }
+  ],
+  "reasoning": "The public search endpoint catches any exception from the search pipeline, database, cache, AI calls, or term summary lookup and serializes the exact error string into the HTTP response. That can expose internal service diagnostics or database details and also makes the API error contract unstable.",
+  "reproduction": null,
+  "recommendation": "Keep the structured log, but return a stable generic response such as {\"error\":\"Search failed\"} for 500s.",
+  "whyTestsDoNotAlreadyCoverThis": "The included search route tests cover successful searches and request validation, but they do not mock SearchPipeline or DB failures.",
+  "suggestedRegressionTest": "Mock SearchPipeline.search to reject with Error('D1_ERROR: private detail') and assert the 500 response does not include D1_ERROR or the private detail.",
+  "minimumFixScope": "Change only the catch block in apps/api/src/routes/search.ts and add one route-level failure test.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-09141f3ef9_862928dd51",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:15:36.658Z",
+  "updatedAt": "2026-06-04T00:15:36.658Z"
+}

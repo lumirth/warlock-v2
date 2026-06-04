@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_ed4541d412",
+  "title": "Python source apps",
+  "summary": "Python source file apps/api/fix_extractor.py.",
+  "kind": "library",
+  "source": "python-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps",
+      "symbol": "apps",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/api/fix_extractor.py",
+      "reason": "source group apps"
+    }
+  ],
+  "contextFiles": [],
+  "tests": [],
+  "tags": [
+    "python",
+    "source-group"
+  ],
+  "trustBoundaries": [],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:08:45.658Z"
+}

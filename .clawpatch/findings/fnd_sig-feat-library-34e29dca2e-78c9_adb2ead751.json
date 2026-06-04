@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-34e29dca2e-78c9_adb2ead751",
+  "featureId": "feat_library_34e29dca2e",
+  "title": "Gen-ed descriptions overwrite cascade course descriptions",
+  "category": "bug",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "apps/api/src/cisapi/parser.ts",
+      "startLine": 467,
+      "endLine": 482,
+      "symbol": "parseSubjectCascadeXml",
+      "quote": "if (currentCourse && !currentSection) { ... if (name === 'description') currentCourse.description = text; ... if (currentGenEd) { if (name === 'description') currentGenEd.name = text; }"
+    },
+    {
+      "path": "apps/api/src/cisapi/__tests__/parser.test.ts",
+      "startLine": 20,
+      "endLine": 25,
+      "symbol": "SAMPLE_CASCADE_XML",
+      "quote": null
+    }
+  ],
+  "reasoning": "While a genEdCategory is open, currentCourse is still set and currentSection is null, so closing the category's description element runs both the course-level description assignment and the gen-ed name assignment. In the included sample, CS 225's course description is parsed first, then the gen-ed description 'Quantitative Reasoning I' overwrites it. Any course with gen-ed categories can therefore return a corrupted course description.",
+  "reproduction": "Parse the included SAMPLE_CASCADE_XML with parseSubjectCascadeXml and inspect result.courses[0].description; it will be 'Quantitative Reasoning I' instead of 'Data abstractions and algorithms.'.",
+  "recommendation": "Scope course-level field assignment to direct children of cascadingCourse, at minimum by skipping course-level assignments while currentGenEd is non-null. A small element stack would make this safer for future nested fields.",
+  "whyTestsDoNotAlreadyCoverThis": "The cascade tests assert course ids, titles, sections, meetings, instructors, and gen-ed ids, but they never assert that course.description remains the course description after parsing gen-ed categories.",
+  "suggestedRegressionTest": "Add a parseSubjectCascadeXml test using SAMPLE_CASCADE_XML that expects the CS 225 description to equal 'Data abstractions and algorithms.' after parsing its genEdCategory.",
+  "minimumFixScope": "apps/api/src/cisapi/parser.ts parseSubjectCascadeXml close-tag scoping plus one parser regression test.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-34e29dca2e_78c91d0c6f",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:12:41.304Z",
+  "updatedAt": "2026-06-04T00:12:41.304Z"
+}

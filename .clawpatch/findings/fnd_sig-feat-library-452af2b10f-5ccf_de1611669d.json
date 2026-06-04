@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-452af2b10f-5ccf_de1611669d",
+  "featureId": "feat_library_452af2b10f",
+  "title": "npm run dev can overwrite the committed subject list with hardcoded fallback data",
+  "category": "data-loss",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "package.json",
+      "startLine": 9,
+      "endLine": 10,
+      "symbol": "scripts.generate:subjects/dev",
+      "quote": null
+    },
+    {
+      "path": "README.md",
+      "startLine": 20,
+      "endLine": 20,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "scripts/generate-subjects.ts",
+      "startLine": 94,
+      "endLine": 110,
+      "symbol": "fetchSubjectsFromD1",
+      "quote": null
+    },
+    {
+      "path": "scripts/generate-subjects.ts",
+      "startLine": 156,
+      "endLine": 179,
+      "symbol": "fetchSubjectsFromCisApi",
+      "quote": null
+    },
+    {
+      "path": "scripts/generate-subjects.ts",
+      "startLine": 226,
+      "endLine": 233,
+      "symbol": "main",
+      "quote": null
+    },
+    {
+      "path": "scripts/generate-subjects.ts",
+      "startLine": 247,
+      "endLine": 248,
+      "symbol": "finish",
+      "quote": null
+    }
+  ],
+  "reasoning": "The package dev script runs generate:subjects automatically, while the README says subject generation should only happen when intentionally refreshing the committed subject list. If every CISAPI request fails, fetchSubjectsFromCisApi returns a non-empty hardcoded list with names equal to IDs, so main never reaches the D1 fallback and then writes that degraded data to apps/api/src/services/data/valid-subjects.ts. A normal dev startup during a network outage can therefore silently replace richer generated subject metadata with stale fallback output.",
+  "reproduction": "Make all CISAPI fetches fail and run npm run generate:subjects or npm run dev; fetchSubjectsFromCisApi returns the hardcoded array, fetchSubjectsFromD1 is skipped because subjects.length is nonzero, and finish writes the fallback content.",
+  "recommendation": "Do not run generate:subjects as part of npm run dev, or make generation explicitly opt-in. Also make CISAPI failure return no subjects so the D1 fallback is reachable, and fail before writing unless a hardcoded fallback is explicitly requested and validated.",
+  "whyTestsDoNotAlreadyCoverThis": "The included tests do not import scripts/generate-subjects.ts, mock failed CISAPI/D1 paths, or assert the package dev script does not mutate generated source.",
+  "suggestedRegressionTest": "Add a generate-subjects test with fetch mocked to fail and D1 mocked to return a real subject name; assert D1 is used before any hardcoded fallback and that no output is written when all authoritative sources fail unless an explicit fallback flag is set.",
+  "minimumFixScope": "package.json dev script plus scripts/generate-subjects.ts fallback ordering/write guard.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-452af2b10f_5ccf926e29",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:15:21.108Z",
+  "updatedAt": "2026-06-04T00:15:21.108Z"
+}

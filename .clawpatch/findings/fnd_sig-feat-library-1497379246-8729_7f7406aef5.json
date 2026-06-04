@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-1497379246-8729_7f7406aef5",
+  "featureId": "feat_library_1497379246",
+  "title": "Malformed time strings can be converted into plausible but wrong display times",
+  "category": "bug",
+  "severity": "low",
+  "confidence": "medium",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "apps/web/src/utils/formatters.ts",
+      "startLine": 3,
+      "endLine": 15,
+      "symbol": "formatTime",
+      "quote": "const clean = time.replace(':', '')"
+    },
+    {
+      "path": "apps/web/src/utils/formatters.ts",
+      "startLine": 7,
+      "endLine": 10,
+      "symbol": "formatTime",
+      "quote": "const hour24 = parseInt(clean.slice(0, -2))"
+    }
+  ],
+  "reasoning": "The helper comments say unexpected formats should fall back to the original input, but the implementation only checks length and whether parseInt of the hour prefix is NaN. parseInt accepts partial numeric prefixes and the minute suffix is never validated, so inputs such as \"09:00:00\", \"9a00\", \"126x\", or \"2360\" can be reformatted into misleading outputs like \"12:00 PM\", \"9:00 AM\", \"12:6x PM\", or \"11:60 PM\" instead of falling back. This is a display correctness issue if upstream schedule data ever includes seconds or malformed values.",
+  "reproduction": "Call formatTime('09:00:00'); it returns '12:00 PM' because the extra colon remains in the hour slice and parseInt partially parses it as 900.",
+  "recommendation": "Validate the entire normalized value before formatting, for example by accepting only /^\\d{3,4}$/ after removing one optional HH:mm colon, then checking hour is 0-23 and minute is 0-59. Return the original string for anything outside that contract.",
+  "whyTestsDoNotAlreadyCoverThis": "The included test file only exercises grading helpers and has no cases for formatTime or invalid/unexpected time formats.",
+  "suggestedRegressionTest": "Add formatTime tests covering valid '09:00', '0900', and '9:00' inputs plus fallback cases such as '09:00:00', '9a00', and '2360'.",
+  "minimumFixScope": "apps/web/src/utils/formatters.ts plus a focused formatter test file or additions to an existing utils test suite.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-1497379246_8729e6422b",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:10:38.868Z",
+  "updatedAt": "2026-06-04T00:10:38.868Z"
+}

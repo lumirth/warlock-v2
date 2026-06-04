@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-32b0f83226-5ef7_26c0f7df0d",
+  "featureId": "feat_library_32b0f83226",
+  "title": "Secret scan misses quoted JSON-style secret assignments",
+  "category": "security",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "scripts/check-secrets.ts",
+      "startLine": 22,
+      "endLine": 31,
+      "symbol": "SECRET_PATTERNS",
+      "quote": null
+    },
+    {
+      "path": "scripts/check-secrets.ts",
+      "startLine": 58,
+      "endLine": 63,
+      "symbol": "scanFile",
+      "quote": null
+    },
+    {
+      "path": "package.json",
+      "startLine": 21,
+      "endLine": 22,
+      "symbol": "scripts.security:secrets",
+      "quote": null
+    }
+  ],
+  "reasoning": "The named secret assignment regex requires the secret name to be followed immediately by optional whitespace and ':' or '='. JSON and many config files quote keys, for example `\"CLOUDFLARE_API_TOKEN\": \"...\"`; after the key name the next character is a quote, so this pattern does not match. Tokens without a provider-specific prefix can be committed in JSON-shaped files without being reported by npm run security:secrets.",
+  "reproduction": "Add a tracked file containing `{ \"CLOUDFLARE_API_TOKEN\": \"abcdefghijklmnop123456\" }`; the named assignment pattern does not match the quoted key.",
+  "recommendation": "Allow optional quotes around known secret keys before the separator, or parse common structured formats before applying value checks. Keep provider-specific token patterns as additional coverage.",
+  "whyTestsDoNotAlreadyCoverThis": "There are no included tests for check-secrets, and no fixture covers JSON-style quoted keys for named secret variables.",
+  "suggestedRegressionTest": "Add a fixture or unit test for quoted JSON keys such as CLOUDFLARE_API_TOKEN and OPENAI_API_KEY with non-placeholder values, and assert scanFile reports them.",
+  "minimumFixScope": "scripts/check-secrets.ts secret assignment pattern and new tests around quoted-key formats.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-32b0f83226_5ef783d720",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:14:56.518Z",
+  "updatedAt": "2026-06-04T00:14:56.518Z"
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-6660193b76-728d_4a51d8575d",
+  "featureId": "feat_library_6660193b76",
+  "title": "SQL-to-CSV failures are logged but exit successfully",
+  "category": "build-release",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "scripts/sql-to-csv.ts",
+      "startLine": 82,
+      "endLine": 84,
+      "symbol": "main",
+      "quote": "Input is read through createReadStream inside main."
+    },
+    {
+      "path": "scripts/sql-to-csv.ts",
+      "startLine": 138,
+      "endLine": 138,
+      "symbol": null,
+      "quote": "main().catch(console.error);"
+    }
+  ],
+  "reasoning": "If main rejects, for example because the input SQL file cannot be read, the catch handler only logs the error and leaves process.exitCode unset. Automation can therefore treat a failed conversion as successful and continue with missing or partial CSV artifacts.",
+  "reproduction": "Run sql-to-csv.ts with a missing input file; the rejection is handled by console.error without setting a non-zero exit code.",
+  "recommendation": "Use a catch handler that logs the error and sets process.exitCode = 1. Also consider awaiting writer finish/error events so output failures are surfaced before success is reported.",
+  "whyTestsDoNotAlreadyCoverThis": "There are no sql-to-csv tests or spawn-based assertions for converter failure exit status.",
+  "suggestedRegressionTest": "Spawn the converter with a nonexistent input file and assert status is non-zero and stderr/stdout contains the read error.",
+  "minimumFixScope": "scripts/sql-to-csv.ts main catch handler, plus one CLI failure test.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-6660193b76_728d0d210c",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:13:46.894Z",
+  "updatedAt": "2026-06-04T00:13:46.894Z"
+}

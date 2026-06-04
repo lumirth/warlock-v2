@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_34e29dca2e",
+  "title": "Node source apps/api/src/cisapi",
+  "summary": "Node/TypeScript source group apps/api/src/cisapi with 3 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/api/package.json",
+      "symbol": "apps/api/src/cisapi",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/api/src/cisapi/client.ts",
+      "reason": "source group apps/api/src/cisapi"
+    },
+    {
+      "path": "apps/api/src/cisapi/parser.ts",
+      "reason": "source group apps/api/src/cisapi"
+    },
+    {
+      "path": "apps/api/src/cisapi/types.ts",
+      "reason": "source group apps/api/src/cisapi"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "apps/api/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "apps/api/src/cisapi/__tests__/parser.test.ts",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "apps/api/src/cisapi/__tests__/parser.test.ts",
+      "command": "npm --prefix apps/api run test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@uiuc-course-search/api",
+    "project-root:apps/api"
+  ],
+  "trustBoundaries": [],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-feat-library-34e29dca2e-78c9_adb2ead751",
+    "fnd_sig-feat-library-34e29dca2e-8c15_1eae40bffa",
+    "fnd_sig-feat-library-34e29dca2e-d281_b0c0d8ef93",
+    "fnd_sig-feat-library-34e29dca2e-863c_28b500cc4b"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260604T000951-d4a932",
+      "kind": "review",
+      "summary": "4 finding(s)",
+      "provider": "codex",
+      "model": null,
+      "reasoningEffort": null,
+      "createdAt": "2026-06-04T00:12:41.306Z"
+    }
+  ],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:12:41.306Z"
+}

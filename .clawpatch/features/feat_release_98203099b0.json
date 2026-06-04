@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_release_98203099b0",
+  "title": "Package script typecheck (@uiuc-course-search/api)",
+  "summary": "Package script 'typecheck' in apps/api/package.json: tsc --noEmit",
+  "kind": "release",
+  "source": "package-json-script",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/api/package.json",
+      "symbol": "typecheck",
+      "route": null,
+      "command": "typecheck"
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/api/package.json",
+      "reason": "entrypoint"
+    }
+  ],
+  "contextFiles": [],
+  "tests": [],
+  "tags": [
+    "node",
+    "package-script",
+    "project:@uiuc-course-search/api",
+    "project-root:apps/api"
+  ],
+  "trustBoundaries": [
+    "process-exec",
+    "filesystem"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:08:45.658Z"
+}

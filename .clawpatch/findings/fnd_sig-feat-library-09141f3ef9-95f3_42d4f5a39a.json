@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-09141f3ef9-95f3_42d4f5a39a",
+  "featureId": "feat_library_09141f3ef9",
+  "title": "Malformed level query values can silently apply a level filter",
+  "category": "api-contract",
+  "severity": "low",
+  "confidence": "high",
+  "triage": "contract-mismatch",
+  "evidence": [
+    {
+      "path": "apps/api/src/routes/search.ts",
+      "startLine": 106,
+      "endLine": 112,
+      "symbol": "parseLevelParam",
+      "quote": "const value = parseInt(raw.trim(), 10);"
+    },
+    {
+      "path": "apps/api/src/routes/search.ts",
+      "startLine": 311,
+      "endLine": 314,
+      "symbol": "searchRoutes.get('/api/search')",
+      "quote": "if (level !== undefined) { overrides.level = level; }"
+    }
+  ],
+  "reasoning": "parseInt accepts numeric prefixes, so a request such as level=100abc or level=500-level is treated as a valid 100- or 500-level filter. Other public numeric controls use strict integer parsing, and malformed controls should not silently narrow search results.",
+  "reproduction": null,
+  "recommendation": "Require the entire level parameter to be numeric before parsing, or reuse the strict bounded integer parser and then check membership in LEVEL_VALUES.",
+  "whyTestsDoNotAlreadyCoverThis": "The included invalid-control test uses level=700, which is out of range but still purely numeric; it does not cover trailing characters after a valid level bucket.",
+  "suggestedRegressionTest": "GET /api/search?q=history&level=100abc should either return 400 or call SearchPipeline without overrides.level.",
+  "minimumFixScope": "Change parseLevelParam in apps/api/src/routes/search.ts and add one malformed-level route test.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-09141f3ef9_95f3473bec",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:15:36.658Z",
+  "updatedAt": "2026-06-04T00:15:36.658Z"
+}

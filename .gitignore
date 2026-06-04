@@ -4,6 +4,10 @@ node_modules/
 .worktrees/
 apps/web/dist/
 artifacts/
+.clawpatch/runs/
+.clawpatch/patches/
+.clawpatch/reports/
+.clawpatch/locks/
 
 # OS files
 .DS_Store

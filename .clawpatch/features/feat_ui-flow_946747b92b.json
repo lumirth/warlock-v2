@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_ui-flow_946747b92b",
+  "title": "React component FeedbackButton",
+  "summary": "React component implemented by apps/web/src/components/FeedbackButton.tsx.",
+  "kind": "ui-flow",
+  "source": "react-component",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/web/src/components/FeedbackButton.tsx",
+      "symbol": "FeedbackButton",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/web/src/components/FeedbackButton.tsx",
+      "reason": "component implementation"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "apps/web/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "apps/web/src/lib/api-client.ts",
+      "reason": "direct import"
+    },
+    {
+      "path": "apps/web/src/components/FeedbackButton.test.tsx",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "apps/web/src/components/FeedbackButton.test.tsx",
+      "command": "npm --prefix apps/web run test"
+    }
+  ],
+  "tags": [
+    "react",
+    "component",
+    "web"
+  ],
+  "trustBoundaries": [
+    "user-input",
+    "network",
+    "serialization"
+  ],
+  "status": "pending",
+  "lock": null,
+  "findingIds": [],
+  "patchAttemptIds": [],
+  "analysisHistory": [],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:08:45.658Z"
+}

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-8f5d5fd534-df32_ca83ea961e",
+  "featureId": "feat_library_8f5d5fd534",
+  "title": "Stale instructor-course links survive rebuilds and keep influencing course scores",
+  "category": "data-loss",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "apps/api/src/services/enrichment.ts",
+      "startLine": 181,
+      "endLine": 185,
+      "symbol": "rebuildInstructorCourseLinks",
+      "quote": "contexts AS (\n  SELECT DISTINCT term_id, subject, number, instructor_name\n  FROM split\n  WHERE instructor_name <> ''\n)"
+    },
+    {
+      "path": "apps/api/src/services/enrichment.ts",
+      "startLine": 245,
+      "endLine": 271,
+      "symbol": "rebuildInstructorCourseLinks",
+      "quote": "INSERT INTO instructor_course_links (\n  term_id, subject, number, instructor_name,\n  gpa_id, rmp_id, confidence_score, match_method\n)\n...\nON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET"
+    },
+    {
+      "path": "apps/api/src/services/enrichment.ts",
+      "startLine": 374,
+      "endLine": 379,
+      "symbol": "enrichCoursesWithScores",
+      "quote": "FROM courses c\nLEFT JOIN instructor_course_links l\n  ON l.term_id = CAST(c.year AS TEXT) || '-' || c.term\n  AND l.subject = c.subject\n  AND l.number = c.number"
+    }
+  ],
+  "reasoning": "The rebuild computes the current instructor contexts and upserts them, but it never removes instructor_course_links rows that are no longer present in courses.primary_instructor. enrichCoursesWithScores then joins every link for the course/term/number, so an old instructor's RMP/GPA evidence remains in the AVG after the course's primary instructor changes or disappears.",
+  "reproduction": "Have CS 225 initially linked to instructor A, then sync the same term with primary_instructor changed to instructor B. rebuildInstructorCourseLinks inserts/updates B but leaves A. enrichCoursesWithScores averages both A and B ratings for the course.",
+  "recommendation": "Replace links for each rebuilt term atomically: delete instructor_course_links for the term/course contexts not present in the new contexts, or rebuild the term's link rows inside a transaction before recomputing scores.",
+  "whyTestsDoNotAlreadyCoverThis": "The included enrichment test only verifies that set-based rebuild SQL is invoked and scores are recomputed once; it does not seed a stale link and assert it is pruned.",
+  "suggestedRegressionTest": "Seed instructor_course_links with an old instructor for a course, mock current courses.primary_instructor with a different instructor, run rebuildInstructorCourseLinks/enrichCoursesWithScores, and assert only the current instructor contributes to linked_rmp_rating/difficulty.",
+  "minimumFixScope": "apps/api/src/services/enrichment.ts link rebuild and score recomputation path.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-8f5d5fd534_df3283d61e",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:19:43.717Z",
+  "updatedAt": "2026-06-04T00:19:43.717Z"
+}

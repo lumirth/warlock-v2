@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-09141f3ef9-a05e_99fa54ed97",
+  "featureId": "feat_library_09141f3ef9",
+  "title": "First upstream rate-limit or outage is reported as course not found",
+  "category": "api-contract",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "contract-mismatch",
+  "evidence": [
+    {
+      "path": "apps/api/src/routes/course.ts",
+      "startLine": 326,
+      "endLine": 330,
+      "symbol": "courseRoutes.get('/api/course/:subject/:number')",
+      "quote": "if (upstreamBackoff.isRateLimited(response.status)) { ... } return c.json({ error: `Course not found: ${response.status}` }, 404);"
+    },
+    {
+      "path": "apps/api/src/routes/course.ts",
+      "startLine": 313,
+      "endLine": 316,
+      "symbol": "courseRoutes.get('/api/course/:subject/:number')",
+      "quote": "return c.json({ error: 'Rate limited and no cached data available', retryAfter: ... }, 503);"
+    }
+  ],
+  "reasoning": "When CISAPI returns 429 or 503 during a live fetch, the route records a backoff failure but still returns 404. That means the first rate-limited request, even for a real course and even if stale data exists, is exposed to clients as a missing course; only later requests hit the backing-off branch that returns stale data or 503.",
+  "reproduction": null,
+  "recommendation": "Branch non-ok upstream responses by status: reserve 404 for actual not-found responses, return stale cached data when available for 429/503/5xx, and otherwise return 503/502 with retry metadata.",
+  "whyTestsDoNotAlreadyCoverThis": "The included course route tests cover malformed parameters and a fresh 200 response, but not non-ok browserFetch responses or stale-cache behavior during a rate limit.",
+  "suggestedRegressionTest": "Mock browserFetch to return 429 with an expired cached course row available and assert the response is stale 200 or 503, never 404.",
+  "minimumFixScope": "Update the non-ok response handling in apps/api/src/routes/course.ts and add one route test for 429 or 503.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-09141f3ef9_a05ee7cfeb",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:15:36.658Z",
+  "updatedAt": "2026-06-04T00:15:36.658Z"
+}

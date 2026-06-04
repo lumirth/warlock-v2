@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-34e29dca2e-d281_b0c0d8ef93",
+  "featureId": "feat_library_34e29dca2e",
+  "title": "Course detail meeting type is lost when type has no code attribute",
+  "category": "bug",
+  "severity": "low",
+  "confidence": "medium",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "apps/api/src/cisapi/parser.ts",
+      "startLine": 173,
+      "endLine": 185,
+      "symbol": "parseMeetingsXml",
+      "quote": "const typeMatch = block.match(/<(?:[\\w]+:)?type[^>]*\\s+code=\"([^\"]*)\"[^>]*>([^<]*)<\\/(?:[\\w]+:)?type>/);"
+    },
+    {
+      "path": "apps/api/src/cisapi/__tests__/parser.test.ts",
+      "startLine": 31,
+      "endLine": 32,
+      "symbol": "SAMPLE_CASCADE_XML",
+      "quote": "<type>Lecture</type>"
+    },
+    {
+      "path": "apps/api/src/cisapi/__tests__/parser.test.ts",
+      "startLine": 209,
+      "endLine": 220,
+      "symbol": "parseCourseDetailXml test",
+      "quote": null
+    }
+  ],
+  "reasoning": "parseMeetingsXml only matches a meeting type element when it contains a code attribute, and both type and typeCode are read from that one match. The included cascade fixture documents CISAPI cascade responses with plain <type>Lecture</type>, while the course-detail test only covers the coded form. Course-detail XML with a plain type element will return an empty meeting type even though the text is present.",
+  "reproduction": "Call parseCourseDetailXml with a detailedSection meeting containing <type>Lecture</type> and no code attribute; sections[0].meetings[0].type is ''.",
+  "recommendation": "Parse the type text independently from the optional code attribute, so <type>Lecture</type> yields type='Lecture' and typeCode='' while preserving coded type behavior.",
+  "whyTestsDoNotAlreadyCoverThis": "The tests exercise code-less type elements only through parseSubjectCascadeXml; the parseCourseDetailXml regression uses <type code=\"LEC\"> and therefore misses the regex requirement.",
+  "suggestedRegressionTest": "Add a parseCourseDetailXml test with <type>Lecture</type> and assert meeting.type is 'Lecture' and meeting.typeCode is ''.",
+  "minimumFixScope": "apps/api/src/cisapi/parser.ts parseMeetingsXml type matching plus one course-detail parser test.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-34e29dca2e_d281c06733",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:12:41.304Z",
+  "updatedAt": "2026-06-04T00:12:41.304Z"
+}

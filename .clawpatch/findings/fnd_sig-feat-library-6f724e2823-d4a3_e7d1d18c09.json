@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-6f724e2823-d4a3_e7d1d18c09",
+  "featureId": "feat_library_6f724e2823",
+  "title": "Web workspace scripts depend on tools the workspace does not declare",
+  "category": "build-release",
+  "severity": "low",
+  "confidence": "medium",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "apps/web/package.json",
+      "startLine": 10,
+      "endLine": 13,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "apps/web/vitest.config.ts",
+      "startLine": 12,
+      "endLine": 14,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "apps/web/src/App.test.tsx",
+      "startLine": 1,
+      "endLine": 3,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "apps/web/package.json",
+      "startLine": 29,
+      "endLine": 42,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "The web package exposes workspace-local test, lint, and deploy scripts, and its tests/config require jsdom plus Testing Library. The deploy script invokes wrangler. Those packages and bins are not declared in apps/web/package.json, so the scripts currently rely on root or sibling workspace dependencies being installed. That works in a full monorepo install, but focused workspace installs, package-graph CI, or removing the sibling/root declarations can break web test/lint/deploy with missing module or missing binary errors.",
+  "reproduction": "In a dependency check scoped to @uiuc-course-search/web, @testing-library/react, @testing-library/jest-dom, jsdom, eslint, and wrangler are not direct dependencies of the web workspace even though its scripts/tests use them.",
+  "recommendation": "Declare the web-owned test/lint/deploy tools in apps/web devDependencies, or move the corresponding scripts to the root package and make the root package explicitly own those dependencies.",
+  "whyTestsDoNotAlreadyCoverThis": "The included tests exercise behavior after the full repository dependency tree is already installed; they do not validate the web workspace's package dependency closure or run scripts from a focused web-only install.",
+  "suggestedRegressionTest": "Add a CI/package metadata check such as npm ls -w @uiuc-course-search/web @testing-library/react @testing-library/jest-dom jsdom eslint wrangler --depth=0, or run the web scripts from a focused workspace install.",
+  "minimumFixScope": "Update apps/web/package.json devDependencies and the lockfile, unless the scripts are intentionally moved to the root package metadata.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-6f724e2823_d4a3a5ae2d",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:17:44.652Z",
+  "updatedAt": "2026-06-04T00:17:44.652Z"
+}

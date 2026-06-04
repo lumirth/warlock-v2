@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-8f5d5fd534-1147_a1e968df36",
+  "featureId": "feat_library_8f5d5fd534",
+  "title": "Course-average GPA rows use NULL in the conflict key, so repeated enrichment can accumulate stale aggregate rows",
+  "category": "data-loss",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "confirmed-bug",
+  "evidence": [
+    {
+      "path": "apps/api/src/services/enrichment.ts",
+      "startLine": 307,
+      "endLine": 323,
+      "symbol": "enrichCoursesWithGpa",
+      "quote": "INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, median_gpa, sample_size, last_updated)\nSELECT\n  subject,\n  number,\n  NULL as instructor,\n...\nON CONFLICT(subject, number, instructor) DO UPDATE SET"
+    },
+    {
+      "path": "apps/api/src/services/enrichment.ts",
+      "startLine": 328,
+      "endLine": 342,
+      "symbol": "enrichCoursesWithGpa",
+      "quote": "FROM gpa_stats g\nLEFT JOIN courses c ON g.subject = c.subject AND g.number = c.number\nWHERE g.instructor IS NULL"
+    }
+  ],
+  "reasoning": "D1/SQLite UNIQUE conflict handling does not treat NULL values as equal, so inserting course-average rows with instructor = NULL will not reliably hit ON CONFLICT(subject, number, instructor). Re-running enrichCoursesWithGpa can create multiple NULL-instructor aggregate rows for the same course. The follow-up SELECT reads all NULL aggregate rows, which can produce repeated or stale course updates with nondeterministic final values.",
+  "reproduction": "Run enrichCoursesWithGpa twice for the same subject/number with instructor-level gpa_stats present. Each run can insert another instructor NULL aggregate row instead of updating the previous aggregate row.",
+  "recommendation": "Do not rely on NULL in the conflict key. Use a non-null sentinel for course averages, add a generated/coalesced unique key, or explicitly delete/update existing NULL aggregate rows for each subject/number before inserting the new aggregate.",
+  "whyTestsDoNotAlreadyCoverThis": "The included enrichment tests import coordinateEnrichment and enrichCoursesWithScores, but do not call enrichCoursesWithGpa or assert idempotency of NULL-instructor aggregate rows.",
+  "suggestedRegressionTest": "Use a real D1/SQLite test or faithful fake to run enrichCoursesWithGpa twice, then assert exactly one course-average row exists per subject/number and courses receives the latest aggregate once.",
+  "minimumFixScope": "apps/api/src/services/enrichment.ts and possibly the gpa_stats uniqueness strategy.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-8f5d5fd534_1147cb9838",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:19:43.717Z",
+  "updatedAt": "2026-06-04T00:19:43.717Z"
+}

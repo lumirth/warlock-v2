@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-452af2b10f-8c43_8e39851230",
+  "featureId": "feat_library_452af2b10f",
+  "title": "Cloudflare preflight accepts smoke artifacts missing two current staging checks",
+  "category": "build-release",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "package.json",
+      "startLine": 24,
+      "endLine": 37,
+      "symbol": "scripts.cloudflare:preflight/test:staging",
+      "quote": null
+    },
+    {
+      "path": "scripts/cloudflare-staging-preflight.ts",
+      "startLine": 30,
+      "endLine": 39,
+      "symbol": "REQUIRED_SMOKE_CHECKS",
+      "quote": null
+    },
+    {
+      "path": "scripts/staging-smoke.ts",
+      "startLine": 165,
+      "endLine": 197,
+      "symbol": "runStagingSmoke",
+      "quote": null
+    },
+    {
+      "path": "scripts/staging-smoke.ts",
+      "startLine": 196,
+      "endLine": 221,
+      "symbol": "runStagingSmoke",
+      "quote": null
+    },
+    {
+      "path": "scripts/__tests__/staging-smoke.test.ts",
+      "startLine": 101,
+      "endLine": 112,
+      "symbol": "staging smoke expected names",
+      "quote": null
+    },
+    {
+      "path": "scripts/__tests__/cloudflare-staging-preflight.test.ts",
+      "startLine": 72,
+      "endLine": 85,
+      "symbol": "preflight smoke artifact test",
+      "quote": null
+    }
+  ],
+  "reasoning": "The staging smoke runner and its test define 10 checks, including professor search and feedback submission. The Cloudflare preflight allowlist only requires 8 checks, and its own test proves an artifact containing only those 8 names is accepted. A stale or hand-written smoke artifact can therefore let cloudflare:preflight pass even when instructor-filter search or feedback ingestion was never exercised.",
+  "reproduction": "Pass checkSmokeResultsText a JSON array containing only the 8 names from REQUIRED_SMOKE_CHECKS with ok:true; it returns ok even though the current staging smoke test expects professor search route and feedback public route too.",
+  "recommendation": "Add the missing smoke names to REQUIRED_SMOKE_CHECKS or export a shared list from staging-smoke.ts so preflight validates the same checks that test:staging produces.",
+  "whyTestsDoNotAlreadyCoverThis": "The staging-smoke test verifies the runner emits 10 checks, but the cloudflare preflight test constructs an 8-check artifact and expects it to pass; there is no test that preflight rejects an artifact missing professor search route or feedback public route.",
+  "suggestedRegressionTest": "Update the preflight test to build its valid artifact from the full staging smoke check list, then assert removing professor search route or feedback public route makes checkSmokeResultsText fail.",
+  "minimumFixScope": "scripts/cloudflare-staging-preflight.ts REQUIRED_SMOKE_CHECKS and its unit test fixture.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-452af2b10f_8c439f7fd8",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:15:21.108Z",
+  "updatedAt": "2026-06-04T00:15:21.108Z"
+}

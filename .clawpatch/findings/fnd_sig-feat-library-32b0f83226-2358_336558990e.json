@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "findingId": "fnd_sig-feat-library-32b0f83226-2358_336558990e",
+  "featureId": "feat_library_32b0f83226",
+  "title": "Cloudflare preflight accepts smoke artifacts missing current checks",
+  "category": "build-release",
+  "severity": "medium",
+  "confidence": "high",
+  "triage": "risk",
+  "evidence": [
+    {
+      "path": "scripts/cloudflare-staging-preflight.ts",
+      "startLine": 30,
+      "endLine": 39,
+      "symbol": "REQUIRED_SMOKE_CHECKS",
+      "quote": null
+    },
+    {
+      "path": "scripts/__tests__/staging-smoke.test.ts",
+      "startLine": 101,
+      "endLine": 112,
+      "symbol": null,
+      "quote": null
+    },
+    {
+      "path": "scripts/__tests__/cloudflare-staging-preflight.test.ts",
+      "startLine": 72,
+      "endLine": 85,
+      "symbol": null,
+      "quote": null
+    }
+  ],
+  "reasoning": "The staging smoke suite defines ten checks, including professor search and feedback submission. The Cloudflare preflight only requires eight names and its own test asserts that an eight-check artifact passes. A stale artifact that never exercised professor search or /api/feedback can therefore satisfy the deployment preflight.",
+  "reproduction": "Create a staging smoke artifact containing only the eight names listed in REQUIRED_SMOKE_CHECKS with ok=true. checkSmokeResultsText returns ok even though it omits 'professor search route' and 'feedback public route'.",
+  "recommendation": "Update REQUIRED_SMOKE_CHECKS to match the authoritative staging smoke result names, and add a regression that removes each current smoke check and expects preflight failure.",
+  "whyTestsDoNotAlreadyCoverThis": "The cloudflare preflight test hardcodes the outdated eight-check list, while the staging-smoke test with the ten-check contract is not cross-checked against the preflight requirement list.",
+  "suggestedRegressionTest": "Import or share the smoke check names between staging-smoke and cloudflare-staging-preflight, then assert checkSmokeResultsText fails when either 'professor search route' or 'feedback public route' is absent.",
+  "minimumFixScope": "scripts/cloudflare-staging-preflight.ts and scripts/__tests__/cloudflare-staging-preflight.test.ts.",
+  "status": "open",
+  "history": [],
+  "signature": "sig_feat-library-32b0f83226_23589a77b0",
+  "linkedPatchAttemptIds": [],
+  "createdByRunId": "20260604T000951-d4a932",
+  "createdAt": "2026-06-04T00:14:56.518Z",
+  "updatedAt": "2026-06-04T00:14:56.518Z"
+}

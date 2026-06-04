@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "featureId": "feat_library_09141f3ef9",
+  "title": "Node source apps/api/src/routes",
+  "summary": "Node/TypeScript source group apps/api/src/routes with 6 files.",
+  "kind": "library",
+  "source": "node-source-group",
+  "confidence": "medium",
+  "entrypoints": [
+    {
+      "path": "apps/api/package.json",
+      "symbol": "apps/api/src/routes",
+      "route": null,
+      "command": null
+    }
+  ],
+  "ownedFiles": [
+    {
+      "path": "apps/api/src/routes/course.ts",
+      "reason": "source group apps/api/src/routes"
+    },
+    {
+      "path": "apps/api/src/routes/debug.ts",
+      "reason": "source group apps/api/src/routes"
+    },
+    {
+      "path": "apps/api/src/routes/feedback.ts",
+      "reason": "source group apps/api/src/routes"
+    },
+    {
+      "path": "apps/api/src/routes/health.ts",
+      "reason": "source group apps/api/src/routes"
+    },
+    {
+      "path": "apps/api/src/routes/search.ts",
+      "reason": "source group apps/api/src/routes"
+    },
+    {
+      "path": "apps/api/src/routes/sync.ts",
+      "reason": "source group apps/api/src/routes"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "apps/api/package.json",
+      "reason": "package manifest"
+    },
+    {
+      "path": "apps/api/src/dto/__tests__/course.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/course.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/debug.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/feedback.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/health.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/rmp-batch.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/search.test.ts",
+      "reason": "associated test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/sync-batch.test.ts",
+      "reason": "associated test"
+    }
+  ],
+  "tests": [
+    {
+      "path": "apps/api/src/dto/__tests__/course.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/course.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/debug.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/feedback.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/health.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/rmp-batch.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/search.test.ts",
+      "command": "npm --prefix apps/api run test"
+    },
+    {
+      "path": "apps/api/src/routes/__tests__/sync-batch.test.ts",
+      "command": "npm --prefix apps/api run test"
+    }
+  ],
+  "tags": [
+    "node",
+    "typescript",
+    "source-group",
+    "project:@uiuc-course-search/api",
+    "project-root:apps/api"
+  ],
+  "trustBoundaries": [],
+  "status": "needs-fix",
+  "lock": null,
+  "findingIds": [
+    "fnd_sig-feat-library-09141f3ef9-8629_75b7a368a9",
+    "fnd_sig-feat-library-09141f3ef9-a05e_99fa54ed97",
+    "fnd_sig-feat-library-09141f3ef9-95f3_42d4f5a39a",
+    "fnd_sig-feat-library-09141f3ef9-f2ee_5d32d5bedf"
+  ],
+  "patchAttemptIds": [],
+  "analysisHistory": [
+    {
+      "runId": "20260604T000951-d4a932",
+      "kind": "review",
+      "summary": "4 finding(s)",
+      "provider": "codex",
+      "model": null,
+      "reasoningEffort": null,
+      "createdAt": "2026-06-04T00:15:36.660Z"
+    }
+  ],
+  "createdAt": "2026-06-04T00:08:45.658Z",
+  "updatedAt": "2026-06-04T00:15:36.660Z"
+}
