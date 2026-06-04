@@ -69,7 +69,6 @@ export type SnapshotPersistenceOperation =
 
 export type SnapshotPersistencePlan = {
   operations: SnapshotPersistenceOperation[];
-  coursesForEmbedding: CourseSnapshot['course'][];
   coursesCount: number;
   sectionsCount: number;
 };
@@ -85,10 +84,8 @@ export function subjectSnapshotPersistencePlan(
   const operations: SnapshotPersistenceOperation[] = [
     { kind: 'subject.upsert', subject: snapshot.subject },
   ];
-  const coursesForEmbedding: CourseSnapshot['course'][] = [];
 
   for (const courseSnapshot of snapshot.courses) {
-    coursesForEmbedding.push(courseSnapshot.course);
     appendCourseWriteOperations(operations, courseSnapshot);
   }
 
@@ -103,7 +100,6 @@ export function subjectSnapshotPersistencePlan(
 
   return {
     operations,
-    coursesForEmbedding,
     coursesCount: snapshot.courses.length,
     sectionsCount: sectionPlan.sectionsCount,
   };

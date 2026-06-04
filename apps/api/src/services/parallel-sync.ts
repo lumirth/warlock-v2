@@ -1,7 +1,7 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
 import { writeSubjectSnapshotToD1 } from './course-snapshot-writer.js';
-import { upsertCourseEmbedding, type CourseEmbeddingData } from './embeddings.js';
+import { courseSnapshotToEmbeddingData, upsertCourseEmbedding } from './embeddings.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
 import { fromSubjectCascade } from '../transforms/course.js';
@@ -111,29 +111,24 @@ async function saveSubjectData(
   ai?: Ai
 ): Promise<{ coursesCount: number; sectionsCount: number }> {
   const snapshot = fromSubjectCascade(parsed, year, term);
-  const { coursesCount, sectionsCount, coursesForEmbedding } =
+  const { coursesCount, sectionsCount } =
     await writeSubjectSnapshotToD1(db, snapshot);
 
   // Process Embeddings
   if (vectorize && ai) {
     // Process embeddings in parallel chunks to speed up
     const EMBEDDING_CONCURRENCY = 5;
-    for (let i = 0; i < coursesForEmbedding.length; i += EMBEDDING_CONCURRENCY) {
-      const chunk = coursesForEmbedding.slice(i, i + EMBEDDING_CONCURRENCY);
-      await Promise.all(chunk.map(async (course) => {
+    for (let i = 0; i < snapshot.courses.length; i += EMBEDDING_CONCURRENCY) {
+      const chunk = snapshot.courses.slice(i, i + EMBEDDING_CONCURRENCY);
+      await Promise.all(chunk.map(async (courseSnapshot) => {
         try {
-          const embeddingData: CourseEmbeddingData = {
-            id: course.id,
-            subject: course.subject,
-            number: course.number,
-            title: course.title,
-            description: course.description,
-            gened: course.gened,
-            primary_instructor: course.primary_instructor
-          };
-          await upsertCourseEmbedding(vectorize, ai, embeddingData);
+          await upsertCourseEmbedding(
+            vectorize,
+            ai,
+            courseSnapshotToEmbeddingData(courseSnapshot)
+          );
         } catch (e) {
-          logger.error('parallelSync.embedding.failed', { courseId: course.id, ...errorFields(e) });
+          logger.error('parallelSync.embedding.failed', { courseId: courseSnapshot.course.id, ...errorFields(e) });
         }
       }));
     }

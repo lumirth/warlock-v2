@@ -1,5 +1,7 @@
 import type { VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import type { SearchFilters } from './search-planner-types.js';
+import type { CourseSnapshot } from '../transforms/course.js';
+import { courseRequirementCodes } from './search-requirements.js';
 
 export interface CourseEmbeddingData {
   id: string;
@@ -8,21 +10,61 @@ export interface CourseEmbeddingData {
   title: string;
   description: string | null;
   gened: string | null;
+  requirementCodes?: string[];
+  requirementLabels?: string[];
   primary_instructor: string | null;
 }
 
-// Create text for embedding
-function createEmbeddingText(course: CourseEmbeddingData): string {
+export function courseSnapshotToEmbeddingData(snapshot: CourseSnapshot): CourseEmbeddingData {
+  const requirementLabels = snapshot.genEdCategories.flatMap(gened => [
+    gened.categoryName,
+    gened.attributeName,
+  ]).filter((value): value is string => Boolean(value));
+
+  return {
+    id: snapshot.course.id,
+    subject: snapshot.course.subject,
+    number: snapshot.course.number,
+    title: snapshot.course.title,
+    description: snapshot.course.description,
+    gened: snapshot.course.gened,
+    requirementCodes: courseRequirementCodes(
+      snapshot.course,
+      snapshot.genEdCategories.flatMap(gened => [
+        gened.categoryId,
+        gened.attributeCode ?? '',
+      ]),
+    ),
+    requirementLabels: uniqueStrings(requirementLabels),
+    primary_instructor: snapshot.course.primary_instructor,
+  };
+}
+
+export function createCourseEmbeddingText(course: CourseEmbeddingData): string {
   const instructorsText = course.primary_instructor ? `Instructors: ${course.primary_instructor}` : '';
+  const requirementCodes = course.requirementCodes?.length
+    ? course.requirementCodes
+    : [course.gened].filter((value): value is string => Boolean(value));
+  const requirementParts = [
+    ...requirementCodes,
+    ...(course.requirementLabels ?? []),
+  ];
+  const requirementText = requirementParts.length > 0
+    ? `Requirements: ${requirementParts.join(' ')}`
+    : '';
   const parts = [
     instructorsText,
     `${course.subject} ${course.number}`,
     course.title,
+    requirementText,
     course.description || '',
-    course.gened ? `GenEd: ${course.gened}` : '',
   ];
 
   return parts.filter(Boolean).join(' ').slice(0, 512); // Limit length
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 export async function generateEmbedding(ai: Ai, text: string): Promise<number[]> {
@@ -39,7 +81,7 @@ export async function upsertCourseEmbedding(
   ai: Ai,
   course: CourseEmbeddingData
 ): Promise<void> {
-  const text = createEmbeddingText(course);
+  const text = createCourseEmbeddingText(course);
   const embedding = await generateEmbedding(ai, text);
 
   // Derive metadata fields for filtering

@@ -23,7 +23,6 @@ export { escapeSqlValue, type GenEdCleanup };
 export type SubjectSnapshotWriteResult = {
   coursesCount: number;
   sectionsCount: number;
-  coursesForEmbedding: CourseSnapshot['course'][];
 };
 
 export async function writeSubjectSnapshotToD1(
@@ -42,7 +41,6 @@ export async function writeSubjectSnapshotToD1(
   return {
     coursesCount: plan.coursesCount,
     sectionsCount: plan.sectionsCount,
-    coursesForEmbedding: plan.coursesForEmbedding,
   };
 }
 
