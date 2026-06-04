@@ -13,7 +13,7 @@ import {
 import type { SearchPlan } from "../services/search-planner-types.js";
 import { searchResultToCourseDto } from "../dto/course.js";
 import { loadSearchResultGeneds } from "../dto/search-geneds.js";
-import { buildSearchUiPlan } from "../dto/search-ui.js";
+import { buildSearchUiPlan } from "../services/search-ui-plan.js";
 import { parseSearchHttpRequest } from "../http/search-request.js";
 import { getSearchTermSummary } from "../services/term-state.js";
 import { errorFields, logger } from "../observability/logger.js";

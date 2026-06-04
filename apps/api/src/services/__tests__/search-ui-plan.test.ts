@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeSearchRequestDto } from '@uiuc-course-search/query-types';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
-import type { Hint, SearchPlan } from '../../services/search-planner-types.js';
-import { buildSearchUiPlan } from '../search-ui.js';
+import type { Hint, SearchPlan } from '../search-planner-types.js';
+import { buildSearchUiPlan } from '../search-ui-plan.js';
 
 const request = (query: string, filters = {}) =>
   normalizeSearchRequestDto({ query, filters });

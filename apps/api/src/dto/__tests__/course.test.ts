@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { Course } from '../../db/index.js';
 import type { SearchResult } from '../../services/search.js';
-import type { CourseSnapshot } from '../../transforms/course.js';
 import {
   buildMatchEvidence,
   buildResultWarnings,
+} from '../../services/search-result-presentation.js';
+import type { CourseSnapshot } from '../../transforms/course.js';
+import {
   courseSnapshotToCourseDto,
   searchResultToCourseDto,
   toCourseDto,

@@ -14,7 +14,7 @@ import type {
   SearchFilters,
   SearchPlan,
   TermValue,
-} from '../services/search-planner-types.js';
+} from './search-planner-types.js';
 import {
   effectiveRequirementFilter,
   isSearchDifficultyFilter,
@@ -23,11 +23,11 @@ import {
   isSearchTermFilter,
   isSearchTimeFilter,
 } from '@uiuc-course-search/query-types';
-import { isGenericAnyGenedFilter } from '../services/gened-codes.js';
+import { isGenericAnyGenedFilter } from './gened-codes.js';
 import {
   ambiguitySearchAction,
   removeSearchIntentAction,
-} from './search-actions.js';
+} from '../dto/search-actions.js';
 
 export function buildSearchUiPlan(
   hints: Hint[],
