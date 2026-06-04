@@ -131,6 +131,27 @@ export const GENED_LOOKUP: Record<string, string> = Object.entries(
   return lookup;
 }, {});
 
+export const GENED_LABELS: Record<string, string> = {
+  ACP: "Advanced Composition",
+  BSC: "Behavioral Sciences",
+  CMP: "Composition I",
+  CS: "Cultural Studies",
+  HP: "Historical & Philosophical Perspectives",
+  HUM: "Humanities & Arts",
+  LA: "Literature & the Arts",
+  LS: "Life Sciences",
+  NAT: "Natural Sciences",
+  NW: "Non-Western Cultures",
+  PS: "Physical Sciences",
+  QR: "Quantitative Reasoning",
+  QR1: "Quantitative Reasoning I",
+  QR2: "Quantitative Reasoning II",
+  SBS: "Social & Behavioral Sciences",
+  SS: "Social Sciences",
+  US: "US Minority Cultures",
+  WCC: "Western/Comparative Cultures",
+};
+
 export const SUBJECT_GENED_CONFLICTS = new Set(["CS", "PS"]);
 
 export const FUZZY_SUBJECT_NAME_BLOCKLIST = new Set([
