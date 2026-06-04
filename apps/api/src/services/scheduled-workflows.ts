@@ -29,6 +29,12 @@ export type ScheduledWorkflowPlan = {
   workflows: ScheduledWorkflow[];
 };
 
+export type ScheduledWorkflowDispatch = {
+  cron: string;
+  env: ScheduledWorkflowEnv;
+  waitUntil: (workflow: Promise<void>) => void;
+};
+
 const TERM_DISCOVERY_CRON = '0 10,22 * * *';
 const WEEKLY_MAINTENANCE_CRON = '0 8 * * 0';
 const GPA_RESUME_CRON = '*/5 * * * *';
@@ -67,16 +73,14 @@ export function planScheduledWorkflows(cron: string): ScheduledWorkflowPlan {
   };
 }
 
-export async function runScheduledWorkflows(
-  event: ScheduledEvent,
-  env: ScheduledWorkflowEnv,
-  ctx: ExecutionContext
-): Promise<ScheduledWorkflowPlan> {
+export function dispatchScheduledWorkflows(
+  input: ScheduledWorkflowDispatch
+): ScheduledWorkflowPlan {
   const runId = createRunId('cron');
-  const plan = planScheduledWorkflows(event.cron);
+  const plan = planScheduledWorkflows(input.cron);
 
   for (const workflow of plan.workflows) {
-    ctx.waitUntil(runScheduledWorkflow(workflow, env, runId, plan.cron));
+    input.waitUntil(runScheduledWorkflow(workflow, input.env, runId, plan.cron));
   }
 
   return plan;

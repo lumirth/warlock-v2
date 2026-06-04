@@ -5,7 +5,10 @@ import { coordinateEnrichment } from '../services/enrichment.js';
 import { resetGpaSync, resumeGpaSync } from '../services/gpa-sync.js';
 import { coordinateRmpSync } from '../services/rmp-sync.js';
 import { coordinateCourseSync } from '../services/sync-coordinator.js';
-import { planScheduledWorkflows } from '../services/scheduled-workflows.js';
+import {
+  dispatchScheduledWorkflows,
+  planScheduledWorkflows,
+} from '../services/scheduled-workflows.js';
 
 vi.mock('../services/enrichment.js', () => ({
   coordinateEnrichment: vi.fn(),
@@ -90,6 +93,32 @@ describe('scheduled worker', () => {
       cron: '17 * * * *',
       workflows: [{ name: 'course_sync', trigger: 'default_cron' }],
     });
+  });
+
+  it('dispatches scheduled workflows without depending on Cloudflare event objects', async () => {
+    vi.mocked(coordinateCourseSync).mockResolvedValue({
+      termCount: 1,
+      results: [],
+      failedTermCount: 0,
+    });
+
+    const promises: Promise<void>[] = [];
+    const environment = env();
+    const plan = dispatchScheduledWorkflows({
+      cron: '17 * * * *',
+      env: environment,
+      waitUntil: promise => promises.push(promise),
+    });
+    await Promise.all(promises);
+
+    expect(plan).toEqual({
+      cron: '17 * * * *',
+      workflows: [{ name: 'course_sync', trigger: 'default_cron' }],
+    });
+    expect(coordinateCourseSync).toHaveBeenCalledWith(environment, expect.objectContaining({
+      cron: '17 * * * *',
+      trigger: 'default_cron',
+    }));
   });
 
   it('runs enrichment after weekly RMP sync completes', async () => {

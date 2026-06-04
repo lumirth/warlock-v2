@@ -1,10 +1,8 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
-import { parseBoundedIntParam, parseCourseNumberParam, parseEnumParam, parseSubjectParam } from '../http/params.js';
+import { parseCourseDetailHttpRequest } from '../http/course-detail-request.js';
 import { errorFields, logger } from '../observability/logger.js';
 import { CourseDetailService } from '../services/course-detail-service.js';
-
-const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
 
 type Bindings = {
   DB: D1Database;
@@ -25,46 +23,28 @@ type Bindings = {
 
 export const courseRoutes = new Hono<{ Bindings: Bindings }>();
 
-// Fresh fetch for a single course returns live CISAPI data without mutating canonical DB tables.
+// Cache/live/stale behavior belongs to CourseDetailService; the route only adapts HTTP.
 courseRoutes.get('/api/course/:subject/:number', async (c) => {
   const { subject: rawSubject, number: rawNumber } = c.req.param();
-  const parsedSubject = parseSubjectParam(rawSubject);
-  if (!parsedSubject.ok) return c.json({ error: parsedSubject.error }, 400);
-
-  const parsedNumber = parseCourseNumberParam(rawNumber);
-  if (!parsedNumber.ok) return c.json({ error: parsedNumber.error }, 400);
-
-  const requestedYear = c.req.query('year');
-  const requestedTerm = c.req.query('term');
-  if ((requestedYear && !requestedTerm) || (!requestedYear && requestedTerm)) {
-    return c.json({ error: 'year and term must be provided together' }, 400);
-  }
-
-  if (requestedYear) {
-    const parsedYear = parseBoundedIntParam(requestedYear, 'year', { min: 2004, max: new Date().getFullYear() + 2 });
-    if (!parsedYear.ok) return c.json({ error: parsedYear.error }, 400);
-  }
-
-  if (requestedTerm) {
-    const parsedTerm = parseEnumParam(requestedTerm, 'term', TERMS);
-    if (!parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
-  }
+  const parsed = parseCourseDetailHttpRequest({
+    rawSubject,
+    rawNumber,
+    requestedYear: c.req.query('year'),
+    requestedTerm: c.req.query('term'),
+    cacheControl: c.req.header('Cache-Control'),
+    fresh: c.req.query('fresh'),
+  });
+  if (!parsed.ok) return c.json(parsed.body, parsed.status);
 
   const service = new CourseDetailService(c.env);
   try {
-    const result = await service.loadCourseDetail({
-      subject: parsedSubject.value,
-      number: parsedNumber.value,
-      requestedYear,
-      requestedTerm,
-      bypassCache: c.req.header('Cache-Control')?.includes('no-cache') || c.req.query('fresh') === 'true',
-    });
+    const result = await service.loadCourseDetail(parsed.request);
 
     return c.json(result.body, result.status, result.headers);
   } catch (error) {
     logger.error('route.course.failed', {
-      subject: parsedSubject.value,
-      number: parsedNumber.value,
+      subject: parsed.request.subject,
+      number: parsed.request.number,
       ...errorFields(error),
     });
     return c.json({ error: 'Internal server error' }, 500);
