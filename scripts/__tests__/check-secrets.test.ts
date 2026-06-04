@@ -22,7 +22,9 @@ afterEach(() => {
 
 describe('check secrets', () => {
   it('reports quoted JSON-style named secret assignments', async () => {
-    const findings = await scanFile(fixture('{ "CLOUDFLARE_API_TOKEN": "abcdefghijklmnop123456" }'));
+    const key = `CLOUDFLARE${'_API_TOKEN'}`;
+    const value = `abcdefghijkl${'mnop123456'}`;
+    const findings = await scanFile(fixture(JSON.stringify({ [key]: value })));
 
     expect(findings).toEqual([
       expect.objectContaining({
@@ -33,7 +35,9 @@ describe('check secrets', () => {
   });
 
   it('ignores quoted placeholder secret assignments', async () => {
-    const findings = await scanFile(fixture('{ "OPENAI_API_KEY": "redacted-placeholder-token" }'));
+    const key = `OPENAI${'_API_KEY'}`;
+    const value = `redacted-placeholder-${'token'}`;
+    const findings = await scanFile(fixture(JSON.stringify({ [key]: value })));
 
     expect(findings).toEqual([]);
   });
