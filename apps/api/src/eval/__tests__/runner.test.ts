@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  evalModeForEnvironment,
+  evalRequestUrl,
   fetchWithRateLimitRetry,
   requestDelayForBaseUrl,
 } from '../runner.js';
@@ -17,6 +19,25 @@ describe('eval runner request pacing', () => {
         'https://uiuc-course-search-staging.lumirth.workers.dev'
       )
     ).toBeGreaterThan(0);
+  });
+
+  it('uses public result-coherence mode when no eval token is available', () => {
+    expect(evalModeForEnvironment({})).toBe('public');
+    expect(
+      evalRequestUrl('https://example.test', "what's an easy gen ed", 'public')
+    ).toBe(
+      'https://example.test/api/search?q=what%27s%20an%20easy%20gen%20ed&limit=20'
+    );
+  });
+
+  it('uses debug mode when an eval token is available or explicitly requested', () => {
+    expect(evalModeForEnvironment({ EVAL_ADMIN_TOKEN: 'token' })).toBe('debug');
+    expect(evalModeForEnvironment({ EVAL_MODE: 'debug' })).toBe('debug');
+    expect(
+      evalRequestUrl('https://example.test', 'CS 225', 'debug')
+    ).toBe(
+      'https://example.test/admin/debug/search-plan?q=CS%20225&limit=20'
+    );
   });
 
   it('retries 429 responses after Retry-After before returning success', async () => {

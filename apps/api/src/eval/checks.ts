@@ -347,18 +347,7 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
     ...checkExpectedRescue(query, plannerDebug.plan.rescue),
     ...checkExpectedResidual(query, data.meta.query.residual),
   ];
-  const resultViolations = [
-    ...checkInvariants(query, results),
-    ...checkResultCoherence(query, results),
-  ];
-  if (query.require_term_metadata && !data.meta.term) {
-    parseViolations.push('term metadata is missing');
-  }
-
-  const relaxed = data.meta.fallback?.constraintsRelaxed ?? [];
-  if (!query.allow_fallback_relaxation && relaxed.length > 0) {
-    parseViolations.push(`fallback relaxed hard constraints: ${relaxed.join(', ')}`);
-  }
+  const resultViolations = checkPublicResultViolations(query, data);
 
   const violations = [...parseViolations, ...resultViolations];
 
@@ -373,4 +362,42 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
     resultViolations,
     tierReached: data.meta.fallback?.tierReached ?? null,
   };
+}
+
+export function evaluatePublicSearchResponse(query: GoldQuery, data: SearchResponseForEval): EvalResult {
+  const results = data.results;
+  const resultViolations = checkPublicResultViolations(query, data);
+
+  return {
+    query,
+    actualFilters: {},
+    actualResidual: data.meta.query.residual,
+    results,
+    reciprocalRank: calculateReciprocalRank(query, results),
+    violations: resultViolations,
+    parseViolations: [],
+    resultViolations,
+    tierReached: data.meta.fallback?.tierReached ?? null,
+  };
+}
+
+function checkPublicResultViolations(
+  query: GoldQuery,
+  data: SearchResponseForEval,
+): string[] {
+  const violations = [
+    ...checkInvariants(query, data.results),
+    ...checkResultCoherence(query, data.results),
+  ];
+
+  if (query.require_term_metadata && !data.meta.term) {
+    violations.push('term metadata is missing');
+  }
+
+  const relaxed = data.meta.fallback?.constraintsRelaxed ?? [];
+  if (!query.allow_fallback_relaxation && relaxed.length > 0) {
+    violations.push(`fallback relaxed hard constraints: ${relaxed.join(', ')}`);
+  }
+
+  return violations;
 }

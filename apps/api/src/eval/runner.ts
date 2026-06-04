@@ -2,7 +2,11 @@ import type { EvalResult } from './types.js';
 import { GOLDEN_QUERIES } from './golden-queries.js';
 import { calculateMetrics } from './metrics.js';
 import { generateReport } from './report.js';
-import { evaluateSearchResponse, type SearchResponseForEval } from './checks.js';
+import {
+  evaluatePublicSearchResponse,
+  evaluateSearchResponse,
+  type SearchResponseForEval,
+} from './checks.js';
 
 const REMOTE_EVAL_REQUEST_DELAY_MS = 650;
 const RATE_LIMIT_RETRY_FALLBACK_MS = 65_000;
@@ -10,9 +14,14 @@ const MAX_RATE_LIMIT_RETRIES = 2;
 
 type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 type Sleeper = (ms: number) => Promise<void>;
+type EvalMode = 'debug' | 'public';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function encodeQueryParam(value: string): string {
+  return encodeURIComponent(value).replace(/'/g, '%27');
 }
 
 function retryAfterMs(response: Response): number | null {
@@ -34,6 +43,25 @@ export function requestDelayForBaseUrl(baseUrl: string): number {
   return /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(?::|\/|$)/i.test(baseUrl)
     ? 0
     : REMOTE_EVAL_REQUEST_DELAY_MS;
+}
+
+export function evalModeForEnvironment(env: Record<string, string | undefined>): EvalMode {
+  if (env.EVAL_MODE === 'debug' || env.EVAL_MODE === 'public') {
+    return env.EVAL_MODE;
+  }
+
+  return env.EVAL_ADMIN_TOKEN || env.STAGING_ADMIN_TOKEN ? 'debug' : 'public';
+}
+
+export function evalRequestUrl(
+  baseUrl: string,
+  query: string,
+  mode: EvalMode,
+): string {
+  const encodedQuery = encodeQueryParam(query);
+  return mode === 'debug'
+    ? `${baseUrl}/admin/debug/search-plan?q=${encodedQuery}&limit=20`
+    : `${baseUrl}/api/search?q=${encodedQuery}&limit=20`;
 }
 
 export async function fetchWithRateLimitRetry(
@@ -70,13 +98,19 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
   const evalResults: EvalResult[] = [];
   const requestDelayMs = requestDelayForBaseUrl(baseUrl);
   const adminToken = process.env.EVAL_ADMIN_TOKEN ?? process.env.STAGING_ADMIN_TOKEN;
+  const evalMode = evalModeForEnvironment(process.env);
   const requestInit = adminToken
     ? { headers: { Authorization: `Bearer ${adminToken}` } }
     : undefined;
+  console.log(
+    evalMode === 'debug'
+      ? 'Eval mode: debug parse + public result coherence'
+      : 'Eval mode: public result coherence only'
+  );
 
   for (const [index, query] of GOLDEN_QUERIES.entries()) {
     try {
-      const url = `${baseUrl}/admin/debug/search-plan?q=${encodeURIComponent(query.query)}&limit=20`;
+      const url = evalRequestUrl(baseUrl, query.query, evalMode);
       const response = await fetchWithRateLimitRetry(url, { init: requestInit });
 
       if (!response.ok) {
@@ -84,7 +118,9 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
       }
 
       const data = await response.json() as SearchResponseForEval;
-      const result = evaluateSearchResponse(query, data);
+      const result = evalMode === 'debug'
+        ? evaluateSearchResponse(query, data)
+        : evaluatePublicSearchResponse(query, data);
       evalResults.push(result);
 
       // Progress indicator
