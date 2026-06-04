@@ -92,7 +92,12 @@ export function buildRetrievalPlan(
         budget.laneCandidateLimit,
         "workload or subjective evidence request",
       ),
-      lane("help_path", false, budget.laneCandidateLimit, "not implemented"),
+      lane(
+        "help_path",
+        false,
+        budget.laneCandidateLimit,
+        "planned FAQ/degree-audit sidecar; no executable help corpus configured",
+      ),
     ],
     aliasQuery,
     workloadSignalTypes: signalTypes,

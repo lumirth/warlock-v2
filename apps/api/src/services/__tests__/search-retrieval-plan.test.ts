@@ -95,6 +95,35 @@ describe("buildRetrievalPlan", () => {
     expect(laneEnabled(result, "requirement")).toBe(true);
   });
 
+  it("keeps help_path as planned metadata until a help corpus exists", () => {
+    const result = retrievalPlan(
+      plan({
+        rescue: {
+          queryTypes: ["help_or_how_to"],
+          negativeTerms: [],
+          topicTerms: [],
+          expandedTerms: [],
+          assumptions: [],
+          warnings: [],
+          interpretedLanes: ["help_path"],
+          relaxationPlan: [],
+          needsStudentProfile: false,
+          confidence: 0.72,
+        },
+      }),
+    );
+
+    expect(result.lanes.find((laneInfo) => laneInfo.lane === "help_path")).toEqual(
+      {
+        lane: "help_path",
+        enabled: false,
+        limit: result.budget.laneCandidateLimit,
+        reason:
+          "planned FAQ/degree-audit sidecar; no executable help corpus configured",
+      },
+    );
+  });
+
   it("records workload evidence signal types as part of executable retrieval configuration", () => {
     const result = retrievalPlan(
       plan({
