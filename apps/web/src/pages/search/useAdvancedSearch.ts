@@ -1,12 +1,6 @@
 import type { Dispatch } from 'react'
 import type { AdvancedSearchStateDto } from '@uiuc-course-search/query-types'
-import {
-  advancedFiltersChanged,
-  advancedFiltersContradictQuery,
-  cleanAdvancedFilters,
-  hasAdvancedFilterValue,
-  meaningfulResidualQuery,
-} from './search-filter-model'
+import { planAdvancedSearchApply } from './advanced-search-planner'
 import type {
   SearchControllerAction,
   SearchControllerState,
@@ -38,32 +32,28 @@ export function useAdvancedSearch({
     })
 
   const applyAdvancedSearch = () => {
-    const previousAdvanced = state.meta?.ui?.advanced || {}
-    const changed = advancedFiltersChanged(previousAdvanced, state.advancedDraft)
-    const contradictsQuery = advancedFiltersContradictQuery(
-      previousAdvanced,
-      state.advancedDraft
-    )
-    const freeTextQuery = state.inputDirty
-      ? state.query.trim()
-      : contradictsQuery
-        ? meaningfulResidualQuery(state.meta?.query.residual || '')
-        : activeRequestQuery
-    const nextFilters = cleanAdvancedFilters(state.advancedDraft)
-    const nextQuery = changed ? freeTextQuery : activeRequestQuery
+    const plan = planAdvancedSearchApply({
+      activeRequestQuery,
+      currentInputQuery: state.query,
+      inputDirty: state.inputDirty,
+      interpretedAdvanced: state.meta?.ui?.advanced || {},
+      draft: state.advancedDraft,
+      residualQuery: state.meta?.query.residual,
+    })
 
-    if (!nextQuery.trim() && !hasAdvancedFilterValue(nextFilters)) {
+    if (plan.kind === 'clear') {
       dispatch({ type: 'search/cleared' })
       return
     }
-    if (contradictsQuery && !state.inputDirty) {
-      dispatch({ type: 'query/changed', value: freeTextQuery })
+
+    if (plan.syncInputQuery !== undefined) {
+      dispatch({ type: 'query/changed', value: plan.syncInputQuery })
     }
 
     executeSearch({
       type: 'refine',
-      query: nextQuery,
-      filters: nextFilters,
+      query: plan.query,
+      filters: plan.filters,
     })
   }
 
