@@ -14,7 +14,7 @@ import {
 } from "./search-request.js";
 import {
   extractSearchPlanningInput,
-  withManualRequestFilterHints,
+  withRequestFilterHints,
 } from "./search-plan-hints.js";
 import { compileQueryLanguageClause } from "./search-plan-query-language.js";
 import {
@@ -56,10 +56,10 @@ export async function createSearchPlan(
       residual: input.extraction.residual,
     }),
   ];
-  const planningInput = withManualRequestFilterHints(input, requestFilters);
+  const planningInput = withRequestFilterHints(input, requestFilters);
   if (requestFilters) {
     compilerEvents.push(
-      compilerEvent("extract", "manual_filter_hints", "Merged structured request filters as manual hints", {
+      compilerEvent("extract", "request_filter_hints", "Merged structured request filters as explicit hints", {
         filters: Object.keys(requestFilters).filter((key) => requestFilters[key as keyof SearchRequestFiltersDto] !== undefined),
       }),
     );

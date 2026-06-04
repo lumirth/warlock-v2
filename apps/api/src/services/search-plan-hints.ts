@@ -79,7 +79,7 @@ export function extractSearchPlanningInput(query: string): SearchPlanningInput {
   };
 }
 
-function manualHint(
+function requestFilterHint(
   type: Hint['type'],
   value: Hint['value'],
   raw: string,
@@ -95,7 +95,7 @@ function manualHint(
   };
 }
 
-function addManualHint(hints: Hint[], hint: Hint): void {
+function addRequestFilterHint(hints: Hint[], hint: Hint): void {
   const signature = `${hint.type}:${JSON.stringify(hint.value)}`;
   const exists = hints.some(
     (existing) =>
@@ -106,29 +106,29 @@ function addManualHint(hints: Hint[], hint: Hint): void {
   }
 }
 
-function manualHintsFromRequestFilters(filters?: SearchRequestFiltersDto): Hint[] {
+function hintsFromRequestFilters(filters?: SearchRequestFiltersDto): Hint[] {
   if (!filters) return [];
 
   const hints: Hint[] = [];
   if (filters.subject && filters.number) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint(
+      requestFilterHint(
         'courseCode',
         { subject: filters.subject, number: filters.number },
         `${filters.subject} ${filters.number}`,
       ),
     );
   } else if (filters.subject) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint('subject', filters.subject, filters.subject),
+      requestFilterHint('subject', filters.subject, filters.subject),
     );
   }
   if (filters.instructor) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint(
+      requestFilterHint(
         'instructor',
         filters.instructor,
         filters.instructor,
@@ -136,9 +136,9 @@ function manualHintsFromRequestFilters(filters?: SearchRequestFiltersDto): Hint[
     );
   }
   if (filters.term && filters.year) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint(
+      requestFilterHint(
         'term',
         { term: filters.term, year: filters.year },
         `${filters.term} ${filters.year}`,
@@ -146,63 +146,63 @@ function manualHintsFromRequestFilters(filters?: SearchRequestFiltersDto): Hint[
     );
   }
   if (filters.gened) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint('gened', filters.gened, filters.gened),
+      requestFilterHint('gened', filters.gened, filters.gened),
     );
   }
   if (filters.credits !== undefined) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint('credits', filters.credits, String(filters.credits)),
+      requestFilterHint('credits', filters.credits, String(filters.credits)),
     );
   }
   if (filters.level !== undefined) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint('level', filters.level, `${filters.level} level`),
+      requestFilterHint('level', filters.level, `${filters.level} level`),
     );
   }
   if (filters.days) {
-    addManualHint(hints, manualHint('days', filters.days, filters.days));
+    addRequestFilterHint(hints, requestFilterHint('days', filters.days, filters.days));
   }
   if (filters.time) {
-    addManualHint(hints, manualHint('time', filters.time, filters.time));
+    addRequestFilterHint(hints, requestFilterHint('time', filters.time, filters.time));
   }
   if (filters.online !== undefined) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint('online', filters.online, String(filters.online)),
+      requestFilterHint('online', filters.online, String(filters.online)),
     );
   }
   if (filters.status) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint('status', filters.status, filters.status),
+      requestFilterHint('status', filters.status, filters.status),
     );
   }
   if (filters.difficulty) {
-    addManualHint(
+    addRequestFilterHint(
       hints,
-      manualHint('difficulty', filters.difficulty, filters.difficulty),
+      requestFilterHint('difficulty', filters.difficulty, filters.difficulty),
     );
   }
 
   return hints;
 }
 
-export function withManualRequestFilterHints(
+export function withRequestFilterHints(
   input: SearchPlanningInput,
   filters?: SearchRequestFiltersDto,
 ): SearchPlanningInput {
-  const manualHints = manualHintsFromRequestFilters(filters);
-  if (manualHints.length === 0) {
+  const requestFilterHints = hintsFromRequestFilters(filters);
+  if (requestFilterHints.length === 0) {
     return input;
   }
 
   const extractionHints = [...input.extraction.hints];
-  for (const hint of manualHints) {
-    addManualHint(extractionHints, hint);
+  for (const hint of requestFilterHints) {
+    addRequestFilterHint(extractionHints, hint);
   }
 
   const extraction: ExtractionResult = {
