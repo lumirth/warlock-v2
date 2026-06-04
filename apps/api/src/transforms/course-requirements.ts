@@ -24,11 +24,7 @@ export function courseSnapshotRequirementEvidence(snapshot: CourseSnapshot): Cou
       gened.attributeCode ?? '',
     ]).map(code => canonicalGenedCode(code) ?? '').filter(Boolean)
   );
-  const codes = richCodes.length > 0
-    ? richCodes
-    : normalizeRequirementCodes([
-      canonicalGenedCode(snapshot.course.gened) ?? '',
-    ].filter(Boolean));
+  const codes = richCodes;
   const labels = uniqueStrings(snapshot.genEdCategories.flatMap(gened => [
     gened.categoryName,
     gened.attributeName,

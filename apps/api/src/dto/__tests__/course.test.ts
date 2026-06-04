@@ -42,6 +42,15 @@ const course: Course = {
   updated_at: 1,
 };
 
+const courseGeneds = [
+  {
+    categoryId: 'QR',
+    categoryName: 'Quantitative Reasoning',
+    attributeCode: 'QR2',
+    attributeName: 'Quantitative Reasoning II',
+  },
+];
+
 function searchResult(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
     course,
@@ -74,6 +83,7 @@ describe('search result DTO evidence', () => {
         keywordQuery: 'data structures',
         semanticQuery: 'data structures',
       },
+      geneds: courseGeneds,
     });
 
     expect(evidence.map(item => item.kind)).toEqual(expect.arrayContaining([
@@ -164,6 +174,7 @@ describe('search result DTO evidence', () => {
           confidence: 0.82,
         },
       },
+      geneds: courseGeneds,
     });
 
     expect(dto.explanation?.matchedChips).toEqual(['Online preferred', 'Low writing preferred']);

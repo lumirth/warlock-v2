@@ -9,7 +9,7 @@ export interface CourseEmbeddingData {
   number: string;
   title: string;
   description: string | null;
-  gened: string | null;
+  requirementSummaryCode: string | null;
   requirementCodes?: string[];
   requirementLabels?: string[];
   primary_instructor: string | null;
@@ -24,7 +24,7 @@ export function courseSnapshotToEmbeddingData(snapshot: CourseSnapshot): CourseE
     number: snapshot.course.number,
     title: snapshot.course.title,
     description: snapshot.course.description,
-    gened: requirements.summaryCode,
+    requirementSummaryCode: requirements.summaryCode,
     requirementCodes: requirements.codes,
     requirementLabels: requirements.labels,
     primary_instructor: snapshot.course.primary_instructor,
@@ -35,7 +35,7 @@ export function createCourseEmbeddingText(course: CourseEmbeddingData): string {
   const instructorsText = course.primary_instructor ? `Instructors: ${course.primary_instructor}` : '';
   const requirementCodes = course.requirementCodes?.length
     ? course.requirementCodes
-    : [course.gened].filter((value): value is string => Boolean(value));
+    : [course.requirementSummaryCode].filter((value): value is string => Boolean(value));
   const requirementParts = [
     ...requirementCodes,
     ...(course.requirementLabels ?? []),
@@ -83,7 +83,7 @@ export async function upsertCourseEmbedding(
       subject: course.subject,
       number: course.number,
       title: course.title,
-      gened: course.gened || '',
+      gened: course.requirementSummaryCode || '',
       catalog_number: catalogNumber,
       level_bucket: levelBucket
     }

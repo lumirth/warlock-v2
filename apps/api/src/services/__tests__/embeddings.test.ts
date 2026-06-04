@@ -55,7 +55,7 @@ describe('course embeddings', () => {
     const embeddingData = courseSnapshotToEmbeddingData(snapshot());
     const text = createCourseEmbeddingText(embeddingData);
 
-    expect(embeddingData.gened).toBe('CS');
+    expect(embeddingData.requirementSummaryCode).toBe('CS');
     expect(embeddingData.requirementCodes).toEqual(['CS', 'US', 'HUM']);
     expect(text).toContain('AAS 281');
     expect(text).toContain('Constructing Race in America');
@@ -83,7 +83,7 @@ describe('course embeddings', () => {
     const embeddingData = courseSnapshotToEmbeddingData(courseSnapshot);
     const text = createCourseEmbeddingText(embeddingData);
 
-    expect(embeddingData.gened).toBe('CS');
+    expect(embeddingData.requirementSummaryCode).toBe('CS');
     expect(embeddingData.requirementCodes).toEqual(['CS', 'US', 'HUM']);
     expect(text).toContain('Requirements: CS US HUM');
     expect(text).not.toContain('Requirements: QR');

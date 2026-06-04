@@ -74,14 +74,14 @@ describe('courseSnapshotRequirementEvidence', () => {
     ]);
   });
 
-  it('falls back to legacy course.gened only when no rich rows exist', () => {
+  it('does not treat the flat course GenEd summary as structured evidence', () => {
     const courseSnapshot = snapshot();
     courseSnapshot.genEdCategories = [];
 
     expect(courseSnapshotRequirementEvidence(courseSnapshot)).toMatchObject({
-      codes: ['QR'],
+      codes: [],
       labels: [],
-      summaryCode: 'QR',
+      summaryCode: null,
       geneds: [],
     });
   });

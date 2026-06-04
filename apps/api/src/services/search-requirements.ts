@@ -1,17 +1,12 @@
 import type { CourseGenedDto } from "@uiuc-course-search/query-types";
 import { normalizeRequirementCodes } from "@uiuc-course-search/query-types";
-import type { Course } from "../db/types.js";
 import { canonicalGenedCode } from "./gened-codes.js";
 import type { SearchResult } from "./search-types.js";
 
-export function courseRequirementCodes(
-  course: Pick<Course, "gened">,
+export function structuredRequirementCodes(
   codes: readonly string[] | undefined = [],
 ): string[] {
-  return normalizeCanonicalRequirementCodes([
-    ...codes,
-    course.gened ?? "",
-  ]);
+  return normalizeCanonicalRequirementCodes(codes);
 }
 
 export function genedDtoRequirementCodes(geneds: readonly CourseGenedDto[] | undefined): string[] {
@@ -27,7 +22,7 @@ export function searchResultRequirementCodes(
   result: SearchResult,
   geneds?: readonly CourseGenedDto[],
 ): string[] {
-  return courseRequirementCodes(result.course, [
+  return structuredRequirementCodes([
     ...genedDtoRequirementCodes(geneds),
     ...(result.requirementCodes ?? []),
   ]);
