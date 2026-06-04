@@ -168,7 +168,7 @@ describe('Historical Sync SQL Generation', () => {
     expect(sql).toContain("'CS'");
     expect(sql).toContain("'101'");
     expect(sql).toContain("'Intro Computing: Engrg & Sci'");
-    expect(sql).toContain("'QR1'");
+    expect(sql).not.toContain("'QR1'");
     expect(sql).toContain("'Fagen-Ulmschneider, W'"); // Primary instructor from lecture
     expect(sql).toContain("'Prerequisite: One of MATH 220 or MATH 221.'");
     expect(sql).toContain("'Quantitative Reasoning I course.'");

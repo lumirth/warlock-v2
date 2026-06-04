@@ -40,7 +40,6 @@ function sampleSnapshot(): SubjectSnapshot {
           title: 'Intro Asian American Studies',
           description: 'Culture and history.',
           credit_hours: 3,
-          gened: 'CS',
           year: 2026,
           term: 'spring',
           avg_gpa: 3.62,

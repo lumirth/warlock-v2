@@ -47,7 +47,6 @@ const courseRow: Course & { age_seconds: number } = {
   title: 'Data Structures',
   description: 'Data abstractions and algorithms.',
   credit_hours: 4,
-  gened: null,
   year: 2026,
   term: 'spring',
   avg_gpa: 3.4,

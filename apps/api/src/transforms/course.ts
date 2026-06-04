@@ -168,8 +168,6 @@ function transformCascadeCourseToSnapshot({
       title: course.title,
       description: course.description || null,
       credit_hours: parseInt(course.creditHours, 10) || null,
-      // Denormalized summary for existing schema indexes; course_gened remains the full source.
-      gened: course.genEdCategories[0]?.id ?? null,
       year,
       term,
       primary_instructor: formatInstructors(primaryInstructors),

@@ -20,7 +20,7 @@ export function normalizedTitle(title: string | null | undefined): string {
 
 export function courseText(
   course: Course,
-  fields: Array<"subject" | "title" | "description" | "gened" | "course_info">,
+  fields: Array<"subject" | "title" | "description" | "course_info">,
 ): string {
   return fields
     .map(field => course[field] ?? "")

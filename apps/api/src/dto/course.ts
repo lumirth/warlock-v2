@@ -33,7 +33,6 @@ type CourseSource = Pick<
   | 'title'
   | 'description'
   | 'credit_hours'
-  | 'gened'
   | 'year'
   | 'term'
   | 'avg_gpa'

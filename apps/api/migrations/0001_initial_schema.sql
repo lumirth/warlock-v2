@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS courses (
     title TEXT NOT NULL,
     description TEXT,
     credit_hours INTEGER,
-    gened TEXT,                       -- "QR", "HUM", etc.
 
     -- New fields from CISAPI
     subject_id TEXT,                  -- FK to subjects
@@ -418,7 +417,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS courses_fts USING fts5(
     title,
     description,
     primary_instructor,
-    gened,
     content='courses',
     content_rowid='rowid',
     tokenize='trigram'
@@ -426,20 +424,20 @@ CREATE VIRTUAL TABLE IF NOT EXISTS courses_fts USING fts5(
 
 -- Triggers to keep FTS in sync
 CREATE TRIGGER IF NOT EXISTS courses_fts_insert AFTER INSERT ON courses BEGIN
-    INSERT INTO courses_fts(rowid, subject, number, title, description, primary_instructor, gened)
-    VALUES (new.rowid, new.subject, new.number, new.title, new.description, new.primary_instructor, new.gened);
+    INSERT INTO courses_fts(rowid, subject, number, title, description, primary_instructor)
+    VALUES (new.rowid, new.subject, new.number, new.title, new.description, new.primary_instructor);
 END;
 
 CREATE TRIGGER IF NOT EXISTS courses_fts_delete AFTER DELETE ON courses BEGIN
-    INSERT INTO courses_fts(courses_fts, rowid, subject, number, title, description, primary_instructor, gened)
-    VALUES('delete', old.rowid, old.subject, old.number, old.title, old.description, old.primary_instructor, old.gened);
+    INSERT INTO courses_fts(courses_fts, rowid, subject, number, title, description, primary_instructor)
+    VALUES('delete', old.rowid, old.subject, old.number, old.title, old.description, old.primary_instructor);
 END;
 
 CREATE TRIGGER IF NOT EXISTS courses_fts_update AFTER UPDATE ON courses BEGIN
-    INSERT INTO courses_fts(courses_fts, rowid, subject, number, title, description, primary_instructor, gened)
-    VALUES('delete', old.rowid, old.subject, old.number, old.title, old.description, old.primary_instructor, old.gened);
-    INSERT INTO courses_fts(rowid, subject, number, title, description, primary_instructor, gened)
-    VALUES (new.rowid, new.subject, new.number, new.title, new.description, new.primary_instructor, new.gened);
+    INSERT INTO courses_fts(courses_fts, rowid, subject, number, title, description, primary_instructor)
+    VALUES('delete', old.rowid, old.subject, old.number, old.title, old.description, old.primary_instructor);
+    INSERT INTO courses_fts(rowid, subject, number, title, description, primary_instructor)
+    VALUES (new.rowid, new.subject, new.number, new.title, new.description, new.primary_instructor);
 END;
 
 -- Full-text search for sections (topics courses, section-level instructors)

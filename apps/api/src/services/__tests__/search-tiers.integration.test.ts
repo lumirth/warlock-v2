@@ -35,7 +35,6 @@ const mockCourse = (overrides: Partial<Course> = {}): Course => ({
   title: 'Data Structures',
   description: 'Data structures and algorithms.',
   credit_hours: 4,
-  gened: 'QR',
   year: 2025,
   term: 'fall',
   avg_gpa: 3.5,

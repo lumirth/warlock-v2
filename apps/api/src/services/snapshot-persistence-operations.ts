@@ -394,7 +394,7 @@ function subjectUpsertStatement(subject: SubjectSnapshot['subject']): SnapshotSq
 
 function courseUpsertStatement(course: CourseSnapshot['course']): SnapshotSqlStatement {
   return {
-    sql: 'INSERT INTO courses (id, subject, number, title, description, credit_hours, gened, subject_id, course_info, degree_attributes, class_schedule_info, date_range_text, registration_notes, approval_code, year, term, avg_gpa, gpa_sample_size, primary_instructor, primary_instructor_rmp, difficulty_score, quality_score, last_synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title, description = excluded.description, credit_hours = excluded.credit_hours, gened = excluded.gened, subject_id = excluded.subject_id, course_info = excluded.course_info, degree_attributes = excluded.degree_attributes, class_schedule_info = excluded.class_schedule_info, date_range_text = excluded.date_range_text, registration_notes = excluded.registration_notes, approval_code = excluded.approval_code, primary_instructor = excluded.primary_instructor, last_synced = excluded.last_synced, updated_at = unixepoch()',
+    sql: 'INSERT INTO courses (id, subject, number, title, description, credit_hours, subject_id, course_info, degree_attributes, class_schedule_info, date_range_text, registration_notes, approval_code, year, term, avg_gpa, gpa_sample_size, primary_instructor, primary_instructor_rmp, difficulty_score, quality_score, last_synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title, description = excluded.description, credit_hours = excluded.credit_hours, subject_id = excluded.subject_id, course_info = excluded.course_info, degree_attributes = excluded.degree_attributes, class_schedule_info = excluded.class_schedule_info, date_range_text = excluded.date_range_text, registration_notes = excluded.registration_notes, approval_code = excluded.approval_code, primary_instructor = excluded.primary_instructor, last_synced = excluded.last_synced, updated_at = unixepoch()',
     params: [
       course.id,
       course.subject,
@@ -402,7 +402,6 @@ function courseUpsertStatement(course: CourseSnapshot['course']): SnapshotSqlSta
       course.title,
       course.description,
       course.credit_hours,
-      course.gened,
       course.subject_id,
       course.course_info,
       course.degree_attributes,

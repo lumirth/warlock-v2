@@ -7,18 +7,17 @@ export function prepareUpsertCourse(
 ): D1PreparedStatement {
   return db.prepare(`
     INSERT INTO courses (
-      id, subject, number, title, description, credit_hours, gened,
+      id, subject, number, title, description, credit_hours,
       subject_id, course_info, degree_attributes, class_schedule_info,
       date_range_text, registration_notes, approval_code,
       year, term, avg_gpa, gpa_sample_size, primary_instructor,
       primary_instructor_rmp, difficulty_score, quality_score, last_synced
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       description = excluded.description,
       credit_hours = excluded.credit_hours,
-      gened = excluded.gened,
       subject_id = excluded.subject_id,
       course_info = excluded.course_info,
       degree_attributes = excluded.degree_attributes,
@@ -31,7 +30,7 @@ export function prepareUpsertCourse(
       updated_at = unixepoch()
   `).bind(
     course.id, course.subject, course.number, course.title, course.description,
-    course.credit_hours, course.gened, course.subject_id, course.course_info,
+    course.credit_hours, course.subject_id, course.course_info,
     course.degree_attributes, course.class_schedule_info, course.date_range_text,
     course.registration_notes, course.approval_code, course.year, course.term,
     course.avg_gpa, course.gpa_sample_size, course.primary_instructor, course.primary_instructor_rmp,

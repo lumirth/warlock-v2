@@ -21,7 +21,6 @@ const course: Course = {
   title: 'Data Structures',
   description: 'Data abstractions and algorithms.',
   credit_hours: 4,
-  gened: 'QR',
   year: 2026,
   term: 'spring',
   avg_gpa: 3.5,
@@ -191,7 +190,7 @@ describe('search result DTO evidence', () => {
 
   it('labels generic GenEd filters as Any GenEd in result evidence', () => {
     const dto = searchResultToCourseDto(searchResult({
-      course: { ...course, gened: null },
+      course: { ...course },
       laneMatches: ['requirement'],
     }), {
       rawQuery: 'easy cs gened',
@@ -236,7 +235,7 @@ describe('search result DTO evidence', () => {
 
   it('explains Cultural Studies sub-attributes from full GenEd DTOs', () => {
     const dto = searchResultToCourseDto(searchResult({
-      course: { ...course, gened: 'CS' },
+      course: { ...course },
       laneMatches: ['requirement'],
     }), {
       rawQuery: 'us minority class',
@@ -288,7 +287,7 @@ describe('search result DTO evidence', () => {
 
   it('does not claim requirement evidence for unmapped courses', () => {
     const dto = searchResultToCourseDto(searchResult({
-      course: { ...course, gened: null },
+      course: { ...course },
       laneMatches: ['requirement'],
     }), {
       rawQuery: 'counts for something',

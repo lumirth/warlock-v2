@@ -14,7 +14,6 @@ function snapshot(): CourseSnapshot {
       title: 'Constructing Race in America',
       description: 'Race, culture, and institutions in the United States.',
       credit_hours: 3,
-      gened: 'CS',
       year: 2026,
       term: 'spring',
       avg_gpa: null,
@@ -76,16 +75,15 @@ describe('course embeddings', () => {
     expect(text).toContain('US Minority Cultures');
   });
 
-  it('does not let stale flat course.gened leak into rich snapshot requirement evidence', () => {
+  it('does not invent requirement evidence when rich GenEd rows are absent', () => {
     const courseSnapshot = snapshot();
-    courseSnapshot.course.gened = 'QR';
+    courseSnapshot.genEdCategories = [];
 
     const embeddingData = courseSnapshotToEmbeddingData(courseSnapshot);
     const text = createCourseEmbeddingText(embeddingData);
 
-    expect(embeddingData.requirementSummaryCode).toBe('CS');
-    expect(embeddingData.requirementCodes).toEqual(['CS', 'US', 'HUM']);
-    expect(text).toContain('Requirements: CS US HUM');
-    expect(text).not.toContain('Requirements: QR');
+    expect(embeddingData.requirementSummaryCode).toBeNull();
+    expect(embeddingData.requirementCodes).toEqual([]);
+    expect(text).not.toContain('Requirements:');
   });
 });

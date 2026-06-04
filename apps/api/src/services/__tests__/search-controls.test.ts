@@ -13,7 +13,6 @@ const course = (overrides: Partial<Course>): Course => ({
   title: 'Data Structures',
   description: null,
   credit_hours: 4,
-  gened: null,
   year: 2026,
   term: 'spring',
   avg_gpa: null,

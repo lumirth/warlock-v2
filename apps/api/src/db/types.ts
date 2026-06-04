@@ -59,7 +59,6 @@ export interface Course {
   title: string;
   description: string | null;
   credit_hours: number | null;
-  gened: string | null;
   year: number;
   term: string;
   avg_gpa: number | null;

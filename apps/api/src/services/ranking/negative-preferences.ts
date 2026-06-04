@@ -36,7 +36,7 @@ const NEGATIVE_PREFERENCE_RULES: NegativePreferenceRule[] = [
         value: -0.7,
         evidence: "math-heavy language",
         matches: course => /\b(qr|quantitative|calculus|statistics|statistical|programming|formal logic)\b/.test(
-          courseText(course, ["subject", "title", "description", "gened"]),
+          courseText(course, ["subject", "title", "description"]),
         ),
       },
       {
@@ -58,7 +58,7 @@ const NEGATIVE_PREFERENCE_RULES: NegativePreferenceRule[] = [
       value: -0.55,
       evidence: "writing-heavy language",
       matches: course => /\b(advanced composition|writing intensive|essay|papers?)\b/.test(
-        courseText(course, ["title", "description", "gened"]),
+        courseText(course, ["title", "description"]),
       ),
     }],
   },
