@@ -1,5 +1,6 @@
 import type { SearchSort } from '@uiuc-course-search/query-types';
 import type { SearchPlan } from './search-planner-types.js';
+import { withSearchPlanUpdates } from './search-plan-model.js';
 import { sanitizeFtsQuery } from './search-text.js';
 import { expandTopics } from './topic-registry.js';
 import { appendQueryText } from './search-plan-query-language.js';
@@ -12,7 +13,7 @@ function removeIntroductoryScaffolding(query: string): string {
     .trim();
 }
 
-export function applyIntroductoryGatewayIntent(plan: SearchPlan): boolean {
+function applyIntroductoryGatewayIntent(plan: SearchPlan): boolean {
   const levelBoost = plan.softPreferences?.levelBoost;
   if (
     levelBoost !== 100 ||
@@ -39,7 +40,21 @@ export function applyIntroductoryGatewayIntent(plan: SearchPlan): boolean {
   return true;
 }
 
-export function applyTopicExpansion(plan: SearchPlan): string[] {
+export type IntroductoryGatewayResult = {
+  plan: SearchPlan;
+  applied: boolean;
+};
+
+export function compileIntroductoryGatewayIntent(plan: SearchPlan): IntroductoryGatewayResult {
+  let applied = false;
+  const nextPlan = withSearchPlanUpdates(plan, draft => {
+    applied = applyIntroductoryGatewayIntent(draft);
+  });
+
+  return { plan: applied ? nextPlan : plan, applied };
+}
+
+function applyTopicExpansion(plan: SearchPlan): string[] {
   const sourceQuery = plan.semanticQuery || plan.keywordQuery || '';
   const expansions = expandTopics(sourceQuery);
   if (expansions.length === 0) {
@@ -56,6 +71,23 @@ export function applyTopicExpansion(plan: SearchPlan): string[] {
   );
   plan.keywordQuery = buildTopicExpansionKeywordQuery(plan.keywordQuery, expansions);
   return expansions;
+}
+
+export type TopicExpansionResult = {
+  plan: SearchPlan;
+  expansions: string[];
+};
+
+export function compileTopicExpansion(plan: SearchPlan): TopicExpansionResult {
+  let expansions: string[] = [];
+  const nextPlan = withSearchPlanUpdates(plan, draft => {
+    expansions = applyTopicExpansion(draft);
+  });
+
+  return {
+    plan: expansions.length > 0 ? nextPlan : plan,
+    expansions,
+  };
 }
 
 const TOPIC_EXPANSION_STOPWORDS = new Set([
@@ -94,7 +126,7 @@ function buildTopicExpansionKeywordQuery(
   return uniqueTerms.join(' OR ');
 }
 
-export function applySortIntent(plan: SearchPlan, rawQuery: string): boolean {
+function applySortIntent(plan: SearchPlan, rawQuery: string): boolean {
   const normalized = rawQuery.toLowerCase();
   let inferredSort: SearchSort | null = null;
   const explicitSortMatch = /\b(?:sort|order|rank)(?:\s+(?:courses?|classes?|results?))?\s+by\s+(avg\s+gpa|gpa|difficulty|workload|quality|professor\s+rating|instructor\s+rating|rating|level|credits?)\b/.exec(normalized);
@@ -143,6 +175,25 @@ export function applySortIntent(plan: SearchPlan, rawQuery: string): boolean {
   return true;
 }
 
+export type SortIntentResult = {
+  plan: SearchPlan;
+  applied: boolean;
+  inferredSort?: SearchSort;
+};
+
+export function compileSortIntent(plan: SearchPlan, rawQuery: string): SortIntentResult {
+  let applied = false;
+  const nextPlan = withSearchPlanUpdates(plan, draft => {
+    applied = applySortIntent(draft, rawQuery);
+  });
+
+  return {
+    plan: applied ? nextPlan : plan,
+    applied,
+    inferredSort: applied ? nextPlan.softPreferences?.inferredSort : undefined,
+  };
+}
+
 export function removeSortScaffolding(query: string): string {
   return query
     .replace(/\b(?:sort|order|rank)(?:\s+(?:courses?|classes?|results?))?\s+by\s+(?:avg\s+gpa|gpa|difficulty|workload|quality|professor\s+rating|instructor\s+rating|rating|level|credits?)\b/gi, ' ')
@@ -169,17 +220,16 @@ export function buildFallbackPlans(plan: SearchPlan, queryResidual: string): Sea
     return [];
   }
 
-  return [{
-    ...plan,
-    keywordQuery: sanitizeFtsQuery(
+  return [withSearchPlanUpdates(plan, draft => {
+    draft.keywordQuery = sanitizeFtsQuery(
       `${plan.keywordQuery} ${expandedKeywords.join(' ')}`,
-    ),
-    semanticQuery: sanitizeFtsQuery(
+    );
+    draft.semanticQuery = sanitizeFtsQuery(
       `${plan.semanticQuery} ${expandedKeywords.join(' ')}`,
-    ),
-    softPreferences: {
-      ...(plan.softPreferences ?? {}),
+    );
+    draft.softPreferences = {
+      ...(draft.softPreferences ?? {}),
       topicExpansions: expandedKeywords,
-    },
-  }];
+    };
+  })];
 }

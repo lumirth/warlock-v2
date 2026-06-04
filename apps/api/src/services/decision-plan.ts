@@ -10,6 +10,7 @@ import {
   hasRequirementFilter,
   requirementFilter,
 } from '@uiuc-course-search/query-types';
+import { withSearchPlanUpdates } from './search-plan-model.js';
 import { GENERIC_GENED_CODES } from './gened-codes.js';
 import {
   ASYNC_PATTERNS,
@@ -32,15 +33,35 @@ type TimePreference = {
 };
 
 export interface DecisionSearchRescueResult {
+  plan: SearchPlan;
   queryResidual: string;
 }
 
+type MutableDecisionSearchRescueResult = {
+  queryResidual: string;
+};
 
-export function applyDecisionSearchRescue(
+export function compileDecisionSearchRescue(
   plan: SearchPlan,
   rawQuery: string,
   queryResidual: string
 ): DecisionSearchRescueResult {
+  let nextResidual = queryResidual;
+  const nextPlan = withSearchPlanUpdates(plan, draft => {
+    nextResidual = applyDecisionSearchRescue(draft, rawQuery, queryResidual).queryResidual;
+  });
+
+  return {
+    plan: nextPlan,
+    queryResidual: nextResidual,
+  };
+}
+
+function applyDecisionSearchRescue(
+  plan: SearchPlan,
+  rawQuery: string,
+  queryResidual: string
+): MutableDecisionSearchRescueResult {
   const queryTypes = new Set<DecisionQueryType>();
   const negativeTerms = new Set<string>();
   const assumptions = new Map<string, SearchPlanAssumption>();
@@ -211,7 +232,15 @@ export function applyDecisionSearchRescue(
   return { queryResidual: nextResidual };
 }
 
-export function syncDecisionSearchExpansions(plan: SearchPlan, expansions: string[]): void {
+export function compileDecisionSearchExpansions(plan: SearchPlan, expansions: string[]): SearchPlan {
+  if (!plan.rescue || expansions.length === 0) return plan;
+
+  return withSearchPlanUpdates(plan, draft => {
+    syncDecisionSearchExpansions(draft, expansions);
+  });
+}
+
+function syncDecisionSearchExpansions(plan: SearchPlan, expansions: string[]): void {
   if (!plan.rescue) return;
 
   const expandedTerms = new Set(plan.rescue.expandedTerms);

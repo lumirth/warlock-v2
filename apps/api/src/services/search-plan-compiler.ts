@@ -2,8 +2,8 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { resolveQuery } from "./query-resolver.js";
 import { sanitizeFtsQuery } from "./search-text.js";
 import {
-  applyDecisionSearchRescue,
-  syncDecisionSearchExpansions,
+  compileDecisionSearchExpansions,
+  compileDecisionSearchRescue,
 } from "./decision-plan.js";
 import {
   type SearchRequestFiltersDto,
@@ -16,14 +16,15 @@ import {
   extractSearchPlanningInput,
   withManualRequestFilterHints,
 } from "./search-plan-hints.js";
-import { applyQueryLanguageClause } from "./search-plan-query-language.js";
+import { compileQueryLanguageClause } from "./search-plan-query-language.js";
 import {
-  applyIntroductoryGatewayIntent,
-  applySortIntent,
-  applyTopicExpansion,
   buildFallbackPlans,
+  compileIntroductoryGatewayIntent,
+  compileSortIntent,
+  compileTopicExpansion,
   removeSortScaffolding,
 } from "./search-plan-intent-passes.js";
+import { withSearchPlanUpdates } from "./search-plan-model.js";
 import {
   compilerEvent,
   type SearchCompilerEvent,
@@ -64,7 +65,7 @@ export async function createSearchPlan(
     );
   }
 
-  const plan = await resolveQuery(db, planningInput.extracted);
+  let plan = await resolveQuery(db, planningInput.extracted);
   compilerEvents.push(
     compilerEvent("resolve", "validated_hints", "Resolved extracted hints into structured filters", {
       filters: Object.keys(plan.filters),
@@ -72,15 +73,21 @@ export async function createSearchPlan(
       semanticQuery: plan.semanticQuery,
     }),
   );
-  plan.rawQuery = query;
+  plan = withSearchPlanUpdates(plan, draft => {
+    draft.rawQuery = query;
+  });
   let queryResidual = plan.semanticQuery;
 
   const clause = planningInput.parsed.clauses[0];
-  compilerEvents.push(...applyQueryLanguageClause(clause, plan));
+  const queryLanguageResult = compileQueryLanguageClause(clause, plan);
+  plan = queryLanguageResult.plan;
+  compilerEvents.push(...queryLanguageResult.events);
 
   if (requestFilters) {
     const filterOverrides = searchPlanFiltersFromRequestFilters(requestFilters);
-    Object.assign(plan.filters, filterOverrides);
+    plan = withSearchPlanUpdates(plan, draft => {
+      Object.assign(draft.filters, filterOverrides);
+    });
     compilerEvents.push(
       compilerEvent("compile", "request_filter_overrides", "Applied canonical structured request filters", {
         filters: Object.keys(filterOverrides ?? {}),
@@ -88,14 +95,17 @@ export async function createSearchPlan(
     );
   }
 
-  if (applyIntroductoryGatewayIntent(plan)) {
+  const introductoryResult = compileIntroductoryGatewayIntent(plan);
+  plan = introductoryResult.plan;
+  if (introductoryResult.applied) {
     queryResidual = plan.semanticQuery;
     compilerEvents.push(
       compilerEvent("compile", "introductory_gateway", "Compiled introductory subject search as gateway intent"),
     );
   }
 
-  const rescueResult = applyDecisionSearchRescue(plan, query, queryResidual);
+  const rescueResult = compileDecisionSearchRescue(plan, query, queryResidual);
+  plan = rescueResult.plan;
   queryResidual = rescueResult.queryResidual;
   if (plan.rescue) {
     compilerEvents.push(
@@ -106,17 +116,21 @@ export async function createSearchPlan(
     );
   }
 
-  if (applySortIntent(plan, query)) {
+  const sortResult = compileSortIntent(plan, query);
+  plan = sortResult.plan;
+  if (sortResult.applied) {
     queryResidual = removeSortScaffolding(queryResidual);
     compilerEvents.push(
       compilerEvent("compile", "sort_intent", "Compiled sort language into request sort intent", {
-        sort: plan.softPreferences?.inferredSort,
+        sort: sortResult.inferredSort,
       }),
     );
   }
 
-  const topicExpansions = applyTopicExpansion(plan);
-  syncDecisionSearchExpansions(plan, topicExpansions);
+  const topicExpansionResult = compileTopicExpansion(plan);
+  plan = topicExpansionResult.plan;
+  const topicExpansions = topicExpansionResult.expansions;
+  plan = compileDecisionSearchExpansions(plan, topicExpansions);
   if (topicExpansions.length > 0) {
     compilerEvents.push(
       compilerEvent("compile", "topic_expansion", "Expanded student topic language for retrieval recall", {
@@ -125,8 +139,10 @@ export async function createSearchPlan(
     );
   }
 
-  plan.keywordQuery = sanitizeFtsQuery(plan.keywordQuery);
-  plan.semanticQuery = sanitizeFtsQuery(plan.semanticQuery);
+  plan = withSearchPlanUpdates(plan, draft => {
+    draft.keywordQuery = sanitizeFtsQuery(draft.keywordQuery);
+    draft.semanticQuery = sanitizeFtsQuery(draft.semanticQuery);
+  });
   const fallbackPlans = buildFallbackPlans(plan, queryResidual);
   if (fallbackPlans.length > 0) {
     compilerEvents.push(

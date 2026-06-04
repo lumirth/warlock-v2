@@ -12,6 +12,7 @@ import type {
   ParsedClause,
   SearchPlan,
 } from './search-planner-types.js';
+import { withSearchPlanUpdates } from './search-plan-model.js';
 import {
   compilerEvent,
   type SearchCompilerEvent,
@@ -21,63 +22,70 @@ export function appendQueryText(current: string, addition: string): string {
   return [current, addition].filter(Boolean).join(' ').trim();
 }
 
-export function applyQueryLanguageClause(
+export type QueryLanguageClauseResult = {
+  plan: SearchPlan;
+  events: SearchCompilerEvent[];
+};
+
+export function compileQueryLanguageClause(
   clause: ParsedClause,
-  plan: SearchPlan,
-): SearchCompilerEvent[] {
+  inputPlan: SearchPlan,
+): QueryLanguageClauseResult {
   const events: SearchCompilerEvent[] = [];
 
-  for (const filter of clause.filters) {
-    applyFieldFilter(filter, plan);
-  }
-  if (clause.filters.length > 0) {
-    events.push(
-      compilerEvent('compile', 'query_language_filters', 'Applied explicit query-language filters', {
-        fields: clause.filters.map((filter) => filter.field),
-      }),
-    );
-  }
-
-  if (clause.genedMode) {
-    if (clause.genedMode.any) {
-      plan.filters.requirement = requirementFilter('any', clause.genedMode.any);
+  const plan = withSearchPlanUpdates(inputPlan, draft => {
+    for (const filter of clause.filters) {
+      applyFieldFilter(filter, draft);
     }
-    if (clause.genedMode.all) {
-      plan.filters.requirement = requirementFilter('all', clause.genedMode.all);
+    if (clause.filters.length > 0) {
+      events.push(
+        compilerEvent('compile', 'query_language_filters', 'Applied explicit query-language filters', {
+          fields: clause.filters.map((filter) => filter.field),
+        }),
+      );
     }
-    events.push(
-      compilerEvent('compile', 'query_language_requirements', 'Applied explicit requirement mode', {
-        mode: clause.genedMode.any ? 'any' : 'all',
-      }),
-    );
-  }
 
-  for (const negation of clause.negations) {
-    applyNegationToken(negation, plan);
-  }
-  if (clause.negations.length > 0) {
-    events.push(
-      compilerEvent('compile', 'query_language_negations', 'Applied explicit query-language negations', {
-        negations: clause.negations,
-      }),
-    );
-  }
+    if (clause.genedMode) {
+      if (clause.genedMode.any) {
+        draft.filters.requirement = requirementFilter('any', clause.genedMode.any);
+      }
+      if (clause.genedMode.all) {
+        draft.filters.requirement = requirementFilter('all', clause.genedMode.all);
+      }
+      events.push(
+        compilerEvent('compile', 'query_language_requirements', 'Applied explicit requirement mode', {
+          mode: clause.genedMode.any ? 'any' : 'all',
+        }),
+      );
+    }
 
-  if (clause.phrases.length > 0) {
-    const keywordPhrases = clause.phrases
-      .map((phrase) => `"${phrase.replace(/"/g, '""')}"`)
-      .join(' ');
-    const semanticPhrases = clause.phrases.join(' ');
-    plan.keywordQuery = appendQueryText(plan.keywordQuery, keywordPhrases);
-    plan.semanticQuery = appendQueryText(plan.semanticQuery, semanticPhrases);
-    events.push(
-      compilerEvent('compile', 'quoted_phrases', 'Added quoted phrases to retrieval query text', {
-        phrases: clause.phrases,
-      }),
-    );
-  }
+    for (const negation of clause.negations) {
+      applyNegationToken(negation, draft);
+    }
+    if (clause.negations.length > 0) {
+      events.push(
+        compilerEvent('compile', 'query_language_negations', 'Applied explicit query-language negations', {
+          negations: clause.negations,
+        }),
+      );
+    }
 
-  return events;
+    if (clause.phrases.length > 0) {
+      const keywordPhrases = clause.phrases
+        .map((phrase) => `"${phrase.replace(/"/g, '""')}"`)
+        .join(' ');
+      const semanticPhrases = clause.phrases.join(' ');
+      draft.keywordQuery = appendQueryText(draft.keywordQuery, keywordPhrases);
+      draft.semanticQuery = appendQueryText(draft.semanticQuery, semanticPhrases);
+      events.push(
+        compilerEvent('compile', 'quoted_phrases', 'Added quoted phrases to retrieval query text', {
+          phrases: clause.phrases,
+        }),
+      );
+    }
+  });
+
+  return { plan, events };
 }
 
 function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
