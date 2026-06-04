@@ -221,6 +221,9 @@ describe('CoursePage request state', () => {
     )
     expect(screen.getByText(/4\.8 rating/)).toBeInTheDocument()
     expect(screen.getByText(/3\.62 avg GPA/)).toBeInTheDocument()
+    expect(
+      screen.getByLabelText('Sections table with horizontal scrolling')
+    ).toHaveClass('overflow-x-auto')
 
     fireEvent.click(screen.getByRole('button', { name: 'Show details for CRN 12345' }))
     expect(screen.getByText('Meeting details')).toBeInTheDocument()

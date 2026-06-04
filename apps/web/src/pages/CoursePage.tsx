@@ -236,7 +236,7 @@ export function CoursePage() {
               <CardContent className="p-0">
                 <div
                   aria-label="Sections table with horizontal scrolling"
-                  className="relative overflow-hidden"
+                  className="relative overflow-x-auto overflow-y-hidden"
                 >
                   <SectionsTable
                     sections={course.sections || []}
