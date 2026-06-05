@@ -25,6 +25,7 @@ export function rankingComponentsForResult(
   return [
     retrievalFusionComponent(result),
     titleMatchComponent(result.course, query),
+    topicTitleMatchComponent(result.course, plan, query),
     exactnessComponent(result),
     qualityTierComponent(result.course),
     requirementComponent(result, plan),
@@ -55,6 +56,81 @@ export function rankingComponentsForResult(
     nullDataPenaltyComponent(result, plan),
     ...introductoryGatewayComponents(result, plan),
   ].filter((component): component is RankingScoreComponent => Boolean(component));
+}
+
+const TOPIC_TITLE_STOP_WORDS = new Set([
+  "a",
+  "about",
+  "an",
+  "and",
+  "class",
+  "classes",
+  "course",
+  "courses",
+  "for",
+  "intro",
+  "introductory",
+  "introduction",
+  "of",
+  "on",
+  "the",
+  "to",
+]);
+
+function topicTitleMatchComponent(
+  course: Course,
+  plan: SearchPlan,
+  query: string,
+): RankingScoreComponent | null {
+  if (titleMatchScore(course.title, query) !== 0) return null;
+
+  const titleTerms = new Set(topicTokens(course.title));
+  if (titleTerms.size === 0) return null;
+
+  const directTerms = new Set(topicTokens([
+    ...(plan.rescue?.topicTerms ?? []),
+    plan.rawQuery ?? "",
+  ].join(" ")));
+  const expandedTerms = new Set(topicTokens(
+    plan.softPreferences?.topicExpansions?.join(" ") ?? "",
+  ));
+
+  const directMatches = [...directTerms].filter(term => titleTerms.has(term));
+  const expandedMatches = [...expandedTerms]
+    .filter(term => !directTerms.has(term) && titleTerms.has(term));
+  if (directMatches.length === 0 && expandedMatches.length === 0) return null;
+
+  const directScore = directMatches.length > 0
+    ? Math.min(1.25, 0.8 + (directMatches.length - 1) * 0.25)
+    : 0;
+  const expandedScore = expandedMatches.length > 0
+    ? Math.min(0.45, 0.25 + (expandedMatches.length - 1) * 0.1)
+    : 0;
+
+  return scoreComponent(
+    "topic_title_match",
+    directScore + expandedScore,
+    "Title contains meaningful topic terms from the query.",
+    [...directMatches, ...expandedMatches],
+  );
+}
+
+function topicTokens(value: string | null | undefined): string[] {
+  return (value ?? "")
+    .toLowerCase()
+    .match(/[a-z0-9+#]+/g)
+    ?.map(normalizeTopicToken)
+    .filter(token => token.length >= 2 && !TOPIC_TITLE_STOP_WORDS.has(token)) ?? [];
+}
+
+function normalizeTopicToken(token: string): string {
+  if (token.length > 3 && token.endsWith("ies")) {
+    return `${token.slice(0, -3)}y`;
+  }
+  if (token.length > 3 && token.endsWith("s") && !token.endsWith("ss")) {
+    return token.slice(0, -1);
+  }
+  return token;
 }
 
 function retrievalFusionComponent(result: SearchResult): RankingScoreComponent {

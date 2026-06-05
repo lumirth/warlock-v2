@@ -231,6 +231,39 @@ describe('buildSearchUiPlan', () => {
     });
   });
 
+  it('does not present topical intro scaffolding as an introductory-gateway chip', () => {
+    const executableRequest = request('intro to compilers');
+    const plan = buildUiPlan([{
+      type: 'levelBoost',
+      value: 100,
+      metadata: { source: 'regex', confidence: 0.5, raw: 'intro' },
+    }], {
+      filters: {},
+      keywordQuery: 'intro OR to OR compilers OR compiler',
+      semanticQuery: 'intro to compilers compiler design programming languages',
+      rawQuery: 'intro to compilers',
+      softPreferences: {
+        levelBoost: 100,
+        topicExpansions: ['compiler design programming languages'],
+      },
+      rescue: {
+        queryTypes: ['topic'],
+        negativeTerms: [],
+        topicTerms: ['intro to compilers'],
+        expandedTerms: ['compiler design programming languages'],
+        assumptions: [],
+        warnings: [],
+        interpretedLanes: ['official_text', 'topic_semantic'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.74,
+      },
+    }, 'intro to compilers', executableRequest);
+
+    expect(plan.chips.map(chip => chip.label)).toEqual(['Topic: intro to compilers']);
+    expectRemovableChipActionsChangeRequest(plan, executableRequest);
+  });
+
   it('hides rescue assumptions already represented by concrete filter chips', () => {
     const plan = buildUiPlan([{
       type: 'online',

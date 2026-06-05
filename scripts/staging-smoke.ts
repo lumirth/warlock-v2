@@ -112,28 +112,21 @@ function hasCourseExplorerLinks(body: JsonRecord | null): boolean {
   });
 }
 
-function hasInstructorFilter(body: JsonRecord | null): boolean {
-  const meta = body?.meta;
-  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
-    return false;
-  }
-
-  const nextRequest = (meta as JsonRecord).nextRequest;
-  if (
-    !nextRequest
-    || typeof nextRequest !== 'object'
-    || Array.isArray(nextRequest)
-  ) {
-    return false;
-  }
-
-  const filters = (nextRequest as JsonRecord).filters;
-  if (!filters || typeof filters !== 'object' || Array.isArray(filters)) {
-    return false;
-  }
-
-  return typeof (filters as JsonRecord).instructor === 'string'
-    && ((filters as JsonRecord).instructor as string).trim().length > 0;
+function hasInstructorEvidence(body: JsonRecord | null): boolean {
+  const results = Array.isArray(body?.results) ? body.results as JsonRecord[] : [];
+  return results.some((result) => {
+    const evidence = Array.isArray(result.matchEvidence)
+      ? result.matchEvidence as JsonRecord[]
+      : [];
+    const hasEvidence = evidence.some(item => item.kind === 'instructor');
+    const course = result.course;
+    const primaryInstructor = course && typeof course === 'object' && !Array.isArray(course)
+      ? (course as JsonRecord).primaryInstructor
+      : null;
+    return hasEvidence
+      && typeof primaryInstructor === 'string'
+      && /fagen/i.test(primaryInstructor);
+  });
 }
 
 function hasSyncStatusBody(body: JsonRecord | null): boolean {
@@ -205,7 +198,7 @@ export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promis
     (response, body) => {
       if (response.status !== 200) return `expected 200, got ${response.status}`;
       if (!hasArray(body, 'results')) return 'expected results array';
-      if (!hasInstructorFilter(body)) return 'expected resolved instructor filter';
+      if (!hasInstructorEvidence(body)) return 'expected public instructor match evidence';
       return null;
     }
   ));

@@ -21,6 +21,7 @@ import {
   removeTextForHint,
   resolvedFilterFromHint,
 } from "./search-hint-labels.js";
+import { hasIntroductoryGatewayIntent } from "./search-intent.js";
 
 export function buildSearchChips(
   hints: Hint[],
@@ -30,6 +31,7 @@ export function buildSearchChips(
 ): SearchChipDto[] {
   const requirement = effectiveRequirementFilter(plan.filters);
   const chips = hints
+    .filter((hint) => !shouldHideHintChip(hint, plan))
     .filter((hint) => !shouldReplaceHintWithStructuredRequirementChip(
       hint,
       request,
@@ -98,6 +100,12 @@ export function buildSearchChips(
   }
 
   return chips;
+}
+
+function shouldHideHintChip(hint: Hint, plan: SearchPlan): boolean {
+  if (hint.type !== "levelBoost") return false;
+  if (hint.value !== 100 && hint.value !== "introductory") return false;
+  return !hasIntroductoryGatewayIntent(plan);
 }
 
 function shouldReplaceHintWithStructuredRequirementChip(

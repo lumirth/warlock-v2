@@ -140,6 +140,36 @@ describe('title-match ranking component', () => {
       expect.objectContaining({ name: 'title_match', value: 0.45 }),
     ]));
   });
+
+  it('boosts titles that contain the actual topic token from a topical intro query', () => {
+    const ranked = applyPolicyForQuery([
+      resultWithTitle('CS-521', 'Advanced Topics in Programming Systems', 0.36),
+      resultWithTitle('CS-426', 'Compiler Construction', 0.28),
+    ], 'intro to compilers', {
+      rawQuery: 'intro to compilers',
+      rescue: {
+        queryTypes: ['topic'],
+        negativeTerms: [],
+        topicTerms: ['intro to compilers'],
+        expandedTerms: ['compiler design programming languages'],
+        assumptions: [],
+        warnings: [],
+        interpretedLanes: ['official_text', 'topic_semantic'],
+        relaxationPlan: [],
+        needsStudentProfile: false,
+        confidence: 0.74,
+      },
+      softPreferences: {
+        levelBoost: 100,
+        topicExpansions: ['compiler design programming languages'],
+      },
+    });
+
+    expect(ranked[0].course.id).toBe('CS-426');
+    expect(ranked[0].scoreComponents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'topic_title_match' }),
+    ]));
+  });
 });
 
 describe('introductory gateway ranking components', () => {

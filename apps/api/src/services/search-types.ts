@@ -4,6 +4,7 @@ import type { Course } from '../db/types.js';
 export type RankingScoreComponentName =
   | "retrieval_fusion"
   | "title_match"
+  | "topic_title_match"
   | "exactness"
   | "quality_tier"
   | "requirement_match"

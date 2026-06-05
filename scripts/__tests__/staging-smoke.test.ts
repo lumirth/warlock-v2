@@ -33,14 +33,19 @@ function makeFetcher(options: MockOptions = {}) {
     if (url.pathname === '/api/search') {
       if (url.searchParams.get('q') === 'professor fagen algorithms') {
         return json(200, {
-          results: [],
-          meta: {
-            nextRequest: {
-              filters: {
-                instructor: 'fagen',
+          results: [
+            {
+              course: {
+                subject: 'CS',
+                number: '107',
+                primaryInstructor: 'Fagen-Ulmschneider, W; Findley, K',
               },
+              matchEvidence: [
+                { kind: 'instructor', label: 'Instructor match' },
+              ],
             },
-          },
+          ],
+          meta: {},
         });
       }
 

@@ -18,6 +18,7 @@ import {
   matchingRequirementCodes,
   searchResultRequirementCodes,
 } from './search-requirements.js';
+import { hasIntroductoryGatewayIntent } from './search-intent.js';
 
 export type SearchResultEvidenceContext = {
   plan: SearchPlan;
@@ -216,7 +217,7 @@ export function buildMatchEvidence(
     addEvidence(evidence, seen, 'schedule', 'Section availability or schedule match', 'filter', 'soft');
   }
 
-  if (softPreferences?.levelBoost) {
+  if (softPreferences?.levelBoost && hasIntroductoryGatewayIntent(context.plan)) {
     const levelLabel = softPreferences.levelBoost === 100
       ? 'Introductory course'
       : `${softPreferences.levelBoost} level preference`;

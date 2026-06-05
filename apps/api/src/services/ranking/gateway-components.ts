@@ -1,6 +1,7 @@
 import type { Course } from "../../db/types.js";
 import type { SearchPlan } from "../search-planner-types.js";
 import type { RankingScoreComponent, SearchResult } from "../search-types.js";
+import { hasIntroductoryGatewayIntent } from "../search-intent.js";
 import { catalogLevel, normalizedTitle } from "./ranking-text.js";
 import { RANKING_POLICY } from "./ranking-policy.js";
 import { scoreComponent } from "./score-utils.js";
@@ -62,11 +63,6 @@ export function introductoryGatewayComponents(
   }
 
   return components;
-}
-
-function hasIntroductoryGatewayIntent(plan: SearchPlan): boolean {
-  return plan.intents?.includes("introductory_gateway")
-    || plan.softPreferences?.introductoryIntent === "gateway";
 }
 
 function introductoryGatewayTitleAdjustment(

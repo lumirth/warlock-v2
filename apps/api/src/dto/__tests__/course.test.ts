@@ -82,7 +82,8 @@ describe('search result DTO evidence', () => {
           term: 'spring',
           year: 2026,
         },
-        softPreferences: { levelBoost: 'introductory' },
+        intents: ['introductory_gateway'],
+        softPreferences: { levelBoost: 'introductory', introductoryIntent: 'gateway' },
         keywordQuery: 'data structures',
         semanticQuery: 'data structures',
       },
@@ -111,6 +112,23 @@ describe('search result DTO evidence', () => {
     expect(evidence.find(item => item.kind === 'semantic')?.label).toBe('Related topic match');
     expect(evidence.map(item => item.label).join(' ')).not.toContain('rank #');
     expect(evidence.map(item => item.label).join(' ')).not.toMatch(/Quality \d/);
+  });
+
+  it('does not claim topical intro searches are introductory gateway evidence', () => {
+    const evidence = buildMatchEvidence(searchResult(), {
+      rawQuery: 'intro to data structures',
+      hints: [],
+      plan: {
+        filters: {},
+        softPreferences: { levelBoost: 100 },
+        keywordQuery: 'intro to data structures',
+        semanticQuery: 'intro to data structures',
+      },
+    });
+
+    expect(evidence).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Introductory course' }),
+    ]));
   });
 
   it('does not add title evidence for empty raw queries', () => {
