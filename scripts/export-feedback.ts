@@ -8,7 +8,7 @@ import {
   parseFeedbackExport,
   parseFeedbackResolutionLedger,
   type FeedbackCandidateResolution,
-} from './feedback-corpus-candidates.js';
+} from './lib/feedback-corpus/report.js';
 
 const execFileAsync = promisify(execFile);
 

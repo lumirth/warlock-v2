@@ -1,5 +1,7 @@
 import type { DecisionQueryType, RetrievalLane, SearchPlanWarningKind } from '../services/search-planner-types.js';
 
+export type { QueryFailureClass } from '@uiuc-course-search/query-types';
+
 export interface ExpectedRescuePlan {
   queryTypes?: DecisionQueryType[];
   negativeTerms?: string[];
@@ -70,26 +72,6 @@ export interface GoldQuery {
     | 'unsupported_language';
   notes?: string;
 }
-
-export type QueryFailureClass =
-  | 'course_code_navigation'
-  | 'subject_alias'
-  | 'misspelling'
-  | 'topic_synonym'
-  | 'introductory_gateway'
-  | 'topical_intro'
-  | 'instructor_name'
-  | 'requirement_language'
-  | 'schedule_delivery'
-  | 'score_quality'
-  | 'power_syntax'
-  | 'ambiguity'
-  | 'semantic_topic'
-  | 'unsupported_language'
-  | 'decision_query_rescue'
-  | 'avoidance_language'
-  | 'requirement_uncertainty'
-  | 'no_result_recovery';
 
 export interface EvalResult {
   query: GoldQuery;

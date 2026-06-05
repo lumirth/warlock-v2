@@ -19,12 +19,12 @@ import {
   GENERIC_DECISION_PATTERNS,
   GENERIC_GENED_PATTERNS,
   HELP_PATTERNS,
-  lanesForDecisionQueryTypes,
   NON_MAJOR_PATTERNS,
   REQUIREMENT_PATTERNS,
   STUDENT_LANGUAGE_RESCUE_RULES,
   STUDENT_PROFILE_PATTERNS,
 } from './student-language-lexicon.js';
+import { lanesForDecisionQueryTypes } from './search-decision-lane-policy.js';
 
 type TimePreference = {
   key: 'startAfterMinutes' | 'startBeforeMinutes';

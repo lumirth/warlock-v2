@@ -9,13 +9,21 @@ import {
 } from "./search-retrieval-plan.js";
 import {
   keywordSearch,
+} from "./search-retrieval-course-lanes.js";
+import {
   postFilterSemanticResults,
-  requirementLaneSearch,
   sectionKeywordSearch,
   structuredSectionLaneSearch,
+} from "./search-retrieval-section-lanes.js";
+import {
+  requirementLaneSearch,
+} from "./search-retrieval-requirement-lanes.js";
+import {
   studentAliasLaneSearch,
+} from "./search-retrieval-alias-lanes.js";
+import {
   workloadEvidenceLaneSearch,
-} from "./search-retrieval-lanes.js";
+} from "./search-retrieval-workload-lanes.js";
 import type { RetrievalLaneResult } from "./search-types.js";
 
 export type RetrievalLaneExecutorContext = {

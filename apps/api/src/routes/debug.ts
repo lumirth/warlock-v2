@@ -3,8 +3,7 @@ import type { Ai, D1Database, KVNamespace, VectorizeIndex } from '@cloudflare/wo
 import { getUpstreamBackoff, resetUpstreamBackoff } from '../services/upstream-backoff.js';
 import { parseSearchHttpRequest } from '../http/search-request.js';
 import { SearchPipeline } from '../services/search-pipeline.js';
-import { loadSearchResultGeneds } from '../dto/search-geneds.js';
-import { getSearchTermSummary } from '../services/term-state.js';
+import { presentSearchDebugResponse } from '../services/search-debug-response-presenter.js';
 import { errorFields, logger } from '../observability/logger.js';
 
 type Bindings = {
@@ -57,7 +56,6 @@ debugRoutes.get('/search-plan', async (c) => {
   }
 
   const { request, pagination } = parsedRequest.value;
-  const { limit, offset } = pagination;
 
   try {
     const pipeline = new SearchPipeline(
@@ -71,36 +69,11 @@ debugRoutes.get('/search-plan', async (c) => {
       pagination,
       c.executionCtx.waitUntil.bind(c.executionCtx),
     );
-    const pageResults = result.results.slice(offset, offset + limit);
-    const genedsByCourseId = await loadSearchResultGeneds(
-      c.env.DB,
-      pageResults.map(searchResult => searchResult.course.id),
-    );
-
-    return c.json({
-      results: pageResults.map(searchResult => ({
-        id: searchResult.course.id,
-        title: searchResult.course.title,
-        subject: searchResult.course.subject,
-        number: searchResult.course.number,
-        avg_gpa: searchResult.course.avg_gpa,
-        geneds: genedsByCourseId.get(searchResult.course.id) ?? [],
-        score: searchResult.score,
-      })),
-      meta: {
-        query: result.meta.query,
-        fallback: result.meta.fallback,
-        term: await getSearchTermSummary(c.env.DB),
-      },
-      _debug: {
-        extraction: result.meta.extraction,
-        compilerEvents: result.meta.compilerEvents,
-        plan: result.meta.plan,
-        retrievalPlan: result.meta.retrievalPlan,
-        retrievalPlans: result.meta.retrievalPlans,
-        budget: result.meta.budget,
-      },
-    });
+    return c.json(await presentSearchDebugResponse({
+      db: c.env.DB,
+      result,
+      pagination,
+    }));
   } catch (error) {
     logger.error('admin.debug.searchPlan.failed', { ...errorFields(error) });
     return c.json({ error: 'Search planner debug failed' }, 500);

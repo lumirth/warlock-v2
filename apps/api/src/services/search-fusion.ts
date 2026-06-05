@@ -1,9 +1,14 @@
 import type { RetrievalLane } from "./search-planner-types.js";
 import type { RetrievalLaneResult } from "./search-types.js";
 import { RANKING_POLICY } from "./ranking/ranking-policy.js";
-
-export type RankedLaneRow = RetrievalLaneResult;
-export type WorkloadLaneRow = RankedLaneRow & { claims: string[] };
+import type {
+  RankedLaneRow,
+  WorkloadLaneRow,
+} from "./search-retrieval-lane-result.js";
+export type {
+  RankedLaneRow,
+  WorkloadLaneRow,
+} from "./search-retrieval-lane-result.js";
 
 export interface FusedSearchScore {
   id: string;
