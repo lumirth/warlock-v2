@@ -18,7 +18,7 @@ export interface ApiSearchResult {
 }
 
 export interface SearchResponseForEval {
-  results: ApiSearchResult[];
+  results: unknown[];
   meta: {
     query: {
       residual: string;
@@ -53,6 +53,61 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function formatValue(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeRequirements(value: unknown): ApiSearchResult['requirements'] {
+  if (!Array.isArray(value)) return undefined;
+
+  return value
+    .filter(isRecord)
+    .map(requirement => ({
+      categoryId: typeof requirement.categoryId === 'string' ? requirement.categoryId : undefined,
+      category_id: typeof requirement.category_id === 'string' ? requirement.category_id : undefined,
+      attributeCode: typeof requirement.attributeCode === 'string' || requirement.attributeCode === null
+        ? requirement.attributeCode
+        : undefined,
+      attribute_code: typeof requirement.attribute_code === 'string' || requirement.attribute_code === null
+        ? requirement.attribute_code
+        : undefined,
+    }));
+}
+
+function normalizeApiSearchResult(result: unknown): ApiSearchResult {
+  if (!isRecord(result)) {
+    return {
+      id: '',
+      title: '',
+      subject: '',
+      number: '',
+    };
+  }
+
+  const publicCourse = isRecord(result.course) ? result.course : null;
+  const source = publicCourse ?? result;
+  const metrics = isRecord(source.metrics) ? source.metrics : {};
+  const search = isRecord(result.search) ? result.search : {};
+
+  return {
+    id: stringValue(source.id ?? result.id),
+    title: stringValue(source.title ?? result.title),
+    subject: stringValue(source.subject ?? result.subject),
+    number: stringValue(source.number ?? result.number),
+    avg_gpa: numberValue(result.avg_gpa ?? metrics.avgGpa),
+    requirements: normalizeRequirements(source.requirements ?? result.requirements),
+    score: numberValue(result.score ?? search.score),
+  };
+}
+
+export function normalizeApiSearchResults(results: unknown[]): ApiSearchResult[] {
+  return results.map(normalizeApiSearchResult);
 }
 
 function valueMatches(expected: unknown, actual: unknown): boolean {
@@ -323,7 +378,7 @@ export function calculateReciprocalRank(query: GoldQuery, results: ApiSearchResu
 }
 
 export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseForEval): EvalResult {
-  const results = data.results;
+  const results = normalizeApiSearchResults(data.results);
   const plannerDebug = data._debug;
   if (!plannerDebug) {
     const missingDebug = 'planner debug payload is missing; run eval against /admin/debug/search-plan with an admin token';
@@ -347,7 +402,7 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
     ...checkExpectedRescue(query, plannerDebug.plan.rescue),
     ...checkExpectedResidual(query, data.meta.query.residual),
   ];
-  const resultViolations = checkPublicResultViolations(query, data);
+  const resultViolations = checkPublicResultViolations(query, data, results);
 
   const violations = [...parseViolations, ...resultViolations];
 
@@ -365,8 +420,8 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
 }
 
 export function evaluatePublicSearchResponse(query: GoldQuery, data: SearchResponseForEval): EvalResult {
-  const results = data.results;
-  const resultViolations = checkPublicResultViolations(query, data);
+  const results = normalizeApiSearchResults(data.results);
+  const resultViolations = checkPublicResultViolations(query, data, results);
 
   return {
     query,
@@ -384,10 +439,11 @@ export function evaluatePublicSearchResponse(query: GoldQuery, data: SearchRespo
 function checkPublicResultViolations(
   query: GoldQuery,
   data: SearchResponseForEval,
+  results: ApiSearchResult[],
 ): string[] {
   const violations = [
-    ...checkInvariants(query, data.results),
-    ...checkResultCoherence(query, data.results),
+    ...checkInvariants(query, results),
+    ...checkResultCoherence(query, results),
   ];
 
   if (query.require_term_metadata && !data.meta.term) {

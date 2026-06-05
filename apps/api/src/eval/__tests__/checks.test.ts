@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkResultCoherence } from '../checks.js';
+import { checkResultCoherence, evaluatePublicSearchResponse, normalizeApiSearchResults } from '../checks.js';
 import type { GoldQuery } from '../types.js';
 
 function query(expectedResults: GoldQuery['expected_results']): GoldQuery {
@@ -67,5 +67,62 @@ describe('result coherence checks', () => {
     expect(violations).toEqual([
       'Result 2026-spring-CLCV-100 does not include requirement US',
     ]);
+  });
+
+  it('normalizes public nested search results before evaluating result coherence', () => {
+    const publicResult = {
+      course: {
+        id: 'CS-225-2026-fall',
+        subject: 'CS',
+        number: '225',
+        title: 'Data Structures',
+        metrics: { avgGpa: 3.12 },
+        requirements: [
+          {
+            categoryId: 'QR',
+            categoryName: 'Quantitative Reasoning',
+            attributeCode: 'QR2',
+            attributeName: 'Quantitative Reasoning II',
+          },
+        ],
+      },
+      search: { score: 6.3 },
+    };
+
+    expect(normalizeApiSearchResults([publicResult])).toEqual([
+      {
+        id: 'CS-225-2026-fall',
+        subject: 'CS',
+        number: '225',
+        title: 'Data Structures',
+        avg_gpa: 3.12,
+        requirements: [
+          {
+            categoryId: 'QR',
+            category_id: undefined,
+            attributeCode: 'QR2',
+            attribute_code: undefined,
+          },
+        ],
+        score: 6.3,
+      },
+    ]);
+
+    const result = evaluatePublicSearchResponse(
+      {
+        ...query({
+          non_empty: true,
+          top_k: 1,
+          all_top_k: { subjects: ['CS'], requirement: 'QR' },
+        }),
+        invariants: { subject: 'CS', requirement: 'QR' },
+      },
+      {
+        results: [publicResult],
+        meta: { query: { residual: '' } },
+      },
+    );
+
+    expect(result.violations).toEqual([]);
   });
 });
