@@ -56,8 +56,8 @@ function workloadFromGpa(avgGpa: number): number {
   return clampScore(normalizeGpaWorkload(avgGpa));
 }
 
-function workloadFromRmp(difficulty: number): number {
-  return clampScore(normalizeRmp(difficulty));
+function workloadFromRmp(rmpDifficulty: number): number {
+  return clampScore(normalizeRmp(rmpDifficulty));
 }
 
 export function calculateCourseScores(source: CourseScoreSource): CourseScoreResult {

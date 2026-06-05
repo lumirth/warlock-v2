@@ -38,6 +38,9 @@ reinterpret another layer's concept, it creates drift.
   timings, and calls into planning, retrieval, ranking, and presentation.
 - `search-planning-*` owns interpretation of raw student input into an internal
   immutable `SearchPlan`.
+- `extraction/*` owns the student-language extraction passes. `extractor.ts` is
+  only a facade; pass implementations stay in focused modules and share the
+  span-masking helpers in `extraction/text.ts`.
 - `search-retrieval-plan*` owns executable lane selection and candidate budgets.
 - `search-retrieval-*` owns candidate recall and evidence from SQL, FTS, Vectorize,
   and structured course data.
@@ -75,6 +78,8 @@ These are the checks future changes should preserve or add as automated tests:
   Defaults apply only when a parameter is absent.
 - Planning passes declare artifacts and the pass harness verifies declared reads
   and writes.
+- Extraction passes stay split by concern and use the shared extraction pass
+  runner plus shared span-masking helpers.
 - Public renames, such as `gened -> requirement` or `difficulty -> workload`, must
   update API, web, evals, tests, mocks, scripts, and docs in the same change.
 
