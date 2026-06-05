@@ -55,12 +55,53 @@ export function createCourseEmbeddingText(course: CourseEmbeddingData): string {
 }
 
 export async function generateEmbedding(ai: Ai, text: string): Promise<number[]> {
+  const embeddings = await generateEmbeddings(ai, [text]);
+  return embeddings[0];
+}
+
+export async function generateEmbeddings(ai: Ai, texts: string[]): Promise<number[][]> {
+  if (texts.length === 0) return [];
+
   const response = await ai.run('@cf/baai/bge-small-en-v1.5', {
-    text: [text]
+    text: texts
   });
 
-  // Response is { data: [[...numbers]] }
-  return (response as { data: number[][] }).data[0];
+  // Response is { data: [[...numbers], ...] }
+  return (response as { data: number[][] }).data;
+}
+
+export async function upsertCourseEmbeddings(
+  vectorize: VectorizeIndex,
+  ai: Ai,
+  courses: CourseEmbeddingData[]
+): Promise<void> {
+  if (courses.length === 0) return;
+
+  const texts = courses.map(course => createCourseEmbeddingText(course));
+  const embeddings = await generateEmbeddings(ai, texts);
+
+  if (embeddings.length !== courses.length) {
+    throw new Error(`Embedding count mismatch: expected ${courses.length}, got ${embeddings.length}`);
+  }
+
+  await vectorize.upsert(courses.map((course, index) => {
+    const numberVal = parseInt(course.number, 10);
+    const catalogNumber = isNaN(numberVal) ? 0 : numberVal;
+    const levelBucket = catalogNumber > 0 ? Math.floor(catalogNumber / 100) * 100 : 0;
+
+    return {
+      id: course.id,
+      values: embeddings[index],
+      metadata: {
+        subject: course.subject,
+        number: course.number,
+        title: course.title,
+        gened: course.requirementSummaryCode || '',
+        catalog_number: catalogNumber,
+        level_bucket: levelBucket
+      }
+    };
+  }));
 }
 
 export async function upsertCourseEmbedding(
@@ -68,26 +109,7 @@ export async function upsertCourseEmbedding(
   ai: Ai,
   course: CourseEmbeddingData
 ): Promise<void> {
-  const text = createCourseEmbeddingText(course);
-  const embedding = await generateEmbedding(ai, text);
-
-  // Derive metadata fields for filtering
-  const numberVal = parseInt(course.number, 10);
-  const catalogNumber = isNaN(numberVal) ? 0 : numberVal;
-  const levelBucket = catalogNumber > 0 ? Math.floor(catalogNumber / 100) * 100 : 0;
-
-  await vectorize.upsert([{
-    id: course.id,
-    values: embedding,
-    metadata: {
-      subject: course.subject,
-      number: course.number,
-      title: course.title,
-      gened: course.requirementSummaryCode || '',
-      catalog_number: catalogNumber,
-      level_bucket: levelBucket
-    }
-  }]);
+  await upsertCourseEmbeddings(vectorize, ai, [course]);
 }
 
 export async function searchCourses(

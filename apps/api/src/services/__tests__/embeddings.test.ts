@@ -3,6 +3,8 @@ import type { CourseSnapshot } from '../../transforms/course.js';
 import {
   courseSnapshotToEmbeddingData,
   createCourseEmbeddingText,
+  generateEmbeddings,
+  upsertCourseEmbeddings,
 } from '../embeddings.js';
 
 function snapshot(): CourseSnapshot {
@@ -85,5 +87,82 @@ describe('course embeddings', () => {
     expect(embeddingData.requirementSummaryCode).toBeNull();
     expect(embeddingData.requirementCodes).toEqual([]);
     expect(text).not.toContain('Requirements:');
+  });
+
+  it('generates embeddings in batches through Workers AI', async () => {
+    const ai = {
+      run: async (_model: string, input: { text: string[] }) => ({
+        data: input.text.map((_, index) => [index, index + 1]),
+      }),
+    };
+
+    await expect(generateEmbeddings(ai as never, ['one', 'two'])).resolves.toEqual([
+      [0, 1],
+      [1, 2],
+    ]);
+  });
+
+  it('upserts batch embeddings with stable course metadata', async () => {
+    const ai = {
+      run: async (_model: string, input: { text: string[] }) => ({
+        data: input.text.map((_, index) => [index, index + 1, index + 2]),
+      }),
+    };
+    const upserts: unknown[] = [];
+    const vectorize = {
+      upsert: async (vectors: unknown[]) => {
+        upserts.push(...vectors);
+      },
+    };
+
+    await upsertCourseEmbeddings(vectorize as never, ai as never, [
+      {
+        id: 'CS-124-2026-fall',
+        subject: 'CS',
+        number: '124',
+        title: 'Introduction to Computer Science I',
+        description: null,
+        requirementSummaryCode: 'QR',
+        requirementCodes: ['QR'],
+        requirementLabels: ['Quantitative Reasoning'],
+        primary_instructor: 'Instructor',
+      },
+      {
+        id: 'AAS-281-2026-fall',
+        subject: 'AAS',
+        number: '281',
+        title: 'Constructing Race in America',
+        description: null,
+        requirementSummaryCode: 'CS',
+        requirementCodes: ['CS', 'US'],
+        requirementLabels: ['Cultural Studies'],
+        primary_instructor: null,
+      },
+    ]);
+
+    expect(upserts).toMatchObject([
+      {
+        id: 'CS-124-2026-fall',
+        values: [0, 1, 2],
+        metadata: {
+          subject: 'CS',
+          number: '124',
+          gened: 'QR',
+          catalog_number: 124,
+          level_bucket: 100,
+        },
+      },
+      {
+        id: 'AAS-281-2026-fall',
+        values: [1, 2, 3],
+        metadata: {
+          subject: 'AAS',
+          number: '281',
+          gened: 'CS',
+          catalog_number: 281,
+          level_bucket: 200,
+        },
+      },
+    ]);
   });
 });
