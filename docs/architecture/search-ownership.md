@@ -63,7 +63,9 @@ reinterpret another layer's concept, it creates drift.
   ambiguity actions, and interpreted public requests each live in their own
   presenter module. Chip actions receive the executable `meta.nextRequest`;
   display-only interpreted requests must not be used to author executable chip
-  continuations.
+  continuations. Removable chips are applied-filter controls and must produce a
+  changed executable request; inferred assumptions are display-only
+  interpretation tokens without removal actions.
 - `apps/web/src/pages/search` owns UI state and rendering. It consumes public
   requests, public responses, and server-authored `nextRequest` actions. It should
   not know internal planner field names. Its session state has one canonical
@@ -108,11 +110,14 @@ reinterpret another layer's concept, it creates drift.
   Chips, advanced labels, examples, and result evidence should say `GenEd`,
   `GenEd categories`, or `Any GenEd`, while the request/DTO field remains
   `requirement`. Controls should lead with readable category names and may show
-  concise public codes such as `US`, `HUM`, or `COMP1` as secondary text.
+  concise public codes such as `US`, `HUM`, or `COMP1` as secondary text. Dense
+  result cards may use canonical short codes, but they must never show
+  source-shaped codes such as `1US`.
 - Public requirement filters are mode-aware objects: `{ mode: "single" | "any" |
   "all", codes: string[] }`. Courses can satisfy multiple requirements, so
   transport, actions, chips, and pagination must preserve both the mode and the
-  full code list instead of collapsing to one string.
+  full code list instead of collapsing to one string. Removing one requirement
+  chip removes only that code and preserves the remaining requirement filter.
 - The public search concept is `workload`, not `difficulty`. Stored source columns
   such as `difficulty_score` and `rmp_difficulty` may remain source-shaped, but
   product/request/presentation code should use workload language.
@@ -128,6 +133,56 @@ reinterpret another layer's concept, it creates drift.
   policy and section display models rather than substring checks in components.
 - A `SearchPlan` is internal intent. It is not a public response shape and must not
   leak through `SearchResponseDto`.
+
+## Search UI Rules
+
+The search UI is a faceted-search surface, not a form dump. Research-backed
+guidance maps to these local rules:
+
+- [Baymard filter UX](https://baymard.com/learn/ecommerce-filter-ui) supports a
+  visible filter surface for large result sets, visible applied filters, grouped
+  multi-select facets, and collapsed/deprioritized long groups. It also supports
+  live desktop filtering when the interaction is cheap, and batch/apply behavior
+  when users need to set several controls before committing.
+- [DWP filter research](https://design-system.dwp.gov.uk/research/filters/design-notes)
+  calls out the state bridge between filters and results: result count, applied
+  filters, and reset affordance should be understandable even when the filter
+  control itself is out of view.
+- [CMS filter chip guidance](https://design.cms.gov/components/filter-chip/)
+  treats filter chips as dismissible applied filters. Non-removable metadata is
+  a badge or explanation, not a filter chip.
+- [UXPin advanced search guidance](https://www.uxpin.com/studio/blog/advanced-search-ux/)
+  frames advanced search as parameterized refinement for large datasets, with
+  active filters displayed clearly and no-results states offering ways to
+  broaden the search.
+- [USWDS modal guidance](https://designsystem.digital.gov/components/modal/)
+  allows short, user-triggered dialogs with clear titles and actions. It warns
+  against surprise modals, long scrolling modal content, and unclear button
+  labels.
+
+Those sources become these product rules:
+
+- Active chips represent applied, removable filters. If a chip cannot remove a
+  real executable constraint, it is not an active filter chip.
+- Interpretation chips represent parser assumptions or semantic explanation.
+  They are visually quieter and non-removable so they do not masquerade as
+  controls.
+- Long advanced-filter groups use progressive disclosure with the current
+  selection summarized outside the disclosure. The GenEd tree is source-backed by
+  `GENED_REQUIREMENT_GROUPS`, collapsed by default, and the selected codes remain
+  visible.
+- Advanced search is available before and after a query. Filter controls compile
+  into the same public `SearchRequestDto` shape as query refinements.
+- The result state near the list must include an exact result count when the
+  backend has computed one, applied filters when present, and obvious recovery
+  controls for zero-results states.
+- Filter options come from canonical owners. Enum values come from
+  `packages/query-types`; available years come from the public `/api/terms`
+  endpoint backed by `term_state`, falling back to distinct course years when
+  term state has not been populated; labels may be local UI presentation.
+- Feedback is a compact, user-triggered action near result controls. The form is
+  short and modal-backed so it does not push results around or take the user away
+  from their current search.
 
 ## Fitness Checks
 
@@ -147,12 +202,17 @@ These are the checks future changes should preserve or add as automated tests:
   the planner artifact to ranking explicitly.
 - Retrieval lane implementations stay split by recall source. The
   `search-retrieval-lanes` barrel must not grow new SQL.
+- Exact course-code and CRN recall use the shared filtered-course query builder.
+  Exactness is a recall lane, not permission to bypass term, status, modality,
+  requirement, part-of-term, or other hard filters.
 - CISAPI list/detail parsers and subject-list consumers use the parser facade and
   DOM helpers, not local XML regexes.
 - Fusion consumes a flat `laneResults` stream rather than one DTO property per
   retrieval lane.
 - Web search UI options derive values from `packages/query-types`; labels may be
   local presentation.
+- Web year filter options derive from `/api/terms`; do not hardcode available
+  years in the frontend or test fixtures that are meant to represent runtime.
 - Web search follow-up actions derive from session `activeRequest`, which is
   replaced by the server-authored `meta.nextRequest` after a successful response.
 - `meta.nextRequest` is a lossless executable continuation request. It is not
@@ -161,6 +221,9 @@ These are the checks future changes should preserve or add as automated tests:
 - Web sort, pagination, and server-authored refinement actions execute canonical
   `SearchRequestDto` objects, not `{ query, filters }` patches reconstructed from
   derived UI state.
+- Search pagination reports the exact size of the ranked result set returned by
+  the backend as `totalResults`. Do not render guessed lower bounds such as
+  "20 of at least 21" as if they were totals.
 - Advanced search state stores `{ filters, scope }`; `scope` is not a fake filter.
 - Advanced GenEd controls consume `GENED_REQUIREMENT_GROUPS` from
   `packages/query-types`; free-text aliases such as `gened`, `cmp`, or source

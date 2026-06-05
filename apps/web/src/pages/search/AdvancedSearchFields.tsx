@@ -1,4 +1,5 @@
-import type { InputHTMLAttributes } from 'react'
+import { useId, useState, type InputHTMLAttributes } from 'react'
+import { ChevronDownIcon } from 'lucide-react'
 import {
   ANY_GENED_DISPLAY_LABEL,
   GENED_REQUIREMENT_GROUPS,
@@ -15,6 +16,8 @@ import {
   type SearchRequestFiltersDto,
   type SearchScope,
 } from '@uiuc-course-search/query-types'
+import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import {
   Field,
   FieldGroup,
@@ -33,6 +36,7 @@ import {
 } from '@/components/ui/select'
 import {
   ANY_SELECT_VALUE,
+  CREDIT_OPTIONS,
   DELIVERY_OPTIONS,
   LEVEL_OPTIONS,
   PART_OF_TERM_OPTIONS,
@@ -44,16 +48,18 @@ import {
 } from './search-options'
 
 const REQUIREMENT_MATCH_OPTIONS = [
-  { value: 'any', label: 'Any listed' },
-  { value: 'all', label: 'All listed' },
+  { value: 'all', label: 'All selected' },
+  { value: 'any', label: 'Any selected' },
 ] as const satisfies SelectOption[]
 
 export function AdvancedSearchFields({
   advancedDraft,
+  availableYears,
   onAdvancedDraftFilterChange,
   onAdvancedDraftScopeChange,
 }: {
   advancedDraft: AdvancedSearchStateDto
+  availableYears?: number[]
   onAdvancedDraftFilterChange: <Key extends SearchRequestFilterKey>(
     key: Key,
     value: SearchRequestFiltersDto[Key]
@@ -61,6 +67,8 @@ export function AdvancedSearchFields({
   onAdvancedDraftScopeChange: (value?: SearchScope) => void
 }) {
   const filters = advancedDraft.filters
+  const yearOptions = getYearOptions(availableYears, filters.year)
+
   return (
     <div className="flex flex-col gap-5">
       <FieldSet>
@@ -70,10 +78,13 @@ export function AdvancedSearchFields({
             id="advanced-subject"
             label="Subject"
             maxLength={8}
-            placeholder="CS"
+            placeholder="e.g. CS"
             value={filters.subject ?? ''}
             onChange={(value) =>
-              onAdvancedDraftFilterChange('subject', value.toUpperCase() || undefined)
+              onAdvancedDraftFilterChange(
+                'subject',
+                value.toUpperCase() || undefined
+              )
             }
           />
           <AdvancedTextField
@@ -81,7 +92,7 @@ export function AdvancedSearchFields({
             label="Course number"
             inputMode="numeric"
             maxLength={4}
-            placeholder="225"
+            placeholder="e.g. 225"
             value={filters.number ?? ''}
             onChange={(value) =>
               onAdvancedDraftFilterChange('number', value || undefined)
@@ -90,7 +101,7 @@ export function AdvancedSearchFields({
           <AdvancedTextField
             id="advanced-instructor"
             label="Instructor"
-            placeholder="Fagen"
+            placeholder="e.g. Fagen"
             value={filters.instructor ?? ''}
             onChange={(value) =>
               onAdvancedDraftFilterChange('instructor', value || undefined)
@@ -142,29 +153,27 @@ export function AdvancedSearchFields({
               onAdvancedDraftFilterChange('term', termFilterValue(value))
             }
           />
-          <AdvancedTextField
+          <AdvancedSelectField
             id="advanced-year"
             label="Year"
-            inputMode="numeric"
-            maxLength={4}
-            placeholder="2026"
-            value={filters.year?.toString() ?? ''}
-            onChange={(value) => {
-              const year = parseInt(value, 10)
-              onAdvancedDraftFilterChange(
-                'year',
-                Number.isNaN(year) ? undefined : year
-              )
-            }}
+            placeholder="Any year"
+            value={filters.year?.toString()}
+            options={yearOptions}
+            onChange={(value) =>
+              onAdvancedDraftFilterChange('year', yearFilterValue(value))
+            }
           />
           <AdvancedTextField
             id="advanced-days"
             label="Days"
             maxLength={7}
-            placeholder="MWF"
+            placeholder="e.g. MWF"
             value={filters.days ?? ''}
             onChange={(value) =>
-              onAdvancedDraftFilterChange('days', value.toUpperCase() || undefined)
+              onAdvancedDraftFilterChange(
+                'days',
+                value.toUpperCase() || undefined
+              )
             }
           />
           <AdvancedSelectField
@@ -200,20 +209,15 @@ export function AdvancedSearchFields({
       <FieldSet>
         <FieldLegend variant="label">Preferences</FieldLegend>
         <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <AdvancedTextField
+          <AdvancedSelectField
             id="advanced-credits"
             label="Credits"
-            inputMode="numeric"
-            maxLength={2}
-            placeholder="3"
-            value={filters.credits?.toString() ?? ''}
-            onChange={(value) => {
-              const credits = parseInt(value, 10)
-              onAdvancedDraftFilterChange(
-                'credits',
-                Number.isNaN(credits) ? undefined : credits
-              )
-            }}
+            placeholder="Any credits"
+            value={filters.credits?.toString()}
+            options={CREDIT_OPTIONS}
+            onChange={(value) =>
+              onAdvancedDraftFilterChange('credits', creditFilterValue(value))
+            }
           />
           <AdvancedSelectField
             id="advanced-delivery"
@@ -278,12 +282,19 @@ function AdvancedTextField({
   maxLength?: number
   onChange: (value: string) => void
 }) {
+  const inputId = useId()
+
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
       <Input
-        id={id}
+        type="search"
+        id={inputId}
+        data-search-filter-field={id}
         autoComplete="off"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         inputMode={inputMode}
         maxLength={maxLength}
         placeholder={placeholder}
@@ -319,10 +330,24 @@ function levelFilterValue(
   return isSearchLevelFilter(level) ? level : undefined
 }
 
+function yearFilterValue(
+  value: string | undefined
+): SearchRequestFiltersDto['year'] {
+  const year = value ? parseInt(value, 10) : NaN
+  return Number.isNaN(year) ? undefined : year
+}
+
+function creditFilterValue(
+  value: string | undefined
+): SearchRequestFiltersDto['credits'] {
+  const credits = value ? parseInt(value, 10) : NaN
+  return Number.isNaN(credits) ? undefined : credits
+}
+
 function requirementMatchMode(
   requirement: SearchRequestFiltersDto['requirement']
 ): Extract<RequirementFilterMode, 'any' | 'all'> {
-  return requirement?.mode === 'all' ? 'all' : 'any'
+  return requirement?.mode === 'any' ? 'any' : 'all'
 }
 
 function requirementFilterFromCodes(
@@ -341,8 +366,12 @@ function RequirementOptionField({
   value: SearchRequestFiltersDto['requirement']
   onChange: (value: SearchRequestFiltersDto['requirement']) => void
 }) {
+  const [open, setOpen] = useState(false)
   const selectedCodes = new Set(canonicalRequirementCodes(value?.codes))
   const mode = requirementMatchMode(value)
+  const selectedSummary = [...selectedCodes]
+    .sort()
+    .join(', ')
 
   const toggleCode = (code: string, checked: boolean) => {
     const nextCodes = new Set(selectedCodes)
@@ -356,36 +385,76 @@ function RequirementOptionField({
 
   return (
     <Field className="rounded-md border bg-background px-3 py-3">
-      <FieldLabel asChild>
-        <span>{GENED_DISPLAY_NAME} categories</span>
-      </FieldLabel>
-      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {GENED_REQUIREMENT_GROUPS.map((group) => (
-          <div key={group.code} className="flex min-w-0 flex-col gap-2">
-            <RequirementOptionCheckbox
-              code={group.code}
-              label={group.label}
-              checked={selectedCodes.has(group.code)}
-              onChange={toggleCode}
-            />
-            {group.options.length > 0 ? (
-              <div className="ml-6 flex flex-col gap-1.5 border-l pl-3">
-                {group.options.map((option) => (
-                  <RequirementOptionCheckbox
-                    key={option.code}
-                    code={option.code}
-                    label={option.label}
-                    checked={selectedCodes.has(option.code)}
-                    onChange={toggleCode}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ))}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <FieldLabel asChild>
+            <span>{GENED_DISPLAY_NAME} categories</span>
+          </FieldLabel>
+          <p className="text-muted-foreground mt-1 text-xs">
+            {selectedSummary
+              ? `${selectedCodes.size} selected: ${selectedSummary}`
+              : 'No GenEd filter selected'}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          aria-expanded={open}
+          aria-controls="advanced-requirement-options"
+          onClick={() => setOpen((nextOpen) => !nextOpen)}
+        >
+          Choose GenEds
+          <ChevronDownIcon
+            aria-hidden
+            className={
+              open ? 'rotate-180 transition-transform' : 'transition-transform'
+            }
+          />
+        </Button>
       </div>
+      <Collapsible open={open}>
+        <CollapsibleContent id="advanced-requirement-options">
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {GENED_REQUIREMENT_GROUPS.map((group) => (
+              <div key={group.code} className="flex min-w-0 flex-col gap-2">
+                <RequirementOptionCheckbox
+                  code={group.code}
+                  label={group.label}
+                  checked={selectedCodes.has(group.code)}
+                  onChange={toggleCode}
+                />
+                {group.options.length > 0 ? (
+                  <div className="ml-6 flex flex-col gap-1.5 border-l pl-3">
+                    {group.options.map((option) => (
+                      <RequirementOptionCheckbox
+                        key={option.code}
+                        code={option.code}
+                        label={option.label}
+                        checked={selectedCodes.has(option.code)}
+                        onChange={toggleCode}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </Field>
   )
+}
+
+function getYearOptions(
+  availableYears: number[] | undefined,
+  selectedYear: number | undefined
+): SelectOption[] {
+  const years = new Set(availableYears ?? [])
+  if (typeof selectedYear === 'number') years.add(selectedYear)
+  return [...years]
+    .sort((left, right) => right - left)
+    .map((year) => ({ value: String(year), label: String(year) }))
 }
 
 function RequirementOptionCheckbox({

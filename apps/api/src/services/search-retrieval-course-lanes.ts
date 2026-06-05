@@ -95,15 +95,19 @@ export async function keywordSearch(
   }
 
   if (filters.crn) {
+    const filtered = buildFilteredCourseQuery(filters);
     const crnSql = `
       SELECT DISTINCT c.id
-      FROM sections s
-      JOIN courses c ON s.course_id = c.id
-      WHERE s.crn = ?
-      LIMIT 1
+      FROM courses c
+      ${filtered.joinSql}
+      ${filtered.whereSql()}
+      ${filtered.groupBySql("c.id")}
+      ORDER BY c.year DESC,
+        CASE c.term WHEN 'spring' THEN 1 WHEN 'fall' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END
+      LIMIT ?
     `;
     const crnResult = await db.prepare(crnSql)
-      .bind(filters.crn)
+      .bind(...filtered.bindParams([limit]))
       .all<{ id: string }>();
     if (crnResult.results.length > 0) {
       return crnResult.results.map((row, index) => rankedLaneRow(

@@ -80,6 +80,18 @@ describe('buildFilterClauses', () => {
     });
   });
 
+  describe('CRN filter', () => {
+    it('generates section-scoped SQL so exact CRN recall cannot bypass hard filters', () => {
+      const filters: SearchFilters = { crn: '12345', year: 2026, term: 'fall' };
+      const result = buildFilterClauses(filters);
+      expect(result.joinKeys).toContain('sections');
+      expect(result.where).toEqual(
+        expect.arrayContaining(['s.crn = ?', 'c.year = ?', 'c.term = ?']),
+      );
+      expect(result.params).toEqual(['12345', 2026, 'fall']);
+    });
+  });
+
   describe('online filter', () => {
     it('generates SQL for online=true', () => {
       const filters: SearchFilters = { online: true };

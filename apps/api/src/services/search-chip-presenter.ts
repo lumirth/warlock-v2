@@ -1,9 +1,11 @@
 import {
   ANY_GENED_DISPLAY_LABEL,
   effectiveRequirementFilter,
+  formatGenEdDisplayLabel,
   type NormalizedSearchRequestDto,
   type SearchChipDto,
   type SearchChipSource,
+  singleRequirementFilter,
 } from "@uiuc-course-search/query-types";
 import { removeSearchIntentAction } from "../dto/search-actions.js";
 import { isGenericAnyRequirementFilter } from "./requirement-codes.js";
@@ -26,23 +28,31 @@ export function buildSearchChips(
   residual: string,
   request: NormalizedSearchRequestDto,
 ): SearchChipDto[] {
-  const chips = hints.map((hint, index): SearchChipDto => ({
-    id: `${hint.type}-${index}`,
-    type: hint.type,
-    label: formatResolvedHintLabel(hint, plan, residual),
-    value: formatResolvedHintValue(hint, plan, residual),
-    source: sourceFromHint(hint),
-    removable: true,
-    editable: isEditableHint(hint),
-    action: removeSearchIntentAction(
-      request,
-      resolvedFilterFromHint(hint, plan, residual),
-      removeTextForHint(hint, residual),
-    ),
-  }));
-
   const requirement = effectiveRequirementFilter(plan.filters);
-  if (shouldShowGenericRequirementChip(hints, plan.filters) && requirement) {
+  const chips = hints
+    .filter((hint) => !shouldReplaceHintWithStructuredRequirementChip(
+      hint,
+      request,
+      requirement,
+    ))
+    .map((hint, index): SearchChipDto => ({
+      id: `${hint.type}-${index}`,
+      type: hint.type,
+      label: formatResolvedHintLabel(hint, plan, residual),
+      value: formatResolvedHintValue(hint, plan, residual),
+      source: sourceFromHint(hint),
+      removable: true,
+      editable: isEditableHint(hint),
+      action: removeSearchIntentAction(
+        request,
+        resolvedFilterFromHint(hint, plan, residual),
+        removeTextForHint(hint, residual),
+      ),
+    }));
+
+  if (shouldShowStructuredRequirementChips(request, requirement)) {
+    chips.push(...buildStructuredRequirementChips(request, requirement));
+  } else if (shouldShowGenericRequirementChip(hints, plan.filters) && requirement) {
     chips.push({
       id: "requirement-any",
       type: "requirement",
@@ -82,17 +92,63 @@ export function buildSearchChips(
       label: assumption.label,
       value: assumption.kind,
       source: "natural_language",
-      removable: true,
+      removable: false,
       editable: false,
-      action: removeSearchIntentAction(
-        request,
-        undefined,
-        textToRemoveForAssumption(assumption.kind, residual),
-      ),
     });
   }
 
   return chips;
+}
+
+function shouldReplaceHintWithStructuredRequirementChip(
+  hint: Hint,
+  request: NormalizedSearchRequestDto,
+  requirement: ReturnType<typeof effectiveRequirementFilter>,
+): boolean {
+  return hint.type === "requirement"
+    && Boolean(request.filters.requirement)
+    && Boolean(requirement);
+}
+
+function shouldShowStructuredRequirementChips(
+  request: NormalizedSearchRequestDto,
+  requirement: ReturnType<typeof effectiveRequirementFilter>,
+): requirement is NonNullable<ReturnType<typeof effectiveRequirementFilter>> {
+  if (!request.filters.requirement || !requirement) return false;
+  return requirement.codes.length > 0;
+}
+
+function buildStructuredRequirementChips(
+  request: NormalizedSearchRequestDto,
+  requirement: NonNullable<ReturnType<typeof effectiveRequirementFilter>>,
+): SearchChipDto[] {
+  if (requirement.mode === "any" && isGenericAnyRequirementFilter(requirement.codes)) {
+    return [{
+      id: "requirement-any",
+      type: "requirement",
+      label: ANY_GENED_DISPLAY_LABEL,
+      value: "any",
+      source: "manual_override",
+      removable: true,
+      editable: false,
+      action: removeSearchIntentAction(request, { requirement }, "gen ed"),
+    }];
+  }
+
+  return requirement.codes.map((code): SearchChipDto => ({
+    id: `requirement-${code}`,
+    type: "requirement",
+    label: formatGenEdDisplayLabel(code),
+    value: code,
+    source: "manual_override",
+    removable: true,
+    editable: false,
+    action: removeSearchIntentAction(
+      request,
+      { requirement: singleRequirementFilter(code) },
+      code,
+    ),
+  }));
 }
 
 function sourceFromHint(hint: Hint): SearchChipSource {
@@ -138,17 +194,4 @@ function shouldShowGenericRequirementChip(
   return requirement?.mode === "any"
     && isGenericAnyRequirementFilter(requirement.codes)
     && !hints.some((hint) => hint.type === "requirement");
-}
-
-function textToRemoveForAssumption(
-  kind: string,
-  residual: string,
-): string | undefined {
-  if (kind === "low_writing") return "no essays";
-  if (kind === "low_exams") return "no tests";
-  if (kind === "low_math") return "not math";
-  if (kind === "low_workload") return "easy";
-  if (kind === "no_listed_prereq") return "no prereq";
-  if (kind === "online_preferred") return "online";
-  return residual || undefined;
 }

@@ -12,6 +12,69 @@ import {
 } from './SearchPage.test-utils'
 
 describe('SearchPage advanced filters and pagination', () => {
+  it('runs advanced filters from the homepage with available years from the API', async () => {
+    vi.mocked(api.getTermOptions).mockResolvedValueOnce({
+      terms: [
+        {
+          termId: '2026-fall',
+          term: 'fall',
+          year: 2026,
+          status: 'registrable',
+          label: 'Fall 2026',
+        },
+      ],
+      years: [2027, 2026],
+    })
+    vi.mocked(api.search).mockResolvedValueOnce(searchResponse([], 'fixture'))
+
+    renderSearchPage()
+
+    await screen.findByText('Search filters')
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+    fireEvent.change(screen.getByLabelText('Subject'), {
+      target: { value: 'cs' },
+    })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Year' }))
+    fireEvent.click(await screen.findByRole('option', { name: '2026' }))
+    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+
+    await waitFor(() => {
+      expectLastSearchCalledWithRequest({
+        query: '',
+        pagination: { limit: 20, offset: 0 },
+        filters: expect.objectContaining({
+          subject: 'CS',
+          year: 2026,
+        }),
+      })
+    })
+  })
+
+  it('defaults multiple GenEd selections to all selected', async () => {
+    vi.mocked(api.search).mockResolvedValueOnce(searchResponse([], 'fixture'))
+
+    renderSearchPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+    fireEvent.click(screen.getByRole('button', { name: /choose geneds/i }))
+    fireEvent.click(screen.getByLabelText(/Advanced Composition/i))
+    fireEvent.click(screen.getByLabelText(/Humanities & the Arts/i))
+    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+
+    await waitFor(() => {
+      expectLastSearchCalledWithRequest({
+        query: '',
+        pagination: { limit: 20, offset: 0 },
+        filters: expect.objectContaining({
+          requirement: {
+            mode: 'all',
+            codes: expect.arrayContaining(['ACP', 'HUM']),
+          },
+        }),
+      })
+    })
+  })
+
   it('sends advanced controls as structured filters while preserving free-text terms', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
@@ -46,9 +109,8 @@ describe('SearchPage advanced filters and pagination', () => {
     fireEvent.change(screen.getByLabelText('Instructor'), {
       target: { value: 'Fagen' },
     })
-    fireEvent.change(screen.getByLabelText('Credits'), {
-      target: { value: '4' },
-    })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Credits' }))
+    fireEvent.click(await screen.findByRole('option', { name: '4 credits' }))
     fireEvent.click(screen.getByRole('combobox', { name: 'Level' }))
     fireEvent.click(await screen.findByRole('option', { name: '400 level' }))
     fireEvent.click(screen.getByLabelText('Include past terms'))
@@ -284,7 +346,7 @@ describe('SearchPage advanced filters and pagination', () => {
           }),
         ], 'algorithms'),
         pagination: {
-          resultCountLowerBound: 21,
+          totalResults: 21,
           limit: 20,
           offset: 0,
           hasMore: true,
@@ -300,7 +362,7 @@ describe('SearchPage advanced filters and pagination', () => {
           }),
         ], 'algorithms'),
         pagination: {
-          resultCountLowerBound: 21,
+          totalResults: 21,
           limit: 20,
           offset: 20,
           hasMore: false,
@@ -342,7 +404,7 @@ describe('SearchPage advanced filters and pagination', () => {
           }),
         ], 'intro to CS'),
         pagination: {
-          resultCountLowerBound: 21,
+          totalResults: 21,
           limit: 20,
           offset: 0,
           hasMore: true,
@@ -358,7 +420,7 @@ describe('SearchPage advanced filters and pagination', () => {
           }),
         ], 'intro to CS'),
         pagination: {
-          resultCountLowerBound: 21,
+          totalResults: 21,
           limit: 20,
           offset: 20,
           hasMore: false,
@@ -394,7 +456,7 @@ describe('SearchPage advanced filters and pagination', () => {
             title: 'Freshman Orientation',
           }),
         ], 'intro to CS'),
-        pagination: { resultCountLowerBound: 21, limit: 20, offset: 0, hasMore: true },
+        pagination: { totalResults: 21, limit: 20, offset: 0, hasMore: true },
       })
       .mockResolvedValueOnce({
         ...searchResponse([
@@ -404,7 +466,7 @@ describe('SearchPage advanced filters and pagination', () => {
             title: 'Intro Computing',
           }),
         ], 'intro to CS'),
-        pagination: { resultCountLowerBound: 22, limit: 20, offset: 20, hasMore: true },
+        pagination: { totalResults: 22, limit: 20, offset: 20, hasMore: true },
       })
 
     renderSearchPage()

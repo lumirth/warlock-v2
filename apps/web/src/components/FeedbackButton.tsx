@@ -1,8 +1,16 @@
-import { useId, useState, type ComponentProps } from 'react'
-import { CheckIcon, MessageCircleIcon, SendIcon, XIcon } from 'lucide-react'
+import { useId, useState, type ComponentProps, type FormEvent } from 'react'
+import { CheckIcon, MessageCircleIcon, SendIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -52,7 +60,8 @@ export function FeedbackButton({
   const expectedId = useId()
   const messageId = useId()
 
-  const submit = async () => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
     setSubmitting(true)
     setError(null)
 
@@ -66,6 +75,7 @@ export function FeedbackButton({
         message: message.trim() || undefined,
       })
       setSuccess(true)
+      setOpen(false)
       setExpected('')
       setMessage('')
     } catch {
@@ -89,78 +99,68 @@ export function FeedbackButton({
   }
 
   return (
-    <div
-      className={cn(
-        'flex flex-col gap-2',
-        fullWidth ? 'w-full' : 'w-full sm:max-w-xl sm:self-end'
-      )}
-    >
-      {!open && (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <Button
           variant={buttonVariant}
           size="xs"
-          className={cn(fullWidth ? 'w-full' : 'self-end')}
-          onClick={() => setOpen(true)}
+          className={cn(fullWidth && 'w-full')}
         >
           <MessageCircleIcon data-icon="inline-start" aria-hidden />
           {buttonLabel}
         </Button>
-      )}
-
-      {open && (
-        <Card size="sm" className="w-full">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle>Send feedback</CardTitle>
-            <Button variant="ghost" size="xs" onClick={() => setOpen(false)}>
-              <XIcon data-icon="inline-start" aria-hidden />
-              Close
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <FieldGroup className="gap-3">
-              <Field>
-                <FieldLabel htmlFor={expectedId} className="sr-only">
-                  Expected result
-                </FieldLabel>
-                <Input
-                  id={expectedId}
-                  autoComplete="off"
-                  placeholder={expectedPlaceholder}
-                  value={expected}
-                  onChange={(event) => setExpected(event.currentTarget.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor={messageId} className="sr-only">
-                  Feedback note
-                </FieldLabel>
-                <Textarea
-                  id={messageId}
-                  placeholder={messagePlaceholder}
-                  rows={2}
-                  value={message}
-                  onChange={(event) => setMessage(event.currentTarget.value)}
-                />
-              </Field>
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <div className="flex justify-end">
-                <Button size="xs" onClick={submit} disabled={submitting}>
-                  {submitting ? (
-                    <Spinner data-icon="inline-start" aria-hidden />
-                  ) : (
-                    <SendIcon data-icon="inline-start" aria-hidden />
-                  )}
-                  Send feedback
-                </Button>
-              </div>
-            </FieldGroup>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>What looked wrong?</DialogTitle>
+          <DialogDescription>
+            Send a short note about the result set without leaving this search.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit}>
+          <FieldGroup className="gap-3">
+            <Field>
+              <FieldLabel htmlFor={expectedId} className="sr-only">
+                Expected result
+              </FieldLabel>
+              <Input
+                id={expectedId}
+                autoComplete="off"
+                placeholder={expectedPlaceholder}
+                value={expected}
+                onChange={(event) => setExpected(event.currentTarget.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={messageId} className="sr-only">
+                Feedback note
+              </FieldLabel>
+              <Textarea
+                id={messageId}
+                placeholder={messagePlaceholder}
+                rows={2}
+                value={message}
+                onChange={(event) => setMessage(event.currentTarget.value)}
+              />
+            </Field>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <DialogFooter>
+              <Button size="xs" type="submit" disabled={submitting}>
+                {submitting ? (
+                  <Spinner data-icon="inline-start" aria-hidden />
+                ) : (
+                  <SendIcon data-icon="inline-start" aria-hidden />
+                )}
+                Send feedback
+              </Button>
+            </DialogFooter>
+          </FieldGroup>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -258,21 +258,25 @@ describe('architecture boundaries', () => {
   it('keeps exact course recall inside the shared filtered-course query envelope', () => {
     const courseLaneSource = readFileSync('apps/api/src/services/search-retrieval-course-lanes.ts', 'utf8');
     const exactBlock = courseLaneSource.match(/if \(filters\.subject && filters\.number[\s\S]*?if \(exactResult\.results\.length > 0\)/)?.[0] ?? '';
+    const crnBlock = courseLaneSource.match(/if \(filters\.crn\)[\s\S]*?if \(crnResult\.results\.length > 0\)/)?.[0] ?? '';
 
     expect(exactBlock).toContain('buildFilteredCourseQuery(filters)');
     expect(exactBlock).toContain('filtered.whereSql()');
     expect(exactBlock).not.toMatch(/WHERE\s+subject\s*=\s*\?\s+AND\s+number\s*=\s*\?/);
+    expect(crnBlock).toContain('buildFilteredCourseQuery(filters)');
+    expect(crnBlock).toContain('filtered.whereSql()');
+    expect(crnBlock).not.toMatch(/WHERE\s+s\.crn\s*=\s*\?/);
   });
 
-  it('keeps search pagination honest about lower-bound counts', () => {
+  it('keeps search pagination honest about exact returned-result counts', () => {
     const contract = readFileSync('packages/query-types/search-response-dto.ts', 'utf8');
     const presenter = readFileSync('apps/api/src/services/search-response-presenter.ts', 'utf8');
     const viewModel = readFileSync('apps/web/src/pages/search/search-view-model.ts', 'utf8');
 
-    expect(contract).toContain('resultCountLowerBound: number');
-    expect(contract).not.toContain('total: number');
-    expect(presenter).toContain('resultCountLowerBound:');
-    expect(viewModel).toContain('at least');
+    expect(contract).toContain('totalResults: number');
+    expect(contract).not.toContain('resultCountLowerBound');
+    expect(presenter).toContain('totalResults:');
+    expect(viewModel).not.toContain('at least');
   });
 
   it('keeps advanced search state structurally separate from filters', () => {

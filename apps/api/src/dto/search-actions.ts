@@ -1,5 +1,7 @@
 import {
+  canonicalRequirementCodes,
   coerceSearchRequestDto,
+  requirementFilter,
   searchRequestHasFilters,
   type NormalizedSearchRequestDto,
   type SearchActionDto,
@@ -88,6 +90,20 @@ function requestWithoutMatchingFilter(
     [keyof SearchRequestFiltersDto, SearchRequestFiltersDto[keyof SearchRequestFiltersDto]]
   >) {
     if (value === undefined) continue;
+    if (key === "requirement" && isRequirementFilterValue(value)) {
+      const nextRequirement = removeRequirementCodes(
+        nextFilters.requirement,
+        value.codes,
+      );
+      if (!nextRequirement.changed) continue;
+      if (nextRequirement.requirement) {
+        nextFilters.requirement = nextRequirement.requirement;
+      } else {
+        delete nextFilters.requirement;
+      }
+      changed = true;
+      continue;
+    }
     if (!searchFilterValuesEqual(nextFilters[key], value)) {
       continue;
     }
@@ -103,6 +119,35 @@ function requestWithoutMatchingFilter(
         scope: request.scope,
       }
     : null;
+}
+
+function removeRequirementCodes(
+  current: SearchRequestFiltersDto["requirement"],
+  codesToRemove: readonly string[],
+): {
+  changed: boolean;
+  requirement?: NonNullable<SearchRequestFiltersDto["requirement"]>;
+} {
+  if (!current) return { changed: false };
+  const removeSet = new Set(canonicalRequirementCodes(codesToRemove));
+  if (removeSet.size === 0) return { changed: false };
+
+  const nextCodes = current.codes.filter(
+    (code) => {
+      const canonicalCode = canonicalRequirementCodes([code])[0];
+      return canonicalCode ? !removeSet.has(canonicalCode) : true;
+    },
+  );
+  if (nextCodes.length === current.codes.length) return { changed: false };
+  if (nextCodes.length === 0) return { changed: true };
+
+  return {
+    changed: true,
+    requirement: requirementFilter(
+      nextCodes.length === 1 ? "single" : current.mode,
+      nextCodes,
+    ),
+  };
 }
 
 function searchFilterValuesEqual(

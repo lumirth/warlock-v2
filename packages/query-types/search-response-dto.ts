@@ -141,7 +141,7 @@ export type SearchResponseDto = {
   results: SearchCourseResultDto[];
   meta: SearchMetaDto;
   pagination: {
-    resultCountLowerBound: number;
+    totalResults: number;
     limit: number;
     offset: number;
     hasMore?: boolean;

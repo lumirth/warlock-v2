@@ -126,7 +126,7 @@ describe('ApiClient', () => {
           timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
         },
         pagination: {
-          resultCountLowerBound: 21,
+          totalResults: 21,
           limit: 20,
           offset: 20,
           hasMore: true,
@@ -161,7 +161,7 @@ describe('ApiClient', () => {
           timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
         },
         pagination: {
-          resultCountLowerBound: 0,
+          totalResults: 0,
           limit: 20,
           offset: 0,
         },
@@ -236,6 +236,32 @@ describe('ApiClient', () => {
         }),
         signal: undefined,
       }
+    )
+  })
+
+  it('loads public search term options', async () => {
+    const termOptions = {
+      terms: [
+        {
+          termId: '2026-fall',
+          term: 'fall',
+          year: 2026,
+          status: 'registrable',
+          label: 'Fall 2026',
+        },
+      ],
+      years: [2026],
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => termOptions,
+    } as Response)
+
+    const client = new ApiClient('https://api.example.test')
+    await expect(client.getTermOptions()).resolves.toEqual(termOptions)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.test/api/terms',
+      { signal: undefined }
     )
   })
 })

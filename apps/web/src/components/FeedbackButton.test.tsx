@@ -59,15 +59,16 @@ describe('FeedbackButton', () => {
     })
   })
 
-  it('opens as a usable full-width panel instead of a cramped button-width form', () => {
+  it('opens a focused feedback dialog instead of pushing results inline', () => {
     renderFeedbackButton()
 
     fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
 
-    const panel = screen
-      .getAllByText('Send feedback')[0]
-      .closest('[data-slot="card"]')
-    expect(panel).toHaveClass('w-full')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: /what looked wrong/i })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/expected result/i)).toBeInTheDocument()
   })
 
   it('uses calm recovery copy when feedback submission fails', async () => {

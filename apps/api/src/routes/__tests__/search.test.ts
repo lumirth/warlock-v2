@@ -587,7 +587,7 @@ describe("Search Routes", () => {
       "CS-14-2026-spring",
     ]);
     expect(data.pagination).toEqual({
-      resultCountLowerBound: 16,
+      totalResults: 16,
       limit: 5,
       offset: 10,
       hasMore: true,

@@ -13,6 +13,7 @@ vi.mock('../lib/api-client', () => ({
   api: {
     search: vi.fn(),
     getCourse: vi.fn(),
+    getTermOptions: vi.fn(async () => ({ terms: [], years: [] })),
   },
 }))
 
@@ -117,7 +118,7 @@ describe('page accessibility', () => {
         appliedSort: { field: 'relevance', direction: 'desc' },
         appliedScope: 'active',
       },
-      pagination: { resultCountLowerBound: 1, limit: 20, offset: 0 },
+      pagination: { totalResults: 1, limit: 20, offset: 0 },
     })
 
     const { container } = render(

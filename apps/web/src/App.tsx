@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { Code2Icon, HomeIcon, MoonIcon, SunIcon } from 'lucide-react'
 import courseSearchLogo from './assets/course-search-logo.png'
 import { SearchPage } from './pages/SearchPage'
@@ -69,10 +69,10 @@ function App() {
 
   return (
     <div className="bg-background text-foreground min-h-screen">
-      <header className="bg-card sticky top-0 border-b">
+      <header className="bg-card sticky top-0 z-40 border-b">
         <PageContainer className="flex h-[60px] items-center gap-3">
-          <Link
-            to="/"
+          <a
+            href="/"
             className="text-foreground flex min-w-0 items-center gap-2 no-underline"
           >
             <img
@@ -90,7 +90,7 @@ function App() {
                 UIUC Course Search
               </span>
             )}
-          </Link>
+          </a>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -112,8 +112,8 @@ function App() {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link
-                  to="/"
+                <a
+                  href="/"
                   aria-label="Home"
                   className={buttonVariants({
                     variant: 'ghost',
@@ -121,7 +121,7 @@ function App() {
                   })}
                 >
                   <HomeIcon aria-hidden />
-                </Link>
+                </a>
               </TooltipTrigger>
               <TooltipContent>Home</TooltipContent>
             </Tooltip>

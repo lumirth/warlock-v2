@@ -75,6 +75,12 @@ export function buildFilterClauses(
     params.push(filters.number);
   }
 
+  if (filters.crn) {
+    joinKeys.add("sections");
+    where.push("s.crn = ?");
+    params.push(filters.crn);
+  }
+
   if (filters.credits !== undefined) {
     where.push("c.credit_hours = ?");
     params.push(filters.credits);

@@ -26,6 +26,8 @@ export function EmptyResults({
   onRemoveChip: (chip: SearchChipDto) => void
   onApplyRecoveryGroup: (group: SearchRecoveryGroup) => void
 }) {
+  const removableChip = meta.ui?.chips.find((chip) => chip.removable)
+
   return (
     <Empty role="status" className="border">
       <EmptyHeader>
@@ -37,18 +39,13 @@ export function EmptyResults({
           Try removing a filter or using a broader phrase.
         </EmptyDescription>
       </EmptyHeader>
-      {meta.ui?.chips?.length || recoveryGroups.length ? (
+      {removableChip || recoveryGroups.length ? (
         <EmptyContent>
-          {meta.ui?.chips?.length ? (
+          {removableChip ? (
             <Button
               size="xs"
               variant="outline"
-              onClick={() =>
-                onRemoveChip(
-                  meta.ui!.chips.find((chip) => chip.removable) ??
-                    meta.ui!.chips[0]
-                )
-              }
+              onClick={() => onRemoveChip(removableChip)}
             >
               Remove one filter
             </Button>

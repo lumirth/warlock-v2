@@ -46,21 +46,17 @@ export function buildSearchViewModel(
     : state.draft.query.trim()
   const interpretedRequestQuery = interpretedRequest?.query ?? activeRequestQuery
   const resultCountLabel =
-    state.session.pagination?.resultCountLowerBound !== undefined
-      ? `${state.session.pagination.resultCountLowerBound.toLocaleString()}${
-          state.session.pagination.hasMore ? '+' : ''
-        } ${
-          state.session.pagination.resultCountLowerBound === 1 ? 'result' : 'results'
+    state.session.pagination?.totalResults !== undefined
+      ? `${state.session.pagination.totalResults.toLocaleString()} ${
+          state.session.pagination.totalResults === 1 ? 'result' : 'results'
         }`
       : `${state.session.results.length.toLocaleString()} ${
           state.session.results.length === 1 ? 'result' : 'results'
         }`
   const showingResultsLabel =
-    state.session.pagination?.resultCountLowerBound !== undefined &&
-    state.session.pagination.resultCountLowerBound > state.session.results.length
-      ? `Showing ${state.session.results.length.toLocaleString()} of ${
-          state.session.pagination.hasMore ? 'at least ' : ''
-        }${state.session.pagination.resultCountLowerBound.toLocaleString()}`
+    state.session.pagination?.totalResults !== undefined &&
+    state.session.pagination.totalResults > state.session.results.length
+      ? `Showing ${state.session.results.length.toLocaleString()} of ${state.session.pagination.totalResults.toLocaleString()}`
       : `Showing ${state.session.results.length.toLocaleString()}`
   const resultsHeadingLabel = state.session.meta?.query.raw
     ? `Results for ${state.session.meta.query.raw}`

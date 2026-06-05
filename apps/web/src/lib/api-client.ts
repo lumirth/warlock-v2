@@ -4,6 +4,7 @@ import type {
   FeedbackSubmitDto,
   SearchRequestDto,
   SearchResponseDto,
+  SearchTermOptionsDto,
 } from '@uiuc-course-search/query-types'
 import { searchRequestToQueryParams } from './search-request-query'
 
@@ -90,6 +91,10 @@ export class ApiClient {
       body: JSON.stringify(feedback),
       signal,
     })
+  }
+
+  async getTermOptions(signal?: AbortSignal): Promise<SearchTermOptionsDto> {
+    return this.fetch<SearchTermOptionsDto>('api/terms', { signal })
   }
 }
 

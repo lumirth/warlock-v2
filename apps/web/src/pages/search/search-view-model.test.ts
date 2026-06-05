@@ -51,7 +51,7 @@ describe('buildSearchViewModel', () => {
             timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
           },
           pagination: {
-            resultCountLowerBound: 41,
+            totalResults: 41,
             limit: 20,
             offset: 0,
             hasMore: true,
@@ -62,8 +62,8 @@ describe('buildSearchViewModel', () => {
     )
 
     expect(model.activeRequestQuery).toBe('online stats class')
-    expect(model.resultCountLabel).toBe('41+ results')
-    expect(model.showingResultsLabel).toBe('Showing 1 of at least 41')
+    expect(model.resultCountLabel).toBe('41 results')
+    expect(model.showingResultsLabel).toBe('Showing 1 of 41')
     expect(model.resultsHeadingLabel).toBe('Results for online stats class')
   })
 

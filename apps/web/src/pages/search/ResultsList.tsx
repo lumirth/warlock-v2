@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import type {
   CourseSummaryDto,
   MatchEvidence,
@@ -49,6 +50,7 @@ export function ResultsList({
   onRemoveChip,
   onApplyRecoveryGroup,
   onLoadMore,
+  feedbackAction,
 }: {
   meta: SearchMetaDto | null
   results: SearchCourseResultDto[]
@@ -62,6 +64,7 @@ export function ResultsList({
   resultsHeadingLabel: string
   showingResultsLabel: string
   recoveryGroups: SearchRecoveryGroup[]
+  feedbackAction?: ReactNode
   onSortFieldChange: (field: SortField) => void
   onDirectionToggle: () => void
   onViewChange: (view: ResultViewMode) => void
@@ -88,15 +91,18 @@ export function ResultsList({
               <div>
                 <h2 className="font-semibold">{resultsHeadingLabel}</h2>
               </div>
-              <ResultsToolbar
-                showingResultsLabel={showingResultsLabel}
-                sort={sort}
-                resultViewMode={resultViewMode}
-                isRefreshing={isRefreshingResults}
-                onSortFieldChange={onSortFieldChange}
-                onDirectionToggle={onDirectionToggle}
-                onViewChange={onViewChange}
-              />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <ResultsToolbar
+                  showingResultsLabel={showingResultsLabel}
+                  sort={sort}
+                  resultViewMode={resultViewMode}
+                  isRefreshing={isRefreshingResults}
+                  onSortFieldChange={onSortFieldChange}
+                  onDirectionToggle={onDirectionToggle}
+                  onViewChange={onViewChange}
+                />
+                {feedbackAction}
+              </div>
             </div>
           )}
           <p className="sr-only" aria-live="polite">

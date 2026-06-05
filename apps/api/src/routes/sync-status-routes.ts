@@ -3,11 +3,20 @@ import { TERM_STATUSES } from '../db/types.js';
 import { parseEnumParam } from '../http/params.js';
 import {
   buildSyncStatusResponse,
+  listPublicTermOptions,
   listTermsForAdmin,
 } from '../services/sync-status-service.js';
 import type { SyncRouteBindings } from '../services/sync-operations.js';
 
 export const syncStatusRoutes = new Hono<{ Bindings: SyncRouteBindings }>();
+
+syncStatusRoutes.get('/api/terms', async (c) => {
+  try {
+    return c.json(await listPublicTermOptions(c.env.DB));
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
 
 syncStatusRoutes.get('/admin/sync/status', async (c) => {
   return c.json(await buildSyncStatusResponse(c.env.DB, {

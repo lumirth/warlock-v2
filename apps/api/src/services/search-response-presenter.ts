@@ -80,7 +80,7 @@ export async function presentSearchResponse(input: {
       ui,
     },
     pagination: {
-      resultCountLowerBound: offset + pageResults.length + (hasMore ? 1 : 0),
+      totalResults: result.results.length,
       limit,
       offset,
       hasMore,

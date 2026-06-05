@@ -1,4 +1,5 @@
 import {
+  canonicalRequirementCode,
   getWorkloadTierLabel,
   type CourseRequirementDto,
   type CourseSummaryDto,
@@ -95,11 +96,11 @@ export function getChipClass(chip: SearchChipDto): string {
   return cn(
     chip.type === 'instructor' &&
       'border-primary/30 bg-primary/5 text-foreground',
-    chip.type === 'workload' &&
-      'border-warning/30 bg-warning/10 text-foreground',
+    chip.type === 'workload' && 'border-border bg-secondary text-foreground',
     (chip.type === 'courseCode' || chip.type === 'subject') &&
       'border-primary/30 bg-primary/5 text-foreground',
-    chip.type === 'semantic' && 'text-muted-foreground'
+    chip.type === 'semantic' && 'text-muted-foreground',
+    chip.type === 'assumption' && 'text-muted-foreground'
   )
 }
 
@@ -116,9 +117,19 @@ export function requirementLabel(requirement: CourseRequirementDto): string {
 
 export function courseRequirementLabels(course: CourseSummaryDto): string[] {
   if (course.requirements.length > 0) {
-    return course.requirements.map(requirementLabel)
+    return course.requirements.map(requirementShortLabel)
   }
   return []
+}
+
+function requirementShortLabel(requirement: CourseRequirementDto): string {
+  const categoryCode = canonicalRequirementCode(requirement.categoryId)
+  const attributeCode = canonicalRequirementCode(requirement.attributeCode)
+
+  if (categoryCode && attributeCode && categoryCode !== attributeCode) {
+    return `${categoryCode}:${attributeCode}`
+  }
+  return attributeCode ?? categoryCode ?? requirementLabel(requirement)
 }
 
 export function formatCourseLevel(course: CourseSummaryDto): string {

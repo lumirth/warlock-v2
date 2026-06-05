@@ -261,9 +261,11 @@ describe('buildSearchUiPlan', () => {
 
     expect(plan.chips).toEqual([
       expect.objectContaining({ type: 'online', label: 'Online', action: expect.any(Object) }),
-      expect.objectContaining({ type: 'assumption', label: 'Low workload preferred', action: expect.any(Object) }),
-      expect.objectContaining({ type: 'assumption', label: 'Low writing preferred', action: expect.any(Object) }),
+      expect.objectContaining({ type: 'assumption', label: 'Low workload preferred', removable: false }),
+      expect.objectContaining({ type: 'assumption', label: 'Low writing preferred', removable: false }),
     ]);
+    expect(plan.chips[1]).not.toHaveProperty('action');
+    expect(plan.chips[2]).not.toHaveProperty('action');
   });
 
   it('hides low-workload assumptions already represented by an easy workload chip', () => {
@@ -341,6 +343,40 @@ describe('buildSearchUiPlan', () => {
       keywordQuery: '',
       semanticQuery: '',
     }, '', request('gened')).filters?.requirement).toEqual(requirement);
+  });
+
+  it('removes one structured GenEd code without collapsing the rest of the requirement filter', () => {
+    const requirement = requirementFilter('any', ['HUM', 'US'])!;
+    const executableRequest = request('', { requirement });
+    const ui = buildUiPlan([{
+      type: 'requirement',
+      value: 'HUM, US',
+      metadata: { source: 'manual', confidence: 1, raw: 'any HUM, US' },
+    }], {
+      filters: { requirement },
+      keywordQuery: '',
+      semanticQuery: '',
+    }, '', executableRequest);
+
+    expect(ui.chips.map(chip => chip.label)).toEqual(['GenEd HUM', 'GenEd US']);
+    expect(ui.chips[0]).toMatchObject({
+      source: 'manual_override',
+      action: {
+        nextRequest: {
+          query: '',
+          filters: { requirement: singleRequirementFilter('US') },
+          sort: { field: 'relevance', direction: 'desc' },
+          scope: 'active',
+        },
+      },
+    });
+    expect(ui.chips[1]).toMatchObject({
+      action: {
+        nextRequest: {
+          filters: { requirement: singleRequirementFilter('HUM') },
+        },
+      },
+    });
   });
 
   it('preserves part-of-term filters in chips and advanced state', () => {

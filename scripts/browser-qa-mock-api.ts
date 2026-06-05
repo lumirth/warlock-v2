@@ -9,6 +9,7 @@ import type {
   SearchCourseMetadataDto,
   SearchRequestDto,
   SearchResponseDto,
+  SearchTermOptionsDto,
   SearchUiPlanDto,
 } from '@uiuc-course-search/query-types';
 import { singleRequirementFilter } from '@uiuc-course-search/query-types';
@@ -158,6 +159,33 @@ const courseDetailResponse: CourseDetailResponseDto = {
     cached: true,
     termStatus: 'active',
   },
+};
+
+const termOptionsResponse: SearchTermOptionsDto = {
+  terms: [
+    {
+      termId: '2027-fall',
+      term: 'fall',
+      year: 2027,
+      status: 'registrable',
+      label: 'Fall 2027',
+    },
+    {
+      termId: '2026-spring',
+      term: 'spring',
+      year: 2026,
+      status: 'active',
+      label: 'Spring 2026',
+    },
+    {
+      termId: '2025-fall',
+      term: 'fall',
+      year: 2025,
+      status: 'historical',
+      label: 'Fall 2025',
+    },
+  ],
+  years: [2027, 2026, 2025],
 };
 
 function courseVariant(overrides: CourseVariantOverride = {}): SearchCourseResultDto {
@@ -421,7 +449,7 @@ function searchResponse(query: string, limit: number, offset: number): SearchRes
       ui: searchUi(query),
     },
     pagination: {
-      resultCountLowerBound: allResults.length,
+      totalResults: allResults.length,
       limit,
       offset,
       hasMore,
@@ -473,6 +501,11 @@ const server = createServer((request, response) => {
 
   if (url.pathname === '/api/course/CS/225') {
     sendJson(response, 200, courseDetailResponse);
+    return;
+  }
+
+  if (url.pathname === '/api/terms') {
+    sendJson(response, 200, termOptionsResponse);
     return;
   }
 

@@ -83,6 +83,11 @@ export const DELIVERY_OPTIONS: SelectOption[] = [
   { value: 'false', label: 'In person' },
 ]
 
+export const CREDIT_OPTIONS: SelectOption[] = Array.from({ length: 9 }, (_, value) => ({
+  value: String(value),
+  label: value === 1 ? '1 credit' : `${value} credits`,
+}))
+
 export const STATUS_OPTIONS: SelectOption[] = SEARCH_STATUS_VALUES.map((value) => ({
   value,
   label: STATUS_LABELS[value],

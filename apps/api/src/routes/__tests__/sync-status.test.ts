@@ -3,6 +3,37 @@ import { Hono } from 'hono';
 import type { Ai, D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
 import { syncRoutes } from '../sync.js';
 
+type SyncTestBindings = {
+  DB: D1Database;
+  VECTORIZE: VectorizeIndex;
+  AI: Ai;
+  SELF: Fetcher;
+  GPA_CACHE: KVNamespace;
+  CURRENT_YEAR: string;
+  CURRENT_TERM: string;
+  CISAPI_BASE: string;
+  FRONTEND_BASE: string;
+  SYNC_CONCURRENCY: string;
+};
+
+function requestSyncRoute(path: string, db: D1Database) {
+  const app = new Hono<{ Bindings: SyncTestBindings }>();
+  app.route('/', syncRoutes);
+
+  return app.request(path, {}, {
+    DB: db,
+    VECTORIZE: {} as VectorizeIndex,
+    AI: {} as Ai,
+    SELF: {} as Fetcher,
+    GPA_CACHE: {} as KVNamespace,
+    CURRENT_YEAR: '2026',
+    CURRENT_TERM: 'spring',
+    CISAPI_BASE: 'https://example.invalid',
+    FRONTEND_BASE: 'https://example.invalid',
+    SYNC_CONCURRENCY: '1',
+  });
+}
+
 function createDb(): D1Database {
   return {
     prepare: vi.fn((sql: string) => ({
@@ -84,36 +115,90 @@ function createDb(): D1Database {
   } as unknown as D1Database;
 }
 
-describe('sync status route', () => {
-  it('reports sync_state and term_state health for admin operators', async () => {
-    const app = new Hono<{
-      Bindings: {
-        DB: D1Database;
-        VECTORIZE: VectorizeIndex;
-        AI: Ai;
-        SELF: Fetcher;
-        GPA_CACHE: KVNamespace;
-        CURRENT_YEAR: string;
-        CURRENT_TERM: string;
-        CISAPI_BASE: string;
-        FRONTEND_BASE: string;
-        SYNC_CONCURRENCY: string;
-      };
-    }>();
-    app.route('/', syncRoutes);
+function createCourseBackedTermDb(): D1Database {
+  return {
+    prepare: vi.fn((sql: string) => ({
+      all: vi.fn(async () => {
+        if (sql.includes('FROM term_state')) {
+          return { success: true, results: [] };
+        }
+        if (sql.includes('FROM courses')) {
+          return {
+            success: true,
+            results: [
+              { year: 2027, term: 'fall' },
+              { year: 2026, term: 'spring' },
+              { year: 2025, term: 'fall' },
+            ],
+          };
+        }
+        return { success: true, results: [] };
+      }),
+    })),
+  } as unknown as D1Database;
+}
 
-    const response = await app.request('/admin/sync/status', {}, {
-      DB: createDb(),
-      VECTORIZE: {} as VectorizeIndex,
-      AI: {} as Ai,
-      SELF: {} as Fetcher,
-      GPA_CACHE: {} as KVNamespace,
-      CURRENT_YEAR: '2026',
-      CURRENT_TERM: 'spring',
-      CISAPI_BASE: 'https://example.invalid',
-      FRONTEND_BASE: 'https://example.invalid',
-      SYNC_CONCURRENCY: '1',
-    });
+describe('sync status route', () => {
+  it('returns public term options for search filters', async () => {
+    const response = await requestSyncRoute('/api/terms', createDb());
+
+    expect(response.status).toBe(200);
+    const data = await response.json() as {
+      terms: Array<{ termId: string; label: string; term: string; year: number }>;
+      years: number[];
+    };
+
+    expect(data.terms).toEqual([
+      expect.objectContaining({
+        termId: '2026-winter',
+        label: 'Winter 2026',
+        term: 'winter',
+        year: 2026,
+      }),
+      expect.objectContaining({
+        termId: '2026-fall',
+        label: 'Fall 2026',
+        term: 'fall',
+        year: 2026,
+      }),
+    ]);
+    expect(data.years).toEqual([2026]);
+  });
+
+  it('falls back to course-backed years when term state has not been populated', async () => {
+    const response = await requestSyncRoute(
+      '/api/terms',
+      createCourseBackedTermDb()
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json() as {
+      terms: Array<{ termId: string; label: string; term: string; year: number; status: string }>;
+      years: number[];
+    };
+
+    expect(data.years).toEqual([2027, 2026, 2025]);
+    expect(data.terms).toEqual([
+      expect.objectContaining({
+        termId: '2027-fall',
+        label: 'Fall 2027',
+        status: 'active',
+      }),
+      expect.objectContaining({
+        termId: '2026-spring',
+        label: 'Spring 2026',
+        status: 'active',
+      }),
+      expect.objectContaining({
+        termId: '2025-fall',
+        label: 'Fall 2025',
+        status: 'active',
+      }),
+    ]);
+  });
+
+  it('reports sync_state and term_state health for admin operators', async () => {
+    const response = await requestSyncRoute('/admin/sync/status', createDb());
 
     expect(response.status).toBe(200);
     const data = await response.json() as {

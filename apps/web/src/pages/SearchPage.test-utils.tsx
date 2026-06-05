@@ -16,6 +16,7 @@ import type {
   SearchCourseResultDto,
   SearchRequestDto,
   SearchResponseDto,
+  SearchTermOptionsDto,
 } from '@uiuc-course-search/query-types'
 import { TestUiProvider } from '../test/TestUiProvider'
 import { SearchPage } from './SearchPage'
@@ -23,6 +24,10 @@ import { SearchPage } from './SearchPage'
 const apiMock = vi.hoisted(() => ({
   api: {
     search: vi.fn(),
+    getTermOptions: vi.fn(async (): Promise<SearchTermOptionsDto> => ({
+      terms: [],
+      years: [],
+    })),
   },
 }))
 
@@ -127,7 +132,7 @@ export function searchResponse(
       nextRequest: request,
       timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
     },
-    pagination: { resultCountLowerBound: results.length, limit: 20, offset: 0 },
+    pagination: { totalResults: results.length, limit: 20, offset: 0 },
   }
 }
 
