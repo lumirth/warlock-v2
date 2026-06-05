@@ -94,11 +94,7 @@ export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[]
 
 export function getChipClass(chip: SearchChipDto): string {
   return cn(
-    chip.type === 'instructor' &&
-      'border-primary/30 bg-primary/5 text-foreground',
-    chip.type === 'workload' && 'border-border bg-secondary text-foreground',
-    (chip.type === 'courseCode' || chip.type === 'subject') &&
-      'border-primary/30 bg-primary/5 text-foreground',
+    chip.removable && 'border-border bg-secondary text-secondary-foreground',
     chip.type === 'semantic' && 'text-muted-foreground',
     chip.type === 'assumption' && 'text-muted-foreground'
   )

@@ -412,6 +412,50 @@ describe('buildSearchUiPlan', () => {
     });
   });
 
+  it('removes orphan GenEd cue text when removing a single natural-language GenEd chip', () => {
+    const executableRequest = request('easy humanities gen ed');
+    const ui = buildUiPlan([{
+      type: 'requirement',
+      value: 'HUM',
+      metadata: { source: 'alias', confidence: 0.9, raw: 'humanities' },
+    }], {
+      filters: { requirement: singleRequirementFilter('HUM') },
+      keywordQuery: '',
+      semanticQuery: '',
+    }, '', executableRequest);
+
+    expect(ui.chips.map(chip => chip.label)).toEqual(['GenEd HUM']);
+    expect(ui.chips[0].action?.nextRequest).toEqual({
+      query: 'easy',
+      sort: { field: 'relevance', direction: 'desc' },
+      scope: 'active',
+    });
+  });
+
+  it('keeps GenEd cue text when another concrete natural-language GenEd remains', () => {
+    const executableRequest = request('humanities and social science gen ed');
+    const ui = buildUiPlan([
+      {
+        type: 'requirement',
+        value: 'HUM',
+        metadata: { source: 'alias', confidence: 0.9, raw: 'humanities' },
+      },
+      {
+        type: 'requirement',
+        value: 'SBS',
+        metadata: { source: 'alias', confidence: 0.9, raw: 'social science' },
+      },
+    ], {
+      filters: { requirement: requirementFilter('any', ['HUM', 'SBS']) },
+      keywordQuery: '',
+      semanticQuery: '',
+    }, '', executableRequest);
+
+    expect(ui.chips.map(chip => chip.label)).toEqual(['GenEd HUM', 'GenEd SBS']);
+    expect(ui.chips[0].action?.nextRequest.query).toBe('social science gen ed');
+    expect(ui.chips[1].action?.nextRequest.query).toBe('humanities gen ed');
+  });
+
   it('preserves part-of-term filters in chips and advanced state', () => {
     const plan = buildUiPlan([{
       type: 'partOfTerm',

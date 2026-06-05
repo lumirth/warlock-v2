@@ -1,6 +1,8 @@
 import {
+  canonicalRequirementCode,
   canonicalRequirementCodes,
   coerceSearchRequestDto,
+  GENED_REQUIREMENT_OPTIONS,
   requirementFilter,
   searchRequestHasFilters,
   type NormalizedSearchRequestDto,
@@ -37,7 +39,10 @@ export function removeSearchIntentAction(
 
   return searchActionFromRequest({
     ...request,
-    query: removeTextFromQuery(request.query, textToRemove ?? ""),
+    query: cleanupQueryAfterIntentRemoval(
+      removeTextFromQuery(request.query, textToRemove ?? ""),
+      filter,
+    ),
   });
 }
 
@@ -187,4 +192,143 @@ function removeTextFromQuery(source: string, textToRemove: string): string {
   return `${normalizedSource.slice(0, index)} ${normalizedSource.slice(index + normalizedRemove.length)}`
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function cleanupQueryAfterIntentRemoval(
+  query: string,
+  filter: Partial<SearchRequestFiltersDto> | undefined,
+): string {
+  const removedRequirementCodes = requirementCodesFromFilter(filter);
+  if (removedRequirementCodes.length === 0) return query;
+
+  return cleanupQueryAfterRequirementRemoval(query, removedRequirementCodes);
+}
+
+function requirementCodesFromFilter(
+  filter: Partial<SearchRequestFiltersDto> | undefined,
+): string[] {
+  if (!filter || !isRequirementFilterValue(filter.requirement)) return [];
+  return canonicalRequirementCodes(filter.requirement.codes);
+}
+
+function cleanupQueryAfterRequirementRemoval(
+  query: string,
+  removedCodes: readonly string[],
+): string {
+  const removedCodeSet = new Set(canonicalRequirementCodes(removedCodes));
+  const withoutRemovedRequirementTerms = cleanupDanglingConnectors(
+    cleanupRequirementCueConnectors(
+      removeRequirementTermsForCodes(query, removedCodeSet),
+    ),
+  );
+
+  if (containsConcreteRequirementTerm(withoutRemovedRequirementTerms, removedCodeSet)) {
+    return withoutRemovedRequirementTerms;
+  }
+
+  return cleanupDanglingConnectors(
+    withoutRemovedRequirementTerms
+      .replace(/\bgen[\s-]?eds?\b/gi, " ")
+      .replace(/\bgeneral\s+education\b/gi, " ")
+      .replace(/\brequirements?\b/gi, " ")
+      .replace(/\bcategor(?:y|ies)\b/gi, " "),
+  );
+}
+
+function cleanupRequirementCueConnectors(query: string): string {
+  return query
+    .replace(
+      /\s+(?:and|or)\s+(?=(?:gen[\s-]?eds?|general\s+education|requirements?|categor(?:y|ies))\b)/gi,
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function removeRequirementTermsForCodes(
+  query: string,
+  removedCodes: ReadonlySet<string>,
+): string {
+  let nextQuery = query;
+  for (const term of requirementTermsForCodes(removedCodes)) {
+    nextQuery = removeRequirementPhraseFromQuery(nextQuery, term);
+  }
+  return nextQuery;
+}
+
+function containsConcreteRequirementTerm(
+  query: string,
+  ignoredCodes: ReadonlySet<string>,
+): boolean {
+  for (const option of GENED_REQUIREMENT_OPTIONS) {
+    const code = canonicalRequirementCode(option.code);
+    if (!code || ignoredCodes.has(code)) continue;
+    if (requirementOptionTerms(option).some(term => queryContainsPhrase(query, term))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function requirementTermsForCodes(removedCodes: ReadonlySet<string>): string[] {
+  const terms = new Set<string>();
+  for (const option of GENED_REQUIREMENT_OPTIONS) {
+    const code = canonicalRequirementCode(option.code);
+    if (!code || !removedCodes.has(code)) continue;
+    for (const term of requirementOptionTerms(option)) {
+      terms.add(term);
+    }
+  }
+  return Array.from(terms).sort((left, right) => right.length - left.length);
+}
+
+function requirementOptionTerms(
+  option: (typeof GENED_REQUIREMENT_OPTIONS)[number],
+): string[] {
+  return [
+    option.code,
+    option.label,
+    ...option.aliases,
+  ].filter(Boolean);
+}
+
+function queryContainsPhrase(query: string, phrase: string): boolean {
+  const normalizedQuery = normalizePhrase(query);
+  const normalizedPhrase = normalizePhrase(phrase);
+  if (!normalizedQuery || !normalizedPhrase) return false;
+  return new RegExp(`(?:^|\\s)${escapeRegex(normalizedPhrase)}(?=$|\\s)`, "i")
+    .test(normalizedQuery);
+}
+
+function removeRequirementPhraseFromQuery(query: string, phrase: string): string {
+  const tokens = phrase.toLowerCase().match(/[a-z0-9+#]+/g);
+  if (!tokens?.length) return query;
+
+  const body = tokens.map(escapeRegex).join("[\\s/_&-]+");
+  return query
+    .replace(new RegExp(`(^|[^a-z0-9+#])${body}(?=$|[^a-z0-9+#])`, "gi"), " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizePhrase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9+#]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanupDanglingConnectors(query: string): string {
+  return query
+    .replace(/\s+/g, " ")
+    .replace(/^\s*(?:and|or|,)+\s*/i, "")
+    .replace(/\s*(?:and|or|,)+\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
