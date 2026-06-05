@@ -7,6 +7,7 @@ import {
 } from './embeddings.js';
 
 const EMBEDDING_BACKFILL_BATCH_SIZE = 25;
+const REQUIREMENT_LOOKUP_BATCH_SIZE = 50;
 const TERM_ORDER_SQL = `
   CASE c.term
     WHEN 'fall' THEN 4
@@ -157,28 +158,31 @@ async function loadEmbeddingRequirements(
   const uniqueIds = [...new Set(courseIds)].filter(Boolean);
   if (uniqueIds.length === 0) return requirementsByCourseId;
 
-  const placeholders = uniqueIds.map(() => '?').join(',');
-  const rows = await db
-    .prepare(
-      `
-      SELECT course_id, category_id, category_name, attribute_code, attribute_name
-      FROM course_gened
-      WHERE course_id IN (${placeholders})
-      ORDER BY course_id, category_id, attribute_code
-      `,
-    )
-    .bind(...uniqueIds)
-    .all<RequirementRow>();
+  for (let index = 0; index < uniqueIds.length; index += REQUIREMENT_LOOKUP_BATCH_SIZE) {
+    const batch = uniqueIds.slice(index, index + REQUIREMENT_LOOKUP_BATCH_SIZE);
+    const placeholders = batch.map(() => '?').join(',');
+    const rows = await db
+      .prepare(
+        `
+        SELECT course_id, category_id, category_name, attribute_code, attribute_name
+        FROM course_gened
+        WHERE course_id IN (${placeholders})
+        ORDER BY course_id, category_id, attribute_code
+        `,
+      )
+      .bind(...batch)
+      .all<RequirementRow>();
 
-  for (const row of rows.results) {
-    const requirements = requirementsByCourseId.get(row.course_id) ?? [];
-    requirements.push({
-      categoryId: row.category_id,
-      categoryName: row.category_name,
-      attributeCode: canonicalRequirementCode(row.attribute_code),
-      attributeName: row.attribute_name,
-    });
-    requirementsByCourseId.set(row.course_id, requirements);
+    for (const row of rows.results) {
+      const requirements = requirementsByCourseId.get(row.course_id) ?? [];
+      requirements.push({
+        categoryId: row.category_id,
+        categoryName: row.category_name,
+        attributeCode: canonicalRequirementCode(row.attribute_code),
+        attributeName: row.attribute_name,
+      });
+      requirementsByCourseId.set(row.course_id, requirements);
+    }
   }
 
   return requirementsByCourseId;
