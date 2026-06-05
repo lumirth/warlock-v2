@@ -11,13 +11,13 @@ import {
   requirementFilter,
 } from '@uiuc-course-search/query-types';
 import { withSearchPlanUpdates } from './search-plan-model.js';
-import { GENERIC_GENED_CODES } from './gened-codes.js';
+import { GENERIC_REQUIREMENT_CODES } from './requirement-codes.js';
 import {
   ASYNC_PATTERNS,
   COMPARISON_PATTERNS,
   COMPRESSED_TERM_PATTERNS,
   GENERIC_DECISION_PATTERNS,
-  GENERIC_GENED_PATTERNS,
+  GENERIC_REQUIREMENT_PATTERNS,
   HELP_PATTERNS,
   NON_MAJOR_PATTERNS,
   REQUIREMENT_PATTERNS,
@@ -87,8 +87,8 @@ function applyDecisionSearchRescue(
     queryTypes.add('exact_course');
   }
 
-  if (hasGenericGenedIntent(rawQuery) && !hasRequirementFilter(plan.filters)) {
-    plan.filters.requirement = requirementFilter("any", GENERIC_GENED_CODES);
+  if (hasGenericRequirementIntent(rawQuery) && !hasRequirementFilter(plan.filters)) {
+    plan.filters.requirement = requirementFilter("any", GENERIC_REQUIREMENT_CODES);
   }
 
   if (hasRequirementIntent(plan, rawQuery)) {
@@ -259,8 +259,8 @@ function hasRequirementIntent(plan: SearchPlan, rawQuery: string): boolean {
     || REQUIREMENT_PATTERNS.some(pattern => pattern.test(rawQuery));
 }
 
-function hasGenericGenedIntent(rawQuery: string): boolean {
-  return GENERIC_GENED_PATTERNS.some(pattern => pattern.test(rawQuery));
+function hasGenericRequirementIntent(rawQuery: string): boolean {
+  return GENERIC_REQUIREMENT_PATTERNS.some(pattern => pattern.test(rawQuery));
 }
 
 function hasScheduleIntent(plan: SearchPlan, rawQuery: string): boolean {

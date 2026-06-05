@@ -19,7 +19,7 @@ import { EmptyResults } from './EmptyResults'
 import { CourseResultsTable } from './ResultsTable'
 import { ResultsToolbar } from './ResultsToolbar'
 import {
-  courseGenedLabels,
+  courseRequirementLabels,
   formatTermLabel,
   getCourseKey,
   getCourseMetrics,
@@ -219,7 +219,7 @@ function CourseResultCard({ result }: { result: SearchCourseResultDto }) {
                   {course.primaryInstructor}
                 </span>
               )}
-              {courseGenedLabels(course).map((label) => (
+              {courseRequirementLabels(course).map((label) => (
                 <span key={label}>{label}</span>
               ))}
             </div>

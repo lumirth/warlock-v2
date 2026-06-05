@@ -1,14 +1,14 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { CourseGenedDto } from "@uiuc-course-search/query-types";
-import { canonicalGenedCode } from "../services/gened-codes.js";
+import type { CourseRequirementDto } from "@uiuc-course-search/query-types";
+import { canonicalRequirementCode } from "../services/requirement-codes.js";
 
 const SEARCH_DTO_BATCH_SIZE = 50;
 
-export async function loadSearchResultGeneds(
+export async function loadSearchResultRequirements(
   db: D1Database,
   courseIds: string[],
-): Promise<Map<string, CourseGenedDto[]>> {
-  const genedsByCourseId = new Map<string, CourseGenedDto[]>();
+): Promise<Map<string, CourseRequirementDto[]>> {
+  const requirementsByCourseId = new Map<string, CourseRequirementDto[]>();
   const uniqueIds = [...new Set(courseIds)].filter(Boolean);
 
   for (let index = 0; index < uniqueIds.length; index += SEARCH_DTO_BATCH_SIZE) {
@@ -33,16 +33,16 @@ export async function loadSearchResultGeneds(
       }>();
 
     for (const row of result.results) {
-      const geneds = genedsByCourseId.get(row.course_id) ?? [];
-      geneds.push({
+      const requirements = requirementsByCourseId.get(row.course_id) ?? [];
+      requirements.push({
         categoryId: row.category_id,
         categoryName: row.category_name,
-        attributeCode: canonicalGenedCode(row.attribute_code),
+        attributeCode: canonicalRequirementCode(row.attribute_code),
         attributeName: row.attribute_name,
       });
-      genedsByCourseId.set(row.course_id, geneds);
+      requirementsByCourseId.set(row.course_id, requirements);
     }
   }
 
-  return genedsByCourseId;
+  return requirementsByCourseId;
 }

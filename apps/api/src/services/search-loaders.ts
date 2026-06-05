@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type { Course } from '../db/types.js';
-import { canonicalGenedCode } from "./gened-codes.js";
+import { canonicalRequirementCode } from "./requirement-codes.js";
 
 const D1_ID_BATCH_SIZE = 50;
 
@@ -60,7 +60,7 @@ export async function fetchRequirementCodesByCourseId(
     for (const row of result.results) {
       const codes = requirementCodesByCourseId.get(row.course_id) ?? [];
       for (const value of [row.category_id, row.attribute_code]) {
-        const code = canonicalGenedCode(value);
+        const code = canonicalRequirementCode(value);
         if (code && !codes.includes(code)) {
           codes.push(code);
         }

@@ -29,7 +29,6 @@ export async function workloadEvidenceLaneSearch(
     ${filtered.joinSql}
     ${filtered.whereSql([signalCondition])}
     ${filtered.groupBySql("c.id")}
-    ${filtered.havingSql}
     ORDER BY evidence_score DESC, c.year DESC, c.subject, c.number
     LIMIT ?
   `;

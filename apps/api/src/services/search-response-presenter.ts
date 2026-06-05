@@ -6,7 +6,7 @@ import type {
 } from "@uiuc-course-search/query-types";
 import { coerceSearchRequestDto } from "@uiuc-course-search/query-types";
 import { searchResultToCourseDto } from "../dto/course.js";
-import { loadSearchResultGeneds } from "../dto/search-geneds.js";
+import { loadSearchResultRequirements } from "../dto/search-requirements.js";
 import type { SearchRequestPagination } from "../http/search-request.js";
 import { getSearchTermSummary } from "./term-state.js";
 import type { SearchPipelineResult } from "./search-response.js";
@@ -33,15 +33,16 @@ export async function presentSearchResponse(input: {
     sort: appliedSort,
     scope: appliedScope,
   };
-  const nextRequest = buildInterpretedSearchRequest(
+  const nextRequest = coerceSearchRequestDto(effectiveRequest);
+  const interpretedRequest = buildInterpretedSearchRequest(
     result.meta.extraction.hints,
     result.meta.plan,
     result.meta.query.residual,
     effectiveRequest,
   );
-  const normalizedNextRequest = coerceSearchRequestDto(nextRequest);
-  const [genedsByCourseId, term] = await Promise.all([
-    loadSearchResultGeneds(
+  const normalizedInterpretedRequest = coerceSearchRequestDto(interpretedRequest);
+  const [requirementsByCourseId, term] = await Promise.all([
+    loadSearchResultRequirements(
       db,
       pageResults.map((searchResult) => searchResult.course.id),
     ),
@@ -51,7 +52,7 @@ export async function presentSearchResponse(input: {
     result.meta.extraction.hints,
     result.meta.plan,
     result.meta.query.residual,
-    normalizedNextRequest,
+    normalizedInterpretedRequest,
   );
 
   return {
@@ -60,7 +61,7 @@ export async function presentSearchResponse(input: {
         plan: result.meta.plan,
         rawQuery: result.meta.query.raw,
         hints: result.meta.extraction.hints,
-        requirementCodes: genedsByCourseId.get(searchResult.course.id) ?? [],
+        requirementCodes: requirementsByCourseId.get(searchResult.course.id) ?? [],
       }),
     ),
     meta: {
@@ -71,6 +72,7 @@ export async function presentSearchResponse(input: {
       appliedSort,
       appliedScope,
       nextRequest,
+      interpretedRequest,
       term,
       ui,
     },

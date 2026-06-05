@@ -7,6 +7,9 @@ import {
   requirementFilter,
   type RequirementFilterMode,
   type AdvancedSearchStateDto,
+  type SearchRequestFilterKey,
+  type SearchRequestFiltersDto,
+  type SearchScope,
 } from '@uiuc-course-search/query-types'
 import {
   Field,
@@ -43,14 +46,17 @@ const REQUIREMENT_MATCH_OPTIONS = [
 
 export function AdvancedSearchFields({
   advancedDraft,
-  onAdvancedDraftChange,
+  onAdvancedDraftFilterChange,
+  onAdvancedDraftScopeChange,
 }: {
   advancedDraft: AdvancedSearchStateDto
-  onAdvancedDraftChange: <Key extends keyof AdvancedSearchStateDto>(
+  onAdvancedDraftFilterChange: <Key extends SearchRequestFilterKey>(
     key: Key,
-    value: AdvancedSearchStateDto[Key]
+    value: SearchRequestFiltersDto[Key]
   ) => void
+  onAdvancedDraftScopeChange: (value?: SearchScope) => void
 }) {
+  const filters = advancedDraft.filters
   return (
     <div className="flex flex-col gap-5">
       <FieldSet>
@@ -61,9 +67,9 @@ export function AdvancedSearchFields({
             label="Subject"
             maxLength={8}
             placeholder="CS"
-            value={advancedDraft.subject ?? ''}
+            value={filters.subject ?? ''}
             onChange={(value) =>
-              onAdvancedDraftChange('subject', value.toUpperCase() || undefined)
+              onAdvancedDraftFilterChange('subject', value.toUpperCase() || undefined)
             }
           />
           <AdvancedTextField
@@ -72,18 +78,18 @@ export function AdvancedSearchFields({
             inputMode="numeric"
             maxLength={4}
             placeholder="225"
-            value={advancedDraft.number ?? ''}
+            value={filters.number ?? ''}
             onChange={(value) =>
-              onAdvancedDraftChange('number', value || undefined)
+              onAdvancedDraftFilterChange('number', value || undefined)
             }
           />
           <AdvancedTextField
             id="advanced-instructor"
             label="Instructor"
             placeholder="Fagen"
-            value={advancedDraft.instructor ?? ''}
+            value={filters.instructor ?? ''}
             onChange={(value) =>
-              onAdvancedDraftChange('instructor', value || undefined)
+              onAdvancedDraftFilterChange('instructor', value || undefined)
             }
           />
           <AdvancedTextField
@@ -91,13 +97,13 @@ export function AdvancedSearchFields({
             label="Requirement codes"
             maxLength={48}
             placeholder="HUM, US"
-            value={requirementCodesText(advancedDraft.requirement)}
+            value={requirementCodesText(filters.requirement)}
             onChange={(value) =>
-              onAdvancedDraftChange(
+              onAdvancedDraftFilterChange(
                 'requirement',
                 requirementFilterFromText(
                   value,
-                  requirementMatchMode(advancedDraft.requirement)
+                  requirementMatchMode(filters.requirement)
                 )
               )
             }
@@ -106,13 +112,13 @@ export function AdvancedSearchFields({
             id="advanced-requirement-mode"
             label="Requirement match"
             placeholder="Any listed"
-            value={requirementMatchMode(advancedDraft.requirement)}
+            value={requirementMatchMode(filters.requirement)}
             options={REQUIREMENT_MATCH_OPTIONS}
             onChange={(value) =>
-              onAdvancedDraftChange(
+              onAdvancedDraftFilterChange(
                 'requirement',
                 requirementFilterFromText(
-                  requirementCodesText(advancedDraft.requirement),
+                  requirementCodesText(filters.requirement),
                   value === 'all' ? 'all' : 'any'
                 )
               )
@@ -122,10 +128,10 @@ export function AdvancedSearchFields({
             id="advanced-level"
             label="Level"
             placeholder="Any level"
-            value={advancedDraft.level?.toString()}
+            value={filters.level?.toString()}
             options={LEVEL_OPTIONS}
             onChange={(value) => {
-              onAdvancedDraftChange('level', levelFilterValue(value))
+              onAdvancedDraftFilterChange('level', levelFilterValue(value))
             }}
           />
         </FieldGroup>
@@ -138,10 +144,10 @@ export function AdvancedSearchFields({
             id="advanced-term"
             label="Term"
             placeholder="Any term"
-            value={advancedDraft.term}
+            value={filters.term}
             options={TERM_OPTIONS}
             onChange={(value) =>
-              onAdvancedDraftChange('term', termFilterValue(value))
+              onAdvancedDraftFilterChange('term', termFilterValue(value))
             }
           />
           <AdvancedTextField
@@ -150,10 +156,10 @@ export function AdvancedSearchFields({
             inputMode="numeric"
             maxLength={4}
             placeholder="2026"
-            value={advancedDraft.year?.toString() ?? ''}
+            value={filters.year?.toString() ?? ''}
             onChange={(value) => {
               const year = parseInt(value, 10)
-              onAdvancedDraftChange(
+              onAdvancedDraftFilterChange(
                 'year',
                 Number.isNaN(year) ? undefined : year
               )
@@ -164,28 +170,28 @@ export function AdvancedSearchFields({
             label="Days"
             maxLength={7}
             placeholder="MWF"
-            value={advancedDraft.days ?? ''}
+            value={filters.days ?? ''}
             onChange={(value) =>
-              onAdvancedDraftChange('days', value.toUpperCase() || undefined)
+              onAdvancedDraftFilterChange('days', value.toUpperCase() || undefined)
             }
           />
           <AdvancedSelectField
             id="advanced-time"
             label="Time"
             placeholder="Any time"
-            value={advancedDraft.time}
+            value={filters.time}
             options={TIME_OPTIONS}
             onChange={(value) =>
-              onAdvancedDraftChange('time', timeFilterValue(value))
+              onAdvancedDraftFilterChange('time', timeFilterValue(value))
             }
           />
           <AdvancedSelectField
             id="advanced-part-of-term"
             label="Part of term"
             placeholder="Any part"
-            value={advancedDraft.partOfTerm}
+            value={filters.partOfTerm}
             options={PART_OF_TERM_OPTIONS}
-            onChange={(value) => onAdvancedDraftChange('partOfTerm', value)}
+            onChange={(value) => onAdvancedDraftFilterChange('partOfTerm', value)}
           />
         </FieldGroup>
         <AdvancedCheckboxField
@@ -194,7 +200,7 @@ export function AdvancedSearchFields({
           description="Add historical offerings to the result pool."
           checked={advancedDraft.scope === 'all'}
           onChange={(checked) =>
-            onAdvancedDraftChange('scope', checked ? 'all' : undefined)
+            onAdvancedDraftScopeChange(checked ? 'all' : undefined)
           }
         />
       </FieldSet>
@@ -208,10 +214,10 @@ export function AdvancedSearchFields({
             inputMode="numeric"
             maxLength={2}
             placeholder="3"
-            value={advancedDraft.credits?.toString() ?? ''}
+            value={filters.credits?.toString() ?? ''}
             onChange={(value) => {
               const credits = parseInt(value, 10)
-              onAdvancedDraftChange(
+              onAdvancedDraftFilterChange(
                 'credits',
                 Number.isNaN(credits) ? undefined : credits
               )
@@ -222,13 +228,13 @@ export function AdvancedSearchFields({
             label="Delivery"
             placeholder="Any delivery"
             value={
-              advancedDraft.online === undefined
+              filters.online === undefined
                 ? undefined
-                : String(advancedDraft.online)
+                : String(filters.online)
             }
             options={DELIVERY_OPTIONS}
             onChange={(value) =>
-              onAdvancedDraftChange(
+              onAdvancedDraftFilterChange(
                 'online',
                 value === undefined ? undefined : value === 'true'
               )
@@ -238,20 +244,20 @@ export function AdvancedSearchFields({
             id="advanced-status"
             label="Status"
             placeholder="Any status"
-            value={advancedDraft.status}
+            value={filters.status}
             options={STATUS_OPTIONS}
             onChange={(value) =>
-              onAdvancedDraftChange('status', statusFilterValue(value))
+              onAdvancedDraftFilterChange('status', statusFilterValue(value))
             }
           />
           <AdvancedSelectField
             id="advanced-workload"
             label="Workload"
             placeholder="Any workload"
-            value={advancedDraft.workload}
+            value={filters.workload}
             options={WORKLOAD_OPTIONS}
             onChange={(value) =>
-              onAdvancedDraftChange(
+              onAdvancedDraftFilterChange(
                 'workload',
                 value === 'easy' || value === 'hard' ? value : undefined
               )
@@ -298,37 +304,37 @@ function AdvancedTextField({
 
 function termFilterValue(
   value: string | undefined
-): AdvancedSearchStateDto['term'] {
+): SearchRequestFiltersDto['term'] {
   return isSearchTermFilter(value) ? value : undefined
 }
 
 function timeFilterValue(
   value: string | undefined
-): AdvancedSearchStateDto['time'] {
+): SearchRequestFiltersDto['time'] {
   return isSearchTimeFilter(value) ? value : undefined
 }
 
 function statusFilterValue(
   value: string | undefined
-): AdvancedSearchStateDto['status'] {
+): SearchRequestFiltersDto['status'] {
   return isSearchStatusFilter(value) ? value : undefined
 }
 
 function levelFilterValue(
   value: string | undefined
-): AdvancedSearchStateDto['level'] {
+): SearchRequestFiltersDto['level'] {
   const level = value ? parseInt(value, 10) : NaN
   return isSearchLevelFilter(level) ? level : undefined
 }
 
 function requirementCodesText(
-  requirement: AdvancedSearchStateDto['requirement']
+  requirement: SearchRequestFiltersDto['requirement']
 ): string {
   return requirement?.codes.join(', ') ?? ''
 }
 
 function requirementMatchMode(
-  requirement: AdvancedSearchStateDto['requirement']
+  requirement: SearchRequestFiltersDto['requirement']
 ): Extract<RequirementFilterMode, 'any' | 'all'> {
   return requirement?.mode === 'all' ? 'all' : 'any'
 }
@@ -336,7 +342,7 @@ function requirementMatchMode(
 function requirementFilterFromText(
   value: string,
   mode: Extract<RequirementFilterMode, 'any' | 'all'>
-): AdvancedSearchStateDto['requirement'] {
+): SearchRequestFiltersDto['requirement'] {
   const codes = value
     .split(',')
     .map((code) => code.trim().toUpperCase())

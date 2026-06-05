@@ -1,7 +1,7 @@
 import {
   effectiveRequirementFilter,
   getQualityTierLabel,
-  type CourseGenedDto,
+  type CourseRequirementDto,
   type MatchEvidence,
   type MatchEvidenceKind,
   type MatchEvidenceSource,
@@ -11,7 +11,7 @@ import {
 } from '@uiuc-course-search/query-types';
 import type { Hint, SearchPlan } from './search-planner-types.js';
 import type { SearchResult } from './search-types.js';
-import { isGenericAnyGenedFilter } from './gened-codes.js';
+import { isGenericAnyRequirementFilter } from './requirement-codes.js';
 import {
   matchingRequirementCodes,
   searchResultRequirementCodes,
@@ -21,7 +21,7 @@ export type SearchResultEvidenceContext = {
   plan: SearchPlan;
   rawQuery: string;
   hints?: Hint[];
-  requirementCodes?: CourseGenedDto[];
+  requirementCodes?: CourseRequirementDto[];
 };
 
 export type SearchResultPresentation = {
@@ -137,17 +137,17 @@ export function buildMatchEvidence(
   }
 
   const requirement = effectiveRequirementFilter(filters);
-  const genedFilters = requirement?.codes ?? [];
+  const requirementFilters = requirement?.codes ?? [];
   const courseRequirementCodes = resultRequirementCodes(result, context);
-  if (genedFilters.length > 0) {
-    const isGenericGened = requirement?.mode === 'any' && isGenericAnyGenedFilter(requirement.codes);
-    const matchedCodes = matchingRequirementCodes(courseRequirementCodes, genedFilters);
+  if (requirementFilters.length > 0) {
+    const isGenericRequirement = requirement?.mode === 'any' && isGenericAnyRequirementFilter(requirement.codes);
+    const matchedCodes = matchingRequirementCodes(courseRequirementCodes, requirementFilters);
     if (matchedCodes.length > 0) {
       addEvidence(
         evidence,
         seen,
         'requirement',
-        isGenericGened ? 'Any Requirement' : `Requirement ${genedFilters.join(', ')}`,
+        isGenericRequirement ? 'Any Requirement' : `Requirement ${requirementFilters.join(', ')}`,
         'filter',
         'hard',
         matchedCodes.join(', '),

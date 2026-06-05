@@ -297,7 +297,10 @@ describe('Worker API integration', () => {
           qualityScore: number | null;
           workloadScore: number | null;
         };
-        sections?: Array<{ crn: string; status: string }>;
+        sections?: Array<{
+          crn: string;
+          availability: { status: string; label: string };
+        }>;
       };
       cache?: {
         cached?: boolean;
@@ -323,6 +326,9 @@ describe('Worker API integration', () => {
         termStatus: 'active',
       },
     });
-    expect(data.course.sections?.[0]).toMatchObject({ crn: '12345', status: 'Open' });
+    expect(data.course.sections?.[0]).toMatchObject({
+      crn: '12345',
+      availability: { status: 'open', label: 'Open' },
+    });
   });
 });

@@ -54,8 +54,13 @@ export function abortError(): Error {
   return error
 }
 
-type SearchResultOverride = Omit<Partial<CourseSummaryDto>, 'metrics' | 'registration'> & {
+type SearchResultOverride = Omit<
+  Partial<CourseSummaryDto>,
+  'metrics' | 'catalog' | 'scheduleNotes' | 'registration'
+> & {
   metrics?: Partial<CourseSummaryDto['metrics']>
+  catalog?: Partial<CourseSummaryDto['catalog']>
+  scheduleNotes?: Partial<CourseSummaryDto['scheduleNotes']>
   registration?: Partial<CourseSummaryDto['registration']>
   search?: SearchCourseMetadataDto
   matchEvidence?: MatchEvidence[]
@@ -83,11 +88,15 @@ export function course(overrides: SearchResultOverride = {}): SearchCourseResult
       qualityScore: overrides.metrics?.qualityScore ?? null,
       workloadScore: overrides.metrics?.workloadScore ?? null,
     },
+    catalog: {
+      courseInfo: overrides.catalog?.courseInfo ?? null,
+      degreeAttributes: overrides.catalog?.degreeAttributes ?? null,
+    },
+    scheduleNotes: {
+      classScheduleInfo: overrides.scheduleNotes?.classScheduleInfo ?? null,
+      dateRangeText: overrides.scheduleNotes?.dateRangeText ?? null,
+    },
     registration: {
-      courseInfo: overrides.registration?.courseInfo ?? null,
-      degreeAttributes: overrides.registration?.degreeAttributes ?? null,
-      classScheduleInfo: overrides.registration?.classScheduleInfo ?? null,
-      dateRangeText: overrides.registration?.dateRangeText ?? null,
       registrationNotes: overrides.registration?.registrationNotes ?? null,
       approvalCode: overrides.registration?.approvalCode ?? null,
     },
@@ -107,7 +116,7 @@ export function course(overrides: SearchResultOverride = {}): SearchCourseResult
 
 export function searchResponse(
   results: SearchCourseResultDto[],
-  nextRequest: SearchRequestDto | string = 'cs'
+  nextRequest: SearchRequestDto | string
 ): SearchResponseDto {
   const request =
     typeof nextRequest === 'string' ? { query: nextRequest } : nextRequest

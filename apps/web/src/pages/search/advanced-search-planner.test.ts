@@ -8,14 +8,14 @@ describe('planAdvancedSearchApply', () => {
         activeRequestQuery: 'algorithms',
         currentInputQuery: 'algorithms',
         inputDirty: false,
-        interpretedAdvanced: {},
-        draft: { subject: 'CS' },
+        interpretedAdvanced: { filters: {} },
+        draft: { filters: { subject: 'CS' } },
         interpretedQuery: 'algorithms',
       })
     ).toEqual({
       kind: 'search',
       query: 'algorithms',
-      filters: { subject: 'CS' },
+      filters: { filters: { subject: 'CS' } },
     })
   })
 
@@ -25,14 +25,14 @@ describe('planAdvancedSearchApply', () => {
         activeRequestQuery: 'intro to CS',
         currentInputQuery: 'philosophy ethics',
         inputDirty: true,
-        interpretedAdvanced: { subject: 'CS' },
-        draft: { subject: 'PHIL' },
+        interpretedAdvanced: { filters: { subject: 'CS' } },
+        draft: { filters: { subject: 'PHIL' } },
         interpretedQuery: '',
       })
     ).toEqual({
       kind: 'search',
       query: 'philosophy ethics',
-      filters: { subject: 'PHIL' },
+      filters: { filters: { subject: 'PHIL' } },
     })
   })
 
@@ -42,14 +42,14 @@ describe('planAdvancedSearchApply', () => {
         activeRequestQuery: 'CS algorithms',
         currentInputQuery: 'CS algorithms',
         inputDirty: false,
-        interpretedAdvanced: { subject: 'CS' },
-        draft: { subject: 'PHIL' },
+        interpretedAdvanced: { filters: { subject: 'CS' } },
+        draft: { filters: { subject: 'PHIL' } },
         interpretedQuery: 'algorithms',
       })
     ).toEqual({
       kind: 'search',
       query: 'algorithms',
-      filters: { subject: 'PHIL' },
+      filters: { filters: { subject: 'PHIL' } },
       syncInputQuery: 'algorithms',
     })
   })
@@ -60,14 +60,14 @@ describe('planAdvancedSearchApply', () => {
         activeRequestQuery: 'intro to CS',
         currentInputQuery: 'intro to CS',
         inputDirty: false,
-        interpretedAdvanced: { subject: 'CS' },
-        draft: { subject: 'PHIL' },
+        interpretedAdvanced: { filters: { subject: 'CS' } },
+        draft: { filters: { subject: 'PHIL' } },
         interpretedQuery: '',
       })
     ).toEqual({
       kind: 'search',
       query: '',
-      filters: { subject: 'PHIL' },
+      filters: { filters: { subject: 'PHIL' } },
       syncInputQuery: '',
     })
   })
@@ -78,8 +78,8 @@ describe('planAdvancedSearchApply', () => {
         activeRequestQuery: 'CS',
         currentInputQuery: 'CS',
         inputDirty: false,
-        interpretedAdvanced: { subject: 'CS' },
-        draft: {},
+        interpretedAdvanced: { filters: { subject: 'CS' } },
+        draft: { filters: {} },
         interpretedQuery: '',
       })
     ).toEqual({ kind: 'clear' })

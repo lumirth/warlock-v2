@@ -66,7 +66,6 @@ export async function structuredSectionLaneSearch(
     ${filtered.joinSql}
     ${filtered.whereSql()}
     ${filtered.groupBySql()}
-    ${filtered.havingSql}
     ORDER BY c.year DESC, c.subject, c.number
     LIMIT ?
   `;
@@ -112,7 +111,6 @@ export async function postFilterSemanticResults(
       ${filtered.joinSql}
       ${filtered.whereSql([`c.id IN (${placeholders})`])}
       ${filtered.groupBySql()}
-      ${filtered.havingSql}
     `;
 
     const finalParams = filtered.bindParams(batch);

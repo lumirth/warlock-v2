@@ -351,7 +351,7 @@ describe("Search Routes", () => {
     });
   });
 
-  it("returns the effective interpreted request when the pipeline infers controls", async () => {
+  it("separates executable continuation from interpreted display request", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
       meta: {
@@ -395,6 +395,11 @@ describe("Search Routes", () => {
     const data = (await res.json()) as SearchResponseDto;
     expect(data.meta.appliedSort).toEqual({ field: "gpa", direction: "desc" });
     expect(data.meta.nextRequest).toMatchObject({
+      query: "highest gpa classes",
+      sort: { field: "gpa", direction: "desc" },
+      scope: "active",
+    });
+    expect(data.meta.interpretedRequest).toMatchObject({
       query: "",
       sort: { field: "gpa", direction: "desc" },
       scope: "active",

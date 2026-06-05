@@ -82,7 +82,7 @@ export interface EvalResult {
     title: string;
     subject: string;
     number: string;
-    geneds?: Array<{
+    requirements?: Array<{
       categoryId?: string;
       category_id?: string;
       attributeCode?: string | null;

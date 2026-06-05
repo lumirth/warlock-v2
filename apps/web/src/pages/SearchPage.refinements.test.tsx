@@ -20,11 +20,14 @@ describe('SearchPage refinements and ambiguity actions', () => {
   it('lets users remove interpreted search chips and reruns the edited query', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([]),
+        ...searchResponse([], 'fixture'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'professor fagen algorithms', residual: 'algorithms' },
           nextRequest: {
+            query: 'professor fagen algorithms',
+          },
+          interpretedRequest: {
             query: 'algorithms',
             filters: { instructor: 'fagen' },
           },
@@ -45,7 +48,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
           },
         },
       })
-      .mockResolvedValueOnce(searchResponse([]))
+      .mockResolvedValueOnce(searchResponse([], 'fixture'))
 
     renderSearchPage()
 
@@ -71,11 +74,14 @@ describe('SearchPage refinements and ambiguity actions', () => {
   it('renders ambiguity alternatives as actionable searches', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([]),
+        ...searchResponse([], 'fixture'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'CS gened', residual: '' },
           nextRequest: {
+            query: 'CS gened',
+          },
+          interpretedRequest: {
             query: '',
             filters: { subject: 'CS' },
           },
@@ -92,7 +98,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
           },
         },
       })
-      .mockResolvedValueOnce(searchResponse([]))
+      .mockResolvedValueOnce(searchResponse([], 'fixture'))
 
     renderSearchPage()
 
@@ -120,12 +126,15 @@ describe('SearchPage refinements and ambiguity actions', () => {
   it('offers recovery groups for empty searches and keeps the relaxed query through sort changes', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([]),
+        ...searchResponse([], 'fixture'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: {
             raw: 'class about movies no essays',
             residual: 'about movies',
+          },
+          nextRequest: {
+            query: 'class about movies no essays',
           },
           fallback: {
             tierReached: 1,
@@ -169,7 +178,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
             title: 'Film History',
             metrics: { avgGpa: 3.7 },
           }),
-        ])
+        ], { query: 'class about movies', filters: {}, sort: { field: 'gpa', direction: 'desc' } })
       )
 
     renderSearchPage()
@@ -225,11 +234,14 @@ describe('SearchPage refinements and ambiguity actions', () => {
             number: '100',
             title: 'Freshman Orientation',
           }),
-        ]),
+        ], 'CS'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'CS', residual: '' },
           nextRequest: {
+            query: 'CS',
+          },
+          interpretedRequest: {
             query: '',
             filters: { subject: 'CS' },
           },
@@ -292,9 +304,9 @@ describe('SearchPage refinements and ambiguity actions', () => {
             number: '103',
             title: 'Anthropology in a Changing World',
           }),
-        ]),
+        ], { query: '', filters: { requirement: singleRequirementFilter('CS') } }),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: '', residual: '' },
           nextRequest: {
             query: '',
@@ -351,9 +363,13 @@ describe('SearchPage refinements and ambiguity actions', () => {
             title: 'Introduction to Modern Africa',
             metrics: { avgGpa: 3.76 },
           }),
-        ]),
+        ], {
+          query: '',
+          filters: { requirement: singleRequirementFilter('CS') },
+          sort: { field: 'gpa', direction: 'desc' },
+        }),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: '', residual: '' },
           appliedSort: { field: 'gpa', direction: 'desc' },
           nextRequest: {
@@ -394,11 +410,14 @@ describe('SearchPage refinements and ambiguity actions', () => {
             number: '100',
             title: 'Freshman Orientation',
           }),
-        ]),
+        ], 'CS'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'CS', residual: '' },
           nextRequest: {
+            query: 'CS',
+          },
+          interpretedRequest: {
             query: '',
             filters: { subject: 'CS' },
           },
@@ -434,9 +453,9 @@ describe('SearchPage refinements and ambiguity actions', () => {
             number: '103',
             title: 'Anthropology in a Changing World',
           }),
-        ]),
+        ], { query: '', filters: { requirement: singleRequirementFilter('CS') } }),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: '', residual: '' },
           nextRequest: {
             query: '',
@@ -466,7 +485,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
             number: '100',
             title: 'Freshman Orientation',
           }),
-        ])
+        ], 'CS')
       )
 
     renderSearchPage()
@@ -497,11 +516,14 @@ describe('SearchPage refinements and ambiguity actions', () => {
   it('switches ambiguity actions by clearing the competing subject or requirement filter', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([]),
+        ...searchResponse([], 'fixture'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'easy cs', residual: '' },
           nextRequest: {
+            query: 'easy cs',
+          },
+          interpretedRequest: {
             query: '',
             filters: { requirement: singleRequirementFilter('CS'), workload: 'easy' },
           },
@@ -521,7 +543,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
           },
         },
       })
-      .mockResolvedValueOnce(searchResponse([]))
+      .mockResolvedValueOnce(searchResponse([], 'fixture'))
 
     renderSearchPage()
 

@@ -135,7 +135,7 @@ describe('architecture boundaries', () => {
     const debugRouteSource = readFileSync('apps/api/src/routes/debug.ts', 'utf8');
 
     expect(debugRouteSource).toContain('presentSearchDebugResponse');
-    expect(debugRouteSource).not.toMatch(/loadSearchResultGeneds|getSearchTermSummary|_debug:\s*\{/);
+    expect(debugRouteSource).not.toMatch(/loadSearchResult(?:Geneds|Requirements)|getSearchTermSummary|_debug:\s*\{/);
   });
 
   it('keeps feedback corpus scripts out of API internals', () => {
@@ -204,17 +204,24 @@ describe('architecture boundaries', () => {
     const activeRequestHelper = controllerState.match(/function activeRequestFromResponse[\s\S]*?^}/m)?.[0] ?? '';
     expect(activeRequestHelper).not.toContain('appliedSort');
     expect(activeRequestHelper).not.toContain('requestSort');
+    expect(activeRequestHelper).toContain('response.meta?.nextRequest');
   });
 
-  it('keeps search presentation responsible for executable next-request assembly', () => {
+  it('keeps search presentation from conflating executable continuation with display interpretation', () => {
     const presenterSource = readFileSync('apps/api/src/services/search-response-presenter.ts', 'utf8');
     const controllerState = readFileSync('apps/web/src/pages/search/search-controller-state.ts', 'utf8');
+    const viewModel = readFileSync('apps/web/src/pages/search/search-view-model.ts', 'utf8');
 
-    expect(presenterSource).toContain('const nextRequest = buildInterpretedSearchRequest');
-    expect(presenterSource).toContain('coerceSearchRequestDto(nextRequest)');
+    expect(presenterSource).toContain('effectiveRequest');
+    expect(presenterSource).toContain('const nextRequest = coerceSearchRequestDto(effectiveRequest)');
+    expect(presenterSource).toContain('const interpretedRequest = buildInterpretedSearchRequest');
     expect(presenterSource).toContain('nextRequest,');
-    expect(presenterSource).toMatch(/buildSearchUiPlan\([\s\S]*normalizedNextRequest[\s\S]*\)/);
+    expect(presenterSource).toContain('interpretedRequest,');
+    expect(presenterSource).toMatch(/buildSearchUiPlan\([\s\S]*normalizedInterpretedRequest[\s\S]*\)/);
+    expect(presenterSource).not.toMatch(/const\s+nextRequest\s*=\s*buildInterpretedSearchRequest/);
+    expect(presenterSource).not.toContain('coerceSearchRequestDto(nextRequest)');
     expect(controllerState).not.toMatch(/sort:\s*response\.meta\?\.appliedSort\s*\?\?/);
+    expect(viewModel).toContain('meta?.interpretedRequest');
   });
 
   it('keeps requirement filters mode-aware in the public search contract', () => {
@@ -264,6 +271,94 @@ describe('architecture boundaries', () => {
     expect(contract).not.toContain('total: number');
     expect(presenter).toContain('resultCountLowerBound:');
     expect(viewModel).toContain('at least');
+  });
+
+  it('keeps advanced search state structurally separate from filters', () => {
+    const contract = readFileSync('packages/query-types/search-contract.ts', 'utf8');
+    const filterModel = readFileSync('apps/web/src/pages/search/search-filter-model.ts', 'utf8');
+    const advancedFields = readFileSync('apps/web/src/pages/search/AdvancedSearchFields.tsx', 'utf8');
+
+    expect(contract).toMatch(/export type AdvancedSearchStateDto = \{\s*filters: SearchRequestFiltersDto;\s*scope\?: SearchScope;\s*\};/);
+    expect(contract).not.toContain('AdvancedSearchStateDto = SearchRequestFiltersDto');
+    expect(filterModel).toContain('state.filters');
+    expect(filterModel).toContain('state.scope');
+    expect(advancedFields).toContain('const filters = advancedDraft.filters');
+    expect(advancedFields).toContain('advancedDraft.scope');
+    expect(advancedFields).not.toMatch(/advancedDraft\.(subject|number|instructor|requirement|workload|status|level)\b/);
+    expect(advancedFields).not.toContain("onAdvancedDraftChange('scope'");
+  });
+
+  it('keeps public course DTO and web vocabulary on requirements, not geneds', () => {
+    const dto = readFileSync('packages/query-types/course-dto.ts', 'utf8');
+    const apiCourseDto = readFileSync('apps/api/src/dto/course.ts', 'utf8');
+    const apiPresenter = readFileSync('apps/api/src/services/search-response-presenter.ts', 'utf8');
+    const resultModel = readFileSync('apps/web/src/pages/search/search-result-model.ts', 'utf8');
+    const coursePage = readFileSync('apps/web/src/pages/CoursePage.tsx', 'utf8');
+
+    expect(dto).toContain('export type CourseRequirementDto');
+    expect(dto).toContain('requirements: CourseRequirementDto[]');
+    expect(dto).not.toContain('CourseGenedDto');
+    expect(apiCourseDto).toContain('requirements?: CourseRequirementDto[]');
+    expect(apiCourseDto).not.toMatch(/geneds\?:|\.geneds\b/);
+    expect(apiPresenter).toContain('loadSearchResultRequirements');
+    expect(apiPresenter).not.toContain('search-geneds');
+    expect(`${resultModel}\n${coursePage}`).toMatch(/requirementLabel|courseRequirementLabels/);
+    expect(`${resultModel}\n${coursePage}`).not.toMatch(/genedLabel|courseGenedLabels|CourseGenedDto/);
+  });
+
+  it('keeps course fact groups honest instead of hiding them under registration', () => {
+    const dto = readFileSync('packages/query-types/course-dto.ts', 'utf8');
+    const apiCourseDto = readFileSync('apps/api/src/dto/course.ts', 'utf8');
+    const coursePage = readFileSync('apps/web/src/pages/CoursePage.tsx', 'utf8');
+
+    expect(dto).toContain('export type CourseCatalogDto');
+    expect(dto).toContain('export type CourseScheduleNotesDto');
+    expect(dto).toContain('export type CourseRegistrationDto');
+    expect(dto).toContain('catalog: CourseCatalogDto');
+    expect(dto).toContain('scheduleNotes: CourseScheduleNotesDto');
+    expect(apiCourseDto).toContain('catalog:');
+    expect(apiCourseDto).toContain('scheduleNotes:');
+    expect(coursePage).toContain('course.catalog.');
+    expect(coursePage).toContain('course.scheduleNotes.');
+    expect(coursePage).not.toMatch(/course\.registration\.(courseInfo|degreeAttributes|classScheduleInfo|dateRangeText)/);
+  });
+
+  it('keeps section presentation behind nested public DTO groups and availability policy', () => {
+    const dto = readFileSync('packages/query-types/course-dto.ts', 'utf8');
+    const apiCourseDto = readFileSync('apps/api/src/dto/course.ts', 'utf8');
+    const availabilityPolicy = readFileSync('apps/api/src/services/section-availability-policy.ts', 'utf8');
+    const sectionsTable = readFileSync('apps/web/src/components/SectionsTable.tsx', 'utf8');
+    const sectionDisplay = readFileSync('apps/web/src/components/section-display-model.ts', 'utf8');
+
+    expect(dto).toContain('availability: CourseSectionAvailabilityDto');
+    expect(dto).toContain('schedule: CourseSectionScheduleDto');
+    expect(dto).toContain('instructors: CourseSectionInstructorsDto');
+    expect(dto).toContain('sourceFacts: CourseSectionSourceFactsDto');
+    expect(dto).toContain('links: CourseSectionLinksDto');
+    expect(apiCourseDto).toContain('normalizeSectionAvailability');
+    expect(availabilityPolicy).toContain('open');
+    expect(availabilityPolicy).toContain('restricted');
+    expect(availabilityPolicy).toContain('waitlisted');
+    expect(sectionDisplay).toContain('sectionAvailabilityTone');
+    expect(sectionDisplay).toContain('CourseSectionAvailabilityStatus');
+    expect(sectionsTable).not.toMatch(/section\.(status|type|days|startTime|endTime|location|instructor|rmpRating|avgGpa|courseExplorerUrl|sectionTitle|sectionText|sectionNotes|partOfTerm|dateRangeText|startDate|endDate|creditHours|meetings)\b/);
+    expect(sectionsTable).not.toMatch(/includes\(['"](open|closed|restricted|wait)['"]\)/i);
+  });
+
+  it('keeps filtered lane SQL fragments ordered without dormant HAVING plumbing', () => {
+    const filters = readFileSync('apps/api/src/services/search-filters.ts', 'utf8');
+    const builder = readFileSync('apps/api/src/services/search-lane-query-builder.ts', 'utf8');
+    const laneSources = [
+      'apps/api/src/services/search-retrieval-course-lanes.ts',
+      'apps/api/src/services/search-retrieval-section-lanes.ts',
+      'apps/api/src/services/search-retrieval-requirement-lanes.ts',
+      'apps/api/src/services/search-retrieval-alias-lanes.ts',
+      'apps/api/src/services/search-retrieval-workload-lanes.ts',
+    ].map(file => readFileSync(file, 'utf8')).join('\n');
+
+    expect(`${filters}\n${builder}\n${laneSources}`).not.toMatch(/havingSql|havingParams|having\?:|groupBy\?:/);
+    expect(builder).toContain('bindParams(...paramGroups)');
+    expect(builder).not.toContain('...filtered.havingParams');
   });
 
   it('keeps parser and historical-sync entrypoints as facades over owned modules', () => {

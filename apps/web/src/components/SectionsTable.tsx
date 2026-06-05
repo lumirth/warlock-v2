@@ -12,14 +12,22 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import {
-  buildRmpProfessorUrl,
-  buildRmpSearchUrl,
   type CourseSectionDto,
-  type CourseSectionMeetingDto,
   type InstructorLinkDto,
 } from '@uiuc-course-search/query-types'
-import { formatTime } from '../utils/formatters'
 import { RMP_THRESHOLDS } from '../config/constants'
+import {
+  formatMeetingLocation,
+  formatPartOfTerm,
+  formatSectionDateRange,
+  formatSectionLocation,
+  formatSectionTimeRange,
+  sectionAvailabilityTone,
+  sectionInstructorStats,
+  sectionRmpHref,
+  splitSectionInstructorNames,
+  type SectionTone,
+} from './section-display-model'
 
 interface SectionsTableProps {
   sections: CourseSectionDto[]
@@ -27,107 +35,13 @@ interface SectionsTableProps {
   courseExplorerUrl?: string
 }
 
-type Tone = 'success' | 'warning' | 'destructive' | 'muted'
-
-function splitInstructorNames(section: CourseSectionDto): string[] {
-  return section.instructor
-    ? section.instructor
-        .split(';')
-        .map((name) => name.trim())
-        .filter(Boolean)
-    : []
-}
-
-function getSectionStats(
-  section: CourseSectionDto,
-  instructorLinks?: Record<string, InstructorLinkDto>
-): InstructorLinkDto[] {
-  if (section.instructorStats.length > 0) {
-    return section.instructorStats
-  }
-
-  return splitInstructorNames(section)
-    .map((name) => instructorLinks?.[name])
-    .filter((stat): stat is InstructorLinkDto => Boolean(stat))
-}
-
-function getRmpHref(
-  stat: InstructorLinkDto | undefined,
-  fallbackName: string
-): string | null {
-  return (
-    stat?.rmpUrl ??
-    buildRmpProfessorUrl(stat?.rmpId) ??
-    stat?.rmpSearchUrl ??
-    buildRmpSearchUrl(fallbackName || stat?.instructorName)
-  )
-}
-
-function toneClass(tone: Tone): string {
+function toneClass(tone: SectionTone): string {
   return cn(
     tone === 'success' && 'text-success',
     tone === 'warning' && 'text-warning',
     tone === 'destructive' && 'text-destructive',
     tone === 'muted' && 'text-muted-foreground'
   )
-}
-
-function statusTone(status: string): Tone {
-  const normalized = status.toLowerCase()
-  if (normalized.includes('open')) return 'success'
-  if (normalized.includes('wait') || normalized.includes('restricted')) {
-    return 'warning'
-  }
-  if (normalized.includes('closed') || normalized.includes('cancel')) {
-    return 'destructive'
-  }
-  return 'muted'
-}
-
-function formatTimeRange(startTime: string | null, endTime: string | null): string {
-  if (!startTime && !endTime) return 'ARRANGED'
-  if (!endTime) return formatTime(startTime)
-  return `${formatTime(startTime)} - ${formatTime(endTime)}`
-}
-
-function formatDate(value: string | null): string | null {
-  if (!value) return null
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-function formatDateRange(section: CourseSectionDto): string | null {
-  if (section.dateRangeText) return section.dateRangeText
-  const start = formatDate(section.startDate)
-  const end = formatDate(section.endDate)
-  if (start && end) return `${start} - ${end}`
-  return start ?? end
-}
-
-function formatPartOfTerm(partOfTerm: string | null): string | null {
-  if (!partOfTerm) return null
-  const normalized = partOfTerm.toUpperCase()
-  if (normalized === '1') return 'Full term (1)'
-  if (normalized === 'A') return 'First half (A)'
-  if (normalized === 'B') return 'Second half (B)'
-  return `Part ${partOfTerm}`
-}
-
-function formatLocation(section: CourseSectionDto): string {
-  return section.location || 'TBA'
-}
-
-function formatMeetingLocation(meeting: CourseSectionMeetingDto): string {
-  const location = [meeting.buildingName, meeting.roomNumber]
-    .filter(Boolean)
-    .join(' ')
-    .trim()
-  return location || 'TBA'
 }
 
 function statSummary(stat: InstructorLinkDto): string[] {
@@ -151,7 +65,7 @@ function statSummary(stat: InstructorLinkDto): string[] {
 }
 
 function renderInstructorName(name: string, stat?: InstructorLinkDto) {
-  const href = getRmpHref(stat, name)
+  const href = sectionRmpHref(stat, name)
   const label = stat?.instructorName ?? name
 
   if (href) {
@@ -250,26 +164,30 @@ function SectionDetails({
   sectionStats: InstructorLinkDto[]
 }) {
   const detailFields = [
-    { label: 'Part of term', value: formatPartOfTerm(section.partOfTerm) },
-    { label: 'Dates', value: formatDateRange(section) },
-    { label: 'Credit hours', value: section.creditHours },
+    { label: 'Part of term', value: formatPartOfTerm(section.schedule.partOfTerm) },
+    { label: 'Dates', value: formatSectionDateRange(section) },
+    { label: 'Credit hours', value: section.schedule.creditHours },
     {
       label: 'Status code',
-      value: [section.statusCode, section.sectionStatusCode]
+      value: [
+        section.availability.statusCode,
+        section.availability.sectionStatusCode,
+      ]
         .filter(Boolean)
         .join(' / '),
     },
-    { label: 'CAPP area', value: section.cappArea },
+    { label: 'CAPP area', value: section.sourceFacts.cappArea },
   ].filter((item): item is { label: string; value: string } =>
     Boolean(item.value)
   )
 
-  const hasSectionText = section.sectionText || section.sectionNotes
+  const hasSectionText =
+    section.sourceFacts.sectionText || section.sourceFacts.sectionNotes
   const hasDetails =
     detailFields.length > 0 ||
     hasSectionText ||
-    section.sectionTitle ||
-    section.meetings.length > 0
+    section.sourceFacts.sectionTitle ||
+    section.schedule.meetings.length > 0
 
   return (
     <div className="flex flex-col gap-4 py-2">
@@ -279,12 +197,14 @@ function SectionDetails({
         </p>
       )}
 
-      {section.sectionTitle && (
+      {section.sourceFacts.sectionTitle && (
         <div>
           <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             Section title
           </p>
-          <p className="mt-1 text-sm font-medium">{section.sectionTitle}</p>
+          <p className="mt-1 text-sm font-medium">
+            {section.sourceFacts.sectionTitle}
+          </p>
         </div>
       )}
 
@@ -302,26 +222,30 @@ function SectionDetails({
 
       {hasSectionText && (
         <div className="grid gap-3 lg:grid-cols-2">
-          {section.sectionNotes && (
+          {section.sourceFacts.sectionNotes && (
             <div>
               <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                 Section notes
               </p>
-              <p className="mt-1 text-sm leading-6">{section.sectionNotes}</p>
+              <p className="mt-1 text-sm leading-6">
+                {section.sourceFacts.sectionNotes}
+              </p>
             </div>
           )}
-          {section.sectionText && (
+          {section.sourceFacts.sectionText && (
             <div>
               <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                 Section text
               </p>
-              <p className="mt-1 text-sm leading-6">{section.sectionText}</p>
+              <p className="mt-1 text-sm leading-6">
+                {section.sourceFacts.sectionText}
+              </p>
             </div>
           )}
         </div>
       )}
 
-      {section.meetings.length > 0 ? (
+      {section.schedule.meetings.length > 0 ? (
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold">Meeting details</h3>
           <Table className="min-w-[780px]">
@@ -336,7 +260,7 @@ function SectionDetails({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {section.meetings.map((meeting, idx) => (
+              {section.schedule.meetings.map((meeting, idx) => (
                 <TableRow key={`${section.crn}-meeting-${idx}`}>
                   <TableCell>
                     <div className="flex flex-col">
@@ -350,11 +274,11 @@ function SectionDetails({
                   </TableCell>
                   <TableCell>{meeting.days || 'Arranged'}</TableCell>
                   <TableCell>
-                    {formatTimeRange(meeting.startTime, meeting.endTime)}
+                    {formatSectionTimeRange(meeting.startTime, meeting.endTime)}
                   </TableCell>
                   <TableCell>{formatMeetingLocation(meeting)}</TableCell>
                   <TableCell>
-                    {meeting.dateRangeText || formatDateRange(section) || '-'}
+                    {meeting.dateRangeText || formatSectionDateRange(section) || '-'}
                   </TableCell>
                   <TableCell className="whitespace-normal">
                     <InstructorBlock
@@ -425,9 +349,9 @@ export function SectionsTable({
       </TableHeader>
       <TableBody>
         {sections.map((section) => {
-          const sectionStats = getSectionStats(section, instructorLinks)
+          const sectionStats = sectionInstructorStats(section, instructorLinks)
           const expanded = expandedCrns.has(section.crn)
-          const officialUrl = section.courseExplorerUrl ?? courseExplorerUrl
+          const officialUrl = section.links.courseExplorerUrl ?? courseExplorerUrl
 
           return (
             <Fragment key={section.crn}>
@@ -453,9 +377,12 @@ export function SectionsTable({
                 <TableCell>
                   <Badge
                     variant="outline"
-                    className={cn('font-semibold', toneClass(statusTone(section.status)))}
+                    className={cn(
+                      'font-semibold',
+                      toneClass(sectionAvailabilityTone(section.availability.status))
+                    )}
                   >
-                    {section.status}
+                    {section.availability.label}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -474,25 +401,28 @@ export function SectionsTable({
                     <span className="text-sm font-medium">{section.crn}</span>
                   )}
                 </TableCell>
-                <TableCell>{section.type || '-'}</TableCell>
+                <TableCell>{section.schedule.type || '-'}</TableCell>
                 <TableCell>
                   <div className="flex flex-col">
                     <span>{section.sectionNumber}</span>
-                    {section.partOfTerm && (
+                    {section.schedule.partOfTerm && (
                       <span className="text-muted-foreground text-xs">
-                        {formatPartOfTerm(section.partOfTerm)}
+                        {formatPartOfTerm(section.schedule.partOfTerm)}
                       </span>
                     )}
                   </div>
                 </TableCell>
                 <TableCell>
-                  {formatTimeRange(section.startTime, section.endTime)}
+                  {formatSectionTimeRange(
+                    section.schedule.startTime,
+                    section.schedule.endTime
+                  )}
                 </TableCell>
-                <TableCell>{section.days || 'Arranged'}</TableCell>
-                <TableCell>{formatLocation(section)}</TableCell>
+                <TableCell>{section.schedule.days || 'Arranged'}</TableCell>
+                <TableCell>{formatSectionLocation(section)}</TableCell>
                 <TableCell className="whitespace-normal">
                   <InstructorBlock
-                    names={splitInstructorNames(section)}
+                    names={splitSectionInstructorNames(section)}
                     stats={sectionStats}
                     compact
                   />

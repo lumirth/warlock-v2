@@ -29,7 +29,7 @@ describe('SearchPage request state', () => {
           number: '225',
           title: 'Data Structures',
         }),
-      ])
+      ], 'CS 225')
     )
 
     renderSearchPage()
@@ -122,7 +122,7 @@ describe('SearchPage request state', () => {
             number: '100',
             title: 'Statistics',
           }),
-        ])
+        ], 'second')
       )
       await second.promise
     })
@@ -137,7 +137,7 @@ describe('SearchPage request state', () => {
             number: '225',
             title: 'Data Structures',
           }),
-        ])
+        ], 'first')
       )
       await first.promise
     })
@@ -156,7 +156,7 @@ describe('SearchPage request state', () => {
           number: '225',
           title: 'Data Structures',
         }),
-      ])
+      ], 'cs 225')
     )
 
     renderSearchPage()
@@ -187,7 +187,7 @@ describe('SearchPage request state', () => {
             number: '225',
             title: 'Data Structures',
           }),
-        ])
+        ], 'cs 225')
       )
       .mockRejectedValueOnce(new Error('Search failed'))
 
@@ -238,7 +238,7 @@ describe('SearchPage request state', () => {
             },
           ],
         }),
-      ])
+      ], 'cs 225')
     )
 
     renderSearchPage()
@@ -269,7 +269,7 @@ describe('SearchPage request state', () => {
               gpaSampleSize: 820,
             },
           }),
-      ])
+      ], 'cs 225')
     )
 
     renderSearchPage()
@@ -323,7 +323,7 @@ describe('SearchPage request state', () => {
             title: 'Statistics',
             metrics: { avgGpa: 3.82 },
           }),
-        ])
+        ], 'online stats class')
       )
 
     renderSearchPage()
@@ -363,7 +363,7 @@ describe('SearchPage request state', () => {
           number: '225',
           title: 'Data Structures',
         }),
-      ])
+      ], 'cs 225')
     )
 
     const rendered = renderSearchPage()
@@ -393,7 +393,7 @@ describe('SearchPage request state', () => {
           title: 'Data Structures',
           search: { historical: true, score: 0.81 },
         }),
-      ])
+      ], 'cs 225')
     )
 
     renderSearchPage()

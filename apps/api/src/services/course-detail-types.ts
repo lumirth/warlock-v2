@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type {
   CourseDetailResponseDto,
-  CourseGenedDto,
+  CourseRequirementDto,
   CourseSectionDto,
   InstructorLinkDto,
 } from '@uiuc-course-search/query-types';
@@ -68,7 +68,7 @@ export type CourseDetailEnrichment = {
   linksMap: Record<string, InstructorLinkDto>;
   enrichedSections: CourseSectionDto[];
   medianGpa: number | null;
-  geneds: CourseGenedDto[];
+  requirements: CourseRequirementDto[];
 };
 
 export type StoredDetailOptions =

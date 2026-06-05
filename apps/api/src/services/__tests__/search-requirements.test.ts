@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  genedDtoRequirementCodes,
+  courseRequirementDtoCodes,
   matchingRequirementCodes,
   structuredRequirementCodes,
 } from '../search-requirements.js';
@@ -10,9 +10,9 @@ describe('search requirement code model', () => {
     expect(structuredRequirementCodes(['1US', 'CS', ''])).toEqual(['US', 'CS']);
   });
 
-  it('extracts category and sub-attribute codes from GenEd DTOs', () => {
+  it('extracts category and sub-attribute codes from requirement DTOs', () => {
     expect(
-      genedDtoRequirementCodes([
+      courseRequirementDtoCodes([
         {
           categoryId: 'QR',
           categoryName: 'Quantitative Reasoning',

@@ -23,10 +23,65 @@ vi.mock('../lib/api-client', () => ({
   },
 }))
 
-type CourseOverride = Omit<Partial<CourseDetailDto>, 'metrics' | 'registration' | 'sections'> & {
+type CourseOverride = Omit<
+  Partial<CourseDetailDto>,
+  'metrics' | 'catalog' | 'scheduleNotes' | 'registration' | 'sections'
+> & {
   metrics?: Partial<CourseDetailDto['metrics']>
+  catalog?: Partial<CourseDetailDto['catalog']>
+  scheduleNotes?: Partial<CourseDetailDto['scheduleNotes']>
   registration?: Partial<CourseDetailDto['registration']>
   sections?: CourseSectionDto[]
+}
+
+type SectionOverride = Partial<Omit<CourseSectionDto, 'availability' | 'schedule' | 'instructors' | 'sourceFacts' | 'links'>> & {
+  availability?: Partial<CourseSectionDto['availability']>
+  schedule?: Partial<CourseSectionDto['schedule']>
+  instructors?: Partial<CourseSectionDto['instructors']>
+  sourceFacts?: Partial<CourseSectionDto['sourceFacts']>
+  links?: Partial<CourseSectionDto['links']>
+}
+
+function section(overrides: SectionOverride = {}): CourseSectionDto {
+  return {
+    crn: overrides.crn ?? '12345',
+    sectionNumber: overrides.sectionNumber ?? 'AL1',
+    availability: {
+      status: overrides.availability?.status ?? 'open',
+      label: overrides.availability?.label ?? 'Open',
+      rawStatus: overrides.availability?.rawStatus ?? 'Open',
+      statusCode: overrides.availability?.statusCode ?? null,
+      sectionStatusCode: overrides.availability?.sectionStatusCode ?? null,
+    },
+    schedule: {
+      type: overrides.schedule?.type ?? 'Lecture',
+      days: overrides.schedule?.days ?? 'MWF',
+      startTime: overrides.schedule?.startTime ?? '09:00',
+      endTime: overrides.schedule?.endTime ?? '09:50',
+      location: overrides.schedule?.location ?? 'Siebel Center',
+      dateRangeText: overrides.schedule?.dateRangeText ?? null,
+      partOfTerm: overrides.schedule?.partOfTerm ?? null,
+      startDate: overrides.schedule?.startDate ?? null,
+      endDate: overrides.schedule?.endDate ?? null,
+      creditHours: overrides.schedule?.creditHours ?? null,
+      meetings: overrides.schedule?.meetings ?? [],
+    },
+    instructors: {
+      displayName: overrides.instructors?.displayName ?? 'TBA',
+      rmpRating: overrides.instructors?.rmpRating ?? null,
+      avgGpa: overrides.instructors?.avgGpa ?? null,
+      stats: overrides.instructors?.stats ?? [],
+    },
+    sourceFacts: {
+      sectionTitle: overrides.sourceFacts?.sectionTitle ?? null,
+      sectionText: overrides.sourceFacts?.sectionText ?? null,
+      sectionNotes: overrides.sourceFacts?.sectionNotes ?? null,
+      cappArea: overrides.sourceFacts?.cappArea ?? null,
+    },
+    links: {
+      courseExplorerUrl: overrides.links?.courseExplorerUrl,
+    },
+  }
 }
 
 function course(overrides: CourseOverride = {}): CourseDetailResponseDto {
@@ -49,11 +104,15 @@ function course(overrides: CourseOverride = {}): CourseDetailResponseDto {
       qualityScore: overrides.metrics?.qualityScore ?? null,
       workloadScore: overrides.metrics?.workloadScore ?? null,
     },
+    catalog: {
+      courseInfo: overrides.catalog?.courseInfo ?? null,
+      degreeAttributes: overrides.catalog?.degreeAttributes ?? null,
+    },
+    scheduleNotes: {
+      classScheduleInfo: overrides.scheduleNotes?.classScheduleInfo ?? null,
+      dateRangeText: overrides.scheduleNotes?.dateRangeText ?? null,
+    },
     registration: {
-      courseInfo: overrides.registration?.courseInfo ?? null,
-      degreeAttributes: overrides.registration?.degreeAttributes ?? null,
-      classScheduleInfo: overrides.registration?.classScheduleInfo ?? null,
-      dateRangeText: overrides.registration?.dateRangeText ?? null,
       registrationNotes: overrides.registration?.registrationNotes ?? null,
       approvalCode: overrides.registration?.approvalCode ?? null,
     },
@@ -158,19 +217,10 @@ describe('CoursePage request state', () => {
           workloadScore: 42,
         },
         sections: [
-          {
-            crn: '12345',
-            sectionNumber: 'AL1',
-            status: 'Open',
-            type: 'Lecture',
-            days: 'MWF',
-            startTime: '09:00',
-            endTime: '09:50',
-            location: 'Siebel Center',
-            instructor: 'Lovelace, A',
-            instructorRmp: null,
-            instructorGpa: null,
-            instructorStats: [
+          section({
+            instructors: {
+              displayName: 'Lovelace, A',
+              stats: [
               {
                 instructorName: 'Lovelace, A',
                 rmpRating: 4.8,
@@ -185,18 +235,9 @@ describe('CoursePage request state', () => {
                 department: null,
               },
             ],
-            sectionTitle: null,
-            statusCode: null,
-            sectionStatusCode: null,
-            sectionText: null,
-            sectionNotes: null,
-            cappArea: null,
-            dateRangeText: null,
-            partOfTerm: null,
-            startDate: null,
-            endDate: null,
-            creditHours: null,
-            meetings: [
+            },
+            schedule: {
+              meetings: [
               {
                 typeCode: 'LCD',
                 typeName: 'Lecture-Discussion',
@@ -210,7 +251,8 @@ describe('CoursePage request state', () => {
                 instructors: [],
               },
             ],
-          },
+            },
+          }),
         ],
       })
     )
@@ -286,21 +328,15 @@ describe('CoursePage request state', () => {
             'https://courses.illinois.edu/schedule/2026/fall/CS/225',
         },
         sections: [
-          {
+          section({
             crn: '45678',
-            sectionNumber: 'AL1',
-            status: 'Open',
-            type: 'Lecture',
-            days: 'MWF',
-            startTime: '09:00',
-            endTime: '09:50',
-            location: 'Siebel Center',
-            instructor: 'Fagen-Ulmschneider, W',
-            instructorRmp: null,
-            instructorGpa: null,
-            courseExplorerUrl:
-              'https://courses.illinois.edu/schedule/2026/fall/CS/225',
-            instructorStats: [
+            links: {
+              courseExplorerUrl:
+                'https://courses.illinois.edu/schedule/2026/fall/CS/225',
+            },
+            instructors: {
+              displayName: 'Fagen-Ulmschneider, W',
+              stats: [
               {
                 instructorName: 'Fagen-Ulmschneider, W',
                 rmpRating: 4.9,
@@ -315,19 +351,8 @@ describe('CoursePage request state', () => {
                 department: null,
               },
             ],
-            sectionTitle: null,
-            statusCode: null,
-            sectionStatusCode: null,
-            sectionText: null,
-            sectionNotes: null,
-            cappArea: null,
-            dateRangeText: null,
-            partOfTerm: null,
-            startDate: null,
-            endDate: null,
-            creditHours: null,
-            meetings: [],
-          },
+            },
+          }),
         ],
       })
     )

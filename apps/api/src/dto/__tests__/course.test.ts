@@ -442,7 +442,7 @@ describe('search result DTO evidence', () => {
     expect(dto).toMatchObject({
       course: {
         id: 'CS-225-2026-spring',
-        registration: {
+        catalog: {
           courseInfo: 'Prerequisite: CS 173.',
         },
         metrics: {
@@ -459,12 +459,18 @@ describe('search result DTO evidence', () => {
     }]);
     expect(dto.course.sections[0]).toMatchObject({
       sectionNumber: 'AL1',
-      partOfTerm: '1',
-      sectionNotes: 'Majors first.',
-      instructorRmp: 4.8,
-      instructorGpa: 3.62,
+      schedule: {
+        partOfTerm: '1',
+      },
+      sourceFacts: {
+        sectionNotes: 'Majors first.',
+      },
+      instructors: {
+        rmpRating: 4.8,
+        avgGpa: 3.62,
+      },
     });
-    expect(dto.course.sections[0]?.meetings[0]).toMatchObject({
+    expect(dto.course.sections[0]?.schedule.meetings[0]).toMatchObject({
       typeCode: 'LEC',
       buildingName: 'Siebel Center',
       instructorNames: ['Lovelace, A'],

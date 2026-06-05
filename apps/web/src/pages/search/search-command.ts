@@ -1,5 +1,6 @@
 import {
   coerceSearchRequestDto,
+  searchRequestHasFilters,
   splitAdvancedSearchState,
   type AdvancedSearchStateDto,
   type SearchRequestDto,
@@ -50,10 +51,10 @@ export function resolveSearchCommand(
   }
 
   const normalizedQuery = command.query.trim()
-  const requestState = cleanAdvancedFilters(command.filters || {})
+  const requestState = cleanAdvancedFilters(command.filters || { filters: {} })
   const { filters: requestFilters, scope } =
     splitAdvancedSearchState(requestState)
-  const hasRequestFilters = hasAdvancedFilterValue(requestFilters)
+  const hasRequestFilters = hasAdvancedFilterValue(requestState)
   if (!normalizedQuery && !hasRequestFilters) return null
 
   const sort = normalizeSearchSort(command.sort ?? currentSort)
@@ -61,7 +62,9 @@ export function resolveSearchCommand(
   const offset = command.type === 'append' ? command.offset : 0
   const request: SearchRequestDto = {
     query: normalizedQuery,
-    filters: hasRequestFilters ? requestFilters : undefined,
+    filters: searchRequestHasFilters({ filters: requestFilters })
+      ? requestFilters
+      : undefined,
     scope,
     sort,
     pagination: {
@@ -109,6 +112,7 @@ function resolveRequestCommand(
     request,
   }
 }
+
 
 function executionModeForCommand(command: SearchCommand): SearchExecutionMode {
   switch (command.type) {

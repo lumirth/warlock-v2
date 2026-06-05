@@ -1,0 +1,60 @@
+# Course Data Vocabulary
+
+This project uses several honest vocabularies at once: Course Explorer source
+labels, storage columns, internal domain concepts, public DTO fields, and UI
+labels. The rule is not "rename everything immediately." The rule is: **rename
+only at named boundaries, and do not let aliases leak past ingress.**
+
+## Boundary Rules
+
+- Parsers are source-shaped. A parser may preserve Course Explorer names because
+  its job is to report what the source said.
+- Snapshots and DB writers are storage-shaped. They may use table vocabulary such
+  as `course_gened`, `difficulty_score`, `course_info`, or `part_of_term`.
+- Domain and public DTO code is product-shaped. Search and web code should say
+  `requirement`, `workload`, `catalog`, `scheduleNotes`, `availability`, and
+  `sourceFacts`.
+- Query aliases terminate at parser/codec edges. Downstream code should not
+  prefer legacy aliases such as `gened`, `difficulty`, or `pot`.
+- UI components may render raw source facts, but they should not interpret raw
+  source codes. Interpretation belongs in a policy or display-model module.
+
+## Matrix
+
+| Course Explorer / source | Parser model | DB / snapshot | Domain concept | Public DTO | UI label | Query aliases |
+| --- | --- | --- | --- | --- | --- | --- |
+| Gen-ed category and attribute | `genEdCategories` | `course_gened`, compatibility `courses.gened` | Requirement evidence | `requirements: CourseRequirementDto[]` | Requirement | Canonical `requirement`; forgiving parser accepts `gened`, `gen ed` |
+| Course section information | source detail text | `course_info` | Catalog course information | `catalog.courseInfo` | Course information | none |
+| Degree attributes | source detail text | `degree_attributes` | Catalog degree attributes | `catalog.degreeAttributes` | Degree attributes | `requirement` when the parser infers a structured requirement |
+| Class schedule information | source detail text | `class_schedule_info` | Schedule note | `scheduleNotes.classScheduleInfo` | Schedule information | none |
+| Course date range text | source detail text | `date_range_text` | Schedule note | `scheduleNotes.dateRangeText` | Dates | none |
+| Registration notes | source detail text | `registration_notes` | Registration constraint/note | `registration.registrationNotes` | Registration notes | none |
+| Approval code | source detail text | `approval_code` | Registration approval requirement | `registration.approvalCode` | Approval | none |
+| Enrollment status text | `enrollmentStatus` / section status text | `sections.status` | Section availability label and raw status | `section.availability.rawStatus`, `section.availability.label` | Status | `status` |
+| Status codes | `statusCode`, `sectionStatusCode` | `sections.status_code`, `sections.section_status_code` | Section availability state | `section.availability.status`, raw code fields | Status code | `status` |
+| Section type | source section type | `sections.type` | Section schedule type | `section.schedule.type` | Type | none |
+| Days and times | source section schedule | `sections.days`, `start_time`, `end_time` | Section schedule | `section.schedule.days/startTime/endTime` | Day / Time | `days`, `time` |
+| Meeting rows | source meeting rows | `meetings` | Per-meeting schedule | `section.schedule.meetings[]` | Meeting details | `days`, `time`, `online` where structured filters apply |
+| Location | source location or meeting building/room | `sections.location`, `meetings.building_name`, `meetings.room_number` | Schedule location | `section.schedule.location`, `meeting.buildingName`, `meeting.roomNumber` | Location | `online` only when delivery intent is structured |
+| Part of term | source part-of-term code | `sections.part_of_term` | Compressed-term schedule signal | `section.schedule.partOfTerm` | Part of term | `partOfTerm`, parser may accept `pot`, `8 week`, `first half`, `second half` at ingress |
+| Section dates | source section date range | `sections.start_date`, `end_date`, `date_range_text` | Section schedule dates | `section.schedule.startDate/endDate/dateRangeText` | Dates | `partOfTerm` and schedule-language aliases at ingress |
+| Section title / text / notes / CAPP area | source section facts | `sections.section_title`, `section_text`, `section_notes`, `capp_area` | Source facts | `section.sourceFacts.*` | Section title / Section notes / Section text / CAPP area | none |
+| Section instructor rollup | source instructor text | `sections.instructor` plus meeting instructors | Instructor display rollup | `section.instructors.displayName`, `section.instructors.stats` | Instructor | `instructor` |
+| GPA and RMP source metrics | GPA/RMP enrichment | `avg_gpa`, `median_gpa`, `quality_score`, `difficulty_score`, RMP fields | Course and instructor metrics | `course.metrics.*`, `InstructorLinkDto.*` | GPA / Quality / Workload / Instructor rating | `gpa`, `quality`, `workload`; parser may accept `difficulty` at ingress |
+
+## Canonical Policy Owners
+
+- Requirement labels and public tier labels live in `packages/query-types`.
+- Requirement evidence extraction from snapshots lives in
+  `apps/api/src/transforms/course-requirements.ts`.
+- Workload and quality score production lives in
+  `apps/api/src/services/course-score-policy.ts`.
+- Search ranking thresholds and boosts live in
+  `apps/api/src/services/ranking/ranking-policy.ts`.
+- Raw section status normalization lives in
+  `apps/api/src/services/section-availability-policy.ts`.
+- Section display fallbacks and tones live in
+  `apps/web/src/components/section-display-model.ts`.
+
+When a new field is added, update this matrix in the same change that moves the
+field through parser, snapshot/DB, DTO, and UI.

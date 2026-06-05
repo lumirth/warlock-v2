@@ -109,8 +109,8 @@ export const TABLE_SORT_COLUMNS: TableSortColumn[] = SEARCH_SORT_FIELDS
 
 export const FIRST_RUN_EXAMPLE_QUERIES = [
   'CS 225',
-  'easy cs gened',
+  'easy cultural studies requirement',
   'data structures with fagen',
   'online stats class',
-  '4 credit hum no friday classes',
+  '4 credit humanities requirement no friday classes',
 ]

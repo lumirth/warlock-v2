@@ -31,7 +31,7 @@ export function useSearchController() {
   const advancedActions = useAdvancedSearch({
     state,
     dispatch,
-    activeRequestQuery: derived.activeRequestQuery,
+    activeRequestQuery: derived.interpretedRequestQuery,
     executeSearch,
   })
   const refinementActions = useSearchRefinements({

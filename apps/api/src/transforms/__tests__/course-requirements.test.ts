@@ -57,7 +57,7 @@ describe('courseSnapshotRequirementEvidence', () => {
       'US Minority Cultures',
       'Humanities - Lit Arts',
     ]);
-    expect(evidence.geneds).toEqual([
+    expect(evidence.requirements).toEqual([
       {
         categoryId: 'CS',
         categoryName: 'Cultural Studies',

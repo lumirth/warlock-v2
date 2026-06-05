@@ -29,7 +29,6 @@ export async function studentAliasLaneSearch(
     ${filtered.joinSql}
     ${filtered.whereSql(["course_aliases_fts MATCH ?"])}
     ${filtered.groupBySql()}
-    ${filtered.havingSql}
     ORDER BY fts_score ASC
     LIMIT ?
   `;

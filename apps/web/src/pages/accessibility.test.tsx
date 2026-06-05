@@ -38,11 +38,15 @@ function course(
         qualityScore: 88,
         workloadScore: 42,
       },
-      registration: {
+      catalog: {
         courseInfo: null,
         degreeAttributes: null,
+      },
+      scheduleNotes: {
         classScheduleInfo: null,
         dateRangeText: null,
+      },
+      registration: {
         registrationNotes: null,
         approvalCode: null,
       },

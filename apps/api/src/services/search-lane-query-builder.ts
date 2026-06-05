@@ -64,7 +64,6 @@ export type FilteredCourseQuery = FilterClauseResult & {
   joinSqlExcluding: (excludedKeys: readonly FilterJoinKey[]) => string;
   whereSql: (extraConditions?: readonly string[]) => string;
   groupBySql: (fallbackGroupBy?: string) => string;
-  havingSql: string;
   bindParams: (...paramGroups: readonly (readonly (string | number)[])[]) => (string | number)[];
 };
 
@@ -87,17 +86,12 @@ export function buildFilteredCourseQuery(filters: SearchFilters): FilteredCourse
         : "";
     },
     groupBySql(fallbackGroupBy?: string) {
-      if (clauses.groupBy) {
-        return `GROUP BY ${fallbackGroupBy ? `${clauses.groupBy}, ${fallbackGroupBy}` : clauses.groupBy}`;
-      }
       return fallbackGroupBy ? `GROUP BY ${fallbackGroupBy}` : "";
     },
-    havingSql: clauses.having ? `HAVING ${clauses.having}` : "",
     bindParams(...paramGroups) {
       return [
         ...clauses.params,
         ...paramGroups.flat(),
-        ...(clauses.havingParams ?? []),
       ];
     },
   };
@@ -105,7 +99,5 @@ export function buildFilteredCourseQuery(filters: SearchFilters): FilteredCourse
 
 export function hasFilteredCourseConstraints(query: FilteredCourseQuery): boolean {
   return query.joins.length > 0
-    || query.where.length > 0
-    || Boolean(query.groupBy)
-    || Boolean(query.having);
+    || query.where.length > 0;
 }

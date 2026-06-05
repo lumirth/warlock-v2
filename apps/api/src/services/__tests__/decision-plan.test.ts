@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { SearchPlan } from '../search-planner-types.js';
 import { compileDecisionSearchRescue } from '../decision-plan.js';
-import { GENERIC_GENED_CODES } from '../gened-codes.js';
+import { GENERIC_REQUIREMENT_CODES } from '../requirement-codes.js';
 
 function plan(overrides: Partial<SearchPlan> = {}): SearchPlan {
   return {
@@ -23,7 +23,7 @@ describe('compileDecisionSearchRescue', () => {
 
     expect(result.plan.filters).toMatchObject({
       workload: 'easy',
-      requirement: requirementFilter('any', GENERIC_GENED_CODES),
+      requirement: requirementFilter('any', GENERIC_REQUIREMENT_CODES),
     });
     expect(result.plan.rescue?.queryTypes).toEqual(expect.arrayContaining(['requirement', 'subjective_vibe']));
     expect(searchPlan).toEqual({

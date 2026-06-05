@@ -4,7 +4,7 @@ import {
   type SearchChipDto,
 } from "@uiuc-course-search/query-types";
 import { removeSearchIntentAction } from "../dto/search-actions.js";
-import { isGenericAnyGenedFilter } from "./gened-codes.js";
+import { isGenericAnyRequirementFilter } from "./requirement-codes.js";
 import type {
   Hint,
   SearchFilters,
@@ -128,7 +128,7 @@ function shouldShowGenericRequirementChip(
 ): boolean {
   const requirement = effectiveRequirementFilter(filters);
   return requirement?.mode === "any"
-    && isGenericAnyGenedFilter(requirement.codes)
+    && isGenericAnyRequirementFilter(requirement.codes)
     && !hints.some((hint) => hint.type === "requirement");
 }
 

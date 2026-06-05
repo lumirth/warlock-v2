@@ -1,6 +1,6 @@
 import type { SearchFilters } from "./search-planner-types.js";
 import { effectiveRequirementFilter } from "@uiuc-course-search/query-types";
-import { canonicalGenedCode, canonicalGenedCodes } from "./gened-codes.js";
+import { canonicalRequirementCode, canonicalRequirementCodes } from "./requirement-codes.js";
 import { WORKLOAD_FILTER_THRESHOLDS } from "./ranking/ranking-policy.js";
 
 export const TIME_RANGES: Record<string, { start?: string; end?: string }> = {
@@ -43,9 +43,6 @@ export interface FilterClauseResult {
   joins: string[];
   where: string[];
   params: (string | number)[];
-  groupBy?: string;
-  having?: string;
-  havingParams?: (string | number)[];
 }
 
 export type FilterJoinKey =
@@ -67,7 +64,6 @@ export function buildFilterClauses(
   const joinKeys = new Set<FilterJoinKey>();
   const where: string[] = [];
   const params: (string | number)[] = [];
-  const havingParams: (string | number)[] = [];
 
   if (filters.subject) {
     where.push("c.subject = ?");
@@ -106,7 +102,7 @@ export function buildFilterClauses(
 
   const requirement = effectiveRequirementFilter(filters);
   if (requirement?.mode === "single") {
-    const requirementCode = canonicalGenedCode(requirement.codes[0]);
+    const requirementCode = canonicalRequirementCode(requirement.codes[0]);
     if (requirementCode) {
       joinKeys.add("courseGened");
       where.push(`(cg.category_id = ? OR ${canonicalAttributeCodeSql("cg")} = ?)`);
@@ -115,7 +111,7 @@ export function buildFilterClauses(
   }
 
   if (requirement?.mode === "any") {
-    const requirementCodes = canonicalGenedCodes(requirement.codes);
+    const requirementCodes = canonicalRequirementCodes(requirement.codes);
     if (requirementCodes.length > 0) {
       joinKeys.add("courseGened");
       const placeholders = requirementCodes.map(() => "?").join(",");
@@ -125,7 +121,7 @@ export function buildFilterClauses(
   }
 
   if (requirement?.mode === "all") {
-    canonicalGenedCodes(requirement.codes).forEach((requirement, index) => {
+    canonicalRequirementCodes(requirement.codes).forEach((requirement, index) => {
       const alias = `cg_all_${index}`;
       where.push(`EXISTS (
         SELECT 1 FROM course_gened ${alias}
@@ -287,7 +283,7 @@ export function buildFilterClauses(
     }
 
     if (filters.not.requirementCodes?.length) {
-      const requirementCodes = canonicalGenedCodes(filters.not.requirementCodes);
+      const requirementCodes = canonicalRequirementCodes(filters.not.requirementCodes);
       if (requirementCodes.length > 0) {
         const placeholders = requirementCodes.map(() => "?").join(",");
         where.push(`NOT EXISTS (
@@ -321,7 +317,6 @@ export function buildFilterClauses(
     joins: Array.from(joinKeys).map((key) => FILTER_JOIN_SQL[key]),
     where,
     params,
-    havingParams,
   };
 }
 

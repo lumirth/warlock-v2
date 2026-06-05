@@ -56,7 +56,9 @@ function makeFetcher(options: MockOptions = {}) {
           },
           sections: [{
             crn: '12345',
-            courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+            links: {
+              courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+            },
           }],
         },
       });

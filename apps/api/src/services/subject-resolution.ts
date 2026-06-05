@@ -3,16 +3,16 @@ import { singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { QueryHint, SearchPlan } from './search-planner-types.js';
 import {
   FUZZY_SUBJECT_NAME_BLOCKLIST,
-  GENED_LABELS,
-  GENED_LOOKUP,
-  SUBJECT_GENED_CONFLICTS,
+  REQUIREMENT_LABELS,
+  REQUIREMENT_LOOKUP,
+  SUBJECT_REQUIREMENT_CONFLICTS,
 } from './student-language-lexicon.js';
 
 type InterpretationType = 'subject' | 'requirement';
 
-export function resolveGened(value: string, plan: SearchPlan): void {
+export function resolveRequirement(value: string, plan: SearchPlan): void {
   const normalized = value.toLowerCase().trim();
-  const code = GENED_LOOKUP[normalized];
+  const code = REQUIREMENT_LOOKUP[normalized];
 
   if (code) {
     plan.filters.requirement = singleRequirementFilter(code);
@@ -28,18 +28,18 @@ export async function resolveSubjectHint(
   plan: SearchPlan,
   rawQuery: string
 ): Promise<void> {
-  if (!SUBJECT_GENED_CONFLICTS.has(subject)) {
+  if (!SUBJECT_REQUIREMENT_CONFLICTS.has(subject)) {
     plan.filters.subject = subject;
     return;
   }
 
-  const genedCode = GENED_LOOKUP[subject.toLowerCase()];
-  if (!genedCode) {
+  const requirementCode = REQUIREMENT_LOOKUP[subject.toLowerCase()];
+  if (!requirementCode) {
     plan.filters.subject = subject;
     return;
   }
 
-  const decision = chooseSubjectOrGenedInterpretation({
+  const decision = chooseSubjectOrRequirementInterpretation({
     subject,
     hint,
     rawQuery,
@@ -47,23 +47,23 @@ export async function resolveSubjectHint(
 
   if (decision.preferred === 'requirement') {
     delete plan.filters.subject;
-    plan.filters.requirement = singleRequirementFilter(genedCode);
-    await addSubjectGenedAmbiguity(db, plan, {
+    plan.filters.requirement = singleRequirementFilter(requirementCode);
+    await addSubjectRequirementAmbiguity(db, plan, {
       term: String(hint.metadata?.raw ?? hint.value),
       chosen: 'requirement',
       subject,
-      genedCode,
+      requirementCode,
     });
     return;
   }
 
   plan.filters.subject = subject;
   if (decision.showAlternative) {
-    await addSubjectGenedAmbiguity(db, plan, {
+    await addSubjectRequirementAmbiguity(db, plan, {
       term: String(hint.metadata?.raw ?? hint.value),
       chosen: 'subject',
       subject,
-      genedCode,
+      requirementCode,
     });
   }
 }
@@ -120,7 +120,7 @@ export async function validateSubject(
   return null;
 }
 
-function chooseSubjectOrGenedInterpretation(context: {
+function chooseSubjectOrRequirementInterpretation(context: {
   subject: string;
   hint: QueryHint;
   rawQuery: string;
@@ -136,8 +136,8 @@ function chooseSubjectOrGenedInterpretation(context: {
     return { preferred: 'subject', showAlternative: false };
   }
 
-  const genedScore = interpretationScore([
-    [mentionsGenedCode(context.subject, raw), 5],
+  const requirementScore = interpretationScore([
+    [mentionsRequirementCodeAlias(context.subject, raw), 5],
     [hasRequirementCue(raw), 3],
     [hasStudentShoppingCue(raw), 2],
   ]);
@@ -147,13 +147,13 @@ function chooseSubjectOrGenedInterpretation(context: {
     [isBareUppercaseSubjectCode(context.subject, raw), 1],
   ]);
 
-  if (genedScore > subjectScore) {
+  if (requirementScore > subjectScore) {
     return { preferred: 'requirement', showAlternative: true };
   }
 
   return {
     preferred: 'subject',
-    showAlternative: genedScore > 0 || isShortAmbiguousCode(hintRaw),
+    showAlternative: requirementScore > 0 || isShortAmbiguousCode(hintRaw),
   };
 }
 
@@ -179,7 +179,7 @@ function hasExplicitSubjectPhrase(subject: string, hintRaw: string, rawQuery: st
   return false;
 }
 
-function mentionsGenedCode(subject: string, rawQuery: string): boolean {
+function mentionsRequirementCodeAlias(subject: string, rawQuery: string): boolean {
   return new RegExp(`\\b${escapeRegex(subject)}\\s+gen\\s*-?\\s*ed\\b`, 'i').test(rawQuery)
     || new RegExp(`\\bgen\\s*-?\\s*ed\\s+${escapeRegex(subject)}\\b`, 'i').test(rawQuery);
 }
@@ -204,23 +204,23 @@ function isShortAmbiguousCode(value: string): boolean {
   return /^[a-z]{2,4}$/i.test(value.trim());
 }
 
-async function addSubjectGenedAmbiguity(
+async function addSubjectRequirementAmbiguity(
   db: D1Database,
   plan: SearchPlan,
   context: {
     term: string;
     chosen: InterpretationType;
     subject: string;
-    genedCode: string;
+    requirementCode: string;
   }
 ): Promise<void> {
   const subjectLabel = await getSubjectName(db, context.subject);
-  const genedLabel = getGenedLabel(context.genedCode);
+  const requirementLabel = getRequirementLabel(context.requirementCode);
   const chosen = context.chosen === 'subject'
     ? { type: 'subject', value: context.subject, label: subjectLabel }
-    : { type: 'requirement', value: context.genedCode, label: genedLabel };
+    : { type: 'requirement', value: context.requirementCode, label: requirementLabel };
   const alternative = context.chosen === 'subject'
-    ? { type: 'requirement', value: context.genedCode, label: genedLabel }
+    ? { type: 'requirement', value: context.requirementCode, label: requirementLabel }
     : { type: 'subject', value: context.subject, label: subjectLabel };
 
   plan.ambiguities = plan.ambiguities || [];
@@ -263,6 +263,6 @@ async function getSubjectName(db: D1Database, code: string): Promise<string> {
   return result?.name || code;
 }
 
-function getGenedLabel(code: string): string {
-  return GENED_LABELS[code] || code;
+function getRequirementLabel(code: string): string {
+  return REQUIREMENT_LABELS[code] || code;
 }

@@ -151,12 +151,13 @@ export const SEARCH_REQUEST_FILTER_KEYS = [
   "level",
 ] as const satisfies readonly SearchRequestFilterKey[];
 
-export type AdvancedSearchStateDto = SearchRequestFiltersDto & {
+export type AdvancedSearchStateDto = {
+  filters: SearchRequestFiltersDto;
   scope?: SearchScope;
 };
 
 export const ADVANCED_SEARCH_STATE_KEYS = [
-  ...SEARCH_REQUEST_FILTER_KEYS,
+  "filters",
   "scope",
 ] as const satisfies readonly (keyof AdvancedSearchStateDto)[];
 
@@ -205,10 +206,9 @@ export function searchRequestHasFilters(
 export function splitAdvancedSearchState(
   state: AdvancedSearchStateDto | undefined,
 ): { filters: SearchRequestFiltersDto; scope?: SearchScope } {
-  const { scope, ...filters } = state ?? {};
   return {
-    filters: compactSearchRequestFilters(filters),
-    scope,
+    filters: compactSearchRequestFilters(state?.filters),
+    scope: state?.scope,
   };
 }
 

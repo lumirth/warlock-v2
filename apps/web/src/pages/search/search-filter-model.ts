@@ -13,16 +13,16 @@ export function advancedFiltersChanged(
 }
 
 export function hasAdvancedFilterValue(state: AdvancedSearchStateDto): boolean {
-  return Object.values(cleanAdvancedFilters(state)).some((value) =>
-    Boolean(normalizeAdvancedValue(value))
+  return (
+    hasSearchableAdvancedFilterValue(state) ||
+    normalizeAdvancedValue(state.scope) !== ''
   )
 }
 
 export function hasSearchableAdvancedFilterValue(
   state: AdvancedSearchStateDto
 ): boolean {
-  const { scope: _scope, ...filters } = cleanAdvancedFilters(state)
-  return searchRequestHasFilters({ filters })
+  return searchRequestHasFilters({ filters: cleanAdvancedFilters(state).filters })
 }
 
 export function cleanAdvancedFilters(
@@ -30,7 +30,7 @@ export function cleanAdvancedFilters(
 ): AdvancedSearchStateDto {
   return advancedStateFromRequest({
     query: '',
-    filters: state,
+    filters: state.filters,
     scope: state.scope,
   })
 }
@@ -40,7 +40,7 @@ export function advancedStateFromRequest(
 ): AdvancedSearchStateDto {
   const normalized = coerceSearchRequestDto(request)
   return {
-    ...normalized.filters,
+    filters: normalized.filters,
     ...(normalized.scope === 'all' ? { scope: normalized.scope } : {}),
   }
 }
@@ -51,19 +51,25 @@ export function advancedFiltersContradictQuery(
 ): boolean {
   const previousState = cleanAdvancedFilters(previous)
   const nextState = cleanAdvancedFilters(next)
-  const { scope: _previousScope, ...previousFilters } = previousState
 
-  return Object.keys(previousFilters).some((key) => {
-    const filterKey = key as keyof AdvancedSearchStateDto
-    const previousValue = normalizeAdvancedValue(previousState[filterKey])
+  return Object.keys(previousState.filters).some((key) => {
+    const filterKey = key as keyof typeof previousState.filters
+    const previousValue = normalizeAdvancedValue(
+      previousState.filters[filterKey]
+    )
     if (!previousValue) return false
 
-    return !advancedValuesEqual(previousState[filterKey], nextState[filterKey])
+    return !advancedValuesEqual(
+      previousState.filters[filterKey],
+      nextState.filters[filterKey]
+    )
   })
 }
 
 function normalizeAdvancedValue(
-  value: AdvancedSearchStateDto[keyof AdvancedSearchStateDto]
+  value:
+    | AdvancedSearchStateDto['scope']
+    | AdvancedSearchStateDto['filters'][keyof AdvancedSearchStateDto['filters']]
 ): string {
   if (value === undefined || value === null || value === '') return ''
   if (typeof value === 'string') return value.trim().toLowerCase()
@@ -72,8 +78,12 @@ function normalizeAdvancedValue(
 }
 
 function advancedValuesEqual(
-  left: AdvancedSearchStateDto[keyof AdvancedSearchStateDto],
-  right: AdvancedSearchStateDto[keyof AdvancedSearchStateDto]
+  left:
+    | AdvancedSearchStateDto['scope']
+    | AdvancedSearchStateDto['filters'][keyof AdvancedSearchStateDto['filters']],
+  right:
+    | AdvancedSearchStateDto['scope']
+    | AdvancedSearchStateDto['filters'][keyof AdvancedSearchStateDto['filters']]
 ): boolean {
   return normalizeAdvancedValue(left) === normalizeAdvancedValue(right)
 }

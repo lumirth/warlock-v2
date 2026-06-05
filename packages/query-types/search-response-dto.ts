@@ -116,7 +116,18 @@ export type SearchMetaDto = {
   };
   appliedSort?: SearchSort;
   appliedScope?: SearchScope;
+  /**
+   * Lossless executable continuation request. Clients may send this request back
+   * for sort, pagination, and refresh operations without reinterpreting server
+   * planning state.
+   */
   nextRequest: SearchRequestDto;
+  /**
+   * Display-oriented interpretation of the request after natural-language
+   * planning. This may intentionally drop executable text and is not a
+   * continuation request.
+   */
+  interpretedRequest?: SearchRequestDto;
   term?: {
     activeTermId: string | null;
     registrableTermId: string | null;

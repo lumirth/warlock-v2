@@ -27,35 +27,65 @@ export type CourseSectionMeetingDto = {
   instructors: InstructorLinkDto[];
 };
 
-export type CourseSectionDto = {
-  crn: string;
-  sectionNumber: string;
-  status: string;
+export type CourseSectionAvailabilityStatus =
+  | "open"
+  | "restricted"
+  | "waitlisted"
+  | "closed"
+  | "cancelled"
+  | "unknown";
+
+export type CourseSectionAvailabilityDto = {
+  status: CourseSectionAvailabilityStatus;
+  label: string;
+  rawStatus: string | null;
+  statusCode: string | null;
+  sectionStatusCode: string | null;
+};
+
+export type CourseSectionScheduleDto = {
   type: string;
   days: string | null;
   startTime: string | null;
   endTime: string | null;
   location: string;
-  instructor: string;
-  instructorRmp: number | null;
-  instructorGpa: number | null;
-  instructorStats: InstructorLinkDto[];
-  sectionTitle: string | null;
-  statusCode: string | null;
-  sectionStatusCode: string | null;
-  sectionText: string | null;
-  sectionNotes: string | null;
-  cappArea: string | null;
   dateRangeText: string | null;
   partOfTerm: string | null;
   startDate: string | null;
   endDate: string | null;
   creditHours: string | null;
   meetings: CourseSectionMeetingDto[];
+};
+
+export type CourseSectionInstructorsDto = {
+  displayName: string;
+  rmpRating: number | null;
+  avgGpa: number | null;
+  stats: InstructorLinkDto[];
+};
+
+export type CourseSectionSourceFactsDto = {
+  sectionTitle: string | null;
+  sectionText: string | null;
+  sectionNotes: string | null;
+  cappArea: string | null;
+};
+
+export type CourseSectionLinksDto = {
   courseExplorerUrl?: string;
 };
 
-export type CourseGenedDto = {
+export type CourseSectionDto = {
+  crn: string;
+  sectionNumber: string;
+  availability: CourseSectionAvailabilityDto;
+  schedule: CourseSectionScheduleDto;
+  instructors: CourseSectionInstructorsDto;
+  sourceFacts: CourseSectionSourceFactsDto;
+  links: CourseSectionLinksDto;
+};
+
+export type CourseRequirementDto = {
   categoryId: string;
   categoryName: string | null;
   attributeCode: string | null;
@@ -133,11 +163,17 @@ export type CourseMetricsDto = {
   workloadScore: number | null;
 };
 
-export type CourseRegistrationDto = {
+export type CourseCatalogDto = {
   courseInfo: string | null;
   degreeAttributes: string | null;
+};
+
+export type CourseScheduleNotesDto = {
   classScheduleInfo: string | null;
   dateRangeText: string | null;
+};
+
+export type CourseRegistrationDto = {
   registrationNotes: string | null;
   approvalCode: string | null;
 };
@@ -157,8 +193,10 @@ export type CourseSummaryDto = {
   term: string;
   primaryInstructor: string | null;
   metrics: CourseMetricsDto;
+  catalog: CourseCatalogDto;
+  scheduleNotes: CourseScheduleNotesDto;
   registration: CourseRegistrationDto;
-  requirements: CourseGenedDto[];
+  requirements: CourseRequirementDto[];
   instructorLinks: Record<string, InstructorLinkDto>;
   links: CourseLinksDto;
 };

@@ -27,7 +27,7 @@ describe('search refinement actions', () => {
 
     expect(plan).toEqual({
       kind: 'search',
-      draft: { requirement: singleRequirementFilter('CS') },
+      draft: { filters: { requirement: singleRequirementFilter('CS') } },
       request: {
         query: '',
         filters: { requirement: singleRequirementFilter('CS') },
@@ -60,7 +60,7 @@ describe('search refinement actions', () => {
 
     expect(plan).toEqual({
       kind: 'search',
-      draft: {},
+      draft: { filters: {} },
       request: {
         query: 'CS',
         sort: { field: 'relevance', direction: 'desc' },
@@ -91,7 +91,7 @@ describe('search refinement actions', () => {
 
     expect(plan).toEqual({
       kind: 'search',
-      draft: { online: true },
+      draft: { filters: { online: true } },
       request: {
         query: 'movies class',
         filters: { online: true },

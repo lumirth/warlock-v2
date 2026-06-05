@@ -4,7 +4,7 @@ import type {
   CourseDetailResponseDto,
   CourseDetailDto,
   CourseExplorerUrlInput,
-  CourseGenedDto,
+  CourseRequirementDto,
   CourseSectionDto,
   CourseSummaryDto,
   InstructorLinkDto,
@@ -25,6 +25,7 @@ import {
   buildSearchResultPresentation,
   type SearchResultEvidenceContext,
 } from '../services/search-result-presentation.js';
+import { normalizeSectionAvailability } from '../services/section-availability-policy.js';
 import { courseSnapshotRequirementEvidence } from '../transforms/course-requirements.js';
 import { formatInstructorName, type CourseSnapshot } from '../transforms/course.js';
 
@@ -78,7 +79,7 @@ type SectionWithStats = Section & {
 export type CourseDtoOptions = {
   sections?: CourseSectionDto[];
   instructorLinks?: Record<string, InstructorLinkDto>;
-  geneds?: CourseGenedDto[];
+  requirements?: CourseRequirementDto[];
   medianGpa?: number | null;
 };
 
@@ -147,29 +148,39 @@ export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto 
   return {
     crn: section.crn,
     sectionNumber: section.section_number ?? '?',
-    status: section.status ?? 'Unknown',
-    type: section.type ?? '?',
-    days: section.days ?? null,
-    startTime: section.start_time ?? null,
-    endTime: section.end_time ?? null,
-    location: section.location ?? 'TBA',
-    instructor: section.instructor ?? 'TBA',
-    instructorRmp: validRmpMetric(section.instructor_rmp),
-    instructorGpa: section.instructor_gpa ?? null,
-    instructorStats: section.instructor_stats ?? [],
-    sectionTitle: section.section_title ?? null,
-    statusCode: section.status_code ?? null,
-    sectionStatusCode: section.section_status_code ?? null,
-    sectionText: section.section_text ?? null,
-    sectionNotes: section.section_notes ?? null,
-    cappArea: section.capp_area ?? null,
-    dateRangeText: section.date_range_text ?? null,
-    partOfTerm: section.part_of_term ?? null,
-    startDate: section.start_date ?? null,
-    endDate: section.end_date ?? null,
-    creditHours: section.credit_hours ?? null,
-    meetings: (section.meetings ?? []).map(toCourseSectionMeetingDto),
-    courseExplorerUrl: buildSectionCourseExplorerUrl(section),
+    availability: normalizeSectionAvailability({
+      status: section.status,
+      statusCode: section.status_code,
+      sectionStatusCode: section.section_status_code,
+    }),
+    schedule: {
+      type: section.type ?? '?',
+      days: section.days ?? null,
+      startTime: section.start_time ?? null,
+      endTime: section.end_time ?? null,
+      location: section.location ?? 'TBA',
+      dateRangeText: section.date_range_text ?? null,
+      partOfTerm: section.part_of_term ?? null,
+      startDate: section.start_date ?? null,
+      endDate: section.end_date ?? null,
+      creditHours: section.credit_hours ?? null,
+      meetings: (section.meetings ?? []).map(toCourseSectionMeetingDto),
+    },
+    instructors: {
+      displayName: section.instructor ?? 'TBA',
+      rmpRating: validRmpMetric(section.instructor_rmp),
+      avgGpa: section.instructor_gpa ?? null,
+      stats: section.instructor_stats ?? [],
+    },
+    sourceFacts: {
+      sectionTitle: section.section_title ?? null,
+      sectionText: section.section_text ?? null,
+      sectionNotes: section.section_notes ?? null,
+      cappArea: section.capp_area ?? null,
+    },
+    links: {
+      courseExplorerUrl: buildSectionCourseExplorerUrl(section),
+    },
   };
 }
 
@@ -213,15 +224,19 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
       qualityScore: course.quality_score ?? null,
       workloadScore: course.difficulty_score ?? null,
     },
-    registration: {
+    catalog: {
       courseInfo: course.course_info ?? null,
       degreeAttributes: course.degree_attributes ?? null,
+    },
+    scheduleNotes: {
       classScheduleInfo: course.class_schedule_info ?? null,
       dateRangeText: course.date_range_text ?? null,
+    },
+    registration: {
       registrationNotes: course.registration_notes ?? null,
       approvalCode: course.approval_code ?? null,
     },
-    requirements: options.geneds ?? [],
+    requirements: options.requirements ?? [],
     instructorLinks: options.instructorLinks ?? {},
     links: {
       courseExplorerUrl: buildCourseExplorerCourseUrl(course),
@@ -235,7 +250,7 @@ export function courseSnapshotToCourseDto(
 ): CourseDetailDto {
   const {
     sections: providedSections,
-    geneds: providedGeneds,
+    requirements: providedRequirements,
     instructorLinks = {},
     ...courseOptions
   } = options;
@@ -243,7 +258,7 @@ export function courseSnapshotToCourseDto(
   const summary = toCourseDto(snapshot.course, {
     ...courseOptions,
     instructorLinks,
-    geneds: providedGeneds ?? snapshotGenedsToDto(snapshot),
+    requirements: providedRequirements ?? snapshotRequirementsToDto(snapshot),
   });
 
   return {
@@ -293,8 +308,8 @@ export function courseSnapshotToCourseDetailResponseDto(
     : { course: courseDto };
 }
 
-function snapshotGenedsToDto(snapshot: CourseSnapshot): CourseGenedDto[] {
-  return courseSnapshotRequirementEvidence(snapshot).geneds;
+function snapshotRequirementsToDto(snapshot: CourseSnapshot): CourseRequirementDto[] {
+  return courseSnapshotRequirementEvidence(snapshot).requirements;
 }
 
 function snapshotSectionsToDto(
@@ -393,7 +408,7 @@ export function searchResultToCourseDto(
   const presentation = buildSearchResultPresentation(result, context);
   return {
     course: toCourseDto(result.course, {
-      geneds: context?.requirementCodes,
+      requirements: context?.requirementCodes,
     }),
     search: {
       score: result.score,

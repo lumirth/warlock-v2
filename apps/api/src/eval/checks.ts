@@ -1,6 +1,6 @@
 import type { GoldQuery, EvalResult, ResultSelector } from './types.js';
 import type { SearchPlanRescue } from '../services/search-planner-types.js';
-import { canonicalGenedCode } from '../services/gened-codes.js';
+import { canonicalRequirementCode } from '../services/requirement-codes.js';
 
 export interface ApiSearchResult {
   id: string;
@@ -8,7 +8,7 @@ export interface ApiSearchResult {
   subject: string;
   number: string;
   avg_gpa?: number;
-  geneds?: Array<{
+  requirements?: Array<{
     categoryId?: string;
     category_id?: string;
     attributeCode?: string | null;
@@ -191,11 +191,11 @@ function resultLevel(result: ApiSearchResult): number | null {
 }
 
 function resultSatisfiesRequirement(result: ApiSearchResult, requirement: string): boolean {
-  const canonical = canonicalGenedCode(requirement);
+  const canonical = canonicalRequirementCode(requirement);
   if (!canonical) return false;
-  return (result.geneds ?? []).some(entry =>
-    canonicalGenedCode(entry.categoryId ?? entry.category_id) === canonical
-    || canonicalGenedCode(entry.attributeCode ?? entry.attribute_code) === canonical
+  return (result.requirements ?? []).some(entry =>
+    canonicalRequirementCode(entry.categoryId ?? entry.category_id) === canonical
+    || canonicalRequirementCode(entry.attributeCode ?? entry.attribute_code) === canonical
   );
 }
 

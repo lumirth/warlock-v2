@@ -10,7 +10,7 @@ import {
 } from './negation.js';
 import { cleanResidual } from './residual.js';
 import {
-  extractContextualGeneds,
+  extractContextualRequirements,
   extractStudentShorthand,
 } from './requirements.js';
 import {
@@ -83,7 +83,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     reads: ['term_filters'],
     writes: ['requirement_context'],
     run(context) {
-      context.residual = extractContextualGeneds(context.residual, context.hints);
+      context.residual = extractContextualRequirements(context.residual, context.hints);
       recordExtractionArtifacts(context, 'requirement_context');
     },
   },

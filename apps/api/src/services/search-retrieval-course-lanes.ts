@@ -39,7 +39,6 @@ export async function titleKeywordSearch(
     ${filtered.joinSql}
     ${filtered.whereSql([titleWhere])}
     ${filtered.groupBySql("c.id")}
-    ${filtered.havingSql}
     ORDER BY title_rank ASC,
       c.year DESC,
       CASE c.term WHEN 'fall' THEN 1 WHEN 'spring' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END,
@@ -76,7 +75,6 @@ export async function keywordSearch(
       ${filtered.joinSql}
       ${filtered.whereSql()}
       ${filtered.groupBySql("c.id")}
-      ${filtered.havingSql}
       ORDER BY c.year DESC,
         CASE c.term WHEN 'spring' THEN 1 WHEN 'fall' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END
       LIMIT ?

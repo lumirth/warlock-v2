@@ -1,6 +1,6 @@
-import type { CourseGenedDto } from "@uiuc-course-search/query-types";
+import type { CourseRequirementDto } from "@uiuc-course-search/query-types";
 import { normalizeRequirementCodes } from "@uiuc-course-search/query-types";
-import { canonicalGenedCode } from "./gened-codes.js";
+import { canonicalRequirementCode } from "./requirement-codes.js";
 import type { SearchResult } from "./search-types.js";
 
 export function structuredRequirementCodes(
@@ -9,7 +9,7 @@ export function structuredRequirementCodes(
   return normalizeCanonicalRequirementCodes(codes);
 }
 
-export function genedDtoRequirementCodes(requirementCodes: readonly CourseGenedDto[] | undefined): string[] {
+export function courseRequirementDtoCodes(requirementCodes: readonly CourseRequirementDto[] | undefined): string[] {
   return normalizeCanonicalRequirementCodes(
     (requirementCodes ?? []).flatMap(requirement => [
       requirement.categoryId,
@@ -20,10 +20,10 @@ export function genedDtoRequirementCodes(requirementCodes: readonly CourseGenedD
 
 export function searchResultRequirementCodes(
   result: SearchResult,
-  requirementCodes?: readonly CourseGenedDto[],
+  requirementCodes?: readonly CourseRequirementDto[],
 ): string[] {
   return structuredRequirementCodes([
-    ...genedDtoRequirementCodes(requirementCodes),
+    ...courseRequirementDtoCodes(requirementCodes),
     ...(result.requirementCodes ?? []),
   ]);
 }
@@ -41,7 +41,7 @@ export function matchingRequirementCodes(
 function normalizeCanonicalRequirementCodes(codes: readonly string[]): string[] {
   return normalizeRequirementCodes(
     codes
-      .map(code => canonicalGenedCode(code) ?? "")
+      .map(code => canonicalRequirementCode(code) ?? "")
       .filter(Boolean),
   );
 }

@@ -80,16 +80,14 @@ describe('course routes', () => {
       course: {
         sections: Array<{
           crn: string;
-          instructor: string;
-          instructorRmp: number | null;
-          instructorGpa: number | null;
-          courseExplorerUrl?: string;
-          meetings: Array<{
-            typeCode: string | null;
-            buildingName: string | null;
-            roomNumber: string | null;
-            instructorNames: string[];
-          }>;
+          schedule: {
+            meetings: Array<{
+              typeCode: string | null;
+              buildingName: string | null;
+              roomNumber: string | null;
+              instructorNames: string[];
+            }>;
+          };
         }>;
       };
     } & Record<string, unknown>;
@@ -114,12 +112,16 @@ describe('course routes', () => {
     const sections = data.course.sections;
     expect(sections[0]).toMatchObject({
       crn: '12345',
-      instructor: 'Lovelace, A',
-      instructorRmp: 4.8,
-      instructorGpa: 3.62,
-      courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+      instructors: {
+        displayName: 'Lovelace, A',
+        rmpRating: 4.8,
+        avgGpa: 3.62,
+      },
+      links: {
+        courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+      },
     });
-    expect(sections[0].meetings[0]).toMatchObject({
+    expect(sections[0].schedule.meetings[0]).toMatchObject({
       typeCode: 'LEC',
       buildingName: 'Siebel Center',
       roomNumber: '1404',

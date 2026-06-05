@@ -14,22 +14,22 @@ import { api } from '../lib/api-client'
 import type {
   CourseDetailDto,
   CourseDetailResponseDto,
-  CourseGenedDto,
+  CourseRequirementDto,
 } from '@uiuc-course-search/query-types'
 
-function genedLabel(gened: CourseGenedDto): string {
-  const category = gened.categoryName ?? gened.categoryId
-  if (gened.attributeName) return `${category}: ${gened.attributeName}`
-  if (gened.attributeCode) return `${category}: ${gened.attributeCode}`
+function requirementLabel(requirement: CourseRequirementDto): string {
+  const category = requirement.categoryName ?? requirement.categoryId
+  if (requirement.attributeName) return `${category}: ${requirement.attributeName}`
+  if (requirement.attributeCode) return `${category}: ${requirement.attributeCode}`
   return category
 }
 
 function detailRows(course: CourseDetailDto): Array<{ label: string; value: string }> {
   return [
-    { label: 'Course information', value: course.registration.courseInfo },
-    { label: 'Degree attributes', value: course.registration.degreeAttributes },
-    { label: 'Schedule information', value: course.registration.classScheduleInfo },
-    { label: 'Date range', value: course.registration.dateRangeText },
+    { label: 'Course information', value: course.catalog.courseInfo },
+    { label: 'Degree attributes', value: course.catalog.degreeAttributes },
+    { label: 'Schedule information', value: course.scheduleNotes.classScheduleInfo },
+    { label: 'Date range', value: course.scheduleNotes.dateRangeText },
     { label: 'Registration notes', value: course.registration.registrationNotes },
     { label: 'Approval code', value: course.registration.approvalCode },
   ].filter((item): item is { label: string; value: string } =>
@@ -129,7 +129,7 @@ export function CoursePage() {
 
   const course = detail.course
   const details = detailRows(course)
-  const genedBadges = course.requirements.map(genedLabel)
+  const requirementBadges = course.requirements.map(requirementLabel)
 
   return (
     <PageContainer className="py-8">
@@ -142,7 +142,7 @@ export function CoursePage() {
           <h1 className="text-3xl leading-tight font-semibold">
             {course.subject} {course.number}: {course.title}
           </h1>
-          {genedBadges.map((label) => (
+          {requirementBadges.map((label) => (
             <Badge key={label} variant="outline">
               {label}
             </Badge>

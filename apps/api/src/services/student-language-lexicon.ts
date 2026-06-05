@@ -24,7 +24,7 @@ export type StudentShorthandRule = {
   confidence: number;
 };
 
-export type ContextualGenedRule = {
+export type ContextualRequirementRule = {
   code: string;
   pattern: RegExp;
   confidence: number;
@@ -51,7 +51,7 @@ export type StudentLanguageAliasEntry = {
   requiresCue?: boolean;
 };
 
-export const GENED_CUES = [
+export const REQUIREMENT_CUES = [
   "gen ed",
   "gened",
   "requirement",
@@ -99,7 +99,7 @@ export const STUDENT_LANGUAGE_ALIAS_ENTRIES: StudentLanguageAliasEntry[] = [
   { kind: "requirement", canonical: "ACP", aliases: ["acp", "advanced composition", "writing intensive"] },
 ];
 
-export const GENED_SYNONYMS: Record<string, string[]> = {
+export const REQUIREMENT_SYNONYMS: Record<string, string[]> = {
   CMP: ["comp 1", "composition", "writing", "rhet 105", "freshman comp", "comp1"],
   ACP: ["adv comp", "advanced composition", "advanced comp", "writing intensive", "cll"],
   HUM: ["humanities", "humanities and the arts", "arts"],
@@ -120,8 +120,8 @@ export const GENED_SYNONYMS: Record<string, string[]> = {
   QR2: ["qr2", "qr 2", "quant 2", "quantitative reasoning 2", "qrii"],
 };
 
-export const GENED_LOOKUP: Record<string, string> = Object.entries(
-  GENED_SYNONYMS,
+export const REQUIREMENT_LOOKUP: Record<string, string> = Object.entries(
+  REQUIREMENT_SYNONYMS,
 ).reduce<Record<string, string>>((lookup, [code, synonyms]) => {
   lookup[code.toLowerCase()] = code;
   for (const synonym of synonyms) {
@@ -130,7 +130,7 @@ export const GENED_LOOKUP: Record<string, string> = Object.entries(
   return lookup;
 }, {});
 
-export const GENED_LABELS: Record<string, string> = {
+export const REQUIREMENT_LABELS: Record<string, string> = {
   ACP: "Advanced Composition",
   BSC: "Behavioral Sciences",
   CMP: "Composition I",
@@ -151,7 +151,7 @@ export const GENED_LABELS: Record<string, string> = {
   WCC: "Western/Comparative Cultures",
 };
 
-export const SUBJECT_GENED_CONFLICTS = new Set(["CS", "PS"]);
+export const SUBJECT_REQUIREMENT_CONFLICTS = new Set(["CS", "PS"]);
 
 export const FUZZY_SUBJECT_NAME_BLOCKLIST = new Set([
   "science",
@@ -324,7 +324,7 @@ export const STUDENT_SHORTHAND_RULES: StudentShorthandRule[] = [
   },
 ];
 
-export const CONTEXTUAL_GENED_RULES: ContextualGenedRule[] = [
+export const CONTEXTUAL_REQUIREMENT_RULES: ContextualRequirementRule[] = [
   {
     code: "SBS",
     pattern: /\b(?:social\s+(?:and\s+behavioral\s+)?sciences?|behavioral\s+sciences?|social\s+science\s+(?:class|course|requirement|gen\s*-?\s*ed|requirement))\b/gi,
@@ -375,7 +375,7 @@ export const REQUIREMENT_PATTERNS = [
   /\btwo\s+requirements?\b/i,
 ];
 
-export const GENERIC_GENED_PATTERNS = [
+export const GENERIC_REQUIREMENT_PATTERNS = [
   /\bgen\s*-?\s*ed\b/i,
   /\bgened\b/i,
 ];

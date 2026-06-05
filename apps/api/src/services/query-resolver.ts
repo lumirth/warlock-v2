@@ -3,7 +3,7 @@ import type { ExtractedQuery, SearchPlan, QueryHint } from './search-planner-typ
 import { applyStructuredNegation } from './search-intent-policy.js';
 import { appendQueryText } from './search-plan-query-language.js';
 import {
-  resolveGened,
+  resolveRequirement,
   resolveSubjectHint,
   validateSubject,
 } from './subject-resolution.js';
@@ -40,7 +40,7 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
       }
 
       case 'requirement':
-        resolveGened(String(hint.value), plan);
+        resolveRequirement(String(hint.value), plan);
         break;
 
       case 'subject': {

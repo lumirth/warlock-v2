@@ -2,7 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import type { InstructorLinkDto } from '@uiuc-course-search/query-types';
 import type { Meeting, Section } from '../db/types.js';
 import { toCourseSectionDto, toInstructorLinkMap } from '../dto/course.js';
-import { canonicalGenedCode } from './gened-codes.js';
+import { canonicalRequirementCode } from './requirement-codes.js';
 import type {
   CourseDetailContext,
   CourseDetailEnrichment,
@@ -85,7 +85,7 @@ export class CourseDetailRepository {
     return aggregate?.median_gpa ?? null;
   }
 
-  async loadCourseGeneds(courseId: string): Promise<CourseDetailEnrichment['geneds']> {
+  async loadCourseRequirements(courseId: string): Promise<CourseDetailEnrichment['requirements']> {
     const rows = await this.db.prepare(`
       SELECT category_id, category_name, attribute_code, attribute_name
       FROM course_gened
@@ -101,20 +101,20 @@ export class CourseDetailRepository {
     return rows.results.map(row => ({
       categoryId: row.category_id,
       categoryName: row.category_name,
-      attributeCode: canonicalGenedCode(row.attribute_code),
+      attributeCode: canonicalRequirementCode(row.attribute_code),
       attributeName: row.attribute_name,
     }));
   }
 
   async loadEnrichment(context: CourseDetailContext): Promise<CourseDetailEnrichment> {
     const linksMap = await this.loadInstructorLinks(context);
-    const [enrichedSections, medianGpa, geneds] = await Promise.all([
+    const [enrichedSections, medianGpa, requirements] = await Promise.all([
       this.loadSectionsWithDetails(context.courseId, linksMap),
       this.loadCourseMedianGpa(context.subject, context.number),
-      this.loadCourseGeneds(context.courseId),
+      this.loadCourseRequirements(context.courseId),
     ]);
 
-    return { linksMap, enrichedSections, medianGpa, geneds };
+    return { linksMap, enrichedSections, medianGpa, requirements };
   }
 
   async loadSectionsWithDetails(

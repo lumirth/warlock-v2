@@ -1,9 +1,12 @@
 import { SlidersHorizontalIcon, XIcon } from 'lucide-react'
 import type {
   AdvancedSearchStateDto,
+  SearchRequestFilterKey,
+  SearchRequestFiltersDto,
   SearchAmbiguityActionDto,
   SearchChipDto,
   SearchMetaDto,
+  SearchScope,
 } from '@uiuc-course-search/query-types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,7 +23,8 @@ export function RefinePanel({
   advancedDraft,
   hasAdvancedDraftChanges,
   onAdvancedOpenChange,
-  onAdvancedDraftChange,
+  onAdvancedDraftFilterChange,
+  onAdvancedDraftScopeChange,
   onRemoveChip,
   onAmbiguityAction,
   onApplyAdvancedSearch,
@@ -32,10 +36,11 @@ export function RefinePanel({
   advancedDraft: AdvancedSearchStateDto
   hasAdvancedDraftChanges: boolean
   onAdvancedOpenChange: (open: boolean) => void
-  onAdvancedDraftChange: <Key extends keyof AdvancedSearchStateDto>(
+  onAdvancedDraftFilterChange: <Key extends SearchRequestFilterKey>(
     key: Key,
-    value: AdvancedSearchStateDto[Key]
+    value: SearchRequestFiltersDto[Key]
   ) => void
+  onAdvancedDraftScopeChange: (value?: SearchScope) => void
   onRemoveChip: (chip: SearchChipDto) => void
   onAmbiguityAction: (action: SearchAmbiguityActionDto) => void
   onApplyAdvancedSearch: () => void
@@ -123,7 +128,8 @@ export function RefinePanel({
           >
             <AdvancedSearchFields
               advancedDraft={advancedDraft}
-              onAdvancedDraftChange={onAdvancedDraftChange}
+              onAdvancedDraftFilterChange={onAdvancedDraftFilterChange}
+              onAdvancedDraftScopeChange={onAdvancedDraftScopeChange}
             />
 
             <div className="mt-4 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">

@@ -1,8 +1,11 @@
 import type {
   AdvancedSearchStateDto,
   SearchCourseResultDto,
+  SearchRequestFilterKey,
+  SearchRequestFiltersDto,
   SearchRequestDto,
   SearchResponseDto,
+  SearchScope,
   SearchSort,
 } from '@uiuc-course-search/query-types'
 import { DEFAULT_SEARCH_SORT } from './search-sort-model'
@@ -39,10 +42,11 @@ export type SearchControllerAction =
   | { type: 'query/changed'; value: string }
   | { type: 'advanced/open-changed'; value: boolean }
   | {
-      type: 'advanced/draft-field-changed'
-      key: keyof AdvancedSearchStateDto
-      value: AdvancedSearchStateDto[keyof AdvancedSearchStateDto]
+      type: 'advanced/draft-filter-changed'
+      key: SearchRequestFilterKey
+      value: SearchRequestFiltersDto[SearchRequestFilterKey]
     }
+  | { type: 'advanced/draft-scope-changed'; value?: SearchScope }
   | { type: 'advanced/draft-replaced'; value: AdvancedSearchStateDto }
   | { type: 'result-view/changed'; value: ResultViewMode }
   | {
@@ -65,7 +69,7 @@ export const INITIAL_SEARCH_DRAFT_STATE: SearchDraftState = {
   query: '',
   inputDirty: false,
   advancedOpen: false,
-  advancedDraft: {},
+  advancedDraft: { filters: {} },
   resultViewMode: 'cards',
 }
 
@@ -94,11 +98,21 @@ export function searchControllerReducer(
       return updateDraft(state, { query: action.value, inputDirty: true })
     case 'advanced/open-changed':
       return updateDraft(state, { advancedOpen: action.value })
-    case 'advanced/draft-field-changed':
+    case 'advanced/draft-filter-changed':
       return updateDraft(state, {
         advancedDraft: {
           ...state.draft.advancedDraft,
-          [action.key]: action.value,
+          filters: {
+            ...state.draft.advancedDraft.filters,
+            [action.key]: action.value,
+          },
+        },
+      })
+    case 'advanced/draft-scope-changed':
+      return updateDraft(state, {
+        advancedDraft: {
+          ...state.draft.advancedDraft,
+          scope: action.value,
         },
       })
     case 'advanced/draft-replaced':
@@ -140,7 +154,7 @@ export function searchControllerReducer(
       return {
         draft: {
           ...state.draft,
-          advancedDraft: {},
+          advancedDraft: { filters: {} },
         },
         session: {
           ...state.session,

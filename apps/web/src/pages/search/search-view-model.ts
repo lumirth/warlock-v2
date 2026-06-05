@@ -11,6 +11,7 @@ import type {
 
 export type SearchViewModel = {
   activeRequestQuery: string
+  interpretedRequestQuery: string
   activeAdvancedFilters: AdvancedSearchStateDto
   hasActiveRequest: boolean
   resultCountLabel: string
@@ -26,9 +27,11 @@ export type SearchViewModel = {
 export function buildSearchViewModel(
   state: SearchControllerState
 ): SearchViewModel {
-  const activeAdvancedFilters = state.session.activeRequest
-    ? advancedStateFromRequest(state.session.activeRequest)
-    : {}
+  const interpretedRequest =
+    state.session.meta?.interpretedRequest ?? state.session.activeRequest
+  const activeAdvancedFilters = interpretedRequest
+    ? advancedStateFromRequest(interpretedRequest)
+    : { filters: {} }
   const hasActiveStructuredFilters = hasAdvancedFilterValue(
     activeAdvancedFilters
   )
@@ -41,6 +44,7 @@ export function buildSearchViewModel(
   const activeRequestQuery = hasActiveRequest
     ? state.session.activeRequest?.query ?? ''
     : state.draft.query.trim()
+  const interpretedRequestQuery = interpretedRequest?.query ?? activeRequestQuery
   const resultCountLabel =
     state.session.pagination?.resultCountLowerBound !== undefined
       ? `${state.session.pagination.resultCountLowerBound.toLocaleString()}${
@@ -76,6 +80,7 @@ export function buildSearchViewModel(
 
   return {
     activeRequestQuery,
+    interpretedRequestQuery,
     activeAdvancedFilters,
     hasActiveRequest,
     resultCountLabel,

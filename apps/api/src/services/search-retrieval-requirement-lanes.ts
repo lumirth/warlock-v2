@@ -34,7 +34,6 @@ export async function requirementLaneSearch(
     ${filtered.joinSql}
     ${filtered.whereSql()}
     ${filtered.groupBySql()}
-    ${filtered.havingSql}
     ORDER BY c.year DESC, c.subject, c.number
     LIMIT ?
   `;

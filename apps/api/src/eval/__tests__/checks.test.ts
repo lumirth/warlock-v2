@@ -18,7 +18,7 @@ const culturalStudiesResult = {
   title: 'Classical Mythology',
   subject: 'CLCV',
   number: '100',
-  geneds: [
+  requirements: [
     {
       categoryId: 'CS',
       category_id: 'CS',
@@ -55,7 +55,7 @@ describe('result coherence checks', () => {
     expect(violations).toEqual([]);
   });
 
-  it('fails when the full gen-ed set does not satisfy the expectation', () => {
+  it('fails when the full requirement set does not satisfy the expectation', () => {
     const violations = checkResultCoherence(
       query({
         top_k: 1,

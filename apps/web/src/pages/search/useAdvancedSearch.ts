@@ -1,5 +1,9 @@
 import type { Dispatch } from 'react'
-import type { AdvancedSearchStateDto } from '@uiuc-course-search/query-types'
+import type {
+  SearchRequestFilterKey,
+  SearchRequestFiltersDto,
+  SearchScope,
+} from '@uiuc-course-search/query-types'
 import { planAdvancedSearchApply } from './advanced-search-planner'
 import { advancedStateFromRequest } from './search-filter-model'
 import type {
@@ -22,27 +26,31 @@ export function useAdvancedSearch({
   const setAdvancedOpen = (value: boolean) =>
     dispatch({ type: 'advanced/open-changed', value })
 
-  const updateAdvancedDraft = <Key extends keyof AdvancedSearchStateDto>(
+  const updateAdvancedDraftFilter = <Key extends SearchRequestFilterKey>(
     key: Key,
-    value: AdvancedSearchStateDto[Key]
+    value: SearchRequestFiltersDto[Key]
   ) =>
     dispatch({
-      type: 'advanced/draft-field-changed',
+      type: 'advanced/draft-filter-changed',
       key,
       value,
     })
+  const updateAdvancedDraftScope = (value?: SearchScope) =>
+    dispatch({ type: 'advanced/draft-scope-changed', value })
 
   const applyAdvancedSearch = () => {
-    const activeAdvanced = state.session.activeRequest
-      ? advancedStateFromRequest(state.session.activeRequest)
-      : {}
+    const interpretedRequest =
+      state.session.meta?.interpretedRequest ?? state.session.activeRequest
+    const activeAdvanced = interpretedRequest
+      ? advancedStateFromRequest(interpretedRequest)
+      : { filters: {} }
     const plan = planAdvancedSearchApply({
       activeRequestQuery,
       currentInputQuery: state.draft.query,
       inputDirty: state.draft.inputDirty,
       interpretedAdvanced: activeAdvanced,
       draft: state.draft.advancedDraft,
-      interpretedQuery: state.session.activeRequest?.query,
+      interpretedQuery: interpretedRequest?.query,
     })
 
     if (plan.kind === 'clear') {
@@ -62,17 +70,20 @@ export function useAdvancedSearch({
   }
 
   const resetAdvancedDraft = () => {
+    const interpretedRequest =
+      state.session.meta?.interpretedRequest ?? state.session.activeRequest
     dispatch({
       type: 'advanced/draft-replaced',
-      value: state.session.activeRequest
-        ? advancedStateFromRequest(state.session.activeRequest)
-        : {},
+      value: interpretedRequest
+        ? advancedStateFromRequest(interpretedRequest)
+        : { filters: {} },
     })
   }
 
   return {
     setAdvancedOpen,
-    updateAdvancedDraft,
+    updateAdvancedDraftFilter,
+    updateAdvancedDraftScope,
     applyAdvancedSearch,
     resetAdvancedDraft,
   }

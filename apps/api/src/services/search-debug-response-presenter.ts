@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { CourseGenedDto } from "@uiuc-course-search/query-types";
-import { loadSearchResultGeneds } from "../dto/search-geneds.js";
+import type { CourseRequirementDto } from "@uiuc-course-search/query-types";
+import { loadSearchResultRequirements } from "../dto/search-requirements.js";
 import type { SearchRequestPagination } from "../http/search-request.js";
 import type { SearchPipelineResult } from "./search-response.js";
 import { getSearchTermSummary } from "./term-state.js";
@@ -16,7 +16,7 @@ export async function presentSearchDebugResponse(input: {
     subject: string;
     number: string;
     avg_gpa: number | null;
-    geneds: CourseGenedDto[];
+    requirements: CourseRequirementDto[];
     score: number;
   }>;
   meta: {
@@ -36,8 +36,8 @@ export async function presentSearchDebugResponse(input: {
   const { db, pagination, result } = input;
   const { limit, offset } = pagination;
   const pageResults = result.results.slice(offset, offset + limit);
-  const [genedsByCourseId, term] = await Promise.all([
-    loadSearchResultGeneds(
+  const [requirementsByCourseId, term] = await Promise.all([
+    loadSearchResultRequirements(
       db,
       pageResults.map((searchResult) => searchResult.course.id),
     ),
@@ -51,7 +51,7 @@ export async function presentSearchDebugResponse(input: {
       subject: searchResult.course.subject,
       number: searchResult.course.number,
       avg_gpa: searchResult.course.avg_gpa,
-      geneds: genedsByCourseId.get(searchResult.course.id) ?? [],
+      requirements: requirementsByCourseId.get(searchResult.course.id) ?? [],
       score: searchResult.score,
     })),
     meta: {

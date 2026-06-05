@@ -1,6 +1,6 @@
 import type { Hint } from '../search-planner-types.js';
 import {
-  CONTEXTUAL_GENED_RULES,
+  CONTEXTUAL_REQUIREMENT_RULES,
   STUDENT_SHORTHAND_RULES,
 } from '../student-language-lexicon.js';
 import {
@@ -37,10 +37,10 @@ export function extractStudentShorthand(text: string, hints: Hint[]): string {
   return residual;
 }
 
-export function extractContextualGeneds(text: string, hints: Hint[]): string {
+export function extractContextualRequirements(text: string, hints: Hint[]): string {
   let residual = text;
 
-  for (const rule of CONTEXTUAL_GENED_RULES) {
+  for (const rule of CONTEXTUAL_REQUIREMENT_RULES) {
     const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
     const matches: TextMatch[] = [];
     let match;

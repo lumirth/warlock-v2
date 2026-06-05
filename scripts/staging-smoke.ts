@@ -103,13 +103,12 @@ function hasCourseExplorerLinks(body: JsonRecord | null): boolean {
     : [];
   return sections.some((section) => {
     const sectionLinks = section.links;
-    return typeof section.courseExplorerUrl === 'string'
-      || (
-        sectionLinks
-        && typeof sectionLinks === 'object'
-        && !Array.isArray(sectionLinks)
-        && typeof (sectionLinks as JsonRecord).courseExplorerUrl === 'string'
-      );
+    return (
+      sectionLinks
+      && typeof sectionLinks === 'object'
+      && !Array.isArray(sectionLinks)
+      && typeof (sectionLinks as JsonRecord).courseExplorerUrl === 'string'
+    );
   });
 }
 

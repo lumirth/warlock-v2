@@ -15,9 +15,9 @@ describe('SearchPage advanced filters and pagination', () => {
   it('sends advanced controls as structured filters while preserving free-text terms', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([]),
+        ...searchResponse([], 'fixture'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'algorithms', residual: 'algorithms' },
           nextRequest: {
             query: 'algorithms',
@@ -28,7 +28,7 @@ describe('SearchPage advanced filters and pagination', () => {
           },
         },
       })
-      .mockResolvedValueOnce(searchResponse([]))
+      .mockResolvedValueOnce(searchResponse([], 'fixture'))
 
     renderSearchPage()
 
@@ -77,11 +77,14 @@ describe('SearchPage advanced filters and pagination', () => {
   it('clears stale search text when advanced filters contradict parsed query filters', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([]),
+        ...searchResponse([], 'fixture'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'intro to CS', residual: 'intro to' },
           nextRequest: {
+            query: 'intro to CS',
+          },
+          interpretedRequest: {
             query: '',
             filters: { subject: 'CS' },
           },
@@ -102,7 +105,7 @@ describe('SearchPage advanced filters and pagination', () => {
           },
         },
       })
-      .mockResolvedValueOnce(searchResponse([]))
+      .mockResolvedValueOnce(searchResponse([], 'fixture'))
 
     renderSearchPage()
 
@@ -129,11 +132,14 @@ describe('SearchPage advanced filters and pagination', () => {
   it('keeps meaningful residual text when advanced filters replace parsed query filters', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([]),
+        ...searchResponse([], 'fixture'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'CS algorithms', residual: 'algorithms' },
           nextRequest: {
+            query: 'CS algorithms',
+          },
+          interpretedRequest: {
             query: 'algorithms',
             filters: { subject: 'CS' },
           },
@@ -154,7 +160,7 @@ describe('SearchPage advanced filters and pagination', () => {
           },
         },
       })
-      .mockResolvedValueOnce(searchResponse([]))
+      .mockResolvedValueOnce(searchResponse([], 'fixture'))
 
     renderSearchPage()
 
@@ -182,11 +188,14 @@ describe('SearchPage advanced filters and pagination', () => {
 
   it('adopts interpreted filters only through the explicit advanced reset action', async () => {
     vi.mocked(api.search).mockResolvedValueOnce({
-      ...searchResponse([]),
+      ...searchResponse([], 'fixture'),
       meta: {
-        ...searchResponse([]).meta,
+        ...searchResponse([], 'fixture').meta,
         query: { raw: 'intro to CS', residual: 'intro to' },
         nextRequest: {
+          query: 'intro to CS',
+        },
+        interpretedRequest: {
           query: '',
           filters: { subject: 'CS' },
         },
@@ -238,11 +247,14 @@ describe('SearchPage advanced filters and pagination', () => {
   it('loads more from the refined query without changing the visible search text', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([]),
+        ...searchResponse([], 'fixture'),
         meta: {
-          ...searchResponse([]).meta,
+          ...searchResponse([], 'fixture').meta,
           query: { raw: 'professor fagen algorithms', residual: 'algorithms' },
           nextRequest: {
+            query: 'professor fagen algorithms',
+          },
+          interpretedRequest: {
             query: 'algorithms',
             filters: { instructor: 'fagen' },
           },
@@ -286,7 +298,7 @@ describe('SearchPage advanced filters and pagination', () => {
             number: '473',
             title: 'Algorithms',
           }),
-        ]),
+        ], 'algorithms'),
         pagination: {
           resultCountLowerBound: 21,
           limit: 20,
@@ -344,7 +356,7 @@ describe('SearchPage advanced filters and pagination', () => {
             number: '124',
             title: 'Introduction to Computer Science I',
           }),
-        ]),
+        ], 'intro to CS'),
         pagination: {
           resultCountLowerBound: 21,
           limit: 20,
@@ -391,7 +403,7 @@ describe('SearchPage advanced filters and pagination', () => {
             number: '101',
             title: 'Intro Computing',
           }),
-        ]),
+        ], 'intro to CS'),
         pagination: { resultCountLowerBound: 22, limit: 20, offset: 20, hasMore: true },
       })
 

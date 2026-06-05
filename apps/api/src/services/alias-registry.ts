@@ -1,6 +1,6 @@
 import { generatedSubjectAliases } from './subject-taxonomy.js';
 import {
-  GENED_CUES,
+  REQUIREMENT_CUES,
   STUDENT_LANGUAGE_ALIAS_ENTRIES,
 } from './student-language-lexicon.js';
 
@@ -50,7 +50,7 @@ export class AliasRegistry {
     const consumed = new Set<number>(); // Track consumed character positions
 
     // Check for cues in the text
-    const hasCue = GENED_CUES.some(cue => normalized.includes(cue));
+    const hasCue = REQUIREMENT_CUES.some(cue => normalized.includes(cue));
 
     const candidates = this.findAliasCandidates(text, normalized, hasCue);
 

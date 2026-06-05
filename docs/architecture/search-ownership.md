@@ -63,10 +63,12 @@ reinterpret another layer's concept, it creates drift.
 - `apps/web/src/pages/search` owns UI state and rendering. It consumes public
   requests, public responses, and server-authored `nextRequest` actions. It should
   not know internal planner field names. Its session state has one canonical
-  `activeRequest`; raw submitted text is temporary until the server returns an
-  interpreted request. Sort, pagination, recovery, chip removal, and ambiguity
-  actions execute a `SearchRequestDto` directly rather than rebuilding query text
-  and filters from derived form state.
+  `activeRequest`, replaced only by the server's executable `meta.nextRequest`
+  after a successful response. `meta.interpretedRequest` is display/form
+  interpretation only; sort, pagination, and refresh must not execute it. Sort,
+  pagination, recovery, chip removal, and ambiguity actions execute a
+  `SearchRequestDto` directly rather than rebuilding query text and filters from
+  derived form state.
 - `course-sync-application` and `enrichment-application` own sync and enrichment
   workflows. Routes validate HTTP input and call these services; they do not update
   term state, coordinate GPA/RMP/scoring workflows, or choose embedding wiring.
@@ -86,6 +88,11 @@ reinterpret another layer's concept, it creates drift.
   defects do not hide inside one mutable parser file. XML parser call sites use
   structured `htmlparser2` DOM helpers; subject-list parsing, course-list parsing,
   and course-detail parsing should not hand-roll regexes.
+- Course-data vocabulary lives in
+  `docs/architecture/course-data-vocabulary.md`. Source, storage, product,
+  transport, and display names are allowed to differ only at named boundaries.
+  Public DTO and web code use product vocabulary such as `requirement`,
+  `workload`, `catalog`, `scheduleNotes`, `availability`, and `sourceFacts`.
 
 ## Naming Rules
 
@@ -100,6 +107,14 @@ reinterpret another layer's concept, it creates drift.
   product/request/presentation code should use workload language.
 - A course entity, a search result wrapper, and a detail cache envelope are separate
   DTO concepts.
+- Course facts are intentionally split: `catalog` contains catalog facts,
+  `scheduleNotes` contains Course Explorer schedule notes, and `registration`
+  contains registration/approval constraints. Do not put every Course Explorer
+  text field back under `registration`.
+- Public section DTOs are grouped by `availability`, `schedule`, `instructors`,
+  `sourceFacts`, and `links`. Raw Course Explorer status text and codes are
+  preserved, but UI status tone and labels flow through section availability
+  policy and section display models rather than substring checks in components.
 - A `SearchPlan` is internal intent. It is not a public response shape and must not
   leak through `SearchResponseDto`.
 
@@ -129,9 +144,21 @@ These are the checks future changes should preserve or add as automated tests:
   local presentation.
 - Web search follow-up actions derive from session `activeRequest`, which is
   replaced by the server-authored `meta.nextRequest` after a successful response.
+- `meta.nextRequest` is a lossless executable continuation request. It is not
+  built from `meta.interpretedRequest`. `meta.interpretedRequest` may drop or
+  rewrite text for display and advanced-form reset flows only.
 - Web sort, pagination, and server-authored refinement actions execute canonical
   `SearchRequestDto` objects, not `{ query, filters }` patches reconstructed from
   derived UI state.
+- Advanced search state stores `{ filters, scope }`; `scope` is not a fake filter.
+- Public course DTOs and web presentation use requirement vocabulary. `gened`
+  names are limited to storage/source compatibility and accepted query aliases.
+- Public course sections use nested DTO groups and canonical
+  `open | restricted | waitlisted | closed | cancelled | unknown` availability.
+  UI components do not interpret raw section status strings directly.
+- Filtered lane SQL helpers should not carry dormant generic SQL phases such as
+  unused `HAVING` support. Add ordered SQL fragments when a real caller needs
+  them.
 - Invalid explicit URL parameters follow one rule: reject with a clear error.
   Defaults apply only when a parameter is absent.
 - Planning passes declare artifacts and the pass harness verifies declared reads

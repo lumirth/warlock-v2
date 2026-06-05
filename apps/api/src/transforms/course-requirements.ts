@@ -1,37 +1,37 @@
-import type { CourseGenedDto } from '@uiuc-course-search/query-types';
+import type { CourseRequirementDto } from '@uiuc-course-search/query-types';
 import { normalizeRequirementCodes } from '@uiuc-course-search/query-types';
 import type { CourseSnapshot } from './course.js';
-import { canonicalGenedCode } from '../services/gened-codes.js';
+import { canonicalRequirementCode } from '../services/requirement-codes.js';
 
 export type CourseRequirementEvidence = {
-  geneds: CourseGenedDto[];
+  requirements: CourseRequirementDto[];
   codes: string[];
   labels: string[];
   summaryCode: string | null;
 };
 
 export function courseSnapshotRequirementEvidence(snapshot: CourseSnapshot): CourseRequirementEvidence {
-  const geneds = snapshot.genEdCategories.map(gened => ({
-    categoryId: gened.categoryId,
-    categoryName: gened.categoryName,
-    attributeCode: canonicalGenedCode(gened.attributeCode),
-    attributeName: gened.attributeName,
+  const requirements = snapshot.genEdCategories.map(category => ({
+    categoryId: category.categoryId,
+    categoryName: category.categoryName,
+    attributeCode: canonicalRequirementCode(category.attributeCode),
+    attributeName: category.attributeName,
   }));
 
   const richCodes = normalizeRequirementCodes(
-    snapshot.genEdCategories.flatMap(gened => [
-      gened.categoryId,
-      gened.attributeCode ?? '',
-    ]).map(code => canonicalGenedCode(code) ?? '').filter(Boolean)
+    snapshot.genEdCategories.flatMap(category => [
+      category.categoryId,
+      category.attributeCode ?? '',
+    ]).map(code => canonicalRequirementCode(code) ?? '').filter(Boolean)
   );
   const codes = richCodes;
-  const labels = uniqueStrings(snapshot.genEdCategories.flatMap(gened => [
-    gened.categoryName,
-    gened.attributeName,
+  const labels = uniqueStrings(snapshot.genEdCategories.flatMap(category => [
+    category.categoryName,
+    category.attributeName,
   ]).filter((value): value is string => Boolean(value)));
 
   return {
-    geneds,
+    requirements,
     codes,
     labels,
     summaryCode: codes[0] ?? null,

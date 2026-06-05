@@ -26,11 +26,13 @@ describe('CourseDetailService', () => {
         id: 'CS-225-2026-spring',
         sections: [{
           crn: '12345',
-          partOfTerm: 'A',
-          meetings: [{
-            typeCode: 'LEC',
-            buildingName: 'Siebel Center',
-          }],
+          schedule: {
+            partOfTerm: 'A',
+            meetings: [{
+              typeCode: 'LEC',
+              buildingName: 'Siebel Center',
+            }],
+          },
         }],
       },
       cache: {
@@ -83,14 +85,18 @@ describe('CourseDetailService', () => {
         },
         sections: [{
           crn: '12345',
-          instructorRmp: 4.8,
-          instructorGpa: 3.62,
-          meetings: [{
-            typeCode: 'LEC',
-            buildingName: 'Siebel Center',
-            roomNumber: '1404',
-            instructorNames: ['Lovelace, A'],
-          }],
+          instructors: {
+            rmpRating: 4.8,
+            avgGpa: 3.62,
+          },
+          schedule: {
+            meetings: [{
+              typeCode: 'LEC',
+              buildingName: 'Siebel Center',
+              roomNumber: '1404',
+              instructorNames: ['Lovelace, A'],
+            }],
+          },
         }],
       },
       cache: {

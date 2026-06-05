@@ -1,6 +1,6 @@
 import {
   getWorkloadTierLabel,
-  type CourseGenedDto,
+  type CourseRequirementDto,
   type CourseSummaryDto,
   type SearchChipDto,
   type SearchRecoveryGroup,
@@ -107,16 +107,16 @@ export function formatTermLabel(term: string, year: number): string {
   return `${term.charAt(0).toUpperCase()}${term.slice(1).toLowerCase()} ${year}`
 }
 
-export function genedLabel(requirement: CourseGenedDto): string {
+export function requirementLabel(requirement: CourseRequirementDto): string {
   const category = requirement.categoryName ?? requirement.categoryId
   if (requirement.attributeName) return `${category}: ${requirement.attributeName}`
   if (requirement.attributeCode) return `${category}: ${requirement.attributeCode}`
   return category
 }
 
-export function courseGenedLabels(course: CourseSummaryDto): string[] {
+export function courseRequirementLabels(course: CourseSummaryDto): string[] {
   if (course.requirements.length > 0) {
-    return course.requirements.map(genedLabel)
+    return course.requirements.map(requirementLabel)
   }
   return []
 }

@@ -26,7 +26,7 @@ export function buildStoredCourseDetailResponse(
     body: toCourseDetailResponseDto(course, {
       sections: enrichment.enrichedSections,
       instructorLinks: enrichment.linksMap,
-      geneds: enrichment.geneds,
+      requirements: enrichment.requirements,
       medianGpa: enrichment.medianGpa,
       cached: !isStale,
       stale: isStale,

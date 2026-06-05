@@ -41,7 +41,7 @@ The system automatically discovers new academic terms to sync:
 *   `http/course-detail-request.ts`: validates HTTP params/query/header state into `CourseDetailRequest`.
 *   `services/course-detail-service.ts`: owns cache freshness, stale fallback, live fetch policy, enrichment loading, and response state.
 *   `services/course-detail-live-source.ts`: owns live CISAPI detail fetch, XML parsing, and snapshot transform.
-*   `services/course-detail-repository.ts`: owns D1 read models for cached detail, sections, meetings, GenEds, GPA, and instructor enrichment.
+*   `services/course-detail-repository.ts`: owns D1 read models for cached detail, sections, meetings, requirements, GPA, and instructor enrichment.
 
 ### Data
 
@@ -51,7 +51,7 @@ The system automatically discovers new academic terms to sync:
 *   `transforms/course-requirements.ts`: canonical full requirement evidence from snapshots.
 *   `services/embeddings.ts`: vector embedding generation/storage from canonical snapshot evidence.
 
-Full GenEd/requirement behavior should use `course_gened`, `CourseGenedDto`, and `transforms/course-requirements.ts`. The flat `courses.gened` field is retained as a denormalized compatibility summary and should not be treated as the source of truth.
+Full requirement behavior should use `course_gened`, `CourseRequirementDto`, and `transforms/course-requirements.ts`. The flat `courses.gened` field is retained as a denormalized source/storage compatibility summary and should not be treated as the public or search source of truth.
 
 ## Configuration
 
