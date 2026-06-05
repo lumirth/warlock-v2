@@ -188,6 +188,19 @@ CREATE TABLE IF NOT EXISTS gpa_stats (
     UNIQUE(subject, number, instructor)
 );
 
+CREATE TABLE IF NOT EXISTS gpa_source_rows (
+    row_key TEXT PRIMARY KEY,
+    subject TEXT NOT NULL,
+    number TEXT NOT NULL,
+    instructor TEXT,
+    avg_gpa REAL NOT NULL,
+    sample_size INTEGER NOT NULL,
+    last_updated INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_gpa_source_rows_course_instructor
+ON gpa_source_rows(subject, number, instructor);
+
 -- RMP cache
 CREATE TABLE IF NOT EXISTS rmp_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
