@@ -61,12 +61,13 @@ export function removeTextForHint(hint: Hint, residual: string): string {
 export function resolvedFilterFromHint(
   hint: Hint,
   plan: SearchPlan,
+  residual: string,
 ): Partial<SearchRequestFiltersDto> {
   if (isSubjectHintResolvedAsRequirement(hint, plan)) {
     return { requirement: singleRequirementFilter(formatHintValue(hint.value)) };
   }
 
-  return filterFromHint(hint);
+  return filterFromHint(hint, residual);
 }
 
 export function isEditableHint(hint: Hint): boolean {
@@ -119,7 +120,10 @@ function formatHintLabel(hint: Hint, residual = ""): string {
   }
 }
 
-function filterFromHint(hint: Hint): Partial<SearchRequestFiltersDto> {
+function filterFromHint(
+  hint: Hint,
+  residual: string,
+): Partial<SearchRequestFiltersDto> {
   switch (hint.type) {
     case "courseCode": {
       const value = hint.value as CourseCodeValue;
@@ -130,6 +134,8 @@ function filterFromHint(hint: Hint): Partial<SearchRequestFiltersDto> {
     }
     case "subject":
       return { subject: formatHintValue(hint.value).toUpperCase() };
+    case "instructor":
+      return { instructor: formatDisplayHintValue(hint, residual) };
     case "crn":
       return {};
     case "days":

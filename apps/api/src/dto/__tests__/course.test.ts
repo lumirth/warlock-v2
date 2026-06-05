@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
+import {
+  GENERIC_GENED_REQUIREMENT_CODES,
+  requirementFilter,
+  singleRequirementFilter,
+} from '@uiuc-course-search/query-types';
 import type { Course } from '../../db/index.js';
 import type { SearchResult } from '../../services/search-types.js';
 import {
@@ -205,29 +209,17 @@ describe('search result DTO evidence', () => {
         filters: {
           subject: 'CS',
           workload: 'easy',
-          requirement: requirementFilter('any', [
-            'HUM',
-            'NAT',
-            'SBS',
-            'CS',
-            'QR',
-            'QR1',
-            'QR2',
-            'NW',
-            'US',
-            'WCC',
-            'ACP',
-          ]),
+          requirement: requirementFilter('any', GENERIC_GENED_REQUIREMENT_CODES),
         },
         keywordQuery: '',
         semanticQuery: '',
       },
     });
 
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any GenEd: QR, QR2']));
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any GenEd: QR']));
     expect(dto.matchEvidence?.find(item => item.kind === 'requirement')).toMatchObject({
       label: 'Any GenEd',
-      value: 'QR, QR2',
+      value: 'QR',
       weight: 'hard',
     });
     expect(dto.explanation?.confidence.reasons).toContain('GenEd evidence came from structured mappings.');

@@ -1,3 +1,5 @@
+import { canonicalRequirementCodes } from "./requirement-options.js";
+
 export type NormalizedQualityScore = number & {
   readonly __scoreKind: "NormalizedQualityScore";
 };
@@ -84,9 +86,9 @@ export const GENED_DISPLAY_NAME = "GenEd";
 export const ANY_GENED_DISPLAY_LABEL = "Any GenEd";
 
 export function formatGenEdDisplayLabel(codes: readonly string[] | string): string {
-  const normalizedCodes = Array.isArray(codes)
-    ? codes.filter(Boolean)
-    : [codes].filter(Boolean);
+  const normalizedCodes = canonicalRequirementCodes(
+    Array.isArray(codes) ? codes : [codes],
+  );
   return normalizedCodes.length > 0
     ? `${GENED_DISPLAY_NAME} ${normalizedCodes.join(", ")}`
     : GENED_DISPLAY_NAME;
@@ -135,13 +137,5 @@ export function hasRequirementFilter(
 }
 
 export function normalizeRequirementCodes(codes: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const code of codes) {
-    const value = code.trim().toUpperCase();
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    normalized.push(value);
-  }
-  return normalized;
+  return canonicalRequirementCodes(codes);
 }

@@ -1,21 +1,10 @@
 import {
+  GENERIC_GENED_REQUIREMENT_CODES,
   requirementFilter as buildRequirementFilter,
   singleRequirementFilter,
 } from '@uiuc-course-search/query-types';
 
-export const ALL_GENED_CODES = [
-  "HUM",
-  "NAT",
-  "SBS",
-  "CS",
-  "QR",
-  "QR1",
-  "QR2",
-  "NW",
-  "US",
-  "WCC",
-  "ACP",
-] as const;
+export const ALL_GENED_CODES = GENERIC_GENED_REQUIREMENT_CODES;
 
 export function requirement(code: string) {
   const filter = singleRequirementFilter(code);

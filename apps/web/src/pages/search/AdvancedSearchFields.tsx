@@ -1,7 +1,9 @@
 import type { InputHTMLAttributes } from 'react'
 import {
   ANY_GENED_DISPLAY_LABEL,
+  GENED_REQUIREMENT_GROUPS,
   GENED_DISPLAY_NAME,
+  canonicalRequirementCodes,
   isSearchLevelFilter,
   isSearchStatusFilter,
   isSearchTermFilter,
@@ -94,22 +96,6 @@ export function AdvancedSearchFields({
               onAdvancedDraftFilterChange('instructor', value || undefined)
             }
           />
-          <AdvancedTextField
-            id="advanced-requirement"
-            label={`${GENED_DISPLAY_NAME} codes`}
-            maxLength={48}
-            placeholder="HUM, US"
-            value={requirementCodesText(filters.requirement)}
-            onChange={(value) =>
-              onAdvancedDraftFilterChange(
-                'requirement',
-                requirementFilterFromText(
-                  value,
-                  requirementMatchMode(filters.requirement)
-                )
-              )
-            }
-          />
           <AdvancedSelectField
             id="advanced-requirement-mode"
             label={`${GENED_DISPLAY_NAME} match`}
@@ -119,8 +105,8 @@ export function AdvancedSearchFields({
             onChange={(value) =>
               onAdvancedDraftFilterChange(
                 'requirement',
-                requirementFilterFromText(
-                  requirementCodesText(filters.requirement),
+                requirementFilterFromCodes(
+                  filters.requirement?.codes ?? [],
                   value === 'all' ? 'all' : 'any'
                 )
               )
@@ -137,6 +123,10 @@ export function AdvancedSearchFields({
             }}
           />
         </FieldGroup>
+        <RequirementOptionField
+          value={filters.requirement}
+          onChange={(value) => onAdvancedDraftFilterChange('requirement', value)}
+        />
       </FieldSet>
 
       <FieldSet>
@@ -329,28 +319,105 @@ function levelFilterValue(
   return isSearchLevelFilter(level) ? level : undefined
 }
 
-function requirementCodesText(
-  requirement: SearchRequestFiltersDto['requirement']
-): string {
-  return requirement?.codes.join(', ') ?? ''
-}
-
 function requirementMatchMode(
   requirement: SearchRequestFiltersDto['requirement']
 ): Extract<RequirementFilterMode, 'any' | 'all'> {
   return requirement?.mode === 'all' ? 'all' : 'any'
 }
 
-function requirementFilterFromText(
-  value: string,
+function requirementFilterFromCodes(
+  values: readonly string[],
   mode: Extract<RequirementFilterMode, 'any' | 'all'>
 ): SearchRequestFiltersDto['requirement'] {
-  const codes = value
-    .split(',')
-    .map((code) => code.trim().toUpperCase())
-    .filter(Boolean)
+  const codes = canonicalRequirementCodes(values)
   if (codes.length === 0) return undefined
   return requirementFilter(codes.length === 1 ? 'single' : mode, codes)
+}
+
+function RequirementOptionField({
+  value,
+  onChange,
+}: {
+  value: SearchRequestFiltersDto['requirement']
+  onChange: (value: SearchRequestFiltersDto['requirement']) => void
+}) {
+  const selectedCodes = new Set(canonicalRequirementCodes(value?.codes))
+  const mode = requirementMatchMode(value)
+
+  const toggleCode = (code: string, checked: boolean) => {
+    const nextCodes = new Set(selectedCodes)
+    if (checked) {
+      nextCodes.add(code)
+    } else {
+      nextCodes.delete(code)
+    }
+    onChange(requirementFilterFromCodes([...nextCodes], mode))
+  }
+
+  return (
+    <Field className="rounded-md border bg-background px-3 py-3">
+      <FieldLabel asChild>
+        <span>{GENED_DISPLAY_NAME} categories</span>
+      </FieldLabel>
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {GENED_REQUIREMENT_GROUPS.map((group) => (
+          <div key={group.code} className="flex min-w-0 flex-col gap-2">
+            <RequirementOptionCheckbox
+              code={group.code}
+              label={group.label}
+              checked={selectedCodes.has(group.code)}
+              onChange={toggleCode}
+            />
+            {group.options.length > 0 ? (
+              <div className="ml-6 flex flex-col gap-1.5 border-l pl-3">
+                {group.options.map((option) => (
+                  <RequirementOptionCheckbox
+                    key={option.code}
+                    code={option.code}
+                    label={option.label}
+                    checked={selectedCodes.has(option.code)}
+                    onChange={toggleCode}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </Field>
+  )
+}
+
+function RequirementOptionCheckbox({
+  code,
+  label,
+  checked,
+  onChange,
+}: {
+  code: string
+  label: string
+  checked: boolean
+  onChange: (code: string, checked: boolean) => void
+}) {
+  const id = `advanced-requirement-${code.toLowerCase()}`
+  return (
+    <label
+      htmlFor={id}
+      className="flex min-w-0 cursor-pointer items-start gap-2 rounded-sm px-1 py-0.5 text-sm leading-5 hover:bg-muted/60"
+    >
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(code, event.currentTarget.checked)}
+        className="mt-0.5 size-4 rounded-[var(--radius-sm)] border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        <span className="text-muted-foreground text-xs">{code}</span>
+      </span>
+    </label>
+  )
 }
 
 function AdvancedSelectField({

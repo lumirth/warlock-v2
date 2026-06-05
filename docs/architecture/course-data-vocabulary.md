@@ -24,7 +24,7 @@ only at named boundaries, and do not let aliases leak past ingress.**
 
 | Course Explorer / source | Parser model | DB / snapshot | Domain concept | Public DTO | UI label | Query aliases |
 | --- | --- | --- | --- | --- | --- | --- |
-| Gen-ed category and attribute | `genEdCategories` | `course_gened`, compatibility `courses.gened` | GenEd requirement evidence | `requirements: CourseRequirementDto[]` | GenEd | Canonical request field is `requirement`; visible copy says `GenEd`; forgiving parser accepts `gened`, `gen ed` |
+| Gen-ed category and attribute | `genEdCategories` | `course_gened`, compatibility `courses.gened` | GenEd requirement evidence | `requirements: CourseRequirementDto[]` | GenEd | Canonical request field is `requirement`; visible copy says `GenEd`; forgiving parser accepts `gened`, `gen ed`; source-prefixed codes such as `1US` normalize to public codes such as `US` |
 | Course section information | source detail text | `course_info` | Catalog course information | `catalog.courseInfo` | Course information | none |
 | Degree attributes | source detail text | `degree_attributes` | Catalog degree attributes | `catalog.degreeAttributes` | Degree attributes | `requirement` when the parser infers a structured requirement |
 | Class schedule information | source detail text | `class_schedule_info` | Schedule note | `scheduleNotes.classScheduleInfo` | Schedule information | none |
@@ -45,7 +45,8 @@ only at named boundaries, and do not let aliases leak past ingress.**
 
 ## Canonical Policy Owners
 
-- GenEd display labels and public tier labels live in `packages/query-types`.
+- GenEd option groups, public requirement code normalization, GenEd display
+  labels, and public tier labels live in `packages/query-types`.
 - GenEd requirement evidence extraction from snapshots lives in
   `apps/api/src/transforms/course-requirements.ts`.
 - Workload and quality score production lives in

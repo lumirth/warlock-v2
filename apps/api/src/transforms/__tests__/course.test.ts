@@ -45,12 +45,12 @@ describe('fromSubjectCascade', () => {
         title: 'Data Structures',
         description: 'Learn data structures.',
         creditHours: '4',
-        courseInfo: 'Prerequisite: CS 173.',
-        degreeAttributes: 'Quantitative Reasoning II.',
-        classScheduleInfo: 'Students must register for one lecture and one discussion.',
-        dateRangeText: 'Meets Jan 20 - May 06.',
-        registrationNotes: 'Restricted to CS majors.',
-        approvalCode: 'Department Approval Required',
+        courseSectionInformation: 'Prerequisite: CS 173.',
+        sectionDegreeAttributes: 'Quantitative Reasoning II.',
+        classScheduleInformation: 'Students must register for one lecture and one discussion.',
+        sectionDateRange: 'Meets Jan 20 - May 06.',
+        sectionRegistrationNotes: 'Restricted to CS majors.',
+        sectionApprovalCode: 'Department Approval Required',
         genEdCategories: [
           {
             id: 'QR',
@@ -70,8 +70,8 @@ describe('fromSubjectCascade', () => {
             sectionStatusCode: 'A',
             sectionText: 'Honors section.',
             sectionNotes: 'Must be James Scholar.',
-            cappArea: 'Restricted.',
-            dateRangeText: 'Jan 20 - May 06',
+            sectionCappArea: 'Restricted.',
+            sectionDateRange: 'Jan 20 - May 06',
             partOfTerm: '1',
             startDate: '2026-01-20',
             endDate: '2026-05-06',
@@ -80,13 +80,13 @@ describe('fromSubjectCascade', () => {
               {
                 index: 0,
                 typeCode: 'LEC',
-                typeName: 'Lecture',
-                startTime: '09:00',
-                endTime: '09:50',
-                days: 'MWF',
+                type: 'Lecture',
+                start: '09:00',
+                end: '09:50',
+                daysOfTheWeek: 'MWF',
                 buildingName: 'Siebel',
                 roomNumber: '1404',
-                dateRangeText: 'Jan 20 - May 06',
+                meetingDateRange: 'Jan 20 - May 06',
                 instructors: [{ firstName: 'Wade', lastName: 'Fagen' }]
               }
             ]
@@ -100,8 +100,8 @@ describe('fromSubjectCascade', () => {
             sectionStatusCode: 'A',
             sectionText: '',
             sectionNotes: '',
-            cappArea: '',
-            dateRangeText: 'Jan 20 - May 06',
+            sectionCappArea: '',
+            sectionDateRange: 'Jan 20 - May 06',
             partOfTerm: '1',
             startDate: '2026-01-20',
             endDate: '2026-05-06',
@@ -110,13 +110,13 @@ describe('fromSubjectCascade', () => {
               {
                 index: 0,
                 typeCode: 'DIS',
-                typeName: 'Discussion',
-                startTime: '10:00',
-                endTime: '10:50',
-                days: 'T',
+                type: 'Discussion',
+                start: '10:00',
+                end: '10:50',
+                daysOfTheWeek: 'T',
                 buildingName: 'Siebel',
                 roomNumber: '0218',
-                dateRangeText: 'Jan 20 - May 06',
+                meetingDateRange: 'Jan 20 - May 06',
                 instructors: []
               }
             ]

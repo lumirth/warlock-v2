@@ -33,13 +33,13 @@ export interface ParsedGenEdCategory {
 export interface ParsedMeeting {
   index: number;
   typeCode: string;
-  typeName: string;
-  startTime: string;
-  endTime: string;
-  days: string;
+  type: string;
+  start: string;
+  end: string;
+  daysOfTheWeek: string;
   buildingName: string;
   roomNumber: string;
-  dateRangeText: string;
+  meetingDateRange: string;
   instructors: { firstName: string; lastName: string }[];
 }
 
@@ -52,8 +52,8 @@ export interface ParsedCascadeSection {
   sectionStatusCode: string;
   sectionText: string;
   sectionNotes: string;
-  cappArea: string;
-  dateRangeText: string;
+  sectionCappArea: string;
+  sectionDateRange: string;
   partOfTerm: string;
   startDate: string;
   endDate: string;
@@ -67,12 +67,12 @@ export interface ParsedCascadeCourse {
   title: string;
   description: string;
   creditHours: string;
-  courseInfo: string;
-  degreeAttributes: string;
-  classScheduleInfo: string;
-  dateRangeText: string;
-  registrationNotes: string;
-  approvalCode: string;
+  courseSectionInformation: string;
+  sectionDegreeAttributes: string;
+  classScheduleInformation: string;
+  sectionDateRange: string;
+  sectionRegistrationNotes: string;
+  sectionApprovalCode: string;
   genEdCategories: ParsedGenEdCategory[];
   sections: ParsedCascadeSection[];
 }
@@ -118,12 +118,12 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
           title: '',
           description: '',
           creditHours: '',
-          courseInfo: '',
-          degreeAttributes: '',
-          classScheduleInfo: '',
-          dateRangeText: '',
-          registrationNotes: '',
-          approvalCode: '',
+          courseSectionInformation: '',
+          sectionDegreeAttributes: '',
+          classScheduleInformation: '',
+          sectionDateRange: '',
+          sectionRegistrationNotes: '',
+          sectionApprovalCode: '',
           genEdCategories: [],
           sections: []
         };
@@ -139,8 +139,8 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
           sectionStatusCode: '',
           sectionText: '',
           sectionNotes: '',
-          cappArea: '',
-          dateRangeText: '',
+          sectionCappArea: '',
+          sectionDateRange: '',
           partOfTerm: '',
           startDate: '',
           endDate: '',
@@ -154,13 +154,13 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
         currentMeeting = {
           index: currentSection.meetings.length,
           typeCode: '',
-          typeName: '',
-          startTime: '',
-          endTime: '',
-          days: '',
+          type: '',
+          start: '',
+          end: '',
+          daysOfTheWeek: '',
           buildingName: '',
           roomNumber: '',
-          dateRangeText: '',
+          meetingDateRange: '',
           instructors: []
         };
         currentSection.meetings.push(currentMeeting);
@@ -215,12 +215,12 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
         if (name === 'label') currentCourse.title = text;
         if (name === 'description') currentCourse.description = text;
         if (name === 'creditHours') currentCourse.creditHours = text;
-        if (name === 'courseSectionInformation') currentCourse.courseInfo = text;
-        if (name === 'sectionDegreeAttributes') currentCourse.degreeAttributes = text;
-        if (name === 'classScheduleInformation') currentCourse.classScheduleInfo = text;
-        if (name === 'sectionDateRange') currentCourse.dateRangeText = text;
-        if (name === 'sectionRegistrationNotes') currentCourse.registrationNotes = text;
-        if (name === 'sectionApprovalCode') currentCourse.approvalCode = text;
+        if (name === 'courseSectionInformation') currentCourse.courseSectionInformation = text;
+        if (name === 'sectionDegreeAttributes') currentCourse.sectionDegreeAttributes = text;
+        if (name === 'classScheduleInformation') currentCourse.classScheduleInformation = text;
+        if (name === 'sectionDateRange') currentCourse.sectionDateRange = text;
+        if (name === 'sectionRegistrationNotes') currentCourse.sectionRegistrationNotes = text;
+        if (name === 'sectionApprovalCode') currentCourse.sectionApprovalCode = text;
       }
 
       // GenEd Category fields
@@ -243,8 +243,8 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
         if (name === 'sectionStatusCode') currentSection.sectionStatusCode = text;
         if (name === 'sectionText') currentSection.sectionText = text;
         if (name === 'sectionNotes') currentSection.sectionNotes = text;
-        if (name === 'sectionCappArea') currentSection.cappArea = text;
-        if (name === 'sectionDateRange') currentSection.dateRangeText = text;
+        if (name === 'sectionCappArea') currentSection.sectionCappArea = text;
+        if (name === 'sectionDateRange') currentSection.sectionDateRange = text;
         if (name === 'partOfTerm') currentSection.partOfTerm = text;
         if (name === 'startDate') currentSection.startDate = text;
         if (name === 'endDate') currentSection.endDate = text;
@@ -253,13 +253,13 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
 
       // Meeting-level fields
       if (currentMeeting && inMeeting) {
-        if (name === 'type') currentMeeting.typeName = text;
-        if (name === 'start') currentMeeting.startTime = convertTo24Hour(text);
-        if (name === 'end') currentMeeting.endTime = convertTo24Hour(text);
-        if (name === 'daysOfTheWeek') currentMeeting.days = text;
+        if (name === 'type') currentMeeting.type = text;
+        if (name === 'start') currentMeeting.start = convertTo24Hour(text);
+        if (name === 'end') currentMeeting.end = convertTo24Hour(text);
+        if (name === 'daysOfTheWeek') currentMeeting.daysOfTheWeek = text;
         if (name === 'buildingName') currentMeeting.buildingName = text;
         if (name === 'roomNumber') currentMeeting.roomNumber = text;
-        if (name === 'meetingDateRange') currentMeeting.dateRangeText = text;
+        if (name === 'meetingDateRange') currentMeeting.meetingDateRange = text;
       }
 
       // Instructor fields

@@ -8,9 +8,13 @@ import {
   getQualityTierRank,
   getWorkloadTierLabel,
   getWorkloadTierRank,
+  formatGenEdDisplayLabel,
   requirementFilter,
   coerceSearchRequestDto,
   decodeSearchRequestQuery,
+  GENED_REQUIREMENT_GROUPS,
+  canonicalRequirementCode,
+  isKnownRequirementCode,
   searchRequestToQueryEntries,
   toNormalizedQualityScore,
 } from './index.js';
@@ -95,14 +99,34 @@ describe('shared course score tiers', () => {
 
 describe('shared requirement policy', () => {
   it('normalizes requirement filter mode and codes', () => {
-    expect(requirementFilter('any', [' hum ', 'HUM', 'us'])).toEqual({
+    expect(requirementFilter('any', [' hum ', 'HUM', 'us', '1nw', 'cmp'])).toEqual({
       mode: 'any',
-      codes: ['HUM', 'US'],
+      codes: ['HUM', 'US', 'NW', 'COMP1'],
     });
   });
 
   it('drops empty requirement filters', () => {
     expect(requirementFilter('all', [' ', ''])).toBeUndefined();
+  });
+
+  it('owns the public GenEd taxonomy used by request validation and UI controls', () => {
+    expect(GENED_REQUIREMENT_GROUPS.map((group) => group.code)).toEqual([
+      'COMP1',
+      'ACP',
+      'CS',
+      'HUM',
+      'NAT',
+      'QR',
+      'SBS',
+    ]);
+    expect(canonicalRequirementCode('1US')).toBe('US');
+    expect(canonicalRequirementCode('cmp')).toBe('COMP1');
+    expect(isKnownRequirementCode('HP')).toBe(true);
+    expect(isKnownRequirementCode('not-a-code')).toBe(false);
+  });
+
+  it('formats public GenEd labels with canonical student-facing codes', () => {
+    expect(formatGenEdDisplayLabel(['1US', 'cmp', 'HUM'])).toBe('GenEd US, COMP1, HUM');
   });
 });
 
@@ -252,6 +276,16 @@ describe('shared public search contract', () => {
     ]))).toEqual({
       ok: false,
       error: 'requirement must contain one code when requirementMode is single',
+    });
+  });
+
+  it('rejects unknown requirement codes at the public request boundary', () => {
+    expect(decodeSearchRequestQuery(paramReader([
+      ['q', 'easy gen ed'],
+      ['requirement', 'HUM,ZZ'],
+    ]))).toEqual({
+      ok: false,
+      error: 'unknown requirement code: ZZ',
     });
   });
 });

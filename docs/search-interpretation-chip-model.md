@@ -20,6 +20,9 @@ Examples:
 - `Any GenEd`
 
 These chips are removable because they constrain the result set.
+When space is tight, cards and chips may use concise public codes such as `US`,
+`HUM`, or `COMP1`, but controls should lead with readable names such as
+`US Minority Cultures`, `Humanities & the Arts`, or `Composition I`.
 
 ### Preference Chips
 
@@ -63,10 +66,29 @@ Examples:
 These may still appear in result explanations, confidence reasons, warnings, or
 debug/eval output.
 
+## Action Authoring
+
+Chip actions are executable continuations, not display annotations. Build them
+from the executable `meta.nextRequest`, while using `meta.interpretedRequest`
+only for display copy and advanced-form interpretation. A removable chip must
+either remove an exact public filter from the executable request or remove raw
+text from the original executable query. Removing text from the already-stripped
+display query is a no-op trap.
+
+Chip `source` should preserve provenance:
+
+- `manual_override` for explicit request or advanced-control filters.
+- `advanced_control` for UI controls when they are distinct from raw URL/manual
+  request overrides.
+- `natural_language` for parser/resolver/extractor hints.
+
+Every removable chip should have a test proving its `action.nextRequest` changes
+the represented intent.
+
 ## Generic GenEd Intent
 
 When the query literally says `gened`, `gen ed`, or `gen-ed` and no specific
-bucket is extracted, the planner applies an explicit `Any GenEd` constraint.
+category is extracted, the planner applies an explicit `Any GenEd` constraint.
 This means the result must have a structured GenEd mapping. The UI shows one
 `Any GenEd` chip instead of hiding the requirement intent in ranking.
 

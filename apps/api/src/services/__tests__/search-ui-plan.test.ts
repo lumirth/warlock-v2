@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   coerceSearchRequestDto,
+  GENERIC_GENED_REQUIREMENT_CODES,
+  type NormalizedSearchRequestDto,
+  type SearchUiPlanDto,
   requirementFilter,
   singleRequirementFilter,
 } from '@uiuc-course-search/query-types';
@@ -12,6 +15,31 @@ import {
 
 const request = (query: string, filters = {}) =>
   coerceSearchRequestDto({ query, filters });
+
+function buildUiPlan(
+  hints: Hint[],
+  plan: SearchPlan,
+  residual: string,
+  executableRequest = request(''),
+) {
+  return buildSearchUiPlan(hints, plan, residual, {
+    executableRequest,
+    interpretedRequest: coerceSearchRequestDto(
+      buildInterpretedSearchRequest(hints, plan, residual, executableRequest),
+    ),
+  });
+}
+
+function expectRemovableChipActionsChangeRequest(
+  ui: SearchUiPlanDto,
+  executableRequest: NormalizedSearchRequestDto,
+) {
+  for (const chip of ui.chips) {
+    if (!chip.removable) continue;
+    expect(chip.action, chip.label).toBeDefined();
+    expect(chip.action?.nextRequest, chip.label).not.toEqual(executableRequest);
+  }
+}
 
 describe('buildSearchUiPlan', () => {
   it('turns extraction hints and residual text into public chips', () => {
@@ -33,7 +61,7 @@ describe('buildSearchUiPlan', () => {
       },
     ];
 
-    const plan = buildSearchUiPlan(hints, {
+    const plan = buildUiPlan(hints, {
       filters: {
         subject: 'CS',
         number: '225',
@@ -50,6 +78,10 @@ describe('buildSearchUiPlan', () => {
       'Hard workload',
       'Topic: systems',
     ]);
+    expectRemovableChipActionsChangeRequest(
+      plan,
+      request('CS 225 professor fagen hard systems'),
+    );
     expect(plan.chips[0].action?.nextRequest.query).toBe('professor fagen hard systems');
     expect(buildInterpretedSearchRequest(
       hints,
@@ -88,7 +120,7 @@ describe('buildSearchUiPlan', () => {
       }],
     };
 
-    expect(buildSearchUiPlan([], plan, '', request('CS')).ambiguityActions).toEqual([{
+    expect(buildUiPlan([], plan, '', request('CS')).ambiguityActions).toEqual([{
       id: '0-0-requirement-CS',
       term: 'CS',
       label: 'Cultural Studies',
@@ -128,7 +160,7 @@ describe('buildSearchUiPlan', () => {
       }],
     };
 
-    const ui = buildSearchUiPlan(hints, plan, '', request('easy cs'));
+    const ui = buildUiPlan(hints, plan, '', request('easy cs'));
 
     expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'GenEd CS']);
     expect(ui.chips[1].action?.nextRequest.query).toBe('easy');
@@ -143,7 +175,8 @@ describe('buildSearchUiPlan', () => {
   });
 
   it('does not show restored topic words inside instructor chips', () => {
-    const plan = buildSearchUiPlan([{
+    const executableRequest = request('professor fagen algorithms');
+    const plan = buildUiPlan([{
       type: 'instructor',
       value: 'fagen algorithms',
       metadata: { source: 'nlp', confidence: 0.8, raw: 'professor fagen algorithms' },
@@ -151,14 +184,19 @@ describe('buildSearchUiPlan', () => {
       filters: { instructor_ids: [3365] },
       keywordQuery: 'algorithms',
       semanticQuery: 'algorithms',
-    }, 'algorithms', request('professor fagen algorithms'));
+    }, 'algorithms', executableRequest);
 
     expect(plan.chips.map(chip => chip.label)).toEqual([
       'Instructor fagen',
       'Topic: algorithms',
     ]);
+    expectRemovableChipActionsChangeRequest(plan, executableRequest);
     expect(plan.chips[0].value).toBe('fagen');
-    expect(plan.chips[0].action?.nextRequest.query).toBe('algorithms');
+    expect(plan.chips[0].action?.nextRequest).toEqual({
+      query: 'algorithms',
+      sort: { field: 'relevance', direction: 'desc' },
+      scope: 'active',
+    });
     expect(buildInterpretedSearchRequest([{
       type: 'instructor',
       value: 'fagen algorithms',
@@ -173,7 +211,8 @@ describe('buildSearchUiPlan', () => {
   });
 
   it('labels introductory level boosts in student-facing language', () => {
-    const plan = buildSearchUiPlan([{
+    const executableRequest = request('intro cs');
+    const plan = buildUiPlan([{
       type: 'levelBoost',
       value: 100,
       metadata: { source: 'regex', confidence: 0.5, raw: 'intro' },
@@ -182,13 +221,18 @@ describe('buildSearchUiPlan', () => {
       keywordQuery: '',
       semanticQuery: '',
       intents: ['introductory_gateway'],
-    }, '', request('intro cs'));
+    }, '', executableRequest);
 
     expect(plan.chips.map(chip => chip.label)).toEqual(['Introductory courses']);
+    expectRemovableChipActionsChangeRequest(plan, executableRequest);
+    expect(plan.chips[0].action?.nextRequest).toMatchObject({
+      query: 'cs',
+      filters: undefined,
+    });
   });
 
   it('hides rescue assumptions already represented by concrete filter chips', () => {
-    const plan = buildSearchUiPlan([{
+    const plan = buildUiPlan([{
       type: 'online',
       value: true,
       metadata: { source: 'alias', confidence: 0.9, raw: 'online' },
@@ -223,7 +267,7 @@ describe('buildSearchUiPlan', () => {
   });
 
   it('hides low-workload assumptions already represented by an easy workload chip', () => {
-    const plan = buildSearchUiPlan([{
+    const plan = buildUiPlan([{
       type: 'workload',
       value: 'easy',
       metadata: { source: 'alias', confidence: 0.9, raw: 'easy' },
@@ -253,20 +297,9 @@ describe('buildSearchUiPlan', () => {
   });
 
   it('shows a concrete Any GenEd chip and preserves the canonical requirement filter', () => {
-    const requirement = requirementFilter('any', [
-      'HUM',
-      'NAT',
-      'SBS',
-      'CS',
-      'QR',
-      'QR1',
-      'QR2',
-      'NW',
-      'US',
-      'WCC',
-      'ACP',
-    ])!;
-    const plan = buildSearchUiPlan([], {
+    const requirement = requirementFilter('any', GENERIC_GENED_REQUIREMENT_CODES)!;
+    const executableRequest = request('gened', { requirement });
+    const plan = buildUiPlan([], {
       filters: {
         requirement,
       },
@@ -286,8 +319,9 @@ describe('buildSearchUiPlan', () => {
         needsStudentProfile: false,
         confidence: 0.74,
       },
-    }, '', request('gened', { requirement }));
+    }, '', executableRequest);
 
+    expectRemovableChipActionsChangeRequest(plan, executableRequest);
     expect(plan.chips).toEqual([
       expect.objectContaining({
         id: 'requirement-any',
@@ -310,7 +344,7 @@ describe('buildSearchUiPlan', () => {
   });
 
   it('preserves part-of-term filters in chips and advanced state', () => {
-    const plan = buildSearchUiPlan([{
+    const plan = buildUiPlan([{
       type: 'partOfTerm',
       value: 'B',
       metadata: { source: 'regex', confidence: 0.8, raw: 'part B' },
@@ -338,6 +372,30 @@ describe('buildSearchUiPlan', () => {
       semanticQuery: '',
     }, '', request('part B')).filters).toMatchObject({
       partOfTerm: 'B',
+    });
+  });
+
+  it('removes manual instructor filters as filters and marks their chip provenance', () => {
+    const plan = buildUiPlan([{
+      type: 'instructor',
+      value: 'Fagen',
+      metadata: { source: 'manual', confidence: 1, raw: 'Fagen' },
+    }], {
+      filters: { instructor_ids: [3365] },
+      keywordQuery: '',
+      semanticQuery: '',
+    }, '', request('', { instructor: 'Fagen' }));
+
+    expect(plan.chips[0]).toMatchObject({
+      label: 'Instructor Fagen',
+      source: 'manual_override',
+      action: {
+        nextRequest: {
+          query: '',
+          sort: { field: 'relevance', direction: 'desc' },
+          scope: 'active',
+        },
+      },
     });
   });
 });

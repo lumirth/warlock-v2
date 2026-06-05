@@ -31,6 +31,7 @@ import {
   type RequirementFilter,
   type RequirementFilterMode,
 } from "./course-policy.js";
+import { isKnownRequirementCode } from "./requirement-options.js";
 
 export type SearchQueryParamReader = {
   get(name: string): string | null;
@@ -383,6 +384,12 @@ function parseSearchRequirementParam(
       return {
         ok: false,
         error: "requirement codes must be 2-8 letters or digits",
+      };
+    }
+    if (!isKnownRequirementCode(code)) {
+      return {
+        ok: false,
+        error: `unknown requirement code: ${code}`,
       };
     }
   }

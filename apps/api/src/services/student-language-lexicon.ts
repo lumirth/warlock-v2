@@ -1,3 +1,7 @@
+import {
+  GENED_REQUIREMENT_LABELS,
+  canonicalRequirementCode,
+} from "@uiuc-course-search/query-types";
 import type {
   DecisionQueryType,
   HintType,
@@ -123,33 +127,16 @@ export const REQUIREMENT_SYNONYMS: Record<string, string[]> = {
 export const REQUIREMENT_LOOKUP: Record<string, string> = Object.entries(
   REQUIREMENT_SYNONYMS,
 ).reduce<Record<string, string>>((lookup, [code, synonyms]) => {
-  lookup[code.toLowerCase()] = code;
+  const canonicalCode = canonicalRequirementCode(code) ?? code;
+  lookup[code.toLowerCase()] = canonicalCode;
+  lookup[canonicalCode.toLowerCase()] = canonicalCode;
   for (const synonym of synonyms) {
-    lookup[synonym.toLowerCase()] = code;
+    lookup[synonym.toLowerCase()] = canonicalCode;
   }
   return lookup;
 }, {});
 
-export const REQUIREMENT_LABELS: Record<string, string> = {
-  ACP: "Advanced Composition",
-  BSC: "Behavioral Sciences",
-  CMP: "Composition I",
-  CS: "Cultural Studies",
-  HP: "Historical & Philosophical Perspectives",
-  HUM: "Humanities & Arts",
-  LA: "Literature & the Arts",
-  LS: "Life Sciences",
-  NAT: "Natural Sciences",
-  NW: "Non-Western Cultures",
-  PS: "Physical Sciences",
-  QR: "Quantitative Reasoning",
-  QR1: "Quantitative Reasoning I",
-  QR2: "Quantitative Reasoning II",
-  SBS: "Social & Behavioral Sciences",
-  SS: "Social Sciences",
-  US: "US Minority Cultures",
-  WCC: "Western/Comparative Cultures",
-};
+export const REQUIREMENT_LABELS: Record<string, string> = GENED_REQUIREMENT_LABELS;
 
 export const SUBJECT_REQUIREMENT_CONFLICTS = new Set(["CS", "PS"]);
 

@@ -5,22 +5,31 @@ import type {
 import type { Hint, SearchPlan } from "./search-planner-types.js";
 import { buildAmbiguityActions } from "./search-ambiguity-actions.js";
 import { buildSearchChips } from "./search-chip-presenter.js";
-import { publicFiltersFromPlan } from "./search-interpreted-request.js";
 
 export { buildInterpretedSearchRequest } from "./search-interpreted-request.js";
+
+export type SearchUiPlanRequestContext = {
+  executableRequest: NormalizedSearchRequestDto;
+  interpretedRequest: NormalizedSearchRequestDto;
+};
 
 export function buildSearchUiPlan(
   hints: Hint[],
   plan: SearchPlan,
   residual: string,
-  request: NormalizedSearchRequestDto,
+  requests: SearchUiPlanRequestContext,
 ): SearchUiPlanDto {
-  const interpretedFilters = publicFiltersFromPlan(hints, plan.filters, residual);
+  const interpretedFilters = requests.interpretedRequest.filters;
   return {
-    chips: buildSearchChips(hints, plan, residual, request),
+    chips: buildSearchChips(
+      hints,
+      plan,
+      residual,
+      requests.executableRequest,
+    ),
     ambiguityActions: buildAmbiguityActions(
       plan.ambiguities ?? [],
-      request,
+      requests.executableRequest,
       residual,
       interpretedFilters,
     ),

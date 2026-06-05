@@ -31,7 +31,9 @@ reinterpret another layer's concept, it creates drift.
 
 - `packages/query-types` owns public request and response DTOs, public query
   codecs, public action DTOs, and display labels or tiers that must match across
-  surfaces.
+  surfaces. It also owns the public GenEd requirement option registry; API and
+  web code may consume that registry, but should not define their own GenEd code
+  lists.
 - `apps/api/src/http` owns transport parsing only. It can call the public codec,
   but it should not own search semantics.
 - `SearchPipeline` and related application services own cache, orchestration,
@@ -59,7 +61,9 @@ reinterpret another layer's concept, it creates drift.
   assembly so debug routes stay adapter-shaped too.
 - `search-ui-plan` composes public UI metadata only. Hint labels, chips,
   ambiguity actions, and interpreted public requests each live in their own
-  presenter module.
+  presenter module. Chip actions receive the executable `meta.nextRequest`;
+  display-only interpreted requests must not be used to author executable chip
+  continuations.
 - `apps/web/src/pages/search` owns UI state and rendering. It consumes public
   requests, public responses, and server-authored `nextRequest` actions. It should
   not know internal planner field names. Its session state has one canonical
@@ -102,8 +106,9 @@ reinterpret another layer's concept, it creates drift.
   `gened` can be accepted as forgiving query syntax only at parser edges.
 - The student-facing label for UIUC General Education requirements is `GenEd`.
   Chips, advanced labels, examples, and result evidence should say `GenEd`,
-  `GenEd codes`, or `Any GenEd`, while the request/DTO field remains
-  `requirement`.
+  `GenEd categories`, or `Any GenEd`, while the request/DTO field remains
+  `requirement`. Controls should lead with readable category names and may show
+  concise public codes such as `US`, `HUM`, or `COMP1` as secondary text.
 - Public requirement filters are mode-aware objects: `{ mode: "single" | "any" |
   "all", codes: string[] }`. Courses can satisfy multiple requirements, so
   transport, actions, chips, and pagination must preserve both the mode and the
@@ -157,6 +162,9 @@ These are the checks future changes should preserve or add as automated tests:
   `SearchRequestDto` objects, not `{ query, filters }` patches reconstructed from
   derived UI state.
 - Advanced search state stores `{ filters, scope }`; `scope` is not a fake filter.
+- Advanced GenEd controls consume `GENED_REQUIREMENT_GROUPS` from
+  `packages/query-types`; free-text aliases such as `gened`, `cmp`, or source
+  prefixed values such as `1US` terminate at parser/codec ingress.
 - Public course DTOs and internal web state use requirement vocabulary. Visible
   student-facing GenEd copy uses `GenEd`. Lowercase `gened` names are limited to
   storage/source compatibility and accepted query aliases.

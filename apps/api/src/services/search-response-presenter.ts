@@ -52,7 +52,10 @@ export async function presentSearchResponse(input: {
     result.meta.extraction.hints,
     result.meta.plan,
     result.meta.query.residual,
-    normalizedInterpretedRequest,
+    {
+      executableRequest: nextRequest,
+      interpretedRequest: normalizedInterpretedRequest,
+    },
   );
 
   return {

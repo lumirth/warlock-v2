@@ -126,7 +126,7 @@ describe('parseSubjectCascadeXml', () => {
     expect(cs225?.sections[0].crn).toBe('12345');
     expect(cs225?.sections[0].sectionNumber).toBe('AL1');
     expect(cs225?.sections[0].enrollmentStatus).toBe('Open');
-    expect(cs225?.sections[0].meetings[0].typeName).toBe('Lecture');
+    expect(cs225?.sections[0].meetings[0].type).toBe('Lecture');
 
     // Second section should be the discussion
     expect(cs225?.sections[1].crn).toBe('12346');
@@ -139,9 +139,9 @@ describe('parseSubjectCascadeXml', () => {
     const lecture = cs225?.sections[0];
     const meeting = lecture?.meetings[0];
 
-    expect(meeting?.startTime).toBe('09:00');
-    expect(meeting?.endTime).toBe('09:50');
-    expect(meeting?.days).toBe('MWF');
+    expect(meeting?.start).toBe('09:00');
+    expect(meeting?.end).toBe('09:50');
+    expect(meeting?.daysOfTheWeek).toBe('MWF');
     expect(meeting?.buildingName).toBe('Siebel Center');
     expect(meeting?.roomNumber).toBe('1404');
   });

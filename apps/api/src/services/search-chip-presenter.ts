@@ -3,6 +3,7 @@ import {
   effectiveRequirementFilter,
   type NormalizedSearchRequestDto,
   type SearchChipDto,
+  type SearchChipSource,
 } from "@uiuc-course-search/query-types";
 import { removeSearchIntentAction } from "../dto/search-actions.js";
 import { isGenericAnyRequirementFilter } from "./requirement-codes.js";
@@ -30,12 +31,12 @@ export function buildSearchChips(
     type: hint.type,
     label: formatResolvedHintLabel(hint, plan, residual),
     value: formatResolvedHintValue(hint, plan, residual),
-    source: "natural_language",
+    source: sourceFromHint(hint),
     removable: true,
     editable: isEditableHint(hint),
     action: removeSearchIntentAction(
       request,
-      resolvedFilterFromHint(hint, plan),
+      resolvedFilterFromHint(hint, plan, residual),
       removeTextForHint(hint, residual),
     ),
   }));
@@ -92,6 +93,12 @@ export function buildSearchChips(
   }
 
   return chips;
+}
+
+function sourceFromHint(hint: Hint): SearchChipSource {
+  return hint.metadata.source === "manual"
+    ? "manual_override"
+    : "natural_language";
 }
 
 function shouldHideAssumptionChip(

@@ -127,7 +127,9 @@ describe('architecture boundaries', () => {
 
     expect(uiPlanSource).toContain('buildSearchChips');
     expect(uiPlanSource).toContain('buildAmbiguityActions');
-    expect(uiPlanSource).toContain('publicFiltersFromPlan');
+    expect(uiPlanSource).toContain('SearchUiPlanRequestContext');
+    expect(uiPlanSource).toContain('executableRequest: NormalizedSearchRequestDto');
+    expect(uiPlanSource).toContain('interpretedRequest: NormalizedSearchRequestDto');
     expect(uiPlanSource).not.toMatch(/removeSearchIntentAction|ambiguitySearchAction|formatResolvedHintLabel|formatDisplayHintValue/);
   });
 
@@ -217,7 +219,7 @@ describe('architecture boundaries', () => {
     expect(presenterSource).toContain('const interpretedRequest = buildInterpretedSearchRequest');
     expect(presenterSource).toContain('nextRequest,');
     expect(presenterSource).toContain('interpretedRequest,');
-    expect(presenterSource).toMatch(/buildSearchUiPlan\([\s\S]*normalizedInterpretedRequest[\s\S]*\)/);
+    expect(presenterSource).toMatch(/buildSearchUiPlan\([\s\S]*executableRequest:\s*nextRequest[\s\S]*interpretedRequest:\s*normalizedInterpretedRequest[\s\S]*\)/);
     expect(presenterSource).not.toMatch(/const\s+nextRequest\s*=\s*buildInterpretedSearchRequest/);
     expect(presenterSource).not.toContain('coerceSearchRequestDto(nextRequest)');
     expect(controllerState).not.toMatch(/sort:\s*response\.meta\?\.appliedSort\s*\?\?/);
@@ -318,7 +320,12 @@ describe('architecture boundaries', () => {
     expect(chipPresenter).toContain('ANY_GENED_DISPLAY_LABEL');
     expect(resultPresentation).toContain('GenEd evidence came from structured mappings.');
     expect(advancedFields).toContain('GENED_DISPLAY_NAME');
+    expect(advancedFields).toContain('GENED_REQUIREMENT_GROUPS');
+    expect(advancedFields).toContain('RequirementOptionField');
     expect(advancedFields).toContain('ANY_GENED_DISPLAY_LABEL');
+    expect(advancedFields).not.toContain('requirementFilterFromText');
+    expect(advancedFields).not.toContain('requirementCodesText');
+    expect(advancedFields).not.toContain('id="advanced-requirement"');
     expect(searchForm).toContain('professor, GenEd, or time');
     expect(searchOptions).toContain('cultural studies gen ed');
     expect(`${advancedFields}\n${searchForm}\n${searchOptions}`).not.toMatch(/Requirement codes|Requirement match|professor, requirement|cultural studies requirement|humanities requirement/);
@@ -389,6 +396,10 @@ describe('architecture boundaries', () => {
     expect(parserFacade).toContain('course-detail-parser');
     expect(parserFacade).toContain('subject-cascade-parser');
     expect(parserCascade).not.toMatch(/parseCourseDetailXml|parseSubjectsXml|parseCoursesXml/);
+    expect(parserCascade).toContain('courseSectionInformation: string');
+    expect(parserCascade).toContain('sectionCappArea: string');
+    expect(parserCascade).toContain('daysOfTheWeek: string');
+    expect(parserCascade).not.toMatch(/courseInfo: string|degreeAttributes: string|classScheduleInfo: string|cappArea: string|typeName: string/);
     expect(historicalCli).toContain('runHistoricalSyncCli');
     expect(historicalCli).not.toMatch(/discoverHistoricalTerms|CoordinatedRateLimitFetcher|subjectSnapshotSqlStatements/);
     expect(historicalWorkflow).toContain('../lib/historical-sync-config');
