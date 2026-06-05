@@ -11,7 +11,7 @@ import type {
 import worker from '../../index.js';
 import { SearchPipeline } from '../search-pipeline.js';
 import type { Course, Section } from '../../db/index.js';
-import type { SearchResult } from '../search.js';
+import type { SearchResult } from '../search-types.js';
 
 vi.mock('../search-pipeline.js', () => ({
   SearchPipeline: vi.fn(),
@@ -227,11 +227,15 @@ describe('Worker API integration', () => {
     );
 
     expect(response.status).toBe(200);
-    const data = await response.json() as { results: Array<{ subject: string; number: string; title: string }> };
+    const data = await response.json() as {
+      results: Array<{ course: { subject: string; number: string; title: string } }>;
+    };
     expect(data.results[0]).toMatchObject({
-      subject: 'CS',
-      number: '225',
-      title: 'Data Structures',
+      course: {
+        subject: 'CS',
+        number: '225',
+        title: 'Data Structures',
+      },
     });
   });
 
@@ -282,15 +286,19 @@ describe('Worker API integration', () => {
 
     expect(response.status).toBe(200);
     const data = await response.json() as {
-      id: string;
-      subject: string;
-      number: string;
-      avg_gpa: number | null;
-      gpa_sample_size: number | null;
-      primary_instructor_rmp: number | null;
-      quality_score: number | null;
-      difficulty_score: number | null;
-      sections?: Array<{ crn: string; status: string }>;
+      course: {
+        id: string;
+        subject: string;
+        number: string;
+        metrics: {
+          avgGpa: number | null;
+          gpaSampleSize: number | null;
+          primaryInstructorRating: number | null;
+          qualityScore: number | null;
+          workloadScore: number | null;
+        };
+        sections?: Array<{ crn: string; status: string }>;
+      };
       cache?: {
         cached?: boolean;
         termStatus?: string;
@@ -298,19 +306,23 @@ describe('Worker API integration', () => {
     };
 
     expect(data).toMatchObject({
-      id: courseRow.id,
-      subject: 'CS',
-      number: '225',
-      avg_gpa: 3.4,
-      gpa_sample_size: 100,
-      primary_instructor_rmp: null,
-      quality_score: 88,
-      difficulty_score: 42,
+      course: {
+        id: courseRow.id,
+        subject: 'CS',
+        number: '225',
+        metrics: {
+          avgGpa: 3.4,
+          gpaSampleSize: 100,
+          primaryInstructorRating: null,
+          qualityScore: 88,
+          workloadScore: 42,
+        },
+      },
       cache: {
         cached: true,
         termStatus: 'active',
       },
     });
-    expect(data.sections?.[0]).toMatchObject({ crn: '12345', status: 'Open' });
+    expect(data.course.sections?.[0]).toMatchObject({ crn: '12345', status: 'Open' });
   });
 });

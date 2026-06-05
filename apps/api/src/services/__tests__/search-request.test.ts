@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { requirementFilter, singleRequirementFilter } from "@uiuc-course-search/query-types";
 import {
   normalizeSearchRequest,
   searchPlanFiltersFromRequestFilters,
@@ -11,7 +12,7 @@ describe("search request normalization", () => {
       filters: {
         subject: "cs",
         instructor: "  Fagen  ",
-        requirement: "hum",
+        requirement: singleRequirementFilter("hum"),
         days: "mwf",
         online: true,
       },
@@ -24,7 +25,7 @@ describe("search request normalization", () => {
       filters: {
         subject: "CS",
         instructor: "Fagen",
-        requirement: "HUM",
+        requirement: { mode: "single", codes: ["HUM"] },
         days: "MWF",
         online: true,
       },
@@ -42,7 +43,7 @@ describe("search request normalization", () => {
       filters: {
         subject: "CS",
         instructor: "Fagen",
-        requirement: "hum",
+        requirement: requirementFilter("any", ["hum", "us"]),
         credits: 4,
         partOfTerm: "a",
       },
@@ -50,7 +51,7 @@ describe("search request normalization", () => {
 
     expect(searchPlanFiltersFromRequestFilters(request.filters)).toEqual({
       subject: "CS",
-      requirement: { mode: "single", codes: ["HUM"] },
+      requirement: { mode: "any", codes: ["HUM", "US"] },
       credits: 4,
       partOfTerm: "A",
     });

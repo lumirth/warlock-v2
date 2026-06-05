@@ -60,9 +60,9 @@ export function buildLiveCourseDetailResponse(
       ...liveSnapshot.snapshot,
       course: {
         ...liveSnapshot.snapshot.course,
-        avg_gpa: existingMetadata?.avg_gpa ?? firstInstructorMetric(linksMap, 'avg_gpa'),
-        gpa_sample_size: existingMetadata?.gpa_sample_size ?? firstInstructorMetric(linksMap, 'gpa_sample_size'),
-        primary_instructor_rmp: existingMetadata?.primary_instructor_rmp ?? firstInstructorMetric(linksMap, 'rmp_rating'),
+        avg_gpa: existingMetadata?.avg_gpa ?? firstInstructorMetric(linksMap, 'avgGpa'),
+        gpa_sample_size: existingMetadata?.gpa_sample_size ?? firstInstructorMetric(linksMap, 'gpaSampleSize'),
+        primary_instructor_rmp: existingMetadata?.primary_instructor_rmp ?? firstInstructorMetric(linksMap, 'rmpRating'),
         quality_score: existingMetadata?.quality_score ?? null,
         difficulty_score: existingMetadata?.difficulty_score ?? null,
       },
@@ -82,7 +82,7 @@ export function buildLiveCourseDetailResponse(
 
 function firstInstructorMetric(
   linksMap: Record<string, InstructorLinkDto>,
-  metric: keyof Pick<InstructorLinkDto, 'rmp_rating' | 'avg_gpa' | 'median_gpa' | 'gpa_sample_size'>
+  metric: keyof Pick<InstructorLinkDto, 'rmpRating' | 'avgGpa' | 'medianGpa' | 'gpaSampleSize'>
 ): number | null {
   const link = Object.values(linksMap).find((entry) => typeof entry[metric] === 'number');
   return link?.[metric] ?? null;

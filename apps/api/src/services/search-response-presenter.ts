@@ -4,6 +4,7 @@ import type {
   NormalizedSearchRequestDto,
   SearchResponseDto,
 } from "@uiuc-course-search/query-types";
+import { coerceSearchRequestDto } from "@uiuc-course-search/query-types";
 import { searchResultToCourseDto } from "../dto/course.js";
 import { loadSearchResultGeneds } from "../dto/search-geneds.js";
 import type { SearchRequestPagination } from "../http/search-request.js";
@@ -25,6 +26,20 @@ export async function presentSearchResponse(input: {
   const { limit, offset } = pagination;
   const pageResults = result.results.slice(offset, offset + limit);
   const hasMore = result.results.length > offset + limit;
+  const appliedSort = result.meta.appliedSort ?? request.sort;
+  const appliedScope = result.meta.appliedScope ?? request.scope;
+  const effectiveRequest: NormalizedSearchRequestDto = {
+    ...request,
+    sort: appliedSort,
+    scope: appliedScope,
+  };
+  const nextRequest = buildInterpretedSearchRequest(
+    result.meta.extraction.hints,
+    result.meta.plan,
+    result.meta.query.residual,
+    effectiveRequest,
+  );
+  const normalizedNextRequest = coerceSearchRequestDto(nextRequest);
   const [genedsByCourseId, term] = await Promise.all([
     loadSearchResultGeneds(
       db,
@@ -36,7 +51,7 @@ export async function presentSearchResponse(input: {
     result.meta.extraction.hints,
     result.meta.plan,
     result.meta.query.residual,
-    request,
+    normalizedNextRequest,
   );
 
   return {
@@ -53,19 +68,14 @@ export async function presentSearchResponse(input: {
       interpretation: searchPlanToPublicInterpretation(result.meta.plan),
       timing: result.meta.timing,
       fallback: result.meta.fallback,
-      appliedSort: result.meta.appliedSort ?? request.sort,
-      appliedScope: result.meta.appliedScope ?? request.scope,
-      interpretedRequest: buildInterpretedSearchRequest(
-        result.meta.extraction.hints,
-        result.meta.plan,
-        result.meta.query.residual,
-        request,
-      ),
+      appliedSort,
+      appliedScope,
+      nextRequest,
       term,
       ui,
     },
     pagination: {
-      total: offset + pageResults.length + (hasMore ? 1 : 0),
+      resultCountLowerBound: offset + pageResults.length + (hasMore ? 1 : 0),
       limit,
       offset,
       hasMore,

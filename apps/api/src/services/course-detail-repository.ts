@@ -138,8 +138,8 @@ export class CourseDetailRepository {
       const sectionWithDetails: SectionWithDetails = {
         ...section,
         instructor_stats: stats,
-        instructor_rmp: primaryStats?.rmp_rating ?? section.instructor_rmp,
-        instructor_gpa: primaryStats?.avg_gpa ?? section.instructor_gpa,
+        instructor_rmp: primaryStats?.rmpRating ?? section.instructor_rmp,
+        instructor_gpa: primaryStats?.avgGpa ?? section.instructor_gpa,
         meetings: meetingsBySection.get(section.id) ?? [],
       };
 

@@ -1,11 +1,15 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
-import { GOLDEN_QUERIES } from '../apps/api/src/eval/golden-queries.js';
-import { checkExpectedKeys, checkExpectedObject, checkExpectedRescue, checkExpectedResidual } from '../apps/api/src/eval/checks.js';
-import { evaluateCorpusCoverage, findDuplicateQueryIds, formatCorpusCoverageReport } from '../apps/api/src/eval/corpus-coverage.js';
-import { createSearchPlan } from '../apps/api/src/services/search-plan-compiler.js';
-import { SUBJECT_NAMES, VALID_SUBJECTS } from '../apps/api/src/services/data/valid-subjects.js';
-import type { EvalResult } from '../apps/api/src/eval/types.js';
+import { GOLDEN_QUERIES } from '../src/eval/golden-queries.js';
+import { checkExpectedKeys, checkExpectedObject, checkExpectedRescue, checkExpectedResidual } from '../src/eval/checks.js';
+import { evaluateCorpusCoverage, findDuplicateQueryIds, formatCorpusCoverageReport } from '../src/eval/corpus-coverage.js';
+import { createSearchPlan } from '../src/services/search-plan-compiler.js';
+import {
+  isKnownSubjectCode,
+  subjectName,
+  subjectNames,
+} from '../src/services/subject-taxonomy.js';
+import type { EvalResult } from '../src/eval/types.js';
 
 type D1Row = Record<string, unknown>;
 
@@ -22,12 +26,12 @@ class EvalD1Statement {
   async first<T = D1Row>(): Promise<T | null> {
     if (this.sql.includes('SELECT id FROM subjects WHERE id = ?')) {
       const code = String(this.params[0] ?? '').toUpperCase();
-      return VALID_SUBJECTS.has(code) ? { id: code } as T : null;
+      return isKnownSubjectCode(code) ? { id: code } as T : null;
     }
 
     if (this.sql.includes('SELECT id FROM subjects WHERE LOWER(name) = ?')) {
       const name = String(this.params[0] ?? '').toLowerCase();
-      const code = Object.entries(SUBJECT_NAMES)
+      const code = Object.entries(subjectNames())
         .find(([, subjectName]) => subjectName.toLowerCase() === name)?.[0];
       return code ? { id: code } as T : null;
     }
@@ -40,7 +44,7 @@ class EvalD1Statement {
 
     if (this.sql.includes('SELECT id FROM subjects') && this.sql.includes('WHERE name LIKE ?')) {
       const needle = String(this.params[0] ?? '').replace(/%/g, '').toLowerCase();
-      const code = Object.entries(SUBJECT_NAMES)
+      const code = Object.entries(subjectNames())
         .find(([subjectCode, subjectName]) =>
           subjectName.toLowerCase().includes(needle)
           || subjectCode.toLowerCase().includes(needle)
@@ -50,12 +54,12 @@ class EvalD1Statement {
 
     if (this.sql.includes('SELECT DISTINCT subject FROM courses WHERE subject = ?')) {
       const code = String(this.params[0] ?? '').toUpperCase();
-      return VALID_SUBJECTS.has(code) ? { subject: code } as T : null;
+      return isKnownSubjectCode(code) ? { subject: code } as T : null;
     }
 
     if (this.sql.includes('SELECT name FROM subjects WHERE id = ?')) {
       const code = String(this.params[0] ?? '').toUpperCase();
-      return { name: SUBJECT_NAMES[code] ?? code } as T;
+      return { name: subjectName(code) ?? code } as T;
     }
 
     return null;

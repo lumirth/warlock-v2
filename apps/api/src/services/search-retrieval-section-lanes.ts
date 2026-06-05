@@ -23,9 +23,7 @@ export async function sectionKeywordSearch(
   }
 
   const filtered = buildFilteredCourseQuery(filters);
-  const joinClause = filtered.joins
-    .filter((join) => !join.includes("JOIN sections s "))
-    .join(" ");
+  const joinClause = filtered.joinSqlExcluding(["sections"]);
 
   const sql = `
     SELECT DISTINCT c.id, bm25(sections_fts) as fts_score

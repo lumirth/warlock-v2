@@ -1,4 +1,7 @@
-import type { SearchRequestFiltersDto } from '@uiuc-course-search/query-types';
+import type {
+  RequirementFilter,
+  SearchRequestFiltersDto,
+} from '@uiuc-course-search/query-types';
 import { extractQuery, type ExtractionResult } from './extractor.js';
 import { parseQuery } from './query-parser.js';
 import type {
@@ -148,7 +151,11 @@ function hintsFromRequestFilters(filters?: SearchRequestFiltersDto): Hint[] {
   if (filters.requirement) {
     addRequestFilterHint(
       hints,
-      requestFilterHint('requirement', filters.requirement, filters.requirement),
+      requestFilterHint(
+        'requirement',
+        formatRequirementHintValue(filters.requirement),
+        formatRequirementHintRaw(filters.requirement),
+      ),
     );
   }
   if (filters.credits !== undefined) {
@@ -189,6 +196,17 @@ function hintsFromRequestFilters(filters?: SearchRequestFiltersDto): Hint[] {
   }
 
   return hints;
+}
+
+function formatRequirementHintValue(requirement: RequirementFilter): string {
+  return requirement.codes.join(', ');
+}
+
+function formatRequirementHintRaw(requirement: RequirementFilter): string {
+  if (requirement.mode === 'single') {
+    return requirement.codes[0] ?? '';
+  }
+  return `${requirement.mode} ${requirement.codes.join(', ')}`;
 }
 
 export function withRequestFilterHints(

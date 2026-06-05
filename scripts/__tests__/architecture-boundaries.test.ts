@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -36,6 +36,18 @@ describe('architecture boundaries', () => {
     }
   });
 
+  it('keeps permissive search request coercion distinct from strict query decoding', () => {
+    const contractSource = readFileSync('packages/query-types/search-contract.ts', 'utf8');
+    const codecSource = readFileSync('packages/query-types/search-request-codec.ts', 'utf8');
+
+    expect(contractSource).toContain('coerceSearchRequestDto');
+    expect(`${contractSource}\n${codecSource}`).not.toContain('normalizeSearchRequestDto');
+    expect(codecSource).toContain('decodeSearchRequestQuery');
+    expect(codecSource).toMatch(/parseSearchSortParams[\s\S]*sort must be one of/);
+    expect(codecSource).toMatch(/parseSearchScopeParam[\s\S]*scope must be one of/);
+    expect(codecSource).toMatch(/parseSearchLevelParam[\s\S]*level must be one of/);
+  });
+
   it('keeps the search route as an adapter instead of a public response presenter', () => {
     const source = readFileSync('apps/api/src/routes/search.ts', 'utf8');
 
@@ -62,6 +74,22 @@ describe('architecture boundaries', () => {
     expect(executorSource).toContain('search-retrieval-course-lanes');
     expect(executorSource).toContain('search-retrieval-section-lanes');
     expect(laneBarrelSource).not.toMatch(/SELECT|FROM courses|JOIN sections|MATCH \?/);
+    expect(readFileSync('apps/api/src/services/search-retrieval-section-lanes.ts', 'utf8')).not.toMatch(/join\.includes|\.includes\("JOIN/);
+  });
+
+  it('does not expose the search subsystem through a broad services/search barrel', () => {
+    expect(existsSync('apps/api/src/services/search.ts')).toBe(false);
+
+    const checkedFiles = sourceFiles('apps/api/src')
+      .filter(file => !file.includes('/routes/__tests__/search.test.ts'));
+
+    for (const file of checkedFiles) {
+      const imports = importSpecifiers(readFileSync(file, 'utf8'));
+      expect(imports, file).not.toContain('../search.js');
+      expect(imports, file).not.toContain('./search.js');
+      expect(imports, file).not.toContain('../../services/search.js');
+      expect(imports, file).not.toContain('../services/search.js');
+    }
   });
 
   it('keeps retrieval plans executable instead of carrying full planner state', () => {
@@ -125,6 +153,25 @@ describe('architecture boundaries', () => {
     expect(typesSource).not.toContain('apps/api/src');
   });
 
+  it('keeps root operational scripts from importing API internals except named workflow adapters', () => {
+    const allowedApiImporters = new Set([
+      'scripts/workflows/historical-sync-workflow.ts',
+      'scripts/__tests__/historical-sync.test.ts',
+    ]);
+    const checkedFiles = sourceFiles('scripts')
+      .filter(file => !allowedApiImporters.has(file))
+      .filter(file => file !== 'scripts/__tests__/architecture-boundaries.test.ts');
+
+    for (const file of checkedFiles) {
+      const imports = importSpecifiers(readFileSync(file, 'utf8'));
+      expect(imports, file).not.toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/apps\/api\/src/),
+        ]),
+      );
+    }
+  });
+
   it('keeps sync routes as adapters over sync application services', () => {
     const courseRoute = readFileSync('apps/api/src/routes/sync-course-routes.ts', 'utf8');
     const enrichmentRoute = readFileSync('apps/api/src/routes/sync-enrichment-routes.ts', 'utf8');
@@ -153,6 +200,70 @@ describe('architecture boundaries', () => {
     expect(refinementActions).toContain("type: 'request'");
     expect(sortingHook).not.toContain('derived.activeAdvancedFilters');
     expect(paginationHook).not.toContain('derived.activeAdvancedFilters');
+
+    const activeRequestHelper = controllerState.match(/function activeRequestFromResponse[\s\S]*?^}/m)?.[0] ?? '';
+    expect(activeRequestHelper).not.toContain('appliedSort');
+    expect(activeRequestHelper).not.toContain('requestSort');
+  });
+
+  it('keeps search presentation responsible for executable next-request assembly', () => {
+    const presenterSource = readFileSync('apps/api/src/services/search-response-presenter.ts', 'utf8');
+    const controllerState = readFileSync('apps/web/src/pages/search/search-controller-state.ts', 'utf8');
+
+    expect(presenterSource).toContain('const nextRequest = buildInterpretedSearchRequest');
+    expect(presenterSource).toContain('coerceSearchRequestDto(nextRequest)');
+    expect(presenterSource).toContain('nextRequest,');
+    expect(presenterSource).toMatch(/buildSearchUiPlan\([\s\S]*normalizedNextRequest[\s\S]*\)/);
+    expect(controllerState).not.toMatch(/sort:\s*response\.meta\?\.appliedSort\s*\?\?/);
+  });
+
+  it('keeps requirement filters mode-aware in the public search contract', () => {
+    const contract = readFileSync('packages/query-types/search-contract.ts', 'utf8');
+    const policy = readFileSync('packages/query-types/course-policy.ts', 'utf8');
+    const interpretedRequest = readFileSync('apps/api/src/services/search-interpreted-request.ts', 'utf8');
+    const requestMapper = readFileSync('apps/api/src/services/search-request.ts', 'utf8');
+
+    expect(policy).toContain('export type RequirementFilter');
+    expect(policy).toContain('codes: string[]');
+    expect(policy).toContain('mode: RequirementFilterMode');
+    expect(contract).toContain('requirement?: RequirementFilter');
+    expect(contract).not.toContain('requirement?: string');
+    expect(interpretedRequest).toContain('effectiveRequirementFilter(filters)');
+    expect(interpretedRequest).not.toMatch(/codes\[0\]|singleRequirementFilter\(/);
+    expect(requestMapper).not.toMatch(/singleRequirementFilter|requirement:\s*requestFilters\.requirement\.codes\[0\]/);
+  });
+
+  it('keeps fallback execution provenance attached to executable fallback plans', () => {
+    const planningTypes = readFileSync('apps/api/src/services/search-planning-types.ts', 'utf8');
+    const intentPasses = readFileSync('apps/api/src/services/search-plan-intent-passes.ts', 'utf8');
+    const executor = readFileSync('apps/api/src/services/search-executor.ts', 'utf8');
+
+    expect(planningTypes).toContain('export type SearchFallbackPlan');
+    expect(planningTypes).toContain('constraintsRelaxed: string[]');
+    expect(intentPasses).toContain('constraintsRelaxed:');
+    expect(executor).toContain('for (const fallback of fallbackPlans)');
+    expect(executor).toContain('fallback.constraintsRelaxed');
+    expect(executor).toContain('fallback.plan');
+  });
+
+  it('keeps exact course recall inside the shared filtered-course query envelope', () => {
+    const courseLaneSource = readFileSync('apps/api/src/services/search-retrieval-course-lanes.ts', 'utf8');
+    const exactBlock = courseLaneSource.match(/if \(filters\.subject && filters\.number[\s\S]*?if \(exactResult\.results\.length > 0\)/)?.[0] ?? '';
+
+    expect(exactBlock).toContain('buildFilteredCourseQuery(filters)');
+    expect(exactBlock).toContain('filtered.whereSql()');
+    expect(exactBlock).not.toMatch(/WHERE\s+subject\s*=\s*\?\s+AND\s+number\s*=\s*\?/);
+  });
+
+  it('keeps search pagination honest about lower-bound counts', () => {
+    const contract = readFileSync('packages/query-types/search-response-dto.ts', 'utf8');
+    const presenter = readFileSync('apps/api/src/services/search-response-presenter.ts', 'utf8');
+    const viewModel = readFileSync('apps/web/src/pages/search/search-view-model.ts', 'utf8');
+
+    expect(contract).toContain('resultCountLowerBound: number');
+    expect(contract).not.toContain('total: number');
+    expect(presenter).toContain('resultCountLowerBound:');
+    expect(viewModel).toContain('at least');
   });
 
   it('keeps parser and historical-sync entrypoints as facades over owned modules', () => {

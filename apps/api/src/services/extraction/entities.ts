@@ -1,5 +1,8 @@
 import type { Hint } from '../search-planner-types.js';
-import { VALID_SUBJECTS, UNSAFE_LOWERCASE_SUBJECTS } from '../data/valid-subjects.js';
+import {
+  isKnownSubjectCode,
+  isSafeStandaloneSubjectToken,
+} from '../subject-taxonomy.js';
 import { createMetadata, maskMatches, type TextMatch } from './text.js';
 
 export function extractCourseCodesAndCrns(text: string, hints: Hint[]): string {
@@ -53,12 +56,7 @@ export function extractStandaloneEntities(text: string, hints: Hint[]): string {
     const raw = match[1];
     const upper = raw.toUpperCase();
 
-    if (!VALID_SUBJECTS.has(upper)) {
-      continue;
-    }
-
-    const isUppercase = raw === upper;
-    if (!isUppercase && UNSAFE_LOWERCASE_SUBJECTS.has(upper)) {
+    if (!isSafeStandaloneSubjectToken(raw)) {
       continue;
     }
 
@@ -122,7 +120,7 @@ export function extractInstructors(text: string, hints: Hint[]): string {
 function trimTrailingSubjectCode(value: string): string {
   const tokens = value.trim().split(/\s+/);
   const lastToken = tokens[tokens.length - 1];
-  if (tokens.length > 1 && VALID_SUBJECTS.has(lastToken.toUpperCase()) && lastToken === lastToken.toUpperCase()) {
+  if (tokens.length > 1 && isKnownSubjectCode(lastToken) && lastToken === lastToken.toUpperCase()) {
     return tokens.slice(0, -1).join(' ');
   }
 

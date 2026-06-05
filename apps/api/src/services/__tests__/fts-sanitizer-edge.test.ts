@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeFtsQuery } from '../search.js';
+import { sanitizeFtsQuery } from '../search-text.js';
 
 describe('FTS Sanitizer Edge Cases', () => {
   it('handles word boundaries correctly (should not replace inside words)', () => {

@@ -5,6 +5,7 @@ import {
   isSearchTermFilter,
   isSearchTimeFilter,
   isSearchWorkloadFilter,
+  singleRequirementFilter,
   type SearchRequestFiltersDto,
 } from "@uiuc-course-search/query-types";
 import type {
@@ -61,7 +62,7 @@ export function resolvedFilterFromHint(
   plan: SearchPlan,
 ): Partial<SearchRequestFiltersDto> {
   if (isSubjectHintResolvedAsRequirement(hint, plan)) {
-    return { requirement: formatHintValue(hint.value).toUpperCase() };
+    return { requirement: singleRequirementFilter(formatHintValue(hint.value)) };
   }
 
   return filterFromHint(hint);
@@ -153,7 +154,7 @@ function filterFromHint(hint: Hint): Partial<SearchRequestFiltersDto> {
         ? { workload: hint.value }
         : {};
     case "requirement":
-      return { requirement: formatHintValue(hint.value).toUpperCase() };
+      return { requirement: singleRequirementFilter(formatHintValue(hint.value)) };
     case "term": {
       const value = hint.value as TermValue;
       return {

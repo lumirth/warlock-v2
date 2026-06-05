@@ -14,5 +14,5 @@
     "forceConsistentCasingInFileNames": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["scripts/**/*.ts"]
+  "include": ["scripts/**/*.ts", "apps/api/scripts/**/*.ts"]
 }

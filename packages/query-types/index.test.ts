@@ -9,7 +9,7 @@ import {
   getWorkloadTierLabel,
   getWorkloadTierRank,
   requirementFilter,
-  normalizeSearchRequestDto,
+  coerceSearchRequestDto,
   decodeSearchRequestQuery,
   searchRequestToQueryEntries,
   toNormalizedQualityScore,
@@ -108,11 +108,11 @@ describe('shared requirement policy', () => {
 
 describe('shared public search contract', () => {
   it('normalizes public request filters without backend planner names', () => {
-    expect(normalizeSearchRequestDto({
+    expect(coerceSearchRequestDto({
       query: 'online stats class',
       filters: {
         subject: ' stat ',
-        requirement: ' hum ',
+        requirement: requirementFilter('single', [' hum ']),
         online: true,
       },
       scope: 'all',
@@ -121,7 +121,7 @@ describe('shared public search contract', () => {
       query: 'online stats class',
       filters: {
         subject: 'STAT',
-        requirement: 'HUM',
+        requirement: { mode: 'single', codes: ['HUM'] },
         online: true,
       },
       sort: { field: 'gpa', direction: 'desc' },
@@ -130,7 +130,7 @@ describe('shared public search contract', () => {
   });
 
   it('normalizes invalid sort and scope controls back to defaults', () => {
-    expect(normalizeSearchRequestDto({
+    expect(coerceSearchRequestDto({
       query: 'history',
       sort: { field: 'not-real', direction: 'sideways' } as never,
       scope: 'past' as never,
@@ -148,7 +148,7 @@ describe('shared public search contract', () => {
       query: 'online stats class',
       filters: {
         subject: ' stat ',
-        requirement: ' hum ',
+        requirement: requirementFilter('any', [' hum ', 'us ']),
         online: true,
         workload: 'easy',
       },
@@ -162,7 +162,8 @@ describe('shared public search contract', () => {
       ['limit', '25'],
       ['offset', '50'],
       ['subject', 'STAT'],
-      ['requirement', 'HUM'],
+      ['requirement', 'HUM,US'],
+      ['requirementMode', 'any'],
       ['online', 'true'],
       ['workload', 'easy'],
       ['scope', 'all'],
@@ -178,7 +179,7 @@ describe('shared public search contract', () => {
           query: 'online stats class',
           filters: {
             subject: 'STAT',
-            requirement: 'HUM',
+            requirement: { mode: 'any', codes: ['HUM', 'US'] },
             online: true,
             workload: 'easy',
           },
@@ -222,6 +223,35 @@ describe('shared public search contract', () => {
     ]))).toEqual({
       ok: false,
       error: 'level must be one of: 100, 200, 300, 400, 500',
+    });
+  });
+
+  it('decodes multiple requirement codes as any-match unless a mode is explicit', () => {
+    expect(decodeSearchRequestQuery(paramReader([
+      ['q', 'easy gen ed'],
+      ['requirement', 'hum, us'],
+    ]))).toEqual({
+      ok: true,
+      value: {
+        request: {
+          query: 'easy gen ed',
+          filters: {
+            requirement: { mode: 'any', codes: ['HUM', 'US'] },
+          },
+          sort: { field: 'relevance', direction: 'desc' },
+          scope: 'active',
+        },
+        pagination: { limit: 20, offset: 0 },
+      },
+    });
+
+    expect(decodeSearchRequestQuery(paramReader([
+      ['q', 'easy gen ed'],
+      ['requirement', 'hum, us'],
+      ['requirementMode', 'single'],
+    ]))).toEqual({
+      ok: false,
+      error: 'requirement must contain one code when requirementMode is single',
     });
   });
 });

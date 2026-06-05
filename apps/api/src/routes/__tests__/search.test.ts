@@ -3,7 +3,10 @@ import { Hono } from "hono";
 import { searchRoutes } from "../search.js";
 import { SearchPipeline } from "../../services/search-pipeline.js";
 import type { D1Database, VectorizeIndex, Ai } from "@cloudflare/workers-types";
-import type { SearchResponseDto } from "@uiuc-course-search/query-types";
+import {
+  singleRequirementFilter,
+  type SearchResponseDto,
+} from "@uiuc-course-search/query-types";
 
 vi.mock("../../services/search-pipeline.js");
 
@@ -99,7 +102,7 @@ describe("Search Routes", () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as SearchResponseDto;
     expect(data.results).toBeDefined();
-    expect(data.results[0].id).toBe("CS-225-2026-spring");
+    expect(data.results[0].course.id).toBe("CS-225-2026-spring");
     expect("plan" in data.meta).toBe(false);
     expect("extraction" in data.meta).toBe(false);
     expect(data.meta.ui).toEqual({
@@ -227,7 +230,7 @@ describe("Search Routes", () => {
           instructor: "Fagen",
           term: "spring",
           year: 2026,
-          requirement: "HUM",
+          requirement: singleRequirementFilter("HUM"),
           credits: 4,
           days: "MWF",
           time: "morning",
@@ -340,10 +343,61 @@ describe("Search Routes", () => {
     const data = (await res.json()) as SearchResponseDto;
     expect(data.meta.appliedSort).toEqual({ field: "gpa", direction: "asc" });
     expect(data.meta.appliedScope).toBe("all");
-    expect(data.meta.interpretedRequest).toMatchObject({
+    expect(data.meta.nextRequest).toMatchObject({
       query: "history",
       filters: { level: 500 },
+      sort: { field: "gpa", direction: "asc" },
       scope: "all",
+    });
+  });
+
+  it("returns the effective interpreted request when the pipeline infers controls", async () => {
+    const searchSpy = vi.fn().mockResolvedValue({
+      results: [],
+      meta: {
+        query: { raw: "highest gpa classes", residual: "" },
+        extraction: { hints: [] },
+        plan: {
+          filters: {},
+          semanticQuery: "",
+          keywordQuery: "",
+          softPreferences: {
+            inferredSort: { field: "gpa", direction: "desc" },
+          },
+        },
+        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+        fallback: { tierReached: 2, constraintsRelaxed: [], originalResultCount: 0 },
+        appliedSort: { field: "gpa", direction: "desc" },
+        appliedScope: "active",
+      },
+    });
+    vi.mocked(SearchPipeline).mockImplementation(function () {
+      return {
+        search: searchSpy,
+      } as unknown as SearchPipeline;
+    });
+
+    const res = await app.request(
+      "/api/search?q=highest+gpa+classes",
+      {},
+      {
+        DB: mockDB,
+        VECTORIZE: mockVectorize,
+        AI: mockAI,
+      },
+      {
+        waitUntil: vi.fn(),
+        passThroughOnException: vi.fn(),
+      } as unknown as ExecutionContext,
+    );
+
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as SearchResponseDto;
+    expect(data.meta.appliedSort).toEqual({ field: "gpa", direction: "desc" });
+    expect(data.meta.nextRequest).toMatchObject({
+      query: "",
+      sort: { field: "gpa", direction: "desc" },
+      scope: "active",
     });
   });
 
@@ -520,7 +574,7 @@ describe("Search Routes", () => {
       { limit: 5, offset: 10 },
       expect.any(Function),
     );
-    expect(data.results.map((result) => result.id)).toEqual([
+    expect(data.results.map((result) => result.course.id)).toEqual([
       "CS-10-2026-spring",
       "CS-11-2026-spring",
       "CS-12-2026-spring",
@@ -528,7 +582,7 @@ describe("Search Routes", () => {
       "CS-14-2026-spring",
     ]);
     expect(data.pagination).toEqual({
-      total: 16,
+      resultCountLowerBound: 16,
       limit: 5,
       offset: 10,
       hasMore: true,

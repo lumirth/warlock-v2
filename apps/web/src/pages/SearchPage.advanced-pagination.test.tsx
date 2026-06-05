@@ -19,7 +19,7 @@ describe('SearchPage advanced filters and pagination', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'algorithms', residual: 'algorithms' },
-          interpretedRequest: {
+          nextRequest: {
             query: 'algorithms',
           },
           ui: {
@@ -81,7 +81,7 @@ describe('SearchPage advanced filters and pagination', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'intro to CS', residual: 'intro to' },
-          interpretedRequest: {
+          nextRequest: {
             query: '',
             filters: { subject: 'CS' },
           },
@@ -133,7 +133,7 @@ describe('SearchPage advanced filters and pagination', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'CS algorithms', residual: 'algorithms' },
-          interpretedRequest: {
+          nextRequest: {
             query: 'algorithms',
             filters: { subject: 'CS' },
           },
@@ -186,7 +186,7 @@ describe('SearchPage advanced filters and pagination', () => {
       meta: {
         ...searchResponse([]).meta,
         query: { raw: 'intro to CS', residual: 'intro to' },
-        interpretedRequest: {
+        nextRequest: {
           query: '',
           filters: { subject: 'CS' },
         },
@@ -242,7 +242,7 @@ describe('SearchPage advanced filters and pagination', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'professor fagen algorithms', residual: 'algorithms' },
-          interpretedRequest: {
+          nextRequest: {
             query: 'algorithms',
             filters: { instructor: 'fagen' },
           },
@@ -270,9 +270,9 @@ describe('SearchPage advanced filters and pagination', () => {
             number: '374',
             title: 'Introduction to Algorithms',
           }),
-        ]),
+        ], 'algorithms'),
         pagination: {
-          total: 21,
+          resultCountLowerBound: 21,
           limit: 20,
           offset: 0,
           hasMore: true,
@@ -288,7 +288,7 @@ describe('SearchPage advanced filters and pagination', () => {
           }),
         ]),
         pagination: {
-          total: 21,
+          resultCountLowerBound: 21,
           limit: 20,
           offset: 20,
           hasMore: false,
@@ -328,9 +328,9 @@ describe('SearchPage advanced filters and pagination', () => {
             number: '100',
             title: 'Freshman Orientation',
           }),
-        ]),
+        ], 'intro to CS'),
         pagination: {
-          total: 21,
+          resultCountLowerBound: 21,
           limit: 20,
           offset: 0,
           hasMore: true,
@@ -346,7 +346,7 @@ describe('SearchPage advanced filters and pagination', () => {
           }),
         ]),
         pagination: {
-          total: 21,
+          resultCountLowerBound: 21,
           limit: 20,
           offset: 20,
           hasMore: false,
@@ -381,8 +381,8 @@ describe('SearchPage advanced filters and pagination', () => {
             number: '100',
             title: 'Freshman Orientation',
           }),
-        ]),
-        pagination: { total: 21, limit: 20, offset: 0, hasMore: true },
+        ], 'intro to CS'),
+        pagination: { resultCountLowerBound: 21, limit: 20, offset: 0, hasMore: true },
       })
       .mockResolvedValueOnce({
         ...searchResponse([
@@ -392,7 +392,7 @@ describe('SearchPage advanced filters and pagination', () => {
             title: 'Intro Computing',
           }),
         ]),
-        pagination: { total: 22, limit: 20, offset: 20, hasMore: true },
+        pagination: { resultCountLowerBound: 22, limit: 20, offset: 20, hasMore: true },
       })
 
     renderSearchPage()

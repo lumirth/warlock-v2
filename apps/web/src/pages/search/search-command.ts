@@ -1,5 +1,5 @@
 import {
-  normalizeSearchRequestDto,
+  coerceSearchRequestDto,
   splitAdvancedSearchState,
   type AdvancedSearchStateDto,
   type SearchRequestDto,
@@ -83,7 +83,7 @@ function resolveRequestCommand(
   command: Extract<SearchCommand, { type: 'request' }>,
   currentSort: SearchSort
 ): ResolvedSearchCommand | null {
-  const normalizedRequest = normalizeSearchRequestDto(command.request)
+  const normalizedRequest = coerceSearchRequestDto(command.request)
   const sort = normalizeSearchSort(command.sort ?? normalizedRequest.sort ?? currentSort)
   const offset =
     command.mode === 'append'

@@ -35,7 +35,7 @@ function makeFetcher(options: MockOptions = {}) {
         return json(200, {
           results: [],
           meta: {
-            interpretedRequest: {
+            nextRequest: {
               filters: {
                 instructor: 'fagen',
               },
@@ -48,13 +48,17 @@ function makeFetcher(options: MockOptions = {}) {
     }
     if (url.pathname === '/api/course/CS/225') {
       return json(200, {
-        subject: 'CS',
-        number: '225',
-        course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
-        sections: [{
-          crn: '12345',
-          course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
-        }],
+        course: {
+          subject: 'CS',
+          number: '225',
+          links: {
+            courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+          },
+          sections: [{
+            crn: '12345',
+            courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+          }],
+        },
       });
     }
     if (url.pathname === '/api/feedback') {

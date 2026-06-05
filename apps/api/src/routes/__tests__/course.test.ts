@@ -77,42 +77,49 @@ describe('course routes', () => {
 
     const res = await app().request('/api/course/CS/225?term=spring&year=2026&fresh=true', {}, env);
     const data = await res.json() as {
-      sections: Array<{
-        crn: string;
-        instructor: string;
-        instructorRmp: number | null;
-        instructorGpa: number | null;
-        course_explorer_url: string;
-        meetings: Array<{
-          typeCode: string | null;
-          buildingName: string | null;
-          roomNumber: string | null;
-          instructorNames: string[];
+      course: {
+        sections: Array<{
+          crn: string;
+          instructor: string;
+          instructorRmp: number | null;
+          instructorGpa: number | null;
+          courseExplorerUrl?: string;
+          meetings: Array<{
+            typeCode: string | null;
+            buildingName: string | null;
+            roomNumber: string | null;
+            instructorNames: string[];
+          }>;
         }>;
-      }>;
+      };
     } & Record<string, unknown>;
 
     expect(res.status).toBe(200);
     expect(data).toMatchObject({
-      id: 'CS-225-2026-spring',
-      avg_gpa: 3.62,
-      gpa_sample_size: 820,
-      primary_instructor_rmp: 4.8,
-      quality_score: 88,
-      difficulty_score: 42,
+      course: {
+        id: 'CS-225-2026-spring',
+        metrics: {
+          avgGpa: 3.62,
+          gpaSampleSize: 820,
+          primaryInstructorRating: 4.8,
+          qualityScore: 88,
+          workloadScore: 42,
+        },
+      },
       cache: {
         cached: false,
         termStatus: 'active',
       },
     });
-    expect(data.sections[0]).toMatchObject({
+    const sections = data.course.sections;
+    expect(sections[0]).toMatchObject({
       crn: '12345',
       instructor: 'Lovelace, A',
       instructorRmp: 4.8,
       instructorGpa: 3.62,
-      course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+      courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
     });
-    expect(data.sections[0].meetings[0]).toMatchObject({
+    expect(sections[0].meetings[0]).toMatchObject({
       typeCode: 'LEC',
       buildingName: 'Siebel Center',
       roomNumber: '1404',
@@ -140,7 +147,9 @@ describe('course routes', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('X-Cache')).toBe('STALE');
     expect(data).toMatchObject({
-      id: 'CS-225-2026-spring',
+      course: {
+        id: 'CS-225-2026-spring',
+      },
       cache: {
         stale: true,
         staleReason: 'upstream returned 429',

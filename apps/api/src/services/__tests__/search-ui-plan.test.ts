@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeSearchRequestDto } from '@uiuc-course-search/query-types';
-import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
+import {
+  coerceSearchRequestDto,
+  requirementFilter,
+  singleRequirementFilter,
+} from '@uiuc-course-search/query-types';
 import type { Hint, SearchPlan } from '../search-planner-types.js';
 import {
   buildInterpretedSearchRequest,
@@ -8,7 +11,7 @@ import {
 } from '../search-ui-plan.js';
 
 const request = (query: string, filters = {}) =>
-  normalizeSearchRequestDto({ query, filters });
+  coerceSearchRequestDto({ query, filters });
 
 describe('buildSearchUiPlan', () => {
   it('turns extraction hints and residual text into public chips', () => {
@@ -93,7 +96,7 @@ describe('buildSearchUiPlan', () => {
         kind: 'run_search',
         nextRequest: {
           query: '',
-          filters: { requirement: 'CS' },
+          filters: { requirement: singleRequirementFilter('CS') },
           sort: { field: 'relevance', direction: 'desc' },
           scope: 'active',
         },
@@ -130,7 +133,7 @@ describe('buildSearchUiPlan', () => {
     expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'Requirement CS']);
     expect(ui.chips[1].action?.nextRequest.query).toBe('easy');
     expect(buildInterpretedSearchRequest(hints, plan, '', request('easy cs')).filters).toMatchObject({
-      requirement: 'CS',
+      requirement: singleRequirementFilter('CS'),
       workload: 'easy',
     });
     expect(ui.ambiguityActions[0].action.nextRequest).toMatchObject({
@@ -249,22 +252,23 @@ describe('buildSearchUiPlan', () => {
     ]);
   });
 
-  it('shows a concrete Any GenEd chip for generic gened intent without polluting advanced state', () => {
+  it('shows a concrete Any Requirement chip and preserves the canonical requirement filter', () => {
+    const requirement = requirementFilter('any', [
+      'HUM',
+      'NAT',
+      'SBS',
+      'CS',
+      'QR',
+      'QR1',
+      'QR2',
+      'NW',
+      'US',
+      'WCC',
+      'ACP',
+    ])!;
     const plan = buildSearchUiPlan([], {
       filters: {
-        requirement: requirementFilter('any', [
-          'HUM',
-          'NAT',
-          'SBS',
-          'CS',
-          'QR',
-          'QR1',
-          'QR2',
-          'NW',
-          'US',
-          'WCC',
-          'ACP',
-        ]),
+        requirement,
       },
       keywordQuery: '',
       semanticQuery: '',
@@ -282,34 +286,27 @@ describe('buildSearchUiPlan', () => {
         needsStudentProfile: false,
         confidence: 0.74,
       },
-    }, '', request('gened'));
+    }, '', request('gened', { requirement }));
 
     expect(plan.chips).toEqual([
       expect.objectContaining({
         id: 'requirement-any',
         type: 'requirement',
         label: 'Any Requirement',
+        action: expect.objectContaining({
+          nextRequest: expect.objectContaining({
+            filters: undefined,
+          }),
+        }),
       }),
     ]);
     expect(buildInterpretedSearchRequest([], {
       filters: {
-        requirement: requirementFilter('any', [
-          'HUM',
-          'NAT',
-          'SBS',
-          'CS',
-          'QR',
-          'QR1',
-          'QR2',
-          'NW',
-          'US',
-          'WCC',
-          'ACP',
-        ]),
+        requirement,
       },
       keywordQuery: '',
       semanticQuery: '',
-    }, '', request('gened')).filters?.requirement).toBeUndefined();
+    }, '', request('gened')).filters?.requirement).toEqual(requirement);
   });
 
   it('preserves part-of-term filters in chips and advanced state', () => {

@@ -27,17 +27,6 @@ export type TermAggregateCounts = {
   sectionsCount: number;
 };
 
-export type EnrichmentCoverage = {
-  term_id: string;
-  status: TermStateStatus;
-  courses_count: number | null;
-  sections_count: number | null;
-  courses_with_gpa: number;
-  courses_with_quality: number;
-  courses_with_difficulty: number;
-  enriched_links: number;
-};
-
 export function resolveManualSyncTermStatus(
   existingTerm: Pick<TermState, 'status'> | null,
   requestedStatus?: TermStateStatus

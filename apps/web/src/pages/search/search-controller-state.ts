@@ -114,7 +114,6 @@ export function searchControllerReducer(
             ? state.session.activeRequest
             : activeRequestFromResponse(
                 action.response,
-                action.requestSort,
                 state.session.activeRequest
               ),
         results:
@@ -207,15 +206,13 @@ function withoutPaginationOffset(request: SearchRequestDto): SearchRequestDto {
 
 function activeRequestFromResponse(
   response: SearchResponseDto,
-  requestSort: SearchSort,
   previousRequest: SearchRequestDto | null
 ): SearchRequestDto | null {
-  const interpretedRequest = response.meta?.interpretedRequest
-  if (!interpretedRequest) return previousRequest
+  const nextRequest = response.meta?.nextRequest
+  if (!nextRequest) return previousRequest
 
   return {
-    ...interpretedRequest,
-    sort: response.meta?.appliedSort ?? interpretedRequest.sort ?? requestSort,
+    ...nextRequest,
     pagination: {
       limit: response.pagination.limit,
       offset: 0,

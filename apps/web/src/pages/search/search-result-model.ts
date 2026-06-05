@@ -1,7 +1,7 @@
 import {
   getWorkloadTierLabel,
   type CourseGenedDto,
-  type CourseDto,
+  type CourseSummaryDto,
   type SearchChipDto,
   type SearchRecoveryGroup,
 } from '@uiuc-course-search/query-types'
@@ -37,22 +37,22 @@ export function toneTextClass(tone?: Tone): string {
   )
 }
 
-export function getCourseKey(course: CourseDto): string {
+export function getCourseKey(course: CourseSummaryDto): string {
   return (
     course.id ||
     `${course.subject}-${course.number}-${course.term}-${course.year}`
   )
 }
 
-export function getCoursePath(course: CourseDto): string {
+export function getCoursePath(course: CourseSummaryDto): string {
   return `/course/${course.subject}/${course.number}?term=${course.term}&year=${course.year}`
 }
 
-export function getCourseMetrics(course: CourseDto): CourseResultMetric[] {
-  const qualityScore = course.quality_score
-  const workloadScore = course.difficulty_score
-  const primaryInstructorRmp = course.primary_instructor_rmp
-  const avgGpa = course.avg_gpa
+export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[] {
+  const qualityScore = course.metrics.qualityScore
+  const workloadScore = course.metrics.workloadScore
+  const primaryInstructorRmp = course.metrics.primaryInstructorRating
+  const avgGpa = course.metrics.avgGpa
   const stats: CourseResultMetric[] = []
 
   if (typeof qualityScore === 'number') {
@@ -62,8 +62,8 @@ export function getCourseMetrics(course: CourseDto): CourseResultMetric[] {
       value: qualityLabel,
       tone: getQualityTone(qualityLabel),
       title:
-        typeof course.gpa_sample_size === 'number'
-          ? `Based on ${course.gpa_sample_size.toLocaleString()} records`
+        typeof course.metrics.gpaSampleSize === 'number'
+          ? `Based on ${course.metrics.gpaSampleSize.toLocaleString()} records`
           : undefined,
     })
   }
@@ -82,8 +82,8 @@ export function getCourseMetrics(course: CourseDto): CourseResultMetric[] {
       label: 'Avg GPA',
       value: avgGpa.toFixed(2),
       title:
-        typeof course.gpa_sample_size === 'number'
-          ? `Based on ${course.gpa_sample_size.toLocaleString()} GPA records`
+        typeof course.metrics.gpaSampleSize === 'number'
+          ? `Based on ${course.metrics.gpaSampleSize.toLocaleString()} GPA records`
           : undefined,
     })
   }
@@ -114,14 +114,14 @@ export function genedLabel(requirement: CourseGenedDto): string {
   return category
 }
 
-export function courseGenedLabels(course: CourseDto): string[] {
-  if (course.geneds.length > 0) {
-    return course.geneds.map(genedLabel)
+export function courseGenedLabels(course: CourseSummaryDto): string[] {
+  if (course.requirements.length > 0) {
+    return course.requirements.map(genedLabel)
   }
   return []
 }
 
-export function formatCourseLevel(course: CourseDto): string {
+export function formatCourseLevel(course: CourseSummaryDto): string {
   const number = parseInt(course.number, 10)
   if (Number.isNaN(number)) return '-'
 

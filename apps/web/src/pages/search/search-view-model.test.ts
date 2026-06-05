@@ -42,13 +42,16 @@ describe('buildSearchViewModel', () => {
           activeRequest: {
             query: 'online stats class',
           },
-          results: [{ id: 'STAT-100' } as SearchControllerState['session']['results'][number]],
+          results: [
+            { id: 'STAT-100' } as unknown as SearchControllerState['session']['results'][number],
+          ],
           meta: {
             query: { raw: 'online stats class', residual: 'stats' },
+            nextRequest: { query: 'online stats class' },
             timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
           },
           pagination: {
-            total: 41,
+            resultCountLowerBound: 41,
             limit: 20,
             offset: 0,
             hasMore: true,
@@ -59,8 +62,8 @@ describe('buildSearchViewModel', () => {
     )
 
     expect(model.activeRequestQuery).toBe('online stats class')
-    expect(model.resultCountLabel).toBe('41 results')
-    expect(model.showingResultsLabel).toBe('Showing 1 of 41')
+    expect(model.resultCountLabel).toBe('41+ results')
+    expect(model.showingResultsLabel).toBe('Showing 1 of at least 41')
     expect(model.resultsHeadingLabel).toBe('Results for online stats class')
   })
 
@@ -75,6 +78,7 @@ describe('buildSearchViewModel', () => {
           loading: true,
           meta: {
             query: { raw: 'cs', residual: 'cs' },
+            nextRequest: { query: 'cs' },
             timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
           },
         },

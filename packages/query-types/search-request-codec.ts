@@ -15,7 +15,7 @@ import {
   isSearchLevelFilter,
   isSearchScope,
   isSearchSortField,
-  normalizeSearchRequestDto,
+  coerceSearchRequestDto,
   searchRequestHasFilters,
   type NormalizedSearchRequestDto,
   type SearchPaginationDto,
@@ -25,6 +25,12 @@ import {
   type SearchScope,
   type SearchSort,
 } from "./search-contract.js";
+import {
+  REQUIREMENT_FILTER_MODES,
+  requirementFilter,
+  type RequirementFilter,
+  type RequirementFilterMode,
+} from "./course-policy.js";
 
 export type SearchQueryParamReader = {
   get(name: string): string | null;
@@ -46,7 +52,7 @@ type ParseResult<T> =
 export function searchRequestToQueryEntries(
   request: SearchRequestDto,
 ): Array<[string, string]> {
-  const normalized = normalizeSearchRequestDto(request);
+  const normalized = coerceSearchRequestDto(request);
   const entries: Array<[string, string]> = [["q", normalized.query]];
 
   for (const [key, value] of searchPaginationToQueryEntries(request.pagination)) {
@@ -59,7 +65,12 @@ export function searchRequestToQueryEntries(
   if (filters.instructor) entries.push(["instructor", filters.instructor]);
   if (filters.term) entries.push(["term", filters.term]);
   if (filters.year !== undefined) entries.push(["year", String(filters.year)]);
-  if (filters.requirement) entries.push(["requirement", filters.requirement]);
+  if (filters.requirement) {
+    entries.push(["requirement", filters.requirement.codes.join(",")]);
+    if (filters.requirement.mode !== "single") {
+      entries.push(["requirementMode", filters.requirement.mode]);
+    }
+  }
   if (filters.credits !== undefined) entries.push(["credits", String(filters.credits)]);
   if (filters.days) entries.push(["days", filters.days]);
   if (filters.time) entries.push(["time", filters.time]);
@@ -150,8 +161,12 @@ export function decodeSearchRequestQuery(
     requestInput.filters!.year = parsedYear.value;
   }
 
-  const requirement = params.get("requirement")?.trim();
-  if (requirement) requestInput.filters!.requirement = requirement.toUpperCase();
+  const requirement = parseSearchRequirementParam(
+    params.get("requirement"),
+    params.get("requirementMode"),
+  );
+  if (!requirement.ok) return requirement;
+  if (requirement.value) requestInput.filters!.requirement = requirement.value;
 
   const credits = params.get("credits");
   if (credits) {
@@ -226,7 +241,7 @@ export function decodeSearchRequestQuery(
     requestInput.filters!.level = level.value;
   }
 
-  const request = normalizeSearchRequestDto(requestInput);
+  const request = coerceSearchRequestDto(requestInput);
   if (!request.query.trim() && !searchRequestHasFilters(request)) {
     return { ok: false, error: "Missing query parameter q" };
   }
@@ -329,6 +344,56 @@ function parseSearchBooleanParam(
     return { ok: true, value: false };
   }
   return { ok: false, error: `${name} must be a boolean` };
+}
+
+function parseSearchRequirementParam(
+  codesRaw: string | null,
+  modeRaw: string | null,
+): ParseResult<RequirementFilter | undefined> {
+  const normalizedMode = modeRaw?.trim().toLowerCase();
+  if (normalizedMode && !isRequirementFilterMode(normalizedMode)) {
+    return {
+      ok: false,
+      error: `requirementMode must be one of: ${REQUIREMENT_FILTER_MODES.join(", ")}`,
+    };
+  }
+
+  const codes = (codesRaw ?? "")
+    .split(",")
+    .map(code => code.trim().toUpperCase())
+    .filter(Boolean);
+  if (codes.length === 0) {
+    return { ok: true, value: undefined };
+  }
+
+  const mode: RequirementFilterMode = normalizedMode && isRequirementFilterMode(normalizedMode)
+    ? normalizedMode
+    : codes.length > 1
+      ? "any"
+      : "single";
+  if (mode === "single" && codes.length > 1) {
+    return {
+      ok: false,
+      error: "requirement must contain one code when requirementMode is single",
+    };
+  }
+
+  for (const code of codes) {
+    if (!/^[A-Z0-9]{2,8}$/.test(code)) {
+      return {
+        ok: false,
+        error: "requirement codes must be 2-8 letters or digits",
+      };
+    }
+  }
+
+  return { ok: true, value: requirementFilter(mode, codes) };
+}
+
+function isRequirementFilterMode(
+  value: string,
+): value is RequirementFilterMode {
+  return (REQUIREMENT_FILTER_MODES as readonly string[]).includes(value);
 }
 
 function parseSearchSortParams(

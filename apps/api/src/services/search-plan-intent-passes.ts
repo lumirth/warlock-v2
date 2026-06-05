@@ -1,4 +1,5 @@
 import type { SearchSort } from '@uiuc-course-search/query-types';
+import type { SearchFallbackPlan } from './search-planning-types.js';
 import type { SearchPlan } from './search-planner-types.js';
 import { withSearchPlanUpdates } from './search-plan-model.js';
 import { sanitizeFtsQuery } from './search-text.js';
@@ -207,7 +208,7 @@ export function removeSortScaffolding(query: string): string {
     .trim();
 }
 
-export function buildFallbackPlans(plan: SearchPlan, queryResidual: string): SearchPlan[] {
+export function buildFallbackPlans(plan: SearchPlan, queryResidual: string): SearchFallbackPlan[] {
   const existingExpansions = Array.isArray(plan.softPreferences?.topicExpansions)
     ? plan.softPreferences.topicExpansions
     : [];
@@ -220,16 +221,21 @@ export function buildFallbackPlans(plan: SearchPlan, queryResidual: string): Sea
     return [];
   }
 
-  return [withSearchPlanUpdates(plan, draft => {
-    draft.keywordQuery = sanitizeFtsQuery(
-      `${plan.keywordQuery} ${expandedKeywords.join(' ')}`,
-    );
-    draft.semanticQuery = sanitizeFtsQuery(
-      `${plan.semanticQuery} ${expandedKeywords.join(' ')}`,
-    );
-    draft.softPreferences = {
-      ...(draft.softPreferences ?? {}),
-      topicExpansions: expandedKeywords,
-    };
-  })];
+  return [{
+    plan: withSearchPlanUpdates(plan, draft => {
+      draft.keywordQuery = sanitizeFtsQuery(
+        `${plan.keywordQuery} ${expandedKeywords.join(' ')}`,
+      );
+      draft.semanticQuery = sanitizeFtsQuery(
+        `${plan.semanticQuery} ${expandedKeywords.join(' ')}`,
+      );
+      draft.softPreferences = {
+        ...(draft.softPreferences ?? {}),
+        topicExpansions: expandedKeywords,
+      };
+    }),
+    constraintsRelaxed: [
+      `Added related topic terms: ${expandedKeywords.join(', ')}`,
+    ],
+  }];
 }

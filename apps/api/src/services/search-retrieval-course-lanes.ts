@@ -69,15 +69,20 @@ export async function keywordSearch(
   const { filters, keywordQuery, cleanKeywordQuery, titleQuery } = input;
 
   if (filters.subject && filters.number && !keywordQuery?.trim()) {
+    const filtered = buildFilteredCourseQuery(filters);
     const exactSql = `
-      SELECT id FROM courses
-      WHERE subject = ? AND number = ?
-      ORDER BY year DESC,
-        CASE term WHEN 'spring' THEN 1 WHEN 'fall' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END
+      SELECT DISTINCT c.id
+      FROM courses c
+      ${filtered.joinSql}
+      ${filtered.whereSql()}
+      ${filtered.groupBySql("c.id")}
+      ${filtered.havingSql}
+      ORDER BY c.year DESC,
+        CASE c.term WHEN 'spring' THEN 1 WHEN 'fall' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END
       LIMIT ?
     `;
     const exactResult = await db.prepare(exactSql)
-      .bind(filters.subject, filters.number, limit)
+      .bind(...filtered.bindParams([limit]))
       .all<{ id: string }>();
 
     if (exactResult.results.length > 0) {

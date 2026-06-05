@@ -13,6 +13,7 @@ import {
 } from "./search-retrieval-plan.js";
 import { hybridSearchWithTermRanking } from "./search-term-ranking.js";
 import type { SearchResult } from "./search-types.js";
+import type { SearchFallbackPlan } from "./search-planning-types.js";
 
 export type SearchExecutionResult = {
   results: SearchResult[];
@@ -31,7 +32,7 @@ export async function executeSearchPlan(
   plan: SearchPlan,
   page: SearchPageWindow,
   controls: AppliedSearchControls,
-  fallbackPlans: readonly SearchPlan[],
+  fallbackPlans: readonly SearchFallbackPlan[],
   budget: SearchCandidateBudget = buildSearchCandidateBudget(plan, page, controls),
 ): Promise<SearchExecutionResult> {
   const retrievalPlan = buildRetrievalPlan(plan, controls, budget);
@@ -50,10 +51,10 @@ export async function executeSearchPlan(
   const originalResultCount = results.length;
 
   if (!isNavigational && results.length < 3) {
-    for (const fallbackPlan of fallbackPlans) {
+    for (const fallback of fallbackPlans) {
       tierReached = 3;
       const expandedRetrievalPlan = buildRetrievalPlan(
-        fallbackPlan,
+        fallback.plan,
         controls,
         budget,
       );
@@ -63,8 +64,13 @@ export async function executeSearchPlan(
         vectorize,
         ai,
         expandedRetrievalPlan,
-        fallbackPlan,
+        fallback.plan,
       );
+      for (const constraint of fallback.constraintsRelaxed) {
+        if (!constraintsRelaxed.includes(constraint)) {
+          constraintsRelaxed.push(constraint);
+        }
+      }
       results = mergeResults(results, expandedResults, budget.executionResultLimit);
       if (results.length >= 3) {
         break;

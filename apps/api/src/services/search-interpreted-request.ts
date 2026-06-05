@@ -5,10 +5,10 @@ import {
   isSearchTermFilter,
   isSearchTimeFilter,
   type NormalizedSearchRequestDto,
+  type RequirementFilter,
   type SearchRequestDto,
   type SearchRequestFiltersDto,
 } from "@uiuc-course-search/query-types";
-import { isGenericAnyGenedFilter } from "./gened-codes.js";
 import type {
   Hint,
   SearchFilters,
@@ -45,7 +45,7 @@ export function publicFiltersFromPlan(
     instructor: instructorHint ? formatDisplayHintValue(instructorHint, residual) : undefined,
     term: publicTerm(filters.term),
     year: filters.year,
-    requirement: publicRequirementCode(filters),
+    requirement: publicRequirementFilter(filters),
     credits: filters.credits,
     days: filters.days,
     time: publicTime(filters.time),
@@ -63,13 +63,10 @@ function compactPublicFilters(filters: SearchRequestFiltersDto): SearchRequestFi
   ) as SearchRequestFiltersDto;
 }
 
-function publicRequirementCode(filters: SearchFilters): string | undefined {
+function publicRequirementFilter(filters: SearchFilters): RequirementFilter | undefined {
   const requirement = effectiveRequirementFilter(filters);
   if (!requirement) return undefined;
-  if (requirement.mode === "any" && isGenericAnyGenedFilter(requirement.codes)) {
-    return undefined;
-  }
-  return requirement.codes[0];
+  return requirement;
 }
 
 function publicTerm(value: string | undefined): SearchRequestFiltersDto["term"] {

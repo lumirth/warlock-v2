@@ -4,6 +4,8 @@ import {
   isSearchStatusFilter,
   isSearchTermFilter,
   isSearchTimeFilter,
+  requirementFilter,
+  type RequirementFilterMode,
   type AdvancedSearchStateDto,
 } from '@uiuc-course-search/query-types'
 import {
@@ -34,6 +36,11 @@ import {
   type SelectOption,
 } from './search-options'
 
+const REQUIREMENT_MATCH_OPTIONS = [
+  { value: 'any', label: 'Any listed' },
+  { value: 'all', label: 'All listed' },
+] as const satisfies SelectOption[]
+
 export function AdvancedSearchFields({
   advancedDraft,
   onAdvancedDraftChange,
@@ -48,7 +55,7 @@ export function AdvancedSearchFields({
     <div className="flex flex-col gap-5">
       <FieldSet>
         <FieldLegend variant="label">Course</FieldLegend>
-        <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <AdvancedTextField
             id="advanced-subject"
             label="Subject"
@@ -81,12 +88,34 @@ export function AdvancedSearchFields({
           />
           <AdvancedTextField
             id="advanced-requirement"
-            label="Requirement"
-            maxLength={6}
-            placeholder="HUM"
-            value={advancedDraft.requirement ?? ''}
+            label="Requirement codes"
+            maxLength={48}
+            placeholder="HUM, US"
+            value={requirementCodesText(advancedDraft.requirement)}
             onChange={(value) =>
-              onAdvancedDraftChange('requirement', value.toUpperCase() || undefined)
+              onAdvancedDraftChange(
+                'requirement',
+                requirementFilterFromText(
+                  value,
+                  requirementMatchMode(advancedDraft.requirement)
+                )
+              )
+            }
+          />
+          <AdvancedSelectField
+            id="advanced-requirement-mode"
+            label="Requirement match"
+            placeholder="Any listed"
+            value={requirementMatchMode(advancedDraft.requirement)}
+            options={REQUIREMENT_MATCH_OPTIONS}
+            onChange={(value) =>
+              onAdvancedDraftChange(
+                'requirement',
+                requirementFilterFromText(
+                  requirementCodesText(advancedDraft.requirement),
+                  value === 'all' ? 'all' : 'any'
+                )
+              )
             }
           />
           <AdvancedSelectField
@@ -290,6 +319,30 @@ function levelFilterValue(
 ): AdvancedSearchStateDto['level'] {
   const level = value ? parseInt(value, 10) : NaN
   return isSearchLevelFilter(level) ? level : undefined
+}
+
+function requirementCodesText(
+  requirement: AdvancedSearchStateDto['requirement']
+): string {
+  return requirement?.codes.join(', ') ?? ''
+}
+
+function requirementMatchMode(
+  requirement: AdvancedSearchStateDto['requirement']
+): Extract<RequirementFilterMode, 'any' | 'all'> {
+  return requirement?.mode === 'all' ? 'all' : 'any'
+}
+
+function requirementFilterFromText(
+  value: string,
+  mode: Extract<RequirementFilterMode, 'any' | 'all'>
+): AdvancedSearchStateDto['requirement'] {
+  const codes = value
+    .split(',')
+    .map((code) => code.trim().toUpperCase())
+    .filter(Boolean)
+  if (codes.length === 0) return undefined
+  return requirementFilter(codes.length === 1 ? 'single' : mode, codes)
 }
 
 function AdvancedSelectField({

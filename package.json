@@ -24,7 +24,7 @@
     "cloudflare:preflight": "tsx scripts/cloudflare-staging-preflight.ts",
     "bootstrap:fresh-check": "tsx scripts/verify-fresh-clone.ts",
     "db:verify": "bash scripts/verify-schema.sh",
-    "eval:smoke": "tsx scripts/eval-smoke.ts",
+    "eval:smoke": "npm run eval:smoke -w @uiuc-course-search/api",
     "feedback:triage": "tsx scripts/feedback-corpus-candidates.ts",
     "feedback:export": "tsx scripts/export-feedback.ts",
     "data:freshness:audit": "tsx scripts/data-freshness-audit.ts",

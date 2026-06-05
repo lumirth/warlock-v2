@@ -85,12 +85,32 @@ function hasArray(body: JsonRecord | null, key: string): boolean {
 }
 
 function hasCourseExplorerLinks(body: JsonRecord | null): boolean {
-  if (typeof body?.course_explorer_url !== 'string') {
+  const course = body?.course;
+  if (!course || typeof course !== 'object' || Array.isArray(course)) {
+    return false;
+  }
+  const courseRecord = course as JsonRecord;
+  const links = courseRecord.links;
+  if (!links || typeof links !== 'object' || Array.isArray(links)) {
+    return false;
+  }
+  if (typeof (links as JsonRecord).courseExplorerUrl !== 'string') {
     return false;
   }
 
-  const sections = Array.isArray(body.sections) ? body.sections as JsonRecord[] : [];
-  return sections.some(section => typeof section.course_explorer_url === 'string');
+  const sections = Array.isArray(courseRecord.sections)
+    ? courseRecord.sections as JsonRecord[]
+    : [];
+  return sections.some((section) => {
+    const sectionLinks = section.links;
+    return typeof section.courseExplorerUrl === 'string'
+      || (
+        sectionLinks
+        && typeof sectionLinks === 'object'
+        && !Array.isArray(sectionLinks)
+        && typeof (sectionLinks as JsonRecord).courseExplorerUrl === 'string'
+      );
+  });
 }
 
 function hasInstructorFilter(body: JsonRecord | null): boolean {
@@ -99,16 +119,16 @@ function hasInstructorFilter(body: JsonRecord | null): boolean {
     return false;
   }
 
-  const interpretedRequest = (meta as JsonRecord).interpretedRequest;
+  const nextRequest = (meta as JsonRecord).nextRequest;
   if (
-    !interpretedRequest
-    || typeof interpretedRequest !== 'object'
-    || Array.isArray(interpretedRequest)
+    !nextRequest
+    || typeof nextRequest !== 'object'
+    || Array.isArray(nextRequest)
   ) {
     return false;
   }
 
-  const filters = (interpretedRequest as JsonRecord).filters;
+  const filters = (nextRequest as JsonRecord).filters;
   if (!filters || typeof filters !== 'object' || Array.isArray(filters)) {
     return false;
   }
@@ -202,7 +222,12 @@ export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promis
     fetcher,
     (response, body) => {
       if (response.status !== 200) return `expected 200, got ${response.status}`;
-      if (body?.subject !== smokeSubject || body?.number !== smokeNumber) {
+      const course = body?.course;
+      if (!course || typeof course !== 'object' || Array.isArray(course)) {
+        return 'expected nested course detail response';
+      }
+      const courseRecord = course as JsonRecord;
+      if (courseRecord.subject !== smokeSubject || courseRecord.number !== smokeNumber) {
         return `expected ${smokeSubject} ${smokeNumber}`;
       }
       if (!hasCourseExplorerLinks(body)) return 'expected course and section Course Explorer links';

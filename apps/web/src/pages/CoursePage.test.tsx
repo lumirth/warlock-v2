@@ -8,7 +8,11 @@ import {
 } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { CourseDto } from '@uiuc-course-search/query-types'
+import type {
+  CourseDetailDto,
+  CourseDetailResponseDto,
+  CourseSectionDto,
+} from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
 import { TestUiProvider } from '../test/TestUiProvider'
 import { CoursePage } from './CoursePage'
@@ -19,33 +23,48 @@ vi.mock('../lib/api-client', () => ({
   },
 }))
 
-function course(overrides: Partial<CourseDto> = {}): CourseDto {
+type CourseOverride = Omit<Partial<CourseDetailDto>, 'metrics' | 'registration' | 'sections'> & {
+  metrics?: Partial<CourseDetailDto['metrics']>
+  registration?: Partial<CourseDetailDto['registration']>
+  sections?: CourseSectionDto[]
+}
+
+function course(overrides: CourseOverride = {}): CourseDetailResponseDto {
+  const courseDetail: CourseDetailDto = {
+    id: overrides.id ?? 'CS-225-2026-spring',
+    subject: overrides.subject ?? 'CS',
+    number: overrides.number ?? '225',
+    title: overrides.title ?? 'Data Structures',
+    description: overrides.description ?? 'A course',
+    creditHours: overrides.creditHours ?? 4,
+    year: overrides.year ?? 2026,
+    term: overrides.term ?? 'spring',
+    primaryInstructor: overrides.primaryInstructor ?? null,
+    metrics: {
+      primaryInstructorRating:
+        overrides.metrics?.primaryInstructorRating ?? null,
+      avgGpa: overrides.metrics?.avgGpa ?? null,
+      medianGpa: overrides.metrics?.medianGpa ?? null,
+      gpaSampleSize: overrides.metrics?.gpaSampleSize ?? null,
+      qualityScore: overrides.metrics?.qualityScore ?? null,
+      workloadScore: overrides.metrics?.workloadScore ?? null,
+    },
+    registration: {
+      courseInfo: overrides.registration?.courseInfo ?? null,
+      degreeAttributes: overrides.registration?.degreeAttributes ?? null,
+      classScheduleInfo: overrides.registration?.classScheduleInfo ?? null,
+      dateRangeText: overrides.registration?.dateRangeText ?? null,
+      registrationNotes: overrides.registration?.registrationNotes ?? null,
+      approvalCode: overrides.registration?.approvalCode ?? null,
+    },
+    requirements: overrides.requirements ?? [],
+    instructorLinks: overrides.instructorLinks ?? {},
+    links: overrides.links ?? {},
+    sections: overrides.sections ?? [],
+  }
+
   return {
-    id: 'CS-225-2026-spring',
-    subject: 'CS',
-    number: '225',
-    title: 'Data Structures',
-    description: 'A course',
-    credit_hours: 4,
-    year: 2026,
-    term: 'spring',
-    primary_instructor: null,
-    primary_instructor_rmp: null,
-    avg_gpa: null,
-    median_gpa: null,
-    gpa_sample_size: null,
-    quality_score: null,
-    difficulty_score: null,
-    course_info: null,
-    degree_attributes: null,
-    class_schedule_info: null,
-    date_range_text: null,
-    registration_notes: null,
-    approval_code: null,
-    geneds: [],
-    instructor_links: {},
-    sections: [],
-    ...overrides,
+    course: courseDetail,
   }
 }
 
@@ -130,12 +149,14 @@ describe('CoursePage request state', () => {
   it('renders course scores, rating, GPA, and section stat fallbacks', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(
       course({
-        primary_instructor: 'Lovelace, A',
-        primary_instructor_rmp: 4.8,
-        avg_gpa: 3.62,
-        gpa_sample_size: 820,
-        quality_score: 88,
-        difficulty_score: 42,
+        primaryInstructor: 'Lovelace, A',
+        metrics: {
+          primaryInstructorRating: 4.8,
+          avgGpa: 3.62,
+          gpaSampleSize: 820,
+          qualityScore: 88,
+          workloadScore: 42,
+        },
         sections: [
           {
             crn: '12345',
@@ -151,16 +172,16 @@ describe('CoursePage request state', () => {
             instructorGpa: null,
             instructorStats: [
               {
-                instructor_name: 'Lovelace, A',
-                rmp_rating: 4.8,
-                rmp_difficulty: 3.1,
-                rmp_id: 'ada',
-                avg_gpa: 3.62,
-                median_gpa: null,
-                gpa_sample_size: 820,
-                num_ratings: 140,
-                would_take_again_pct: null,
-                top_tags: null,
+                instructorName: 'Lovelace, A',
+                rmpRating: 4.8,
+                rmpDifficulty: 3.1,
+                rmpId: 'ada',
+                avgGpa: 3.62,
+                medianGpa: null,
+                gpaSampleSize: 820,
+                numRatings: 140,
+                wouldTakeAgainPct: null,
+                topTags: null,
                 department: null,
               },
             ],
@@ -234,10 +255,12 @@ describe('CoursePage request state', () => {
   it('uses a course score sidebar at laptop widths, not only extra-wide screens', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(
       course({
-        avg_gpa: 3.62,
-        gpa_sample_size: 820,
-        quality_score: 88,
-        difficulty_score: 42,
+        metrics: {
+          avgGpa: 3.62,
+          gpaSampleSize: 820,
+          qualityScore: 88,
+          workloadScore: 42,
+        },
       })
     )
 
@@ -258,8 +281,10 @@ describe('CoursePage request state', () => {
   it('renders official Course Explorer links and public instructor link fallbacks', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(
       course({
-        course_explorer_url:
-          'https://courses.illinois.edu/schedule/2026/fall/CS/225',
+        links: {
+          courseExplorerUrl:
+            'https://courses.illinois.edu/schedule/2026/fall/CS/225',
+        },
         sections: [
           {
             crn: '45678',
@@ -273,20 +298,20 @@ describe('CoursePage request state', () => {
             instructor: 'Fagen-Ulmschneider, W',
             instructorRmp: null,
             instructorGpa: null,
-            course_explorer_url:
+            courseExplorerUrl:
               'https://courses.illinois.edu/schedule/2026/fall/CS/225',
             instructorStats: [
               {
-                instructor_name: 'Fagen-Ulmschneider, W',
-                rmp_rating: 4.9,
-                rmp_difficulty: 3.4,
-                rmp_id: '85515',
-                avg_gpa: 3.45,
-                median_gpa: null,
-                gpa_sample_size: 1200,
-                num_ratings: 180,
-                would_take_again_pct: null,
-                top_tags: null,
+                instructorName: 'Fagen-Ulmschneider, W',
+                rmpRating: 4.9,
+                rmpDifficulty: 3.4,
+                rmpId: '85515',
+                avgGpa: 3.45,
+                medianGpa: null,
+                gpaSampleSize: 1200,
+                numRatings: 180,
+                wouldTakeAgainPct: null,
+                topTags: null,
                 department: null,
               },
             ],

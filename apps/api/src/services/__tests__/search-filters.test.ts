@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import { requirementFilter } from '@uiuc-course-search/query-types';
-import { buildFilterClauses, requirementLaneSearch, TIME_RANGES } from '../search.js';
+import { buildFilterClauses, TIME_RANGES } from '../search-filters.js';
+import { requirementLaneSearch } from '../search-retrieval-requirement-lanes.js';
 import { WORKLOAD_FILTER_THRESHOLDS } from '../ranking/ranking-policy.js';
 import type { SearchFilters, SearchPlan } from '../search-planner-types.js';
 
@@ -12,6 +13,7 @@ describe('buildFilterClauses', () => {
       const result = buildFilterClauses(filters);
       expect(result.where).toContain('m.days = ?');
       expect(result.params).toContain('MWF');
+      expect(result.joinKeys).toEqual(['sections', 'meetings']);
       expect(result.joins).toContain('JOIN sections s ON s.course_id = c.id');
       expect(result.joins).toContain('JOIN meetings m ON m.section_id = s.id');
     });

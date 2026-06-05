@@ -116,7 +116,7 @@ export type SearchMetaDto = {
   };
   appliedSort?: SearchSort;
   appliedScope?: SearchScope;
-  interpretedRequest?: SearchRequestDto;
+  nextRequest: SearchRequestDto;
   term?: {
     activeTermId: string | null;
     registrableTermId: string | null;
@@ -130,7 +130,7 @@ export type SearchResponseDto = {
   results: SearchCourseResultDto[];
   meta: SearchMetaDto;
   pagination: {
-    total: number;
+    resultCountLowerBound: number;
     limit: number;
     offset: number;
     hasMore?: boolean;

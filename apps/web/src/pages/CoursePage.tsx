@@ -12,6 +12,7 @@ import { SectionsTable } from '../components/SectionsTable'
 import { FeedbackButton } from '../components/FeedbackButton'
 import { api } from '../lib/api-client'
 import type {
+  CourseDetailDto,
   CourseDetailResponseDto,
   CourseGenedDto,
 } from '@uiuc-course-search/query-types'
@@ -23,14 +24,14 @@ function genedLabel(gened: CourseGenedDto): string {
   return category
 }
 
-function detailRows(course: CourseDetailResponseDto): Array<{ label: string; value: string }> {
+function detailRows(course: CourseDetailDto): Array<{ label: string; value: string }> {
   return [
-    { label: 'Course information', value: course.course_info },
-    { label: 'Degree attributes', value: course.degree_attributes },
-    { label: 'Schedule information', value: course.class_schedule_info },
-    { label: 'Date range', value: course.date_range_text },
-    { label: 'Registration notes', value: course.registration_notes },
-    { label: 'Approval code', value: course.approval_code },
+    { label: 'Course information', value: course.registration.courseInfo },
+    { label: 'Degree attributes', value: course.registration.degreeAttributes },
+    { label: 'Schedule information', value: course.registration.classScheduleInfo },
+    { label: 'Date range', value: course.registration.dateRangeText },
+    { label: 'Registration notes', value: course.registration.registrationNotes },
+    { label: 'Approval code', value: course.registration.approvalCode },
   ].filter((item): item is { label: string; value: string } =>
     Boolean(item.value)
   )
@@ -44,7 +45,7 @@ export function CoursePage() {
     ? parseInt(searchParams.get('year')!)
     : undefined
 
-  const [course, setCourse] = useState<CourseDetailResponseDto | null>(null)
+  const [detail, setDetail] = useState<CourseDetailResponseDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,7 +65,7 @@ export function CoursePage() {
           year,
           controller.signal
         )
-        setCourse(data)
+        setDetail(data)
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return
         setError(
@@ -108,7 +109,7 @@ export function CoursePage() {
     )
   }
 
-  if (error || !course) {
+  if (error || !detail) {
     return (
       <PageContainer className="py-8">
         <Button asChild variant="ghost" className="mb-4">
@@ -126,8 +127,9 @@ export function CoursePage() {
     )
   }
 
+  const course = detail.course
   const details = detailRows(course)
-  const genedBadges = course.geneds.map(genedLabel)
+  const genedBadges = course.requirements.map(genedLabel)
 
   return (
     <PageContainer className="py-8">
@@ -145,10 +147,10 @@ export function CoursePage() {
               {label}
             </Badge>
           ))}
-          {course.course_explorer_url && (
+          {course.links.courseExplorerUrl && (
             <Button asChild variant="outline" size="xs">
               <a
-                href={course.course_explorer_url}
+                href={course.links.courseExplorerUrl}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -159,8 +161,8 @@ export function CoursePage() {
           )}
         </div>
         <p className="text-muted-foreground text-lg">
-          {course.credit_hours} credit hours / {course.term} {course.year}
-          {course.primary_instructor && ` / ${course.primary_instructor}`}
+          {course.creditHours} credit hours / {course.term} {course.year}
+          {course.primaryInstructor && ` / ${course.primaryInstructor}`}
         </p>
       </div>
 
@@ -168,12 +170,12 @@ export function CoursePage() {
         <aside className="min-w-0 md:sticky md:top-24 md:self-start">
           <div className="flex flex-col gap-3">
             <Scorecard
-              qualityScore={course.quality_score}
-              workloadScore={course.difficulty_score}
-              avgGpa={course.avg_gpa}
-              medianGpa={course.median_gpa}
-              gpaSampleSize={course.gpa_sample_size}
-              primaryInstructorRmp={course.primary_instructor_rmp}
+              qualityScore={course.metrics.qualityScore}
+              workloadScore={course.metrics.workloadScore}
+              avgGpa={course.metrics.avgGpa}
+              medianGpa={course.metrics.medianGpa}
+              gpaSampleSize={course.metrics.gpaSampleSize}
+              primaryInstructorRmp={course.metrics.primaryInstructorRating}
             />
             <FeedbackButton
               buttonLabel="Score feedback"
@@ -189,10 +191,10 @@ export function CoursePage() {
                 term: course.term,
                 year: course.year,
                 metadata: {
-                  qualityScore: course.quality_score,
-                  workloadScore: course.difficulty_score,
-                  avgGpa: course.avg_gpa,
-                  primaryInstructorRmp: course.primary_instructor_rmp,
+                  qualityScore: course.metrics.qualityScore,
+                  workloadScore: course.metrics.workloadScore,
+                  avgGpa: course.metrics.avgGpa,
+                  primaryInstructorRmp: course.metrics.primaryInstructorRating,
                 },
               }}
             />
@@ -243,8 +245,8 @@ export function CoursePage() {
                 >
                   <SectionsTable
                     sections={course.sections || []}
-                    instructorLinks={course.instructor_links}
-                    courseExplorerUrl={course.course_explorer_url}
+                    instructorLinks={course.instructorLinks}
+                    courseExplorerUrl={course.links.courseExplorerUrl}
                   />
                 </div>
               </CardContent>

@@ -1,8 +1,7 @@
 import {
   deepFreezeSearchContractValue,
-  normalizeSearchRequestDto,
+  coerceSearchRequestDto,
   searchRequestHasFilters,
-  singleRequirementFilter,
   type NormalizedSearchRequestDto,
   type SearchRequestDto,
   type SearchRequestFiltersDto,
@@ -14,7 +13,7 @@ export type CanonicalSearchRequest = NormalizedSearchRequestDto;
 export function normalizeSearchRequest(
   request: SearchRequestDto,
 ): CanonicalSearchRequest {
-  return normalizeSearchRequestDto(request);
+  return coerceSearchRequestDto(request);
 }
 
 export function searchPlanFiltersFromRequestFilters(
@@ -28,7 +27,7 @@ export function searchPlanFiltersFromRequestFilters(
   if (requestFilters.term !== undefined) filters.term = requestFilters.term;
   if (requestFilters.year !== undefined) filters.year = requestFilters.year;
   if (requestFilters.requirement !== undefined) {
-    filters.requirement = singleRequirementFilter(requestFilters.requirement);
+    filters.requirement = requestFilters.requirement;
   }
   if (requestFilters.credits !== undefined) filters.credits = requestFilters.credits;
   if (requestFilters.days !== undefined) filters.days = requestFilters.days;

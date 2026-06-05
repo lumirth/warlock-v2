@@ -221,7 +221,7 @@ describe('SearchPage request state', () => {
           number: '225',
           title: 'Data Structures',
           search: { score: 0.91 },
-          match_evidence: [
+          matchEvidence: [
             {
               kind: 'course_code',
               label: 'Course CS 225',
@@ -256,17 +256,19 @@ describe('SearchPage request state', () => {
 
   it('surfaces quality, workload, instructor rating, and GPA on result cards', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse([
-        course({
-          id: 'CS-225-2026-spring',
-          number: '225',
-          title: 'Data Structures',
-          quality_score: 88,
-          difficulty_score: 42,
-          primary_instructor_rmp: 4.8,
-          avg_gpa: 3.62,
-          gpa_sample_size: 820,
-        }),
+        searchResponse([
+          course({
+            id: 'CS-225-2026-spring',
+            number: '225',
+            title: 'Data Structures',
+            metrics: {
+              qualityScore: 88,
+              workloadScore: 42,
+              primaryInstructorRating: 4.8,
+              avgGpa: 3.62,
+              gpaSampleSize: 820,
+            },
+          }),
       ])
     )
 
@@ -302,12 +304,15 @@ describe('SearchPage request state', () => {
             id: 'CS-225-2026-spring',
             number: '225',
             title: 'Data Structures',
-            quality_score: 88,
-            difficulty_score: 42,
-            avg_gpa: 3.62,
-            primary_instructor_rmp: 4.8,
+            metrics: {
+              qualityScore: 88,
+              workloadScore: 42,
+              primaryInstructorRating: 4.8,
+              avgGpa: 3.62,
+              gpaSampleSize: 820,
+            },
           }),
-        ])
+        ], 'online stats class')
       )
       .mockResolvedValueOnce(
         searchResponse([
@@ -316,7 +321,7 @@ describe('SearchPage request state', () => {
             subject: 'STAT',
             number: '100',
             title: 'Statistics',
-            avg_gpa: 3.82,
+            metrics: { avgGpa: 3.82 },
           }),
         ])
       )

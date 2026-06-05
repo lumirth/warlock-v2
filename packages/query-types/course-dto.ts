@@ -1,16 +1,16 @@
 export type InstructorLinkDto = {
-  instructor_name: string | null;
-  rmp_rating: number | null;
-  rmp_difficulty: number | null;
-  rmp_id: string | null;
-  rmp_url?: string | null;
-  rmp_search_url?: string | null;
-  avg_gpa: number | null;
-  median_gpa: number | null;
-  gpa_sample_size: number | null;
-  num_ratings: number | null;
-  would_take_again_pct: number | null;
-  top_tags: string[] | null;
+  instructorName: string | null;
+  rmpRating: number | null;
+  rmpDifficulty: number | null;
+  rmpId: string | null;
+  rmpUrl?: string | null;
+  rmpSearchUrl?: string | null;
+  avgGpa: number | null;
+  medianGpa: number | null;
+  gpaSampleSize: number | null;
+  numRatings: number | null;
+  wouldTakeAgainPct: number | null;
+  topTags: string[] | null;
   department: string | null;
 };
 
@@ -52,7 +52,7 @@ export type CourseSectionDto = {
   endDate: string | null;
   creditHours: string | null;
   meetings: CourseSectionMeetingDto[];
-  course_explorer_url?: string;
+  courseExplorerUrl?: string;
 };
 
 export type CourseGenedDto = {
@@ -124,32 +124,47 @@ export type ResultExplanation = {
   };
 };
 
-export type CourseDto = {
+export type CourseMetricsDto = {
+  primaryInstructorRating: number | null;
+  avgGpa: number | null;
+  medianGpa: number | null;
+  gpaSampleSize: number | null;
+  qualityScore: number | null;
+  workloadScore: number | null;
+};
+
+export type CourseRegistrationDto = {
+  courseInfo: string | null;
+  degreeAttributes: string | null;
+  classScheduleInfo: string | null;
+  dateRangeText: string | null;
+  registrationNotes: string | null;
+  approvalCode: string | null;
+};
+
+export type CourseLinksDto = {
+  courseExplorerUrl?: string;
+};
+
+export type CourseSummaryDto = {
   id: string;
   subject: string;
   number: string;
   title: string;
   description: string | null;
-  credit_hours: number | null;
+  creditHours: number | null;
   year: number;
   term: string;
-  primary_instructor: string | null;
-  primary_instructor_rmp: number | null;
-  avg_gpa: number | null;
-  median_gpa: number | null;
-  gpa_sample_size: number | null;
-  quality_score: number | null;
-  difficulty_score: number | null;
-  course_info: string | null;
-  degree_attributes: string | null;
-  class_schedule_info: string | null;
-  date_range_text: string | null;
-  registration_notes: string | null;
-  approval_code: string | null;
-  geneds: CourseGenedDto[];
-  instructor_links: Record<string, InstructorLinkDto>;
-  course_explorer_url?: string;
-  sections?: CourseSectionDto[];
+  primaryInstructor: string | null;
+  metrics: CourseMetricsDto;
+  registration: CourseRegistrationDto;
+  requirements: CourseGenedDto[];
+  instructorLinks: Record<string, InstructorLinkDto>;
+  links: CourseLinksDto;
+};
+
+export type CourseDetailDto = CourseSummaryDto & {
+  sections: CourseSectionDto[];
 };
 
 export type SearchCourseMetadataDto = {
@@ -159,12 +174,13 @@ export type SearchCourseMetadataDto = {
   historical?: boolean;
 };
 
-export type SearchCourseResultDto = CourseDto & {
+export type SearchCourseResultDto = {
+  course: CourseSummaryDto;
   search?: SearchCourseMetadataDto;
-  match_evidence?: MatchEvidence[];
+  matchEvidence?: MatchEvidence[];
   explanation?: ResultExplanation;
   warnings?: ResultWarning[];
-  section_matches?: SectionMatchDto[];
+  sectionMatches?: SectionMatchDto[];
 };
 
 export type CourseDetailCacheDto = {
@@ -176,6 +192,7 @@ export type CourseDetailCacheDto = {
   termStatus?: string;
 };
 
-export type CourseDetailResponseDto = CourseDto & {
+export type CourseDetailResponseDto = {
+  course: CourseDetailDto;
   cache?: CourseDetailCacheDto;
 };

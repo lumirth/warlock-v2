@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "eval": "npx tsx src/eval/runner.ts",
+    "eval:smoke": "tsx scripts/eval-smoke.ts",
     "check": "npm run typecheck && npm run test",
     "deploy:staging": "npm run check && wrangler deploy --env staging"
   },

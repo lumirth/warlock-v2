@@ -7,6 +7,11 @@ import {
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, vi } from 'vitest'
 import type {
+  CourseSummaryDto,
+  MatchEvidence,
+  ResultExplanation,
+  ResultWarning,
+  SearchCourseMetadataDto,
   SearchActionDto,
   SearchCourseResultDto,
   SearchRequestDto,
@@ -49,47 +54,71 @@ export function abortError(): Error {
   return error
 }
 
-export function course(
-  overrides: Partial<SearchCourseResultDto>
-): SearchCourseResultDto {
+type SearchResultOverride = Omit<Partial<CourseSummaryDto>, 'metrics' | 'registration'> & {
+  metrics?: Partial<CourseSummaryDto['metrics']>
+  registration?: Partial<CourseSummaryDto['registration']>
+  search?: SearchCourseMetadataDto
+  matchEvidence?: MatchEvidence[]
+  explanation?: ResultExplanation
+  warnings?: ResultWarning[]
+}
+
+export function course(overrides: SearchResultOverride = {}): SearchCourseResultDto {
+  const summary: CourseSummaryDto = {
+    id: overrides.id ?? 'CS-225-2026-spring',
+    subject: overrides.subject ?? 'CS',
+    number: overrides.number ?? '225',
+    title: overrides.title ?? 'Data Structures',
+    description: overrides.description ?? 'A course',
+    creditHours: overrides.creditHours ?? 4,
+    year: overrides.year ?? 2026,
+    term: overrides.term ?? 'spring',
+    primaryInstructor: overrides.primaryInstructor ?? null,
+    metrics: {
+      primaryInstructorRating:
+        overrides.metrics?.primaryInstructorRating ?? null,
+      avgGpa: overrides.metrics?.avgGpa ?? null,
+      medianGpa: overrides.metrics?.medianGpa ?? null,
+      gpaSampleSize: overrides.metrics?.gpaSampleSize ?? null,
+      qualityScore: overrides.metrics?.qualityScore ?? null,
+      workloadScore: overrides.metrics?.workloadScore ?? null,
+    },
+    registration: {
+      courseInfo: overrides.registration?.courseInfo ?? null,
+      degreeAttributes: overrides.registration?.degreeAttributes ?? null,
+      classScheduleInfo: overrides.registration?.classScheduleInfo ?? null,
+      dateRangeText: overrides.registration?.dateRangeText ?? null,
+      registrationNotes: overrides.registration?.registrationNotes ?? null,
+      approvalCode: overrides.registration?.approvalCode ?? null,
+    },
+    requirements: overrides.requirements ?? [],
+    instructorLinks: overrides.instructorLinks ?? {},
+    links: overrides.links ?? {},
+  }
+
   return {
-    id: 'CS-225-2026-spring',
-    subject: 'CS',
-    number: '225',
-    title: 'Data Structures',
-    description: 'A course',
-    credit_hours: 4,
-    year: 2026,
-    term: 'spring',
-    primary_instructor: null,
-    primary_instructor_rmp: null,
-    avg_gpa: null,
-    median_gpa: null,
-    gpa_sample_size: null,
-    quality_score: null,
-    difficulty_score: null,
-    course_info: null,
-    degree_attributes: null,
-    class_schedule_info: null,
-    date_range_text: null,
-    registration_notes: null,
-    approval_code: null,
-    geneds: [],
-    instructor_links: {},
-    ...overrides,
+    course: summary,
+    search: overrides.search,
+    matchEvidence: overrides.matchEvidence,
+    explanation: overrides.explanation,
+    warnings: overrides.warnings,
   }
 }
 
 export function searchResponse(
-  results: SearchCourseResultDto[]
+  results: SearchCourseResultDto[],
+  nextRequest: SearchRequestDto | string = 'cs'
 ): SearchResponseDto {
+  const request =
+    typeof nextRequest === 'string' ? { query: nextRequest } : nextRequest
   return {
     results,
     meta: {
-      query: { raw: 'cs', residual: 'cs' },
+      query: { raw: request.query, residual: request.query },
+      nextRequest: request,
       timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
     },
-    pagination: { total: results.length, limit: 20, offset: 0 },
+    pagination: { resultCountLowerBound: results.length, limit: 20, offset: 0 },
   }
 }
 

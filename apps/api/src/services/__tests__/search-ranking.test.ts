@@ -4,14 +4,22 @@ import { singleRequirementFilter } from '@uiuc-course-search/query-types';
 import {
   applyRankingPolicy,
   applyTermRankingPolicy,
-  buildRetrievalPlan,
-  buildSearchCandidateBudget,
   buildTermPriorityMap,
+} from '../ranking/index.js';
+import {
+  buildRetrievalPlan,
+} from '../search-retrieval-plan.js';
+import {
+  buildSearchCandidateBudget,
+} from '../search-budget.js';
+import {
   hybridSearch,
+} from '../search-hybrid.js';
+import {
   normalizeSearchControls,
-} from '../search.js';
+} from '../search-controls.js';
 import { fuseRetrievalResults } from '../search-fusion.js';
-import type { SearchResult } from '../search.js';
+import type { SearchResult } from '../search-types.js';
 import type { Course } from '../../db/index.js';
 import type { SearchPlan } from '../search-planner-types.js';
 

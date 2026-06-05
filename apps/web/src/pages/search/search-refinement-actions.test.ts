@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { singleRequirementFilter } from '@uiuc-course-search/query-types'
 import {
   planAmbiguityAction,
   planChipRemoval,
@@ -16,7 +17,7 @@ describe('search refinement actions', () => {
           kind: 'run_search',
           nextRequest: {
             query: '',
-            filters: { requirement: 'CS' },
+            filters: { requirement: singleRequirementFilter('CS') },
             sort: { field: 'relevance', direction: 'desc' },
             scope: 'active',
           },
@@ -26,10 +27,10 @@ describe('search refinement actions', () => {
 
     expect(plan).toEqual({
       kind: 'search',
-      draft: { requirement: 'CS' },
+      draft: { requirement: singleRequirementFilter('CS') },
       request: {
         query: '',
-        filters: { requirement: 'CS' },
+        filters: { requirement: singleRequirementFilter('CS') },
         sort: { field: 'relevance', direction: 'desc' },
         scope: 'active',
       },

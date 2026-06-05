@@ -39,6 +39,7 @@ const DAY_ALIASES: Record<string, string> = {
 };
 
 export interface FilterClauseResult {
+  joinKeys: FilterJoinKey[];
   joins: string[];
   where: string[];
   params: (string | number)[];
@@ -47,10 +48,23 @@ export interface FilterClauseResult {
   havingParams?: (string | number)[];
 }
 
+export type FilterJoinKey =
+  | "courseGened"
+  | "sections"
+  | "meetings"
+  | "meetingInstructors";
+
+const FILTER_JOIN_SQL: Record<FilterJoinKey, string> = {
+  courseGened: "JOIN course_gened cg ON cg.course_id = c.id",
+  sections: "JOIN sections s ON s.course_id = c.id",
+  meetings: "JOIN meetings m ON m.section_id = s.id",
+  meetingInstructors: "JOIN meeting_instructors mi ON mi.meeting_id = m.id",
+};
+
 export function buildFilterClauses(
   filters: SearchFilters,
 ): FilterClauseResult {
-  const joinsSet = new Set<string>();
+  const joinKeys = new Set<FilterJoinKey>();
   const where: string[] = [];
   const params: (string | number)[] = [];
   const havingParams: (string | number)[] = [];
@@ -94,7 +108,7 @@ export function buildFilterClauses(
   if (requirement?.mode === "single") {
     const requirementCode = canonicalGenedCode(requirement.codes[0]);
     if (requirementCode) {
-      joinsSet.add("JOIN course_gened cg ON cg.course_id = c.id");
+      joinKeys.add("courseGened");
       where.push(`(cg.category_id = ? OR ${canonicalAttributeCodeSql("cg")} = ?)`);
       params.push(requirementCode, requirementCode);
     }
@@ -103,7 +117,7 @@ export function buildFilterClauses(
   if (requirement?.mode === "any") {
     const requirementCodes = canonicalGenedCodes(requirement.codes);
     if (requirementCodes.length > 0) {
-      joinsSet.add("JOIN course_gened cg ON cg.course_id = c.id");
+      joinKeys.add("courseGened");
       const placeholders = requirementCodes.map(() => "?").join(",");
       where.push(`(cg.category_id IN (${placeholders}) OR ${canonicalAttributeCodeSql("cg")} IN (${placeholders}))`);
       params.push(...requirementCodes, ...requirementCodes);
@@ -123,23 +137,23 @@ export function buildFilterClauses(
   }
 
   if (filters.partOfTerm) {
-    joinsSet.add("JOIN sections s ON s.course_id = c.id");
+    joinKeys.add("sections");
     where.push("s.part_of_term = ?");
     params.push(filters.partOfTerm);
   }
 
   if (filters.instructor_ids?.length) {
-    joinsSet.add("JOIN sections s ON s.course_id = c.id");
-    joinsSet.add("JOIN meetings m ON m.section_id = s.id");
-    joinsSet.add("JOIN meeting_instructors mi ON mi.meeting_id = m.id");
+    joinKeys.add("sections");
+    joinKeys.add("meetings");
+    joinKeys.add("meetingInstructors");
     const placeholders = filters.instructor_ids.map(() => "?").join(",");
     where.push(`mi.instructor_id IN (${placeholders})`);
     params.push(...filters.instructor_ids);
   }
 
   if (filters.days) {
-    joinsSet.add("JOIN sections s ON s.course_id = c.id");
-    joinsSet.add("JOIN meetings m ON m.section_id = s.id");
+    joinKeys.add("sections");
+    joinKeys.add("meetings");
     where.push("m.days = ?");
     params.push(filters.days);
   }
@@ -147,8 +161,8 @@ export function buildFilterClauses(
   if (filters.time) {
     const range = TIME_RANGES[filters.time];
     if (range) {
-      joinsSet.add("JOIN sections s ON s.course_id = c.id");
-      joinsSet.add("JOIN meetings m ON m.section_id = s.id");
+      joinKeys.add("sections");
+      joinKeys.add("meetings");
       if (range.start) {
         where.push("m.start_time >= ?");
         params.push(range.start);
@@ -161,8 +175,8 @@ export function buildFilterClauses(
   }
 
   if (filters.online !== undefined) {
-    joinsSet.add("JOIN sections s ON s.course_id = c.id");
-    joinsSet.add("JOIN meetings m ON m.section_id = s.id");
+    joinKeys.add("sections");
+    joinKeys.add("meetings");
     if (filters.online) {
       where.push("(m.building_name = '' OR m.building_name IS NULL OR LOWER(m.building_name) LIKE '%online%')");
     } else {
@@ -171,7 +185,7 @@ export function buildFilterClauses(
   }
 
   if (filters.status) {
-    joinsSet.add("JOIN sections s ON s.course_id = c.id");
+    joinKeys.add("sections");
     const statuses = STATUS_VALUES[filters.status] ?? ["Open"];
     const placeholders = statuses.map(() => "?").join(",");
     where.push(`s.status IN (${placeholders})`);
@@ -303,7 +317,8 @@ export function buildFilterClauses(
   }
 
   return {
-    joins: Array.from(joinsSet),
+    joinKeys: Array.from(joinKeys),
+    joins: Array.from(joinKeys).map((key) => FILTER_JOIN_SQL[key]),
     where,
     params,
     havingParams,

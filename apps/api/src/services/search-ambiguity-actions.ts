@@ -2,6 +2,7 @@ import {
   type NormalizedSearchRequestDto,
   type SearchAmbiguityActionDto,
   type SearchRequestFiltersDto,
+  singleRequirementFilter,
 } from "@uiuc-course-search/query-types";
 import { ambiguitySearchAction } from "../dto/search-actions.js";
 import type { Ambiguity } from "./search-planner-types.js";
@@ -35,7 +36,7 @@ function ambiguityFilter(
   }
 
   if (type === "requirement") {
-    return { requirement: value.toUpperCase() };
+    return { requirement: singleRequirementFilter(value) };
   }
 
   return {};

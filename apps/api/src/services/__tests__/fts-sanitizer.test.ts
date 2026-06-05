@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeFtsQuery } from '../search.js';
+import { sanitizeFtsQuery } from '../search-text.js';
 
 describe('sanitizeFtsQuery', () => {
   it('replaces & with " and "', () => {

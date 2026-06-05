@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { singleRequirementFilter } from "@uiuc-course-search/query-types";
 import { parseSearchHttpRequest } from "../search-request.js";
 
 describe("parseSearchHttpRequest", () => {
@@ -39,7 +40,7 @@ describe("parseSearchHttpRequest", () => {
             instructor: "Fagen",
             term: "spring",
             year: 2026,
-            requirement: "HUM",
+            requirement: singleRequirementFilter("HUM"),
             credits: 4,
             days: "MWF",
             time: "morning",

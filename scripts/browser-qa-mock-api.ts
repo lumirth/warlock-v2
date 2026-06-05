@@ -1,37 +1,53 @@
 import { createServer, type ServerResponse } from 'node:http';
 import type {
+  CourseDetailResponseDto,
+  CourseSectionDto,
+  CourseSummaryDto,
+  MatchEvidence,
   SearchActionDto,
   SearchCourseResultDto,
+  SearchCourseMetadataDto,
   SearchRequestDto,
   SearchResponseDto,
   SearchUiPlanDto,
 } from '@uiuc-course-search/query-types';
+import { singleRequirementFilter } from '@uiuc-course-search/query-types';
 
 const PORT = Number(process.env.QA_MOCK_API_PORT ?? 8787);
 
-const course: SearchCourseResultDto = {
+type CourseVariantOverride = Partial<CourseSummaryDto> & {
+  search?: SearchCourseMetadataDto;
+  matchEvidence?: MatchEvidence[];
+  warnings?: SearchCourseResultDto['warnings'];
+};
+
+const baseCourse: CourseSummaryDto = {
   id: 'CS-225-2026-spring',
   subject: 'CS',
   number: '225',
   title: 'Data Structures',
   description: 'Data abstractions: elementary data structures and their implementation using an object-oriented programming language.',
-  credit_hours: 4,
+  creditHours: 4,
   year: 2026,
   term: 'spring',
-  primary_instructor: 'Lovelace, A; Hopper, G',
-  primary_instructor_rmp: 4.8,
-  avg_gpa: 3.62,
-  median_gpa: 3.67,
-  gpa_sample_size: 820,
-  quality_score: 88,
-  difficulty_score: 42,
-  course_info: 'Credit is not given for both CS 225 and ECE 220.',
-  degree_attributes: 'Quantitative Reasoning II',
-  class_schedule_info: null,
-  date_range_text: 'Jan 20, 2026 - May 6, 2026',
-  registration_notes: null,
-  approval_code: null,
-  geneds: [
+  primaryInstructor: 'Lovelace, A; Hopper, G',
+  metrics: {
+    primaryInstructorRating: 4.8,
+    avgGpa: 3.62,
+    medianGpa: 3.67,
+    gpaSampleSize: 820,
+    qualityScore: 88,
+    workloadScore: 42,
+  },
+  registration: {
+    courseInfo: 'Credit is not given for both CS 225 and ECE 220.',
+    degreeAttributes: 'Quantitative Reasoning II',
+    classScheduleInfo: null,
+    dateRangeText: 'Jan 20, 2026 - May 6, 2026',
+    registrationNotes: null,
+    approvalCode: null,
+  },
+  requirements: [
     {
       categoryId: 'QR',
       categoryName: 'Quantitative Reasoning',
@@ -39,99 +55,36 @@ const course: SearchCourseResultDto = {
       attributeName: null,
     },
   ],
-  instructor_links: {
+  instructorLinks: {
     'Lovelace, A': {
-      instructor_name: 'Lovelace, A',
-      rmp_rating: 4.8,
-      rmp_difficulty: 3.1,
-      rmp_id: 'ada',
-      rmp_url: null,
-      rmp_search_url: 'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
-	      avg_gpa: 3.62,
-	      median_gpa: 3.67,
-	      gpa_sample_size: 820,
-	      num_ratings: 140,
-	      would_take_again_pct: 92,
-	      top_tags: ['Clear grading', 'Helpful'],
-	      department: 'Computer Science',
-	    },
-	  },
-  sections: [
-    {
-      crn: '12345',
-      sectionNumber: 'AL1',
-      status: 'Open',
-      type: 'Lecture',
-      days: 'MWF',
-      startTime: '09:00',
-      endTime: '09:50',
-      location: 'Siebel Center for Computer Science 1404',
-      instructor: 'Lovelace, A',
-	      instructorRmp: 4.8,
-	      instructorGpa: 3.62,
-	      instructorStats: [],
-	      sectionTitle: null,
-	      statusCode: null,
-	      sectionStatusCode: null,
-	      sectionText: null,
-	      sectionNotes: null,
-	      cappArea: null,
-	      dateRangeText: 'Jan 20, 2026 - May 6, 2026',
-	      partOfTerm: '1',
-	      startDate: '2026-01-20',
-	      endDate: '2026-05-06',
-	      creditHours: null,
-	      meetings: [
-	        {
-	          typeCode: 'LCD',
-	          typeName: 'Lecture-Discussion',
-	          days: 'MWF',
-	          startTime: '09:00',
-	          endTime: '09:50',
-	          buildingName: 'Siebel Center for Computer Science',
-	          roomNumber: '1404',
-	          dateRangeText: 'Jan 20, 2026 - May 6, 2026',
-	          instructorNames: ['Lovelace, A'],
-	          instructors: [],
-	        },
-	      ],
-	      course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
-	    },
-    {
-      crn: '67890',
-      sectionNumber: 'AD1',
-      status: 'Restricted',
-      type: 'Discussion',
-      days: 'TR',
-      startTime: '15:30',
-      endTime: '16:50',
-      location: 'Digital Computer Laboratory 1320',
-      instructor: 'Hopper, G',
-	      instructorRmp: null,
-	      instructorGpa: null,
-	      instructorStats: [],
-	      sectionTitle: null,
-	      statusCode: null,
-	      sectionStatusCode: null,
-	      sectionText: null,
-	      sectionNotes: 'Restricted to Computer Science majors until open registration.',
-	      cappArea: null,
-	      dateRangeText: 'Mar 16, 2026 - May 6, 2026',
-	      partOfTerm: 'B',
-	      startDate: '2026-03-16',
-	      endDate: '2026-05-06',
-	      creditHours: null,
-	      meetings: [],
-	      course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
-	    },
-  ],
-  course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+      instructorName: 'Lovelace, A',
+      rmpRating: 4.8,
+      rmpDifficulty: 3.1,
+      rmpId: 'ada',
+      rmpUrl: null,
+      rmpSearchUrl: 'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
+      avgGpa: 3.62,
+      medianGpa: 3.67,
+      gpaSampleSize: 820,
+      numRatings: 140,
+      wouldTakeAgainPct: 92,
+      topTags: ['Clear grading', 'Helpful'],
+      department: 'Computer Science',
+    },
+  },
+  links: {
+    courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
+  },
+};
+
+const course: SearchCourseResultDto = {
+  course: baseCourse,
   search: {
     score: 1,
     keywordRank: 1,
     historical: false,
   },
-  match_evidence: [
+  matchEvidence: [
     { kind: 'course_code', label: 'Course CS 225', source: 'filter', weight: 'hard', value: 'CS 225' },
     { kind: 'requirement', label: 'Requirement QR', source: 'filter', weight: 'hard', value: 'QR' },
     { kind: 'keyword', label: 'Strong keyword match', source: 'keyword', weight: 'rank', value: '1' },
@@ -139,13 +92,106 @@ const course: SearchCourseResultDto = {
   warnings: [],
 };
 
-function courseVariant(overrides: Partial<SearchCourseResultDto>): SearchCourseResultDto {
+const baseSection: CourseSectionDto = {
+  crn: '12345',
+  sectionNumber: 'AL1',
+  status: 'Open',
+  type: 'Lecture',
+  days: 'MWF',
+  startTime: '09:00',
+  endTime: '09:50',
+  location: 'Siebel Center 1404',
+  instructor: 'Lovelace, A',
+  instructorRmp: 4.8,
+  instructorGpa: 3.62,
+  instructorStats: [baseCourse.instructorLinks['Lovelace, A']!],
+  sectionTitle: null,
+  statusCode: 'A',
+  sectionStatusCode: 'A',
+  sectionText: null,
+  sectionNotes: null,
+  cappArea: null,
+  dateRangeText: 'Jan 20, 2026 - May 6, 2026',
+  partOfTerm: '1',
+  startDate: '2026-01-20',
+  endDate: '2026-05-06',
+  creditHours: '4',
+  courseExplorerUrl: baseCourse.links.courseExplorerUrl,
+  meetings: [
+    {
+      typeCode: 'LEC',
+      typeName: 'Lecture',
+      days: 'MWF',
+      startTime: '09:00',
+      endTime: '09:50',
+      buildingName: 'Siebel Center',
+      roomNumber: '1404',
+      dateRangeText: 'Jan 20, 2026 - May 6, 2026',
+      instructorNames: ['Lovelace, A'],
+      instructors: [baseCourse.instructorLinks['Lovelace, A']!],
+    },
+  ],
+};
+
+const courseDetailResponse: CourseDetailResponseDto = {
+  course: {
+    ...baseCourse,
+    sections: [baseSection],
+  },
+  cache: {
+    cached: true,
+    termStatus: 'active',
+  },
+};
+
+function courseVariant(overrides: CourseVariantOverride = {}): SearchCourseResultDto {
   return {
-    ...course,
-    ...overrides,
-    instructor_links: overrides.instructor_links ?? course.instructor_links,
-    sections: overrides.sections ?? course.sections,
-    match_evidence: overrides.match_evidence ?? course.match_evidence,
+    course: {
+      ...course.course,
+      id: overrides.id ?? course.course.id,
+      subject: overrides.subject ?? course.course.subject,
+      number: overrides.number ?? course.course.number,
+      title: overrides.title ?? course.course.title,
+      description: overrides.description ?? course.course.description,
+      creditHours: overrides.creditHours ?? course.course.creditHours,
+      year: overrides.year ?? course.course.year,
+      term: overrides.term ?? course.course.term,
+      primaryInstructor: overrides.primaryInstructor ?? course.course.primaryInstructor,
+      metrics: {
+        ...course.course.metrics,
+        ...overrides.metrics,
+        primaryInstructorRating:
+          overrides.metrics?.primaryInstructorRating ??
+          course.course.metrics.primaryInstructorRating,
+        avgGpa: overrides.metrics?.avgGpa ?? course.course.metrics.avgGpa,
+        medianGpa:
+          overrides.metrics?.medianGpa ?? course.course.metrics.medianGpa,
+        gpaSampleSize:
+          overrides.metrics?.gpaSampleSize ??
+          course.course.metrics.gpaSampleSize,
+        qualityScore:
+          overrides.metrics?.qualityScore ??
+          course.course.metrics.qualityScore,
+        workloadScore:
+          overrides.metrics?.workloadScore ??
+          course.course.metrics.workloadScore,
+      },
+      registration: {
+        ...course.course.registration,
+        ...overrides.registration,
+      },
+      requirements: overrides.requirements ?? course.course.requirements,
+      instructorLinks: overrides.instructorLinks ?? course.course.instructorLinks,
+      links: {
+        ...course.course.links,
+        ...overrides.links,
+        courseExplorerUrl:
+          overrides.links?.courseExplorerUrl ??
+          course.course.links.courseExplorerUrl,
+      },
+    },
+    search: overrides.search ?? course.search,
+    matchEvidence: overrides.matchEvidence ?? course.matchEvidence,
     warnings: overrides.warnings ?? course.warnings,
   };
 }
@@ -207,7 +253,7 @@ function searchUi(query: string): SearchUiPlanDto {
       id: 'requirement-CS-alternative',
       term: 'CS',
       label: 'Cultural Studies',
-      action: searchAction({ query: '', filters: { requirement: 'CS' } }),
+      action: searchAction({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
     });
   }
 
@@ -249,9 +295,9 @@ function introResults(): SearchCourseResultDto[] {
       number: '124',
       title: 'Introduction to Computer Science I',
       description: 'A first programming and computer science course for students beginning the CS sequence.',
-      credit_hours: 3,
+      creditHours: 3,
       search: { score: 0.98 },
-      match_evidence: [
+      matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
       ],
@@ -261,9 +307,9 @@ function introResults(): SearchCourseResultDto[] {
       number: '100',
       title: 'Freshman Orientation',
       description: 'Orientation to computer science study, department resources, and first-year planning.',
-      credit_hours: 1,
+      creditHours: 1,
       search: { score: 0.92 },
-      match_evidence: [
+      matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
       ],
@@ -273,9 +319,9 @@ function introResults(): SearchCourseResultDto[] {
       number: '101',
       title: 'Introduction to Computing',
       description: 'Computing concepts and programming for students from a broad range of majors.',
-      credit_hours: 3,
+      creditHours: 3,
       search: { score: 0.88 },
-      match_evidence: [
+      matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
       ],
@@ -289,9 +335,9 @@ function introResults(): SearchCourseResultDto[] {
       number: String(199 - index),
       title: `Introductory CS Topic ${index + 1}`,
       description: 'Additional introductory CS result used to exercise paginated exploration in Browser QA.',
-      credit_hours: 3,
+      creditHours: 3,
       search: { score: 0.75 - index / 100 },
-      match_evidence: [
+      matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
       ],
     })),
@@ -306,10 +352,10 @@ function defaultResults(query: string): SearchCourseResultDto[] {
       number: '173',
       title: 'Discrete Structures',
       description: 'Discrete mathematical structures frequently encountered in computer science.',
-      credit_hours: 3,
-      primary_instructor: null,
+      creditHours: 3,
+      primaryInstructor: null,
       search: { score: 0.82 },
-      match_evidence: [
+      matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'keyword', label: 'Keyword match', source: 'keyword', weight: 'rank', value: '2' },
       ],
@@ -328,6 +374,9 @@ function searchResponse(query: string, limit: number, offset: number): SearchRes
     results: pageResults,
     meta: {
       query: { raw: query, residual: query.toLowerCase().includes('cs 225') || isIntroCs ? '' : query },
+      nextRequest: {
+        query,
+      },
       interpretation: {
         queryTypes: isIntroCs ? ['topic'] : query.toLowerCase().includes('cs 225') ? ['exact_course'] : ['topic'],
         negativeTerms: [],
@@ -348,7 +397,7 @@ function searchResponse(query: string, limit: number, offset: number): SearchRes
       ui: searchUi(query),
     },
     pagination: {
-      total: allResults.length,
+      resultCountLowerBound: allResults.length,
       limit,
       offset,
       hasMore,
@@ -399,7 +448,7 @@ const server = createServer((request, response) => {
   }
 
   if (url.pathname === '/api/course/CS/225') {
-    sendJson(response, 200, course);
+    sendJson(response, 200, courseDetailResponse);
     return;
   }
 

@@ -1,4 +1,4 @@
-import { SUBJECT_ALIASES } from './data/valid-subjects.js';
+import { generatedSubjectAliases } from './subject-taxonomy.js';
 import {
   GENED_CUES,
   STUDENT_LANGUAGE_ALIAS_ENTRIES,
@@ -285,7 +285,7 @@ export function createDefaultRegistry(): AliasRegistry {
   // This is generated with the subject list so broad queries like "Philosophy"
   // resolve as PHIL without maintaining a tiny hand-picked subset.
   registry.addAll(
-    SUBJECT_ALIASES
+    generatedSubjectAliases()
       .filter(entry => entry.aliases.length > 0)
       .map(entry => ({
         kind: 'subject',

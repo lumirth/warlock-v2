@@ -56,10 +56,10 @@ function getRmpHref(
   fallbackName: string
 ): string | null {
   return (
-    stat?.rmp_url ??
-    buildRmpProfessorUrl(stat?.rmp_id) ??
-    stat?.rmp_search_url ??
-    buildRmpSearchUrl(fallbackName || stat?.instructor_name)
+    stat?.rmpUrl ??
+    buildRmpProfessorUrl(stat?.rmpId) ??
+    stat?.rmpSearchUrl ??
+    buildRmpSearchUrl(fallbackName || stat?.instructorName)
   )
 }
 
@@ -132,27 +132,27 @@ function formatMeetingLocation(meeting: CourseSectionMeetingDto): string {
 
 function statSummary(stat: InstructorLinkDto): string[] {
   const values: string[] = []
-  if (typeof stat.rmp_rating === 'number') {
-    values.push(`${stat.rmp_rating.toFixed(1)} rating`)
+  if (typeof stat.rmpRating === 'number') {
+    values.push(`${stat.rmpRating.toFixed(1)} rating`)
   }
-  if (typeof stat.rmp_difficulty === 'number') {
-    values.push(`${stat.rmp_difficulty.toFixed(1)} RMP difficulty`)
+  if (typeof stat.rmpDifficulty === 'number') {
+    values.push(`${stat.rmpDifficulty.toFixed(1)} RMP difficulty`)
   }
-  if (typeof stat.avg_gpa === 'number') {
-    values.push(`${stat.avg_gpa.toFixed(2)} avg GPA`)
+  if (typeof stat.avgGpa === 'number') {
+    values.push(`${stat.avgGpa.toFixed(2)} avg GPA`)
   }
-  if (typeof stat.median_gpa === 'number') {
-    values.push(`${stat.median_gpa.toFixed(2)} median GPA`)
+  if (typeof stat.medianGpa === 'number') {
+    values.push(`${stat.medianGpa.toFixed(2)} median GPA`)
   }
-  if (typeof stat.would_take_again_pct === 'number') {
-    values.push(`${Math.round(stat.would_take_again_pct)}% would take again`)
+  if (typeof stat.wouldTakeAgainPct === 'number') {
+    values.push(`${Math.round(stat.wouldTakeAgainPct)}% would take again`)
   }
   return values
 }
 
 function renderInstructorName(name: string, stat?: InstructorLinkDto) {
   const href = getRmpHref(stat, name)
-  const label = stat?.instructor_name ?? name
+  const label = stat?.instructorName ?? name
 
   if (href) {
     return (
@@ -183,10 +183,10 @@ function InstructorBlock({
     names.length > 0
       ? names.map((name) => ({
           name,
-          stat: stats.find((item) => item.instructor_name === name),
+          stat: stats.find((item) => item.instructorName === name),
         }))
       : stats.map((stat) => ({
-          name: stat.instructor_name ?? 'Instructor',
+          name: stat.instructorName ?? 'Instructor',
           stat,
         }))
 
@@ -199,8 +199,8 @@ function InstructorBlock({
       {rows.map(({ name, stat }, idx) => {
         const statsText = stat ? statSummary(stat) : []
         const ratingTone =
-          typeof stat?.rmp_rating === 'number' &&
-          stat.rmp_rating > RMP_THRESHOLDS.GOOD
+          typeof stat?.rmpRating === 'number' &&
+          stat.rmpRating > RMP_THRESHOLDS.GOOD
             ? 'success'
             : 'warning'
 
@@ -219,9 +219,9 @@ function InstructorBlock({
                 {statsText.join(' / ')}
               </span>
             )}
-            {!compact && stat?.top_tags && stat.top_tags.length > 0 && (
+            {!compact && stat?.topTags && stat.topTags.length > 0 && (
               <span className="text-muted-foreground text-xs">
-                Tags: {stat.top_tags.slice(0, 3).join(', ')}
+                Tags: {stat.topTags.slice(0, 3).join(', ')}
               </span>
             )}
           </div>
@@ -427,7 +427,7 @@ export function SectionsTable({
         {sections.map((section) => {
           const sectionStats = getSectionStats(section, instructorLinks)
           const expanded = expandedCrns.has(section.crn)
-          const officialUrl = section.course_explorer_url ?? courseExplorerUrl
+          const officialUrl = section.courseExplorerUrl ?? courseExplorerUrl
 
           return (
             <Fragment key={section.crn}>

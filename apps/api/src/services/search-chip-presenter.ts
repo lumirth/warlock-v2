@@ -39,7 +39,8 @@ export function buildSearchChips(
     ),
   }));
 
-  if (shouldShowGenericRequirementChip(hints, plan.filters)) {
+  const requirement = effectiveRequirementFilter(plan.filters);
+  if (shouldShowGenericRequirementChip(hints, plan.filters) && requirement) {
     chips.push({
       id: "requirement-any",
       type: "requirement",
@@ -48,7 +49,7 @@ export function buildSearchChips(
       source: "natural_language",
       removable: true,
       editable: false,
-      action: removeSearchIntentAction(request, undefined, "requirement"),
+      action: removeSearchIntentAction(request, { requirement }, "gen ed"),
     });
   }
 

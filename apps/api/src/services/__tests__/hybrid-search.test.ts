@@ -1,13 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   buildRetrievalPlan,
+} from '../search-retrieval-plan.js';
+import {
   buildSearchCandidateBudget,
-  hybridSearch,
-  keywordSearch,
-  normalizeSearchControls,
-  postFilterSemanticResults,
   type SearchCandidateBudget,
-} from '../search.js';
+} from '../search-budget.js';
+import {
+  keywordSearch,
+} from '../search-retrieval-course-lanes.js';
+import {
+  hybridSearch,
+} from '../search-hybrid.js';
+import {
+  normalizeSearchControls,
+} from '../search-controls.js';
+import {
+  postFilterSemanticResults,
+} from '../search-retrieval-section-lanes.js';
 import * as embeddings from '../embeddings.js';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
@@ -313,6 +323,45 @@ describe('hybridSearch', () => {
 describe('keywordSearch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('keeps exact course-code recall inside hard filter constraints', async () => {
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn((...params: unknown[]) => {
+          expect(sql).toContain('FROM courses c');
+          expect(sql).toContain('JOIN course_gened cg ON cg.course_id = c.id');
+          expect(sql).toContain('JOIN sections s ON s.course_id = c.id');
+          expect(sql).toContain('JOIN meetings m ON m.section_id = s.id');
+          expect(sql).toContain('c.subject = ?');
+          expect(sql).toContain('c.number = ?');
+          expect(sql).toContain('cg.category_id = ?');
+          expect(params).toEqual(['CS', '225', 'HUM', 'HUM', 20]);
+          return {
+            all: vi.fn(async () => ({ results: [{ id: 'CS-225-2026-spring' }] })),
+          };
+        }),
+      })),
+    };
+
+    const results = await keywordSearch(db as unknown as D1Database, {
+      filters: {
+        subject: 'CS',
+        number: '225',
+        online: true,
+        requirement: singleRequirementFilter('HUM'),
+      },
+      keywordQuery: '',
+      cleanKeywordQuery: '',
+      titleQuery: '',
+    }, 20);
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: 'CS-225-2026-spring',
+        lane: 'exact',
+      }),
+    ]);
   });
 
   it('recalls exact title matches before unrelated FTS matches', async () => {

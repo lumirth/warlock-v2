@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { Course } from '../../db/index.js';
-import type { SearchResult } from '../../services/search.js';
+import type { SearchResult } from '../../services/search-types.js';
 import {
   buildMatchEvidence,
   buildResultWarnings,
@@ -134,14 +134,14 @@ describe('search result DTO evidence', () => {
       },
     });
 
-    expect(dto.match_evidence?.some(item => item.kind === 'course_code')).toBe(true);
+    expect(dto.matchEvidence?.some(item => item.kind === 'course_code')).toBe(true);
     expect(dto.warnings).toEqual([{ kind: 'historical', message: 'Historical term result' }]);
-    expect(dto.avg_gpa).toBe(3.5);
-    expect(dto.gpa_sample_size).toBe(100);
-    expect(dto.primary_instructor_rmp).toBe(4.8);
-    expect(dto.quality_score).toBe(91);
-    expect(dto.difficulty_score).toBe(22);
-    expect(dto.course_explorer_url).toBe('https://courses.illinois.edu/schedule/2026/spring/CS/225');
+    expect(dto.course.metrics.avgGpa).toBe(3.5);
+    expect(dto.course.metrics.gpaSampleSize).toBe(100);
+    expect(dto.course.metrics.primaryInstructorRating).toBe(4.8);
+    expect(dto.course.metrics.qualityScore).toBe(91);
+    expect(dto.course.metrics.workloadScore).toBe(22);
+    expect(dto.course.links.courseExplorerUrl).toBe('https://courses.illinois.edu/schedule/2026/spring/CS/225');
   });
 
   it('explains subjective decision matches with evidence and uncertainty', () => {
@@ -225,7 +225,7 @@ describe('search result DTO evidence', () => {
     });
 
     expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any Requirement: QR, QR2']));
-    expect(dto.match_evidence?.find(item => item.kind === 'requirement')).toMatchObject({
+    expect(dto.matchEvidence?.find(item => item.kind === 'requirement')).toMatchObject({
       label: 'Any Requirement',
       value: 'QR, QR2',
       weight: 'hard',
@@ -253,7 +253,7 @@ describe('search result DTO evidence', () => {
       },
     });
 
-    expect(dto.match_evidence?.find(item => item.kind === 'requirement')).toMatchObject({
+    expect(dto.matchEvidence?.find(item => item.kind === 'requirement')).toMatchObject({
       label: 'Requirement US',
       value: 'US',
       weight: 'hard',
@@ -311,8 +311,8 @@ describe('search result DTO evidence', () => {
       },
     });
 
-    expect(dto.match_evidence?.map(item => item.label)).not.toContain('Requirement lane match');
-    expect(dto.match_evidence?.some(item => item.kind === 'requirement')).toBe(false);
+    expect(dto.matchEvidence?.map(item => item.label)).not.toContain('Requirement lane match');
+    expect(dto.matchEvidence?.some(item => item.kind === 'requirement')).toBe(false);
     expect(dto.explanation?.confidence.reasons).not.toContain('Requirement evidence came from structured mappings.');
     expect(dto.explanation?.confidence.score).toBe(0.74);
     expect(dto.explanation?.confidence.label).toBe('medium');
@@ -336,15 +336,15 @@ describe('search result DTO evidence', () => {
       num_ratings: 0,
     });
 
-    expect(dto.primary_instructor_rmp).toBeNull();
+    expect(dto.metrics.primaryInstructorRating).toBeNull();
     expect(link).toMatchObject({
-      instructor_name: 'Fox, E',
-      rmp_rating: null,
-      rmp_difficulty: null,
-      rmp_id: 'fox',
-      rmp_url: null,
-      rmp_search_url: 'https://www.ratemyprofessors.com/search/professors/1112?q=Fox%2C%20E',
-      num_ratings: 0,
+      instructorName: 'Fox, E',
+      rmpRating: null,
+      rmpDifficulty: null,
+      rmpId: 'fox',
+      rmpUrl: null,
+      rmpSearchUrl: 'https://www.ratemyprofessors.com/search/professors/1112?q=Fox%2C%20E',
+      numRatings: 0,
     });
   });
 
@@ -357,8 +357,8 @@ describe('search result DTO evidence', () => {
       num_ratings: 120,
     });
 
-    expect(link.rmp_url).toBe('https://www.ratemyprofessors.com/professor/85515');
-    expect(link.rmp_search_url).toBe('https://www.ratemyprofessors.com/search/professors/1112?q=Fagen-Ulmschneider%2C%20W');
+    expect(link.rmpUrl).toBe('https://www.ratemyprofessors.com/professor/85515');
+    expect(link.rmpSearchUrl).toBe('https://www.ratemyprofessors.com/search/professors/1112?q=Fagen-Ulmschneider%2C%20W');
   });
 
   it('converts fresh course snapshots to the same visible DTO surface as cached rows', () => {
@@ -440,29 +440,35 @@ describe('search result DTO evidence', () => {
     });
 
     expect(dto).toMatchObject({
-      id: 'CS-225-2026-spring',
-      course_info: 'Prerequisite: CS 173.',
-      median_gpa: 3.6,
+      course: {
+        id: 'CS-225-2026-spring',
+        registration: {
+          courseInfo: 'Prerequisite: CS 173.',
+        },
+        metrics: {
+          medianGpa: 3.6,
+        },
+      },
       cache: { cached: false },
     });
-    expect(dto.geneds).toEqual([{
+    expect(dto.course.requirements).toEqual([{
       categoryId: 'QR',
       categoryName: 'Quantitative Reasoning',
       attributeCode: 'QR2',
       attributeName: 'Quantitative Reasoning II',
     }]);
-    expect(dto.sections?.[0]).toMatchObject({
+    expect(dto.course.sections[0]).toMatchObject({
       sectionNumber: 'AL1',
       partOfTerm: '1',
       sectionNotes: 'Majors first.',
       instructorRmp: 4.8,
       instructorGpa: 3.62,
     });
-    expect(dto.sections?.[0]?.meetings[0]).toMatchObject({
+    expect(dto.course.sections[0]?.meetings[0]).toMatchObject({
       typeCode: 'LEC',
       buildingName: 'Siebel Center',
       instructorNames: ['Lovelace, A'],
-      instructors: [expect.objectContaining({ instructor_name: 'Lovelace, A' })],
+      instructors: [expect.objectContaining({ instructorName: 'Lovelace, A' })],
     });
   });
 });

@@ -2,10 +2,11 @@ import type { Course, Meeting, Section } from '../db/types.js';
 import type {
   CourseSectionMeetingDto,
   CourseDetailResponseDto,
+  CourseDetailDto,
   CourseExplorerUrlInput,
-  CourseDto,
   CourseGenedDto,
   CourseSectionDto,
+  CourseSummaryDto,
   InstructorLinkDto,
   MatchEvidence,
   ResultExplanation,
@@ -19,7 +20,7 @@ import {
   buildRmpProfessorUrl,
   buildRmpSearchUrl,
 } from '@uiuc-course-search/query-types';
-import type { SearchResult } from '../services/search.js';
+import type { SearchResult } from '../services/search-types.js';
 import {
   buildSearchResultPresentation,
   type SearchResultEvidenceContext,
@@ -117,18 +118,18 @@ export function toInstructorLinkDto(row: InstructorLinkRow | null | undefined): 
   const instructorName = row?.instructor_name ?? null;
 
   return {
-    instructor_name: instructorName,
-    rmp_rating: validRmpMetric(row?.rmp_rating, row?.num_ratings),
-    rmp_difficulty: validRmpMetric(row?.rmp_difficulty, row?.num_ratings),
-    rmp_id: row?.rmp_id ?? null,
-    rmp_url: buildRmpProfessorUrl(row?.rmp_id),
-    rmp_search_url: buildRmpSearchUrl(instructorName),
-    avg_gpa: row?.avg_gpa ?? null,
-    median_gpa: row?.median_gpa ?? null,
-    gpa_sample_size: row?.gpa_sample_size ?? null,
-    num_ratings: row?.num_ratings ?? null,
-    would_take_again_pct: row?.would_take_again_pct ?? null,
-    top_tags: normalizeTopTags(row?.top_tags),
+    instructorName,
+    rmpRating: validRmpMetric(row?.rmp_rating, row?.num_ratings),
+    rmpDifficulty: validRmpMetric(row?.rmp_difficulty, row?.num_ratings),
+    rmpId: row?.rmp_id ?? null,
+    rmpUrl: buildRmpProfessorUrl(row?.rmp_id),
+    rmpSearchUrl: buildRmpSearchUrl(instructorName),
+    avgGpa: row?.avg_gpa ?? null,
+    medianGpa: row?.median_gpa ?? null,
+    gpaSampleSize: row?.gpa_sample_size ?? null,
+    numRatings: row?.num_ratings ?? null,
+    wouldTakeAgainPct: row?.would_take_again_pct ?? null,
+    topTags: normalizeTopTags(row?.top_tags),
     department: row?.department ?? null,
   };
 }
@@ -137,8 +138,8 @@ export function toInstructorLinkMap(rows: InstructorLinkRow[]): Record<string, I
   return Object.fromEntries(
     rows
       .map(toInstructorLinkDto)
-      .filter(link => link.instructor_name)
-      .map(link => [link.instructor_name as string, link])
+      .filter(link => link.instructorName)
+      .map(link => [link.instructorName as string, link])
   );
 }
 
@@ -168,7 +169,7 @@ export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto 
     endDate: section.end_date ?? null,
     creditHours: section.credit_hours ?? null,
     meetings: (section.meetings ?? []).map(toCourseSectionMeetingDto),
-    course_explorer_url: buildSectionCourseExplorerUrl(section),
+    courseExplorerUrl: buildSectionCourseExplorerUrl(section),
   };
 }
 
@@ -176,7 +177,7 @@ function toCourseSectionMeetingDto(meeting: SectionMeetingWithStats): CourseSect
   const instructorNames = meeting.instructor_names
     ? meeting.instructor_names.split(';').map(name => name.trim()).filter(Boolean)
     : (meeting.instructor_stats ?? [])
-      .map(stat => stat.instructor_name)
+      .map(stat => stat.instructorName)
       .filter((name): name is string => Boolean(name));
 
   return {
@@ -193,40 +194,45 @@ function toCourseSectionMeetingDto(meeting: SectionMeetingWithStats): CourseSect
   };
 }
 
-export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}): CourseDto {
+export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}): CourseSummaryDto {
   return {
     id: course.id,
     subject: course.subject,
     number: course.number,
     title: course.title,
     description: course.description ?? null,
-    credit_hours: course.credit_hours ?? null,
+    creditHours: course.credit_hours ?? null,
     year: course.year,
     term: course.term,
-    primary_instructor: course.primary_instructor ?? null,
-    primary_instructor_rmp: validRmpMetric(course.primary_instructor_rmp),
-    avg_gpa: course.avg_gpa ?? null,
-    median_gpa: options.medianGpa ?? course.median_gpa ?? null,
-    gpa_sample_size: course.gpa_sample_size ?? null,
-    quality_score: course.quality_score ?? null,
-    difficulty_score: course.difficulty_score ?? null,
-    course_info: course.course_info ?? null,
-    degree_attributes: course.degree_attributes ?? null,
-    class_schedule_info: course.class_schedule_info ?? null,
-    date_range_text: course.date_range_text ?? null,
-    registration_notes: course.registration_notes ?? null,
-    approval_code: course.approval_code ?? null,
-    geneds: options.geneds ?? [],
-    instructor_links: options.instructorLinks ?? {},
-    course_explorer_url: buildCourseExplorerCourseUrl(course),
-    sections: options.sections,
+    primaryInstructor: course.primary_instructor ?? null,
+    metrics: {
+      primaryInstructorRating: validRmpMetric(course.primary_instructor_rmp),
+      avgGpa: course.avg_gpa ?? null,
+      medianGpa: options.medianGpa ?? course.median_gpa ?? null,
+      gpaSampleSize: course.gpa_sample_size ?? null,
+      qualityScore: course.quality_score ?? null,
+      workloadScore: course.difficulty_score ?? null,
+    },
+    registration: {
+      courseInfo: course.course_info ?? null,
+      degreeAttributes: course.degree_attributes ?? null,
+      classScheduleInfo: course.class_schedule_info ?? null,
+      dateRangeText: course.date_range_text ?? null,
+      registrationNotes: course.registration_notes ?? null,
+      approvalCode: course.approval_code ?? null,
+    },
+    requirements: options.geneds ?? [],
+    instructorLinks: options.instructorLinks ?? {},
+    links: {
+      courseExplorerUrl: buildCourseExplorerCourseUrl(course),
+    },
   };
 }
 
 export function courseSnapshotToCourseDto(
   snapshot: CourseSnapshot,
   options: CourseDtoOptions = {}
-): CourseDto {
+): CourseDetailDto {
   const {
     sections: providedSections,
     geneds: providedGeneds,
@@ -234,19 +240,26 @@ export function courseSnapshotToCourseDto(
     ...courseOptions
   } = options;
 
-  return toCourseDto(snapshot.course, {
+  const summary = toCourseDto(snapshot.course, {
     ...courseOptions,
     instructorLinks,
     geneds: providedGeneds ?? snapshotGenedsToDto(snapshot),
-    sections: providedSections ?? snapshotSectionsToDto(snapshot, instructorLinks),
   });
+
+  return {
+    ...summary,
+    sections: providedSections ?? snapshotSectionsToDto(snapshot, instructorLinks),
+  };
 }
 
 export function toCourseDetailResponseDto(
   course: CourseSource,
   options: CourseDetailResponseDtoOptions = {},
 ): CourseDetailResponseDto {
-  const dto = toCourseDto(course, options);
+  const courseDto: CourseDetailDto = {
+    ...toCourseDto(course, options),
+    sections: options.sections ?? [],
+  };
   const cache = {
     cached: options.cached,
     stale: options.stale,
@@ -257,15 +270,15 @@ export function toCourseDetailResponseDto(
   };
 
   return Object.values(cache).some((value) => value !== undefined)
-    ? { ...dto, cache }
-    : dto;
+    ? { course: courseDto, cache }
+    : { course: courseDto };
 }
 
 export function courseSnapshotToCourseDetailResponseDto(
   snapshot: CourseSnapshot,
   options: CourseDetailResponseDtoOptions = {},
 ): CourseDetailResponseDto {
-  const dto = courseSnapshotToCourseDto(snapshot, options);
+  const courseDto = courseSnapshotToCourseDto(snapshot, options);
   const cache = {
     cached: options.cached,
     stale: options.stale,
@@ -276,8 +289,8 @@ export function courseSnapshotToCourseDetailResponseDto(
   };
 
   return Object.values(cache).some((value) => value !== undefined)
-    ? { ...dto, cache }
-    : dto;
+    ? { course: courseDto, cache }
+    : { course: courseDto };
 }
 
 function snapshotGenedsToDto(snapshot: CourseSnapshot): CourseGenedDto[] {
@@ -295,8 +308,8 @@ function snapshotSectionsToDto(
     return toCourseSectionDto({
       ...section,
       instructor_stats: instructorStats,
-      instructor_rmp: primaryStats?.rmp_rating ?? section.instructor_rmp,
-      instructor_gpa: primaryStats?.avg_gpa ?? section.instructor_gpa,
+      instructor_rmp: primaryStats?.rmpRating ?? section.instructor_rmp,
+      instructor_gpa: primaryStats?.avgGpa ?? section.instructor_gpa,
       meetings: meetings.map(meeting => {
         const instructorNames = meeting.instructors
           .map(formatInstructorName)
@@ -379,7 +392,7 @@ export function searchResultToCourseDto(
 ): SearchCourseResultDto {
   const presentation = buildSearchResultPresentation(result, context);
   return {
-    ...toCourseDto(result.course, {
+    course: toCourseDto(result.course, {
       geneds: context?.requirementCodes,
     }),
     search: {
@@ -388,7 +401,7 @@ export function searchResultToCourseDto(
       keywordRank: result.keywordRank,
       historical: result.historical,
     },
-    match_evidence: presentation.matchEvidence,
+    matchEvidence: presentation.matchEvidence,
     explanation: presentation.explanation,
     warnings: presentation.warnings,
   };

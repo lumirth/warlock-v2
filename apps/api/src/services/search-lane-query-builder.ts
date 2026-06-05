@@ -1,5 +1,9 @@
 import type { RetrievalLane, SearchFilters } from "./search-planner-types.js";
-import { buildFilterClauses, type FilterClauseResult } from "./search-filters.js";
+import {
+  buildFilterClauses,
+  type FilterClauseResult,
+  type FilterJoinKey,
+} from "./search-filters.js";
 
 export type LaneSpec = {
   lane: RetrievalLane;
@@ -57,6 +61,7 @@ export const RETRIEVAL_LANE_SPECS: Record<RetrievalLane, LaneSpec> = {
 
 export type FilteredCourseQuery = FilterClauseResult & {
   joinSql: string;
+  joinSqlExcluding: (excludedKeys: readonly FilterJoinKey[]) => string;
   whereSql: (extraConditions?: readonly string[]) => string;
   groupBySql: (fallbackGroupBy?: string) => string;
   havingSql: string;
@@ -68,6 +73,13 @@ export function buildFilteredCourseQuery(filters: SearchFilters): FilteredCourse
   return {
     ...clauses,
     joinSql: clauses.joins.join(" "),
+    joinSqlExcluding(excludedKeys: readonly FilterJoinKey[]) {
+      const excluded = new Set(excludedKeys);
+      return clauses.joinKeys
+        .map((key, index) => excluded.has(key) ? null : clauses.joins[index])
+        .filter((join): join is string => Boolean(join))
+        .join(" ");
+    },
     whereSql(extraConditions: readonly string[] = []) {
       const allConditions = [...clauses.where, ...extraConditions];
       return allConditions.length > 0

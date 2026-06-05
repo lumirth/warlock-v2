@@ -10,7 +10,7 @@ import * as topicRegistry from '../topic-registry.js';
 import { normalizeSearchRequest } from '../search-request.js';
 import type { Course } from '../../db/index.js';
 import type { ExtractionResult } from '../extractor.js';
-import type { SearchResult } from '../search.js';
+import type { SearchResult } from '../search-types.js';
 import type { SearchPlan } from '../search-planner-types.js';
 
 vi.mock('../extractor.js');

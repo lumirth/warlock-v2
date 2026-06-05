@@ -58,15 +58,16 @@ export function CourseResultsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {results.map((course) => {
-          const isHistorical = course.search?.historical === true
+        {results.map((result) => {
+          const { course } = result
+          const isHistorical = result.search?.historical === true
           const qualityLabel =
-            typeof course.quality_score === 'number'
-              ? getQualityLabel(course.quality_score)
+            typeof course.metrics.qualityScore === 'number'
+              ? getQualityLabel(course.metrics.qualityScore)
               : null
           const workloadLabel =
-            typeof course.difficulty_score === 'number'
-              ? getWorkloadLabel(course.difficulty_score)
+            typeof course.metrics.workloadScore === 'number'
+              ? getWorkloadLabel(course.metrics.workloadScore)
               : null
 
           return (
@@ -118,7 +119,7 @@ export function CourseResultsTable({
                   <span
                     className={cn(
                       'font-semibold',
-                      toneTextClass(getWorkloadTone(course.difficulty_score!))
+                      toneTextClass(getWorkloadTone(course.metrics.workloadScore!))
                     )}
                   >
                     {workloadLabel}
@@ -128,16 +129,16 @@ export function CourseResultsTable({
                 )}
               </TableCell>
               <TableCell className="tabular-nums">
-                {formatNumber(course.avg_gpa, 2)}
+                {formatNumber(course.metrics.avgGpa, 2)}
               </TableCell>
               <TableCell className="tabular-nums">
-                {formatNumber(course.primary_instructor_rmp, 1)}
+                {formatNumber(course.metrics.primaryInstructorRating, 1)}
               </TableCell>
               <TableCell className="tabular-nums">
                 {formatCourseLevel(course)}
               </TableCell>
               <TableCell className="tabular-nums">
-                {formatCredits(course.credit_hours)}
+                {formatCredits(course.creditHours)}
               </TableCell>
             </TableRow>
           )

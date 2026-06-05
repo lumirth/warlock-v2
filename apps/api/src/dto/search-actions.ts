@@ -1,5 +1,5 @@
 import {
-  normalizeSearchRequestDto,
+  coerceSearchRequestDto,
   searchRequestHasFilters,
   type NormalizedSearchRequestDto,
   type SearchActionDto,
@@ -11,7 +11,7 @@ import { meaningfulResidualQuery } from "../services/search-request-text.js";
 export function searchActionFromRequest(
   request: SearchRequestDto,
 ): SearchActionDto {
-  const normalized = normalizeSearchRequestDto(request);
+  const normalized = coerceSearchRequestDto(request);
   return {
     kind: "run_search",
     nextRequest: {
@@ -88,7 +88,7 @@ function requestWithoutMatchingFilter(
     [keyof SearchRequestFiltersDto, SearchRequestFiltersDto[keyof SearchRequestFiltersDto]]
   >) {
     if (value === undefined) continue;
-    if (String(nextFilters[key] ?? "").toLowerCase() !== String(value).toLowerCase()) {
+    if (!searchFilterValuesEqual(nextFilters[key], value)) {
       continue;
     }
     delete nextFilters[key];
@@ -103,6 +103,27 @@ function requestWithoutMatchingFilter(
         scope: request.scope,
       }
     : null;
+}
+
+function searchFilterValuesEqual(
+  left: SearchRequestFiltersDto[keyof SearchRequestFiltersDto],
+  right: SearchRequestFiltersDto[keyof SearchRequestFiltersDto],
+): boolean {
+  if (isRequirementFilterValue(left) || isRequirementFilterValue(right)) {
+    return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+  }
+  return String(left ?? "").toLowerCase() === String(right ?? "").toLowerCase();
+}
+
+function isRequirementFilterValue(
+  value: SearchRequestFiltersDto[keyof SearchRequestFiltersDto],
+): value is NonNullable<SearchRequestFiltersDto["requirement"]> {
+  return Boolean(
+    value
+      && typeof value === "object"
+      && "mode" in value
+      && "codes" in value,
+  );
 }
 
 function removeTextFromQuery(source: string, textToRemove: string): string {

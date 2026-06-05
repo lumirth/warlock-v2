@@ -1,3 +1,8 @@
+import {
+  requirementFilter,
+  type RequirementFilter,
+} from "./course-policy.js";
+
 export const SEARCH_SORT_FIELDS = [
   "relevance",
   "gpa",
@@ -116,7 +121,7 @@ export type SearchRequestFiltersDto = {
   instructor?: string;
   term?: SearchTermFilter;
   year?: number;
-  requirement?: string;
+  requirement?: RequirementFilter;
   credits?: number;
   days?: string;
   time?: SearchTimeFilter;
@@ -180,7 +185,7 @@ export type SearchRequestPaginationDto = {
   offset: number;
 };
 
-export function normalizeSearchRequestDto(
+export function coerceSearchRequestDto(
   request: SearchRequestDto,
 ): NormalizedSearchRequestDto {
   return deepFreezeSearchContractValue({
@@ -254,7 +259,7 @@ function compactSearchRequestFilters(
   const term = normalizeEnumSearchString(filters.term, SEARCH_TERM_VALUES, "lower");
   if (term) compact.term = term;
   if (filters.year !== undefined) compact.year = filters.year;
-  const requirement = normalizeSearchString(filters.requirement, "upper");
+  const requirement = normalizeSearchRequirementFilter(filters.requirement);
   if (requirement) compact.requirement = requirement;
   if (filters.credits !== undefined) compact.credits = filters.credits;
   const days = normalizeSearchString(filters.days, "upper");
@@ -279,6 +284,15 @@ function compactSearchRequestFilters(
   if (isSearchLevelFilter(filters.level)) compact.level = filters.level;
 
   return compact;
+}
+
+function normalizeSearchRequirementFilter(
+  value: SearchRequestFiltersDto["requirement"],
+): RequirementFilter | undefined {
+  if (!value) return undefined;
+  const mode = value.mode === "any" || value.mode === "all" ? value.mode : "single";
+  const codes = mode === "single" ? value.codes.slice(0, 1) : value.codes;
+  return requirementFilter(mode, codes);
 }
 
 function normalizeSearchString(

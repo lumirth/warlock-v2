@@ -23,6 +23,7 @@ import {
   compilerEvent,
   type SearchCompilerEvent,
   type SearchCompilerEventStage,
+  type SearchFallbackPlan,
   type SearchPlanningInput,
 } from "./search-planning-types.js";
 import type { SearchPlan } from "./search-planner-types.js";
@@ -49,7 +50,7 @@ export type SearchPlanningContext = {
   planningInput: SearchPlanningInput;
   plan?: SearchPlan;
   queryResidual: string;
-  fallbackPlans: SearchPlan[];
+  fallbackPlans: SearchFallbackPlan[];
   compilerEvents: SearchCompilerEvent[];
   artifacts: Set<PlanningArtifact>;
   artifactRevisions: Map<PlanningArtifact, number>;

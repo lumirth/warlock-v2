@@ -2,7 +2,7 @@ import axe from 'axe-core'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { CourseDto } from '@uiuc-course-search/query-types'
+import type { CourseDetailResponseDto } from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
 import { TestUiProvider } from '../test/TestUiProvider'
 import { SearchPage } from './SearchPage'
@@ -16,40 +16,49 @@ vi.mock('../lib/api-client', () => ({
   },
 }))
 
-function course(overrides: Partial<CourseDto> = {}): CourseDto {
+function course(
+  overrides: Partial<CourseDetailResponseDto['course']> = {}
+): CourseDetailResponseDto {
   return {
-    id: 'CS-225-2026-spring',
-    subject: 'CS',
-    number: '225',
-    title: 'Data Structures',
-    description: 'A course',
-    credit_hours: 4,
-    year: 2026,
-    term: 'spring',
-    primary_instructor: 'Lovelace, A',
-    primary_instructor_rmp: 4.8,
-    avg_gpa: 3.62,
-    median_gpa: null,
-    gpa_sample_size: 820,
-    quality_score: 88,
-    difficulty_score: 42,
-    course_info: null,
-    degree_attributes: null,
-    class_schedule_info: null,
-    date_range_text: null,
-    registration_notes: null,
-    approval_code: null,
-    geneds: [
-      {
-        categoryId: 'QR',
-        categoryName: 'Quantitative Reasoning',
-        attributeCode: null,
-        attributeName: null,
+    course: {
+      id: 'CS-225-2026-spring',
+      subject: 'CS',
+      number: '225',
+      title: 'Data Structures',
+      description: 'A course',
+      creditHours: 4,
+      year: 2026,
+      term: 'spring',
+      primaryInstructor: 'Lovelace, A',
+      metrics: {
+        primaryInstructorRating: 4.8,
+        avgGpa: 3.62,
+        medianGpa: null,
+        gpaSampleSize: 820,
+        qualityScore: 88,
+        workloadScore: 42,
       },
-    ],
-    instructor_links: {},
-    sections: [],
-    ...overrides,
+      registration: {
+        courseInfo: null,
+        degreeAttributes: null,
+        classScheduleInfo: null,
+        dateRangeText: null,
+        registrationNotes: null,
+        approvalCode: null,
+      },
+      requirements: [
+        {
+          categoryId: 'QR',
+          categoryName: 'Quantitative Reasoning',
+          attributeCode: null,
+          attributeName: null,
+        },
+      ],
+      instructorLinks: {},
+      links: {},
+      sections: [],
+      ...overrides,
+    },
   }
 }
 
@@ -99,11 +108,12 @@ describe('page accessibility', () => {
       results: [course()],
       meta: {
         query: { raw: 'cs 225', residual: 'cs 225' },
+        nextRequest: { query: 'cs 225' },
         timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
         appliedSort: { field: 'relevance', direction: 'desc' },
         appliedScope: 'active',
       },
-      pagination: { total: 1, limit: 20, offset: 0 },
+      pagination: { resultCountLowerBound: 1, limit: 20, offset: 0 },
     })
 
     const { container } = render(

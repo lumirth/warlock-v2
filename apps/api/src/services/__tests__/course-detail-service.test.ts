@@ -22,19 +22,21 @@ describe('CourseDetailService', () => {
     expect(result.headers).toMatchObject({ 'X-Cache': 'HIT' });
     expect(browserFetch).not.toHaveBeenCalled();
     expect(result.body).toMatchObject({
-      id: 'CS-225-2026-spring',
+      course: {
+        id: 'CS-225-2026-spring',
+        sections: [{
+          crn: '12345',
+          partOfTerm: 'A',
+          meetings: [{
+            typeCode: 'LEC',
+            buildingName: 'Siebel Center',
+          }],
+        }],
+      },
       cache: {
         cached: true,
         ageSeconds: 2,
       },
-      sections: [{
-        crn: '12345',
-        partOfTerm: 'A',
-        meetings: [{
-          typeCode: 'LEC',
-          buildingName: 'Siebel Center',
-        }],
-      }],
     });
   });
 
@@ -52,7 +54,9 @@ describe('CourseDetailService', () => {
     });
     expect(browserFetch).not.toHaveBeenCalled();
     expect(result.body).toMatchObject({
-      id: 'CS-225-2026-spring',
+      course: {
+        id: 'CS-225-2026-spring',
+      },
       cache: {
         stale: true,
       },
@@ -68,27 +72,31 @@ describe('CourseDetailService', () => {
     expect(result.status).toBe(200);
     expect(result.headers).toMatchObject({ 'X-Cache': 'MISS' });
     expect(result.body).toMatchObject({
-      id: 'CS-225-2026-spring',
-      avg_gpa: 3.62,
-      gpa_sample_size: 820,
-      primary_instructor_rmp: 4.8,
-      quality_score: 88,
-      difficulty_score: 42,
+      course: {
+        id: 'CS-225-2026-spring',
+        metrics: {
+          avgGpa: 3.62,
+          gpaSampleSize: 820,
+          primaryInstructorRating: 4.8,
+          qualityScore: 88,
+          workloadScore: 42,
+        },
+        sections: [{
+          crn: '12345',
+          instructorRmp: 4.8,
+          instructorGpa: 3.62,
+          meetings: [{
+            typeCode: 'LEC',
+            buildingName: 'Siebel Center',
+            roomNumber: '1404',
+            instructorNames: ['Lovelace, A'],
+          }],
+        }],
+      },
       cache: {
         cached: false,
         termStatus: 'active',
       },
-      sections: [{
-        crn: '12345',
-        instructorRmp: 4.8,
-        instructorGpa: 3.62,
-        meetings: [{
-          typeCode: 'LEC',
-          buildingName: 'Siebel Center',
-          roomNumber: '1404',
-          instructorNames: ['Lovelace, A'],
-        }],
-      }],
     });
   });
 
@@ -104,7 +112,9 @@ describe('CourseDetailService', () => {
       'X-Stale-Reason': 'upstream-unavailable',
     });
     expect(result.body).toMatchObject({
-      id: 'CS-225-2026-spring',
+      course: {
+        id: 'CS-225-2026-spring',
+      },
       cache: {
         stale: true,
         staleReason: 'upstream returned 503',

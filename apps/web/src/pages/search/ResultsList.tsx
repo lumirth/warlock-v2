@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type {
+  CourseSummaryDto,
   MatchEvidence,
   SearchChipDto,
   SearchCourseResultDto,
@@ -110,8 +111,11 @@ export function ResultsList({
               onSort={onTableSort}
             />
           ) : (
-            results.map((course) => (
-              <CourseResultCard key={getCourseKey(course)} course={course} />
+            results.map((result) => (
+              <CourseResultCard
+                key={getCourseKey(result.course)}
+                result={result}
+              />
             ))
           )}
           {pagination?.hasMore && (
@@ -172,8 +176,9 @@ function ResultsSkeleton() {
   )
 }
 
-function CourseResultCard({ course }: { course: SearchCourseResultDto }) {
-  const isHistorical = course.search?.historical === true
+function CourseResultCard({ result }: { result: SearchCourseResultDto }) {
+  const { course } = result
+  const isHistorical = result.search?.historical === true
 
   return (
     <Link
@@ -208,10 +213,10 @@ function CourseResultCard({ course }: { course: SearchCourseResultDto }) {
                   Historical term
                 </Badge>
               )}
-              <span>{course.credit_hours} credits</span>
-              {course.primary_instructor && (
+              <span>{course.creditHours} credits</span>
+              {course.primaryInstructor && (
                 <span className="border-l pl-2">
-                  {course.primary_instructor}
+                  {course.primaryInstructor}
                 </span>
               )}
               {courseGenedLabels(course).map((label) => (
@@ -227,7 +232,7 @@ function CourseResultCard({ course }: { course: SearchCourseResultDto }) {
             >
               {course.description}
             </p>
-            <MatchEvidence evidence={course.match_evidence} />
+            <MatchEvidence evidence={result.matchEvidence} />
           </div>
         </CardContent>
       </Card>
@@ -235,7 +240,7 @@ function CourseResultCard({ course }: { course: SearchCourseResultDto }) {
   )
 }
 
-function ScoreSummary({ course }: { course: SearchCourseResultDto }) {
+function ScoreSummary({ course }: { course: CourseSummaryDto }) {
   const stats = getCourseMetrics(course)
   if (stats.length === 0) return null
 

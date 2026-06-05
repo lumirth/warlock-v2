@@ -42,17 +42,21 @@ export function buildSearchViewModel(
     ? state.session.activeRequest?.query ?? ''
     : state.draft.query.trim()
   const resultCountLabel =
-    state.session.pagination?.total !== undefined
-      ? `${state.session.pagination.total.toLocaleString()} ${
-          state.session.pagination.total === 1 ? 'result' : 'results'
+    state.session.pagination?.resultCountLowerBound !== undefined
+      ? `${state.session.pagination.resultCountLowerBound.toLocaleString()}${
+          state.session.pagination.hasMore ? '+' : ''
+        } ${
+          state.session.pagination.resultCountLowerBound === 1 ? 'result' : 'results'
         }`
       : `${state.session.results.length.toLocaleString()} ${
           state.session.results.length === 1 ? 'result' : 'results'
         }`
   const showingResultsLabel =
-    state.session.pagination?.total !== undefined &&
-    state.session.pagination.total > state.session.results.length
-      ? `Showing ${state.session.results.length.toLocaleString()} of ${state.session.pagination.total.toLocaleString()}`
+    state.session.pagination?.resultCountLowerBound !== undefined &&
+    state.session.pagination.resultCountLowerBound > state.session.results.length
+      ? `Showing ${state.session.results.length.toLocaleString()} of ${
+          state.session.pagination.hasMore ? 'at least ' : ''
+        }${state.session.pagination.resultCountLowerBound.toLocaleString()}`
       : `Showing ${state.session.results.length.toLocaleString()}`
   const resultsHeadingLabel = state.session.meta?.query.raw
     ? `Results for ${state.session.meta.query.raw}`

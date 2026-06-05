@@ -91,6 +91,10 @@ reinterpret another layer's concept, it creates drift.
 
 - The public search concept is `requirement`, not `gened`. Legacy `gened` can be
   accepted as forgiving query syntax only at parser edges.
+- Public requirement filters are mode-aware objects: `{ mode: "single" | "any" |
+  "all", codes: string[] }`. Courses can satisfy multiple requirements, so
+  transport, actions, chips, and pagination must preserve both the mode and the
+  full code list instead of collapsing to one string.
 - The public search concept is `workload`, not `difficulty`. Stored source columns
   such as `difficulty_score` and `rmp_difficulty` may remain source-shaped, but
   product/request/presentation code should use workload language.
@@ -124,7 +128,7 @@ These are the checks future changes should preserve or add as automated tests:
 - Web search UI options derive values from `packages/query-types`; labels may be
   local presentation.
 - Web search follow-up actions derive from session `activeRequest`, which is
-  replaced by `meta.interpretedRequest` after a successful response.
+  replaced by the server-authored `meta.nextRequest` after a successful response.
 - Web sort, pagination, and server-authored refinement actions execute canonical
   `SearchRequestDto` objects, not `{ query, filters }` patches reconstructed from
   derived UI state.

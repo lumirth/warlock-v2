@@ -10,7 +10,7 @@ import {
   type ResultWarning,
 } from '@uiuc-course-search/query-types';
 import type { Hint, SearchPlan } from './search-planner-types.js';
-import type { SearchResult } from './search.js';
+import type { SearchResult } from './search-types.js';
 import { isGenericAnyGenedFilter } from './gened-codes.js';
 import {
   matchingRequirementCodes,

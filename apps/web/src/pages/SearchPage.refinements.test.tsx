@@ -1,6 +1,9 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { SearchResponseDto } from '@uiuc-course-search/query-types'
+import {
+  singleRequirementFilter,
+  type SearchResponseDto,
+} from '@uiuc-course-search/query-types'
 import {
   api,
   course,
@@ -21,7 +24,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'professor fagen algorithms', residual: 'algorithms' },
-          interpretedRequest: {
+          nextRequest: {
             query: 'algorithms',
             filters: { instructor: 'fagen' },
           },
@@ -72,7 +75,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'CS gened', residual: '' },
-          interpretedRequest: {
+          nextRequest: {
             query: '',
             filters: { subject: 'CS' },
           },
@@ -83,7 +86,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                action: searchAction({ query: '', filters: { requirement: 'CS' } }),
+                action: searchAction({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
               },
             ],
           },
@@ -106,7 +109,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
       expectLastSearchCalledWithRequest({
         query: '',
         pagination: { limit: 20, offset: 0 },
-        filters: expect.objectContaining({ requirement: 'CS' }),
+        filters: expect.objectContaining({ requirement: singleRequirementFilter('CS') }),
       })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
@@ -155,7 +158,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
             number: '150',
             title: 'Introduction to Film',
           }),
-        ])
+        ], { query: 'class about movies', filters: {} })
       )
       .mockResolvedValueOnce(
         searchResponse([
@@ -164,7 +167,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
             subject: 'MACS',
             number: '356',
             title: 'Film History',
-            avg_gpa: 3.7,
+            metrics: { avgGpa: 3.7 },
           }),
         ])
       )
@@ -226,7 +229,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'CS', residual: '' },
-          interpretedRequest: {
+          nextRequest: {
             query: '',
             filters: { subject: 'CS' },
           },
@@ -248,7 +251,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                action: searchAction({ query: '', filters: { requirement: 'CS' } }),
+                action: searchAction({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
               },
             ],
           },
@@ -275,7 +278,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
     expectLastSearchCalledWithRequest({
       query: '',
       pagination: { limit: 20, offset: 0 },
-      filters: { requirement: 'CS' },
+      filters: { requirement: singleRequirementFilter('CS') },
       scope: 'active',
       sort: { field: 'relevance', direction: 'desc' },
     })
@@ -293,9 +296,9 @@ describe('SearchPage refinements and ambiguity actions', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: '', residual: '' },
-          interpretedRequest: {
+          nextRequest: {
             query: '',
-            filters: { requirement: 'CS' },
+            filters: { requirement: singleRequirementFilter('CS') },
           },
           ui: {
             chips: [
@@ -330,7 +333,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
     expectLastSearchCalledWithRequest({
       query: '',
       pagination: { limit: 20, offset: 0 },
-      filters: { requirement: 'CS' },
+      filters: { requirement: singleRequirementFilter('CS') },
       scope: 'active',
       sort: { field: 'gpa', direction: 'desc' },
     })
@@ -346,16 +349,16 @@ describe('SearchPage refinements and ambiguity actions', () => {
             subject: 'AFST',
             number: '222',
             title: 'Introduction to Modern Africa',
-            avg_gpa: 3.76,
+            metrics: { avgGpa: 3.76 },
           }),
         ]),
         meta: {
           ...searchResponse([]).meta,
           query: { raw: '', residual: '' },
           appliedSort: { field: 'gpa', direction: 'desc' },
-          interpretedRequest: {
+          nextRequest: {
             query: '',
-            filters: { requirement: 'CS' },
+            filters: { requirement: singleRequirementFilter('CS') },
             sort: { field: 'gpa', direction: 'desc' },
           },
           ui: {
@@ -395,7 +398,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'CS', residual: '' },
-          interpretedRequest: {
+          nextRequest: {
             query: '',
             filters: { subject: 'CS' },
           },
@@ -417,7 +420,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                action: searchAction({ query: '', filters: { requirement: 'CS' } }),
+                action: searchAction({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
               },
             ],
           },
@@ -435,9 +438,9 @@ describe('SearchPage refinements and ambiguity actions', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: '', residual: '' },
-          interpretedRequest: {
+          nextRequest: {
             query: '',
-            filters: { requirement: 'CS' },
+            filters: { requirement: singleRequirementFilter('CS') },
           },
           ui: {
             chips: [
@@ -498,9 +501,9 @@ describe('SearchPage refinements and ambiguity actions', () => {
         meta: {
           ...searchResponse([]).meta,
           query: { raw: 'easy cs', residual: '' },
-          interpretedRequest: {
+          nextRequest: {
             query: '',
-            filters: { requirement: 'CS', workload: 'easy' },
+            filters: { requirement: singleRequirementFilter('CS'), workload: 'easy' },
           },
           ui: {
             chips: [],
