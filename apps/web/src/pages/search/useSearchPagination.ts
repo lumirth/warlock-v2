@@ -1,18 +1,15 @@
 import type { SearchControllerState } from './search-controller-state'
-import type { SearchViewModel } from './search-view-model'
 import type { ExecuteSearch } from './useSearchExecution'
 
 export function useSearchPagination({
   state,
-  derived,
   executeSearch,
 }: {
   state: SearchControllerState
-  derived: SearchViewModel
   executeSearch: ExecuteSearch
 }) {
   const loadMoreResults = () => {
-    if (!state.session.pagination?.hasMore) {
+    if (!state.session.pagination?.hasMore || !state.session.activeRequest) {
       return
     }
     const nextOffset =
@@ -20,10 +17,10 @@ export function useSearchPagination({
       state.session.pagination.offset + state.session.pagination.limit
 
     executeSearch({
-      type: 'append',
-      query: derived.activeRequestQuery,
+      type: 'request',
+      mode: 'append',
+      request: state.session.activeRequest,
       offset: nextOffset,
-      filters: derived.activeAdvancedFilters,
       sort: state.session.sort,
     })
   }

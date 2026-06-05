@@ -14,17 +14,14 @@ import {
   writeStoredResultViewMode,
   type ResultViewMode,
 } from './search-sort-model'
-import type { SearchViewModel } from './search-view-model'
 import type { ExecuteSearch } from './useSearchExecution'
 
 export function useSearchSorting({
   state,
-  derived,
   dispatch,
   executeSearch,
 }: {
   state: SearchControllerState
-  derived: SearchViewModel
   dispatch: Dispatch<SearchControllerAction>
   executeSearch: ExecuteSearch
 }) {
@@ -36,11 +33,13 @@ export function useSearchSorting({
     dispatch({ type: 'result-view/changed', value })
 
   const applySort = (nextSort: SearchSort) => {
+    if (!state.session.activeRequest) return
+
     const normalizedSort = normalizeSearchSort(nextSort)
     executeSearch({
-      type: 'refresh',
-      query: derived.activeRequestQuery,
-      filters: derived.activeAdvancedFilters,
+      type: 'request',
+      mode: 'refresh',
+      request: state.session.activeRequest,
       sort: normalizedSort,
     })
   }

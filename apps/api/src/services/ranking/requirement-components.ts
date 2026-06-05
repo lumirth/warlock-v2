@@ -8,6 +8,7 @@ import {
   searchResultRequirementCodes,
 } from "../search-requirements.js";
 import type { RankingScoreComponent, SearchResult } from "../search-types.js";
+import { RANKING_POLICY } from "./ranking-policy.js";
 import { scoreComponent } from "./score-utils.js";
 
 export function requirementComponent(
@@ -17,10 +18,11 @@ export function requirementComponent(
   const courseCodes = searchResultRequirementCodes(result);
   const matchedCodes = matchingRequestedRequirementCodes(courseCodes, plan.filters);
   if (matchedCodes.length > 0) {
+    const policy = RANKING_POLICY.components.requirementIntent.exactMatch;
     return scoreComponent(
       "requirement_match",
-      0.9,
-      "Course satisfies the requested requirement filter.",
+      policy.value,
+      policy.reason,
       matchedCodes,
     );
   }
@@ -30,18 +32,20 @@ export function requirementComponent(
   }
 
   if (courseCodes.length > 0) {
+    const policy = RANKING_POLICY.components.requirementIntent.relatedCredit;
     return scoreComponent(
       "requirement_match",
-      0.25,
-      "Course has requirement credit, but not the exact requested bucket.",
+      policy.value,
+      policy.reason,
       courseCodes,
     );
   }
 
+  const policy = RANKING_POLICY.components.requirementIntent.missingMapping;
   return scoreComponent(
     "requirement_match",
-    -0.25,
-    "Requirement intent was detected, but this course has no visible requirement mapping.",
+    policy.value,
+    policy.reason,
   );
 }
 

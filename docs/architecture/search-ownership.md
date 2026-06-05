@@ -49,6 +49,9 @@ reinterpret another layer's concept, it creates drift.
   lane-local candidate recall by source: course text, section text/filters,
   requirements, aliases, workload evidence, and semantic post-filtering.
 - `ranking/*` owns fusion, final ordering, ranking components, and ranking policy.
+  Component modules should compute named contributions from `RankingPolicy`; they
+  should not introduce independent threshold, regex, or score constants that
+  change ordering.
 - `search-response-presenter` owns translation from internal search artifacts into
   `SearchResponseDto`. `search-debug-response-presenter` owns admin debug response
   assembly so debug routes stay adapter-shaped too.
@@ -59,7 +62,9 @@ reinterpret another layer's concept, it creates drift.
   requests, public responses, and server-authored `nextRequest` actions. It should
   not know internal planner field names. Its session state has one canonical
   `activeRequest`; raw submitted text is temporary until the server returns an
-  interpreted request.
+  interpreted request. Sort, pagination, recovery, chip removal, and ambiguity
+  actions execute a `SearchRequestDto` directly rather than rebuilding query text
+  and filters from derived form state.
 - `course-sync-application` and `enrichment-application` own sync and enrichment
   workflows. Routes validate HTTP input and call these services; they do not update
   term state, coordinate GPA/RMP/scoring workflows, or choose embedding wiring.
@@ -67,6 +72,12 @@ reinterpret another layer's concept, it creates drift.
   aggregate count reads, embedding flags, and route binding shapes.
 - `scripts/lib/*` owns repeated operational script primitives and script domain
   models. Top-level scripts are command adapters, not reusable domain subsystems.
+- `scripts/workflows/*` owns script-only application workflows that compose CLI
+  I/O, script primitives, and explicit API-side parser/transform/writer services.
+  This is the named boundary for operational workflows that need app internals.
+- `apps/api/src/cisapi/parser.ts` is a compatibility facade. List, detail, XML
+  utility, and cascade parsing live in focused parser modules so source-data
+  defects do not hide inside one mutable parser file.
 
 ## Naming Rules
 
@@ -101,6 +112,9 @@ These are the checks future changes should preserve or add as automated tests:
   local presentation.
 - Web search follow-up actions derive from session `activeRequest`, which is
   replaced by `meta.interpretedRequest` after a successful response.
+- Web sort, pagination, and server-authored refinement actions execute canonical
+  `SearchRequestDto` objects, not `{ query, filters }` patches reconstructed from
+  derived UI state.
 - Invalid explicit URL parameters follow one rule: reject with a clear error.
   Defaults apply only when a parameter is absent.
 - Planning passes declare artifacts and the pass harness verifies declared reads
@@ -113,6 +127,9 @@ These are the checks future changes should preserve or add as automated tests:
   update API, web, evals, tests, mocks, scripts, and docs in the same change.
 - Script domain libraries must not import API internals. Shared eval-facing types
   that scripts need belong in `packages/query-types`.
+- Top-level scripts remain CLI adapters. Large workflows live under
+  `scripts/workflows/*`; reusable parsing/resume/report primitives stay under
+  `scripts/lib/*`.
 
 ## Policy Ownership
 

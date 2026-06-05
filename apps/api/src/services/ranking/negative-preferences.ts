@@ -2,6 +2,7 @@ import type { Course } from "../../db/types.js";
 import type { SearchPlan } from "../search-planner-types.js";
 import type { RankingScoreComponent } from "../search-types.js";
 import { courseText } from "./ranking-text.js";
+import { RANKING_POLICY } from "./ranking-policy.js";
 import { scoreComponent } from "./score-utils.js";
 
 type NegativePreferenceContext = {
@@ -10,103 +11,21 @@ type NegativePreferenceContext = {
   softPreferences: SearchPlan["softPreferences"];
 };
 
-type EvidenceLabel = string | ((course: Course) => string);
-
-type NegativePreferencePenaltyRule = {
-  value: number;
-  evidence: EvidenceLabel;
-  matches: (course: Course) => boolean;
+type NegativePreferenceRule =
+  typeof RANKING_POLICY.components.negativePreferences[number];
+type NegativePreferencePenalty = NegativePreferenceRule["penalties"][number];
+type NegativePreferenceTriggers = {
+  negativeTerms?: readonly string[];
+  excludedSubjects?: readonly string[];
+  softPreferences?: readonly (keyof NonNullable<SearchPlan["softPreferences"]>)[];
 };
-
-type NegativePreferenceRule = {
-  applies: (context: NegativePreferenceContext) => boolean;
-  penalties: NegativePreferencePenaltyRule[];
+type SubjectPenaltyShape = {
+  subjectMatches?: readonly string[];
 };
-
-const NEGATIVE_PREFERENCE_RULES: NegativePreferenceRule[] = [
-  {
-    applies: ({ negativeTerms, excludedSubjects, softPreferences }) => (
-      negativeTerms.has("math_heavy")
-      || Boolean(softPreferences?.lowMath)
-      || excludedSubjects.has("MATH")
-      || excludedSubjects.has("STAT")
-    ),
-    penalties: [
-      {
-        value: -0.7,
-        evidence: "math-heavy language",
-        matches: course => /\b(qr|quantitative|calculus|statistics|statistical|programming|formal logic)\b/.test(
-          courseText(course, ["subject", "title", "description"]),
-        ),
-      },
-      {
-        value: -0.4,
-        evidence: course => `subject ${course.subject}`,
-        matches: course => ["MATH", "STAT"].includes(course.subject.toUpperCase()),
-      },
-    ],
-  },
-  {
-    applies: ({ negativeTerms, softPreferences }) => (
-      negativeTerms.has("writing_heavy")
-      || negativeTerms.has("writing")
-      || negativeTerms.has("essay")
-      || negativeTerms.has("essays")
-      || Boolean(softPreferences?.lowWriting)
-    ),
-    penalties: [{
-      value: -0.55,
-      evidence: "writing-heavy language",
-      matches: course => /\b(advanced composition|writing intensive|essay|papers?)\b/.test(
-        courseText(course, ["title", "description"]),
-      ),
-    }],
-  },
-  {
-    applies: ({ negativeTerms, excludedSubjects }) => (
-      negativeTerms.has("biology_heavy")
-      || excludedSubjects.has("MCB")
-      || excludedSubjects.has("IB")
-    ),
-    penalties: [
-      {
-        value: -0.45,
-        evidence: "biology-heavy language",
-        matches: course => /\b(bio|biology|biological|molecular|cellular|anatomy|physiology)\b/.test(
-          courseText(course, ["subject", "title", "description"]),
-        ),
-      },
-      {
-        value: -0.35,
-        evidence: course => `subject ${course.subject}`,
-        matches: course => ["IB", "MCB"].includes(course.subject.toUpperCase()),
-      },
-    ],
-  },
-  {
-    applies: ({ negativeTerms }) => negativeTerms.has("lab") || negativeTerms.has("labs"),
-    penalties: [{
-      value: -0.45,
-      evidence: "lab language",
-      matches: course => /\b(lab|laboratory)\b/.test(
-        courseText(course, ["title", "description", "course_info"]),
-      ),
-    }],
-  },
-  {
-    applies: ({ negativeTerms }) => negativeTerms.has("coding") || negativeTerms.has("programming"),
-    penalties: [{
-      value: -0.55,
-      evidence: "coding/programming language",
-      matches: course => (
-        /\b(coding|programming|programs?|software|computer science)\b/.test(
-          courseText(course, ["subject", "title", "description"]),
-        )
-        || course.subject.toUpperCase() === "CS"
-      ),
-    }],
-  },
-];
+type TextPenaltyShape = {
+  textFields?: readonly Parameters<typeof courseText>[1][number][];
+  pattern?: RegExp;
+};
 
 export function negativePreferenceComponent(
   course: Course,
@@ -116,12 +35,12 @@ export function negativePreferenceComponent(
   let penalty = 0;
   const evidence: string[] = [];
 
-  for (const rule of NEGATIVE_PREFERENCE_RULES) {
-    if (!rule.applies(context)) continue;
+  for (const rule of RANKING_POLICY.components.negativePreferences) {
+    if (!negativePreferenceRuleApplies(rule, context)) continue;
     for (const penaltyRule of rule.penalties) {
-      if (!penaltyRule.matches(course)) continue;
+      if (!negativePreferencePenaltyMatches(penaltyRule, course)) continue;
       penalty += penaltyRule.value;
-      evidence.push(evidenceLabel(penaltyRule.evidence, course));
+      evidence.push(negativePreferenceEvidence(penaltyRule, course));
     }
   }
 
@@ -148,6 +67,41 @@ function negativePreferenceContext(plan: SearchPlan): NegativePreferenceContext 
   };
 }
 
-function evidenceLabel(label: EvidenceLabel, course: Course): string {
-  return typeof label === "function" ? label(course) : label;
+function negativePreferenceRuleApplies(
+  rule: NegativePreferenceRule,
+  context: NegativePreferenceContext,
+): boolean {
+  const triggers = rule.triggers as NegativePreferenceTriggers;
+  return Boolean(
+    triggers.negativeTerms?.some(term => context.negativeTerms.has(term))
+    || triggers.excludedSubjects?.some(subject => context.excludedSubjects.has(subject))
+    || triggers.softPreferences?.some(preference => Boolean(context.softPreferences?.[preference])),
+  );
+}
+
+function negativePreferencePenaltyMatches(
+  penalty: NegativePreferencePenalty,
+  course: Course,
+): boolean {
+  const subjectPolicy = penalty as SubjectPenaltyShape;
+  const textPolicy = penalty as TextPenaltyShape;
+  const subjectMatches = subjectPolicy.subjectMatches
+    ? subjectPolicy.subjectMatches.includes(course.subject.toUpperCase())
+    : false;
+  const textMatches = textPolicy.pattern && textPolicy.textFields
+    ? textPolicy.pattern.test(courseText(course, textPolicy.textFields))
+    : false;
+
+  return subjectMatches || textMatches;
+}
+
+function negativePreferenceEvidence(
+  penalty: NegativePreferencePenalty,
+  course: Course,
+): string {
+  if ("evidenceFromSubject" in penalty && penalty.evidenceFromSubject) {
+    return `subject ${course.subject}`;
+  }
+
+  return "evidence" in penalty ? penalty.evidence : `subject ${course.subject}`;
 }

@@ -3,8 +3,8 @@ import type {
   SearchAmbiguityActionDto,
   SearchActionDto,
   SearchChipDto,
+  SearchRequestDto,
   SearchRecoveryGroup,
-  SearchSort,
 } from '@uiuc-course-search/query-types'
 import {
   cleanAdvancedFilters,
@@ -12,16 +12,10 @@ import {
   hasSearchableAdvancedFilterValue,
 } from './search-filter-model'
 
-export type SearchRefinementRequest = {
-  query: string
-  filters: AdvancedSearchStateDto
-  sort?: SearchSort
-}
-
 export type SearchRefinementPlan =
   | {
       kind: 'search'
-      request: SearchRefinementRequest
+      request: SearchRequestDto
       draft?: AdvancedSearchStateDto
     }
   | {
@@ -30,45 +24,29 @@ export type SearchRefinementPlan =
     }
   | { kind: 'noop' }
 
-export type RefinementContext = {
-  activeRequestQuery: string
-  typedQuery: string
-  metaRawQuery?: string
-  residualQuery?: string
-  activeFilters: AdvancedSearchStateDto
-  sort?: SearchSort
-}
-
 export function planChipRemoval(
-  chip: SearchChipDto,
-  context: RefinementContext
+  chip: SearchChipDto
 ): SearchRefinementPlan {
-  return planSearchAction(chip.action, context)
+  return planSearchAction(chip.action)
 }
 
 export function planAmbiguityAction(
-  action: SearchAmbiguityActionDto,
-  context: RefinementContext
+  action: SearchAmbiguityActionDto
 ): SearchRefinementPlan {
-  return planSearchAction(action.action, context)
+  return planSearchAction(action.action)
 }
 
 export function planRecoveryAction(
-  group: SearchRecoveryGroup,
-  context: RefinementContext
+  group: SearchRecoveryGroup
 ): SearchRefinementPlan {
-  return planSearchAction(group.action, context)
+  return planSearchAction(group.action)
 }
 
-function planSearchAction(
-  action: SearchActionDto | undefined,
-  context: RefinementContext
-): SearchRefinementPlan {
+function planSearchAction(action: SearchActionDto | undefined): SearchRefinementPlan {
   if (!action) return { kind: 'noop' }
 
   const nextFilters = advancedStateFromRequest(action.nextRequest)
   const nextQuery = action.nextRequest.query.trim()
-  const nextSort = action.nextRequest.sort ?? context.sort
   const draft = cleanAdvancedFilters(nextFilters)
 
   if (!nextQuery && !hasSearchableAdvancedFilterValue(draft)) {
@@ -78,10 +56,6 @@ function planSearchAction(
   return {
     kind: 'search',
     draft,
-    request: {
-      query: nextQuery,
-      filters: draft,
-      sort: nextSort,
-    },
+    request: action.nextRequest,
   }
 }

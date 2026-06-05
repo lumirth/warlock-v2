@@ -3,17 +3,7 @@ import {
   planAmbiguityAction,
   planChipRemoval,
   planRecoveryAction,
-  type RefinementContext,
 } from './search-refinement-actions'
-
-const baseContext: RefinementContext = {
-  activeRequestQuery: 'CS',
-  typedQuery: 'CS',
-  metaRawQuery: 'CS',
-  residualQuery: '',
-  activeFilters: { subject: 'CS' },
-  sort: { field: 'relevance', direction: 'desc' },
-}
 
 describe('search refinement actions', () => {
   it('turns public ambiguity actions into canonical filter-only refinement requests', () => {
@@ -31,8 +21,7 @@ describe('search refinement actions', () => {
             scope: 'active',
           },
         },
-      },
-      baseContext
+      }
     )
 
     expect(plan).toEqual({
@@ -42,6 +31,7 @@ describe('search refinement actions', () => {
         query: '',
         filters: { requirement: 'CS' },
         sort: { field: 'relevance', direction: 'desc' },
+        scope: 'active',
       },
     })
   })
@@ -64,8 +54,7 @@ describe('search refinement actions', () => {
             scope: 'active',
           },
         },
-      },
-      baseContext
+      }
     )
 
     expect(plan).toEqual({
@@ -73,8 +62,8 @@ describe('search refinement actions', () => {
       draft: {},
       request: {
         query: 'CS',
-        filters: {},
         sort: { field: 'relevance', direction: 'desc' },
+        scope: 'active',
       },
     })
   })
@@ -97,12 +86,6 @@ describe('search refinement actions', () => {
           },
         },
       },
-      {
-        ...baseContext,
-        activeRequestQuery: 'movies online',
-        activeFilters: { online: true },
-        sort: { field: 'gpa', direction: 'desc' },
-      }
     )
 
     expect(plan).toEqual({
@@ -112,6 +95,7 @@ describe('search refinement actions', () => {
         query: 'movies class',
         filters: { online: true },
         sort: { field: 'gpa', direction: 'desc' },
+        scope: 'active',
       },
     })
   })

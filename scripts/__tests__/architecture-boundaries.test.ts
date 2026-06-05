@@ -83,13 +83,49 @@ describe('architecture boundaries', () => {
 
   it('keeps the web search session anchored to one canonical active request', () => {
     const controllerState = readFileSync('apps/web/src/pages/search/search-controller-state.ts', 'utf8');
+    const searchCommand = readFileSync('apps/web/src/pages/search/search-command.ts', 'utf8');
+    const refinementActions = readFileSync('apps/web/src/pages/search/useSearchRefinements.ts', 'utf8');
     const sortingHook = readFileSync('apps/web/src/pages/search/useSearchSorting.ts', 'utf8');
     const paginationHook = readFileSync('apps/web/src/pages/search/useSearchPagination.ts', 'utf8');
 
     expect(controllerState).toContain('activeRequest: SearchRequestDto | null');
     expect(controllerState).toContain('activeRequestFromResponse');
     expect(controllerState).not.toMatch(/activeSearchText|activeAdvancedFilters/);
-    expect(sortingHook).toContain('derived.activeAdvancedFilters');
-    expect(paginationHook).toContain('derived.activeAdvancedFilters');
+    expect(searchCommand).toContain("type: 'request'");
+    expect(sortingHook).toContain('request: state.session.activeRequest');
+    expect(paginationHook).toContain('request: state.session.activeRequest');
+    expect(refinementActions).toContain("type: 'request'");
+    expect(sortingHook).not.toContain('derived.activeAdvancedFilters');
+    expect(paginationHook).not.toContain('derived.activeAdvancedFilters');
+  });
+
+  it('keeps parser and historical-sync entrypoints as facades over owned modules', () => {
+    const parserFacade = readFileSync('apps/api/src/cisapi/parser.ts', 'utf8');
+    const parserCascade = readFileSync('apps/api/src/cisapi/subject-cascade-parser.ts', 'utf8');
+    const historicalCli = readFileSync('scripts/historical-sync.ts', 'utf8');
+    const historicalWorkflow = readFileSync('scripts/workflows/historical-sync-workflow.ts', 'utf8');
+
+    expect(parserFacade).not.toMatch(/new Parser|parseCourseDetailXml\(xml: string\)/);
+    expect(parserFacade).toContain('course-detail-parser');
+    expect(parserFacade).toContain('subject-cascade-parser');
+    expect(parserCascade).not.toMatch(/parseCourseDetailXml|parseSubjectsXml|parseCoursesXml/);
+    expect(historicalCli).toContain('runHistoricalSyncCli');
+    expect(historicalCli).not.toMatch(/discoverHistoricalTerms|CoordinatedRateLimitFetcher|subjectSnapshotSqlStatements/);
+    expect(historicalWorkflow).toContain('../lib/historical-sync-config');
+    expect(historicalWorkflow).toContain('../lib/historical-sync-sql-output');
+  });
+
+  it('keeps ranking policy values in the ranking policy owner', () => {
+    const policy = readFileSync('apps/api/src/services/ranking/ranking-policy.ts', 'utf8');
+    const requirement = readFileSync('apps/api/src/services/ranking/requirement-components.ts', 'utf8');
+    const negative = readFileSync('apps/api/src/services/ranking/negative-preferences.ts', 'utf8');
+    const gateway = readFileSync('apps/api/src/services/ranking/gateway-components.ts', 'utf8');
+
+    expect(policy).toContain('requirementIntent');
+    expect(policy).toContain('negativePreferences');
+    expect(policy).toContain('introductoryGateway');
+    expect(requirement).not.toMatch(/0\.9|0\.25|-0\.25/);
+    expect(negative).not.toMatch(/-0\.7|-0\.55|-0\.45/);
+    expect(gateway).not.toMatch(/const INTRODUCTORY_GATEWAY_NUMBERS|2\.0|-0\.75/);
   });
 });

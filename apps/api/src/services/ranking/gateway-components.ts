@@ -2,17 +2,8 @@ import type { Course } from "../../db/types.js";
 import type { SearchPlan } from "../search-planner-types.js";
 import type { RankingScoreComponent, SearchResult } from "../search-types.js";
 import { catalogLevel, normalizedTitle } from "./ranking-text.js";
+import { RANKING_POLICY } from "./ranking-policy.js";
 import { scoreComponent } from "./score-utils.js";
-
-const INTRODUCTORY_GATEWAY_NUMBERS: Record<string, string[]> = {
-  CS: ["124", "101", "105", "128"],
-  ECE: ["110", "120"],
-  ECON: ["102", "103"],
-  MATH: ["220", "221", "234"],
-  PSYC: ["100"],
-  SPAN: ["101", "102", "122"],
-  STAT: ["100", "107", "200"],
-};
 
 export function introductoryGatewayComponents(
   result: SearchResult,
@@ -24,24 +15,25 @@ export function introductoryGatewayComponents(
 
   const components: RankingScoreComponent[] = [];
   const level = catalogLevel(result.course.number);
+  const levelPolicy = RANKING_POLICY.components.introductoryGateway.level;
   if (level === 100) {
     components.push(scoreComponent(
       "level_accessibility",
-      1,
+      levelPolicy.level100,
       "100-level course fits introductory gateway intent.",
       ["100 level"],
     ));
   } else if (level === 200) {
     components.push(scoreComponent(
       "level_accessibility",
-      0.15,
+      levelPolicy.level200,
       "200-level course partially fits introductory gateway intent.",
       ["200 level"],
     ));
   } else if (level !== null && level >= 300) {
     components.push(scoreComponent(
       "level_accessibility",
-      -0.25,
+      levelPolicy.level300Plus,
       `${level} level is less likely to be an introductory gateway course.`,
       [`${level} level`],
     ));
@@ -82,32 +74,29 @@ function introductoryGatewayTitleAdjustment(
 ): number {
   const titleText = normalizedTitle(title);
   if (!titleText) return 0;
+  const policy = RANKING_POLICY.components.introductoryGateway.titleLanguage;
 
-  if (
-    titleText.startsWith("introduction to ")
-    || titleText.startsWith("intro to ")
-    || titleText.startsWith("introductory ")
-    || titleText.includes(" introduction to ")
-    || titleText.includes(" fundamentals of ")
-  ) {
-    return 0.75;
+  if (policy.introductory.phrases.some(phrase => titleText.includes(phrase))) {
+    return policy.introductory.value;
   }
 
-  if (
-    titleText.includes("undergraduate open seminar")
-    || titleText.includes("special topics")
-    || titleText.includes("independent study")
-  ) {
-    return -0.75;
+  if (policy.disqualifying.phrases.some(phrase => titleText.includes(phrase))) {
+    return policy.disqualifying.value;
   }
 
   return 0;
 }
 
 function canonicalGatewayNumberAdjustment(course: Course): number {
-  const numbers = INTRODUCTORY_GATEWAY_NUMBERS[course.subject.toUpperCase()];
+  const numbers = gatewayNumbersForSubject(course.subject);
   if (!numbers) return 0;
 
   const index = numbers.indexOf(course.number);
-  return index === -1 ? 0 : 2.0 - (index * 0.1);
+  const score = RANKING_POLICY.components.introductoryGateway.canonicalNumberScore;
+  return index === -1 ? 0 : score.base - (index * score.rankStep);
+}
+
+function gatewayNumbersForSubject(subject: string): readonly string[] | undefined {
+  const numbers = RANKING_POLICY.components.introductoryGateway.canonicalNumbers;
+  return numbers[subject.toUpperCase() as keyof typeof numbers];
 }

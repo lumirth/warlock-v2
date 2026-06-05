@@ -6,7 +6,6 @@ import type {
 } from '@uiuc-course-search/query-types'
 import type {
   SearchControllerAction,
-  SearchControllerState,
 } from './search-controller-state'
 import {
   planAmbiguityAction,
@@ -14,29 +13,15 @@ import {
   planRecoveryAction,
   type SearchRefinementPlan,
 } from './search-refinement-actions'
-import type { SearchViewModel } from './search-view-model'
 import type { ExecuteSearch } from './useSearchExecution'
 
 export function useSearchRefinements({
-  state,
-  derived,
   dispatch,
   executeSearch,
 }: {
-  state: SearchControllerState
-  derived: SearchViewModel
   dispatch: Dispatch<SearchControllerAction>
   executeSearch: ExecuteSearch
 }) {
-  const context = {
-    activeRequestQuery: derived.activeRequestQuery,
-    typedQuery: state.draft.query,
-    metaRawQuery: state.session.meta?.query.raw,
-    residualQuery: state.session.meta?.query.residual,
-    activeFilters: derived.activeAdvancedFilters,
-    sort: state.session.sort,
-  }
-
   const runRefinementPlan = (plan: SearchRefinementPlan) => {
     if (plan.kind === 'noop') return
     if (plan.draft) {
@@ -48,19 +33,18 @@ export function useSearchRefinements({
     }
 
     executeSearch({
-      type: 'refine',
-      query: plan.request.query,
-      filters: plan.request.filters,
-      sort: plan.request.sort,
+      type: 'request',
+      mode: 'refine',
+      request: plan.request,
     })
   }
 
   return {
     removeChip: (chip: SearchChipDto) =>
-      runRefinementPlan(planChipRemoval(chip, context)),
+      runRefinementPlan(planChipRemoval(chip)),
     applyAmbiguityAction: (action: SearchAmbiguityActionDto) =>
-      runRefinementPlan(planAmbiguityAction(action, context)),
+      runRefinementPlan(planAmbiguityAction(action)),
     applyRecoveryGroup: (group: SearchRecoveryGroup) =>
-      runRefinementPlan(planRecoveryAction(group, context)),
+      runRefinementPlan(planRecoveryAction(group)),
   }
 }

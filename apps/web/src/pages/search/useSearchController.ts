@@ -35,20 +35,16 @@ export function useSearchController() {
     executeSearch,
   })
   const refinementActions = useSearchRefinements({
-    state,
-    derived,
     dispatch,
     executeSearch,
   })
   const sortingActions = useSearchSorting({
     state,
-    derived,
     dispatch,
     executeSearch,
   })
   const paginationActions = useSearchPagination({
     state,
-    derived,
     executeSearch,
   })
 

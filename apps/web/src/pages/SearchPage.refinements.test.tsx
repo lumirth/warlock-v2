@@ -185,7 +185,9 @@ describe('SearchPage refinements and ambiguity actions', () => {
       expectLastSearchCalledWithRequest({
         query: 'class about movies',
         pagination: { limit: 20, offset: 0 },
-        filters: undefined,
+        filters: {},
+        scope: 'active',
+        sort: { field: 'relevance', direction: 'desc' },
       })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
@@ -202,7 +204,8 @@ describe('SearchPage refinements and ambiguity actions', () => {
       expectLastSearchCalledWithRequest({
         query: 'class about movies',
         pagination: { limit: 20, offset: 0 },
-        filters: undefined,
+        filters: {},
+        scope: 'active',
         sort: { field: 'gpa', direction: 'desc' },
       })
     })
@@ -273,6 +276,8 @@ describe('SearchPage refinements and ambiguity actions', () => {
       query: '',
       pagination: { limit: 20, offset: 0 },
       filters: { requirement: 'CS' },
+      scope: 'active',
+      sort: { field: 'relevance', direction: 'desc' },
     })
 
     await act(async () => {
@@ -326,6 +331,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
       query: '',
       pagination: { limit: 20, offset: 0 },
       filters: { requirement: 'CS' },
+      scope: 'active',
       sort: { field: 'gpa', direction: 'desc' },
     })
     expect(screen.queryByLabelText('Searching courses')).not.toBeInTheDocument()
@@ -477,7 +483,9 @@ describe('SearchPage refinements and ambiguity actions', () => {
       expectLastSearchCalledWithRequest({
         query: 'CS',
         pagination: { limit: 20, offset: 0 },
-        filters: undefined,
+        filters: {},
+        scope: 'active',
+        sort: { field: 'relevance', direction: 'desc' },
       })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue('CS')
@@ -527,6 +535,8 @@ describe('SearchPage refinements and ambiguity actions', () => {
         query: '',
         pagination: { limit: 20, offset: 0 },
         filters: { subject: 'CS', workload: 'easy' },
+        scope: 'active',
+        sort: { field: 'relevance', direction: 'desc' },
       })
     })
   })

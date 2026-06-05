@@ -1,10 +1,15 @@
 import {
+  normalizeSearchRequestDto,
   splitAdvancedSearchState,
   type AdvancedSearchStateDto,
   type SearchRequestDto,
   type SearchSort,
 } from '@uiuc-course-search/query-types'
-import { cleanAdvancedFilters, hasAdvancedFilterValue } from './search-filter-model'
+import {
+  advancedStateFromRequest,
+  cleanAdvancedFilters,
+  hasAdvancedFilterValue,
+} from './search-filter-model'
 import { SEARCH_PAGE_SIZE } from './search-options'
 import { normalizeSearchSort } from './search-sort-model'
 import type { SearchExecutionMode } from './search-controller-state'
@@ -20,6 +25,13 @@ export type SearchCommand =
   | ({ type: 'refine' } & BaseSearchCommand)
   | ({ type: 'refresh' } & BaseSearchCommand)
   | ({ type: 'append'; offset: number } & BaseSearchCommand)
+  | {
+      type: 'request'
+      mode: SearchExecutionMode
+      request: SearchRequestDto
+      sort?: SearchSort
+      offset?: number
+    }
 
 export type ResolvedSearchCommand = {
   mode: SearchExecutionMode
@@ -33,6 +45,10 @@ export function resolveSearchCommand(
   command: SearchCommand,
   currentSort: SearchSort,
 ): ResolvedSearchCommand | null {
+  if (command.type === 'request') {
+    return resolveRequestCommand(command, currentSort)
+  }
+
   const normalizedQuery = command.query.trim()
   const requestState = cleanAdvancedFilters(command.filters || {})
   const { filters: requestFilters, scope } =
@@ -63,6 +79,37 @@ export function resolveSearchCommand(
   }
 }
 
+function resolveRequestCommand(
+  command: Extract<SearchCommand, { type: 'request' }>,
+  currentSort: SearchSort
+): ResolvedSearchCommand | null {
+  const normalizedRequest = normalizeSearchRequestDto(command.request)
+  const sort = normalizeSearchSort(command.sort ?? normalizedRequest.sort ?? currentSort)
+  const offset =
+    command.mode === 'append'
+      ? command.offset ?? command.request.pagination?.offset ?? 0
+      : 0
+  const request: SearchRequestDto = {
+    ...normalizedRequest,
+    sort,
+    pagination: {
+      limit: command.request.pagination?.limit ?? SEARCH_PAGE_SIZE,
+      offset,
+    },
+  }
+  const filters = advancedStateFromRequest(request)
+  const hasRequestFilters = hasAdvancedFilterValue(filters)
+  if (!request.query.trim() && !hasRequestFilters) return null
+
+  return {
+    mode: command.mode,
+    query: request.query,
+    filters,
+    sort,
+    request,
+  }
+}
+
 function executionModeForCommand(command: SearchCommand): SearchExecutionMode {
   switch (command.type) {
     case 'append':
@@ -73,5 +120,7 @@ function executionModeForCommand(command: SearchCommand): SearchExecutionMode {
       return 'refine'
     case 'submit':
       return 'replace'
+    case 'request':
+      return command.mode
   }
 }
