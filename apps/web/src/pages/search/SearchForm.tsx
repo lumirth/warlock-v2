@@ -36,7 +36,7 @@ export function SearchForm({
             <InputGroupInput
               id="course-search-query"
               autoComplete="off"
-              placeholder="Search by course, topic, professor, requirement, or time"
+              placeholder="Search by course, topic, professor, GenEd, or time"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
             />

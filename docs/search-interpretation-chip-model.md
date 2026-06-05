@@ -55,7 +55,7 @@ be shown as public chips when they are not directly removable user constraints.
 
 Examples:
 
-- `Requirement match matters`
+- `GenEd match matters`
 - `Schedule or delivery fit matters`
 - `Online preferred` when `Online` is already a chip
 - `Low workload preferred` when `Easy workload` is already a chip

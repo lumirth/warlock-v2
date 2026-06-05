@@ -93,11 +93,11 @@ function applyDecisionSearchRescue(
 
   if (hasRequirementIntent(plan, rawQuery)) {
     queryTypes.add('requirement');
-    assumptions.set('requirement_match', assumption('requirement_match', 'Requirement match matters', 0.78));
+    assumptions.set('requirement_match', assumption('requirement_match', 'GenEd match matters', 0.78));
     if (/\bcounts?\s+for\s+something\b/i.test(rawQuery)) {
       assumptions.set(
         'requirement_ambiguous',
-        assumption('requirement_ambiguous', 'Could mean Requirement, elective, major requirement, or advanced hours', 0.68)
+        assumption('requirement_ambiguous', 'Could mean GenEd, elective, major requirement, or advanced hours', 0.68)
       );
     }
   }
@@ -306,7 +306,7 @@ function buildRelaxations(
   if (context.hasOnline) {
     relaxations.set('any-delivery', {
       id: 'any-delivery',
-      label: 'Keep the requirement or topic but allow any delivery mode',
+      label: 'Keep the GenEd or topic but allow any delivery mode',
       relaxes: ['online'],
       keeps: ['requirements', 'topic', 'workload'],
     });
@@ -315,7 +315,7 @@ function buildRelaxations(
   if (context.hasRequirement) {
     relaxations.set('adjacent-requirements', {
       id: 'adjacent-requirements',
-      label: 'Show adjacent requirement buckets if exact requirement matches are sparse',
+      label: 'Show adjacent GenEd buckets if exact GenEd matches are sparse',
       relaxes: ['specificRequirement'],
       keeps: ['topic', 'availability'],
     });

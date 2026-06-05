@@ -1,4 +1,5 @@
 import {
+  ANY_GENED_DISPLAY_LABEL,
   effectiveRequirementFilter,
   type NormalizedSearchRequestDto,
   type SearchChipDto,
@@ -44,7 +45,7 @@ export function buildSearchChips(
     chips.push({
       id: "requirement-any",
       type: "requirement",
-      label: "Any Requirement",
+      label: ANY_GENED_DISPLAY_LABEL,
       value: "any",
       source: "natural_language",
       removable: true,

@@ -178,7 +178,7 @@ describe('search result DTO evidence', () => {
 
     expect(dto.explanation?.matchedChips).toEqual(['Online preferred', 'Low writing preferred']);
     expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining([
-      expect.stringContaining('Requirement'),
+      expect.stringContaining('GenEd'),
       'Student-language alias match',
     ]));
     expect(dto.explanation?.watchOut).toEqual(expect.arrayContaining([
@@ -188,7 +188,7 @@ describe('search result DTO evidence', () => {
     expect(dto.explanation?.confidence.label).toBe('medium');
   });
 
-  it('labels generic requirement filters as Any Requirement in result evidence', () => {
+  it('labels generic requirement filters as Any GenEd in result evidence', () => {
     const dto = searchResultToCourseDto(searchResult({
       course: { ...course },
       laneMatches: ['requirement'],
@@ -224,13 +224,13 @@ describe('search result DTO evidence', () => {
       },
     });
 
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any Requirement: QR, QR2']));
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any GenEd: QR, QR2']));
     expect(dto.matchEvidence?.find(item => item.kind === 'requirement')).toMatchObject({
-      label: 'Any Requirement',
+      label: 'Any GenEd',
       value: 'QR, QR2',
       weight: 'hard',
     });
-    expect(dto.explanation?.confidence.reasons).toContain('Requirement evidence came from structured mappings.');
+    expect(dto.explanation?.confidence.reasons).toContain('GenEd evidence came from structured mappings.');
   });
 
   it('explains Cultural Studies sub-attributes from full requirement DTOs', () => {
@@ -254,11 +254,11 @@ describe('search result DTO evidence', () => {
     });
 
     expect(dto.matchEvidence?.find(item => item.kind === 'requirement')).toMatchObject({
-      label: 'Requirement US',
+      label: 'GenEd US',
       value: 'US',
       weight: 'hard',
     });
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Requirement US: US']));
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['GenEd US: US']));
   });
 
   it('includes explicit sort controls as ordering explanation without changing score evidence', () => {
@@ -313,7 +313,7 @@ describe('search result DTO evidence', () => {
 
     expect(dto.matchEvidence?.map(item => item.label)).not.toContain('Requirement lane match');
     expect(dto.matchEvidence?.some(item => item.kind === 'requirement')).toBe(false);
-    expect(dto.explanation?.confidence.reasons).not.toContain('Requirement evidence came from structured mappings.');
+    expect(dto.explanation?.confidence.reasons).not.toContain('GenEd evidence came from structured mappings.');
     expect(dto.explanation?.confidence.score).toBe(0.74);
     expect(dto.explanation?.confidence.label).toBe('medium');
   });

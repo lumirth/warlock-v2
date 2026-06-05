@@ -1,5 +1,7 @@
 import type { InputHTMLAttributes } from 'react'
 import {
+  ANY_GENED_DISPLAY_LABEL,
+  GENED_DISPLAY_NAME,
   isSearchLevelFilter,
   isSearchStatusFilter,
   isSearchTermFilter,
@@ -94,7 +96,7 @@ export function AdvancedSearchFields({
           />
           <AdvancedTextField
             id="advanced-requirement"
-            label="Requirement codes"
+            label={`${GENED_DISPLAY_NAME} codes`}
             maxLength={48}
             placeholder="HUM, US"
             value={requirementCodesText(filters.requirement)}
@@ -110,8 +112,8 @@ export function AdvancedSearchFields({
           />
           <AdvancedSelectField
             id="advanced-requirement-mode"
-            label="Requirement match"
-            placeholder="Any listed"
+            label={`${GENED_DISPLAY_NAME} match`}
+            placeholder={ANY_GENED_DISPLAY_LABEL}
             value={requirementMatchMode(filters.requirement)}
             options={REQUIREMENT_MATCH_OPTIONS}
             onChange={(value) =>

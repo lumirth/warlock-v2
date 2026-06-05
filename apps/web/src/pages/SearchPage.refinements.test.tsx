@@ -317,7 +317,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
               {
                 id: 'requirement-0',
                 type: 'requirement',
-                label: 'Requirement CS',
+                label: 'GenEd CS',
                 value: 'CS',
                 source: 'natural_language',
                 removable: true,
@@ -382,7 +382,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
               {
                 id: 'requirement-0',
                 type: 'requirement',
-                label: 'Requirement CS',
+                label: 'GenEd CS',
                 value: 'CS',
                 source: 'natural_language',
                 removable: true,
@@ -466,7 +466,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
               {
                 id: 'requirement-0',
                 type: 'requirement',
-                label: 'Requirement CS',
+                label: 'GenEd CS',
                 value: 'CS',
                 source: 'natural_language',
                 removable: true,
@@ -499,7 +499,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
     )
     await screen.findByText(/ANTH 103: Anthropology in a Changing World/i)
 
-    fireEvent.click(screen.getByRole('button', { name: /remove requirement cs/i }))
+    fireEvent.click(screen.getByRole('button', { name: /remove gened cs/i }))
 
     await waitFor(() => {
       expectLastSearchCalledWithRequest({

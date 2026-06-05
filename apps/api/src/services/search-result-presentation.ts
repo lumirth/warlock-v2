@@ -1,5 +1,7 @@
 import {
+  ANY_GENED_DISPLAY_LABEL,
   effectiveRequirementFilter,
+  formatGenEdDisplayLabel,
   getQualityTierLabel,
   type CourseRequirementDto,
   type MatchEvidence,
@@ -147,7 +149,7 @@ export function buildMatchEvidence(
         evidence,
         seen,
         'requirement',
-        isGenericRequirement ? 'Any Requirement' : `Requirement ${requirementFilters.join(', ')}`,
+        isGenericRequirement ? ANY_GENED_DISPLAY_LABEL : formatGenEdDisplayLabel(requirementFilters),
         'filter',
         'hard',
         matchedCodes.join(', '),
@@ -155,7 +157,7 @@ export function buildMatchEvidence(
     }
   } else if (hasHint(context.hints, 'requirement') && courseRequirementCodes.length > 0) {
     const value = courseRequirementCodes.join(', ');
-    addEvidence(evidence, seen, 'requirement', `Requirement ${value}`, 'query', 'soft', value);
+    addEvidence(evidence, seen, 'requirement', formatGenEdDisplayLabel(courseRequirementCodes), 'query', 'soft', value);
   }
 
   if (filters.days) {
@@ -207,7 +209,7 @@ export function buildMatchEvidence(
 
   if (result.laneMatches?.includes('requirement') && courseRequirementCodes.length > 0) {
     const value = courseRequirementCodes.join(', ');
-    addEvidence(evidence, seen, 'requirement', `Requirement ${value}`, 'filter', 'soft', value);
+    addEvidence(evidence, seen, 'requirement', formatGenEdDisplayLabel(courseRequirementCodes), 'filter', 'soft', value);
   }
 
   if (result.laneMatches?.includes('structured_section')) {
@@ -339,7 +341,7 @@ function explanationConfidenceReasons(result: SearchResult, context: SearchResul
   const { plan } = context;
   const reasons: string[] = [];
   if (result.laneMatches?.includes('exact')) reasons.push('Exact course lookup is structured.');
-  if (hasStructuredRequirementEvidence(result, context)) reasons.push('Requirement evidence came from structured mappings.');
+  if (hasStructuredRequirementEvidence(result, context)) reasons.push('GenEd evidence came from structured mappings.');
   if (result.laneMatches?.includes('structured_section')) reasons.push('Schedule or availability evidence came from section data.');
   if (result.laneMatches?.includes('workload_evidence')) reasons.push('Subjective workload preference has an evidence signal.');
   if (

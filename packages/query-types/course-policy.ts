@@ -80,6 +80,18 @@ export function getWorkloadTierRank(
   return null;
 }
 
+export const GENED_DISPLAY_NAME = "GenEd";
+export const ANY_GENED_DISPLAY_LABEL = "Any GenEd";
+
+export function formatGenEdDisplayLabel(codes: readonly string[] | string): string {
+  const normalizedCodes = Array.isArray(codes)
+    ? codes.filter(Boolean)
+    : [codes].filter(Boolean);
+  return normalizedCodes.length > 0
+    ? `${GENED_DISPLAY_NAME} ${normalizedCodes.join(", ")}`
+    : GENED_DISPLAY_NAME;
+}
+
 export const REQUIREMENT_FILTER_MODES = ["single", "any", "all"] as const;
 
 export type RequirementFilterMode = (typeof REQUIREMENT_FILTER_MODES)[number];

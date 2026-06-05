@@ -91,13 +91,19 @@ reinterpret another layer's concept, it creates drift.
 - Course-data vocabulary lives in
   `docs/architecture/course-data-vocabulary.md`. Source, storage, product,
   transport, and display names are allowed to differ only at named boundaries.
-  Public DTO and web code use product vocabulary such as `requirement`,
+  Public DTO and internal web state use product vocabulary such as `requirement`,
   `workload`, `catalog`, `scheduleNotes`, `availability`, and `sourceFacts`.
+  Student-facing copy for UIUC GenEd requirements says `GenEd`, not the vague
+  bare word `Requirement`.
 
 ## Naming Rules
 
-- The public search concept is `requirement`, not `gened`. Legacy `gened` can be
-  accepted as forgiving query syntax only at parser edges.
+- The public search contract concept is `requirement`, not `gened`. Legacy
+  `gened` can be accepted as forgiving query syntax only at parser edges.
+- The student-facing label for UIUC General Education requirements is `GenEd`.
+  Chips, advanced labels, examples, and result evidence should say `GenEd`,
+  `GenEd codes`, or `Any GenEd`, while the request/DTO field remains
+  `requirement`.
 - Public requirement filters are mode-aware objects: `{ mode: "single" | "any" |
   "all", codes: string[] }`. Courses can satisfy multiple requirements, so
   transport, actions, chips, and pagination must preserve both the mode and the
@@ -151,8 +157,9 @@ These are the checks future changes should preserve or add as automated tests:
   `SearchRequestDto` objects, not `{ query, filters }` patches reconstructed from
   derived UI state.
 - Advanced search state stores `{ filters, scope }`; `scope` is not a fake filter.
-- Public course DTOs and web presentation use requirement vocabulary. `gened`
-  names are limited to storage/source compatibility and accepted query aliases.
+- Public course DTOs and internal web state use requirement vocabulary. Visible
+  student-facing GenEd copy uses `GenEd`. Lowercase `gened` names are limited to
+  storage/source compatibility and accepted query aliases.
 - Public course sections use nested DTO groups and canonical
   `open | restricted | waitlisted | closed | cancelled | unknown` availability.
   UI components do not interpret raw section status strings directly.

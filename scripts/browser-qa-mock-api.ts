@@ -90,7 +90,7 @@ const course: SearchCourseResultDto = {
   },
   matchEvidence: [
     { kind: 'course_code', label: 'Course CS 225', source: 'filter', weight: 'hard', value: 'CS 225' },
-    { kind: 'requirement', label: 'Requirement QR', source: 'filter', weight: 'hard', value: 'QR' },
+    { kind: 'requirement', label: 'GenEd QR', source: 'filter', weight: 'hard', value: 'QR' },
     { kind: 'keyword', label: 'Strong keyword match', source: 'keyword', weight: 'rank', value: '1' },
   ],
   warnings: [],

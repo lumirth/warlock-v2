@@ -130,7 +130,7 @@ describe('buildSearchUiPlan', () => {
 
     const ui = buildSearchUiPlan(hints, plan, '', request('easy cs'));
 
-    expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'Requirement CS']);
+    expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'GenEd CS']);
     expect(ui.chips[1].action?.nextRequest.query).toBe('easy');
     expect(buildInterpretedSearchRequest(hints, plan, '', request('easy cs')).filters).toMatchObject({
       requirement: singleRequirementFilter('CS'),
@@ -252,7 +252,7 @@ describe('buildSearchUiPlan', () => {
     ]);
   });
 
-  it('shows a concrete Any Requirement chip and preserves the canonical requirement filter', () => {
+  it('shows a concrete Any GenEd chip and preserves the canonical requirement filter', () => {
     const requirement = requirementFilter('any', [
       'HUM',
       'NAT',
@@ -278,7 +278,7 @@ describe('buildSearchUiPlan', () => {
         topicTerms: [],
         expandedTerms: [],
         assumptions: [
-          { kind: 'requirement_match', label: 'Requirement match matters', confidence: 0.78, source: 'rule' },
+          { kind: 'requirement_match', label: 'GenEd match matters', confidence: 0.78, source: 'rule' },
         ],
         warnings: [],
         interpretedLanes: ['official_text', 'requirement'],
@@ -292,7 +292,7 @@ describe('buildSearchUiPlan', () => {
       expect.objectContaining({
         id: 'requirement-any',
         type: 'requirement',
-        label: 'Any Requirement',
+        label: 'Any GenEd',
         action: expect.objectContaining({
           nextRequest: expect.objectContaining({
             filters: undefined,

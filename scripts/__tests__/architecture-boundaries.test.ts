@@ -288,10 +288,17 @@ describe('architecture boundaries', () => {
     expect(advancedFields).not.toContain("onAdvancedDraftChange('scope'");
   });
 
-  it('keeps public course DTO and web vocabulary on requirements, not geneds', () => {
+  it('keeps requirement as the contract vocabulary while student-facing copy says GenEd', () => {
     const dto = readFileSync('packages/query-types/course-dto.ts', 'utf8');
+    const policy = readFileSync('packages/query-types/course-policy.ts', 'utf8');
     const apiCourseDto = readFileSync('apps/api/src/dto/course.ts', 'utf8');
     const apiPresenter = readFileSync('apps/api/src/services/search-response-presenter.ts', 'utf8');
+    const hintLabels = readFileSync('apps/api/src/services/search-hint-labels.ts', 'utf8');
+    const chipPresenter = readFileSync('apps/api/src/services/search-chip-presenter.ts', 'utf8');
+    const resultPresentation = readFileSync('apps/api/src/services/search-result-presentation.ts', 'utf8');
+    const advancedFields = readFileSync('apps/web/src/pages/search/AdvancedSearchFields.tsx', 'utf8');
+    const searchForm = readFileSync('apps/web/src/pages/search/SearchForm.tsx', 'utf8');
+    const searchOptions = readFileSync('apps/web/src/pages/search/search-options.ts', 'utf8');
     const resultModel = readFileSync('apps/web/src/pages/search/search-result-model.ts', 'utf8');
     const coursePage = readFileSync('apps/web/src/pages/CoursePage.tsx', 'utf8');
 
@@ -304,6 +311,17 @@ describe('architecture boundaries', () => {
     expect(apiPresenter).not.toContain('search-geneds');
     expect(`${resultModel}\n${coursePage}`).toMatch(/requirementLabel|courseRequirementLabels/);
     expect(`${resultModel}\n${coursePage}`).not.toMatch(/genedLabel|courseGenedLabels|CourseGenedDto/);
+
+    expect(policy).toContain('GENED_DISPLAY_NAME = "GenEd"');
+    expect(policy).toContain('ANY_GENED_DISPLAY_LABEL = "Any GenEd"');
+    expect(hintLabels).toContain('formatGenEdDisplayLabel');
+    expect(chipPresenter).toContain('ANY_GENED_DISPLAY_LABEL');
+    expect(resultPresentation).toContain('GenEd evidence came from structured mappings.');
+    expect(advancedFields).toContain('GENED_DISPLAY_NAME');
+    expect(advancedFields).toContain('ANY_GENED_DISPLAY_LABEL');
+    expect(searchForm).toContain('professor, GenEd, or time');
+    expect(searchOptions).toContain('cultural studies gen ed');
+    expect(`${advancedFields}\n${searchForm}\n${searchOptions}`).not.toMatch(/Requirement codes|Requirement match|professor, requirement|cultural studies requirement|humanities requirement/);
   });
 
   it('keeps course fact groups honest instead of hiding them under registration', () => {

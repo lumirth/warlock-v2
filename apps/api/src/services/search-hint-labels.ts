@@ -1,5 +1,6 @@
 import {
   effectiveRequirementFilter,
+  formatGenEdDisplayLabel,
   isSearchLevelFilter,
   isSearchStatusFilter,
   isSearchTermFilter,
@@ -22,7 +23,7 @@ export function formatResolvedHintLabel(
   residual = "",
 ): string {
   if (isSubjectHintResolvedAsRequirement(hint, plan)) {
-    return `Requirement ${formatHintValue(hint.value)}`;
+    return formatGenEdDisplayLabel(formatHintValue(hint.value));
   }
 
   return formatHintLabel(hint, residual);
@@ -104,7 +105,7 @@ function formatHintLabel(hint: Hint, residual = ""): string {
     case "workload":
       return `${capitalize(formatHintValue(hint.value))} workload`;
     case "requirement":
-      return `Requirement ${formatHintValue(hint.value)}`;
+      return formatGenEdDisplayLabel(formatHintValue(hint.value));
     case "term": {
       const term = hint.value as TermValue;
       return `${capitalize(term.term)} ${term.year}`;
