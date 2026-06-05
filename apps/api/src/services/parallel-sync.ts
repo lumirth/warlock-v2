@@ -1,5 +1,5 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import { parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
+import { parseSubjectsXml, parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
 import { writeSubjectSnapshotToD1 } from './course-snapshot-writer.js';
 import { courseSnapshotToEmbeddingData, upsertCourseEmbedding } from './embeddings.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
@@ -155,15 +155,7 @@ export async function getSubjectsForTerm(
   upstreamBackoff.recordSuccess();
 
   const xml = await response.text();
-  const subjectRegex = /<subject id="([^"]+)"/g;
-  const subjects: string[] = [];
-  let match;
-
-  while ((match = subjectRegex.exec(xml)) !== null) {
-    subjects.push(match[1]);
-  }
-
-  return subjects;
+  return parseSubjectsXml(xml).map(subject => subject.id);
 }
 
 export async function syncSubjects(

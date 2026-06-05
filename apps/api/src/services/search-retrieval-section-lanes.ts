@@ -1,5 +1,5 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { SearchFilters, SearchPlan } from "./search-planner-types.js";
+import type { SearchFilters } from "./search-planner-types.js";
 import {
   buildFilteredCourseQuery,
   hasFilteredCourseConstraints,
@@ -54,28 +54,10 @@ export async function sectionKeywordSearch(
 
 export async function structuredSectionLaneSearch(
   db: D1Database,
-  plan: SearchPlan,
+  filters: SearchFilters,
   limit: number = 50,
 ): Promise<RankedLaneRow[]> {
-  const hasSectionFilter = Boolean(
-    plan.filters.online !== undefined
-    || plan.filters.days
-    || plan.filters.time
-    || plan.filters.status
-    || plan.filters.partOfTerm,
-  );
-  const hasSectionPreference = Boolean(
-    plan.softPreferences?.startAfterMinutes
-    || plan.softPreferences?.startBeforeMinutes
-    || plan.softPreferences?.compressedTerm
-    || plan.softPreferences?.asyncFriendly,
-  );
-
-  if (!hasSectionFilter && !hasSectionPreference) {
-    return [];
-  }
-
-  const filtered = buildFilteredCourseQuery(plan.filters);
+  const filtered = buildFilteredCourseQuery(filters);
   if (!hasFilteredCourseConstraints(filtered)) {
     return [];
   }

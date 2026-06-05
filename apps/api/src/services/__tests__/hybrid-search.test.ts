@@ -65,6 +65,7 @@ describe('hybridSearch', () => {
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
       await retrievalPlan(plan),
+      plan,
     );
 
     // Expect semanticSearch to NOT be called
@@ -91,6 +92,7 @@ describe('hybridSearch', () => {
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
       await retrievalPlan(plan),
+      plan,
     );
 
     // Expect semanticSearch to BE called WITH filters
@@ -121,6 +123,7 @@ describe('hybridSearch', () => {
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
       await retrievalPlan(plan),
+      plan,
     );
 
     expect(embeddings.searchCourses).toHaveBeenCalledWith(
@@ -207,6 +210,7 @@ describe('hybridSearch', () => {
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
       await retrievalPlan(plan),
+      plan,
     );
 
     expect(results).toHaveLength(80);
@@ -298,6 +302,7 @@ describe('hybridSearch', () => {
         executionResultLimit: 1,
         termCandidateLimit: 1,
       }),
+      plan,
     );
 
     expect(results).toHaveLength(1);
@@ -344,9 +349,9 @@ describe('keywordSearch', () => {
 
     const results = await keywordSearch(db as unknown as D1Database, {
       filters: {},
-      rawQuery: 'data structures',
       keywordQuery: 'data structures',
-      semanticQuery: 'data structures',
+      cleanKeywordQuery: 'data structures',
+      titleQuery: 'data structures',
     }, 20);
 
     expect(seenSql.some(sql => sql.includes('LOWER(c.title) LIKE'))).toBe(true);
@@ -381,9 +386,9 @@ describe('keywordSearch', () => {
 
     await keywordSearch(db as unknown as D1Database, {
       filters: {},
-      rawQuery: 'class about movies no essays',
       keywordQuery: 'class about movies no essays film cinema media documentary television pop culture visual culture papers essays',
-      semanticQuery: 'class about movies no essays',
+      cleanKeywordQuery: 'class about movies no essays film cinema media documentary television pop culture visual culture papers essays',
+      titleQuery: '',
     }, 20);
   });
 });

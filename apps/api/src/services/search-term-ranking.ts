@@ -6,6 +6,7 @@ import {
   type RankingTermInfo,
 } from "./ranking/index.js";
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
+import type { SearchPlan } from "./search-planner-types.js";
 import type { SearchResult } from "./search-types.js";
 
 export type TermInfo = RankingTermInfo;
@@ -16,13 +17,14 @@ export async function hybridSearchWithTermRanking(
   vectorize: VectorizeIndex,
   ai: Ai,
   retrievalPlan: RetrievalPlan,
+  rankingPlan: SearchPlan,
 ): Promise<SearchResult[]> {
   const termStates = await db.prepare(`
     SELECT term_id, year, term, status FROM term_state
     WHERE status IN ('active', 'registrable')
   `).all<TermInfo>();
 
-  const results = await hybridSearch(db, vectorize, ai, retrievalPlan);
+  const results = await hybridSearch(db, vectorize, ai, retrievalPlan, rankingPlan);
   return applyTermRankingPolicy(results, {
     termStates: termStates.results,
     limit: retrievalPlan.budget.executionResultLimit,

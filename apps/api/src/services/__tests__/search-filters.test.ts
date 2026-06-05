@@ -241,7 +241,7 @@ describe('requirementLaneSearch', () => {
       },
     };
 
-    const rows = await requirementLaneSearch(db, plan);
+    const rows = await requirementLaneSearch(db, plan.filters);
 
     expect(rows).toEqual([]);
     expect(capturedSql).toBe('');

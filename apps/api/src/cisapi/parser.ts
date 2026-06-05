@@ -1,5 +1,6 @@
 export { parseCoursesXml, parseSubjectsXml } from './course-list-parser.js';
 export { parseCourseDetailXml } from './course-detail-parser.js';
+export { parseEnrollmentStatusesXml } from './enrollment-status-parser.js';
 export { convertTo24Hour } from './xml-utils.js';
 export {
   parseSubjectCascadeXml,

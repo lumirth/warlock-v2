@@ -1,5 +1,5 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { SearchPlan } from "./search-planner-types.js";
+import type { SearchFilters } from "./search-planner-types.js";
 import {
   buildFilteredCourseQuery,
   RETRIEVAL_LANE_SPECS,
@@ -8,20 +8,18 @@ import {
   rankedLaneRow,
   type RankedLaneRow,
 } from "./search-retrieval-lane-result.js";
-import { buildAliasLaneQuery } from "./search-retrieval-plan-queries.js";
 
 export async function studentAliasLaneSearch(
   db: D1Database,
-  plan: SearchPlan,
+  filters: SearchFilters,
+  aliasQuery: string,
   limit: number = 50,
-  plannedAliasQuery?: string,
 ): Promise<RankedLaneRow[]> {
-  const aliasQuery = plannedAliasQuery ?? buildAliasLaneQuery(plan);
   if (!aliasQuery) {
     return [];
   }
 
-  const filtered = buildFilteredCourseQuery(plan.filters);
+  const filtered = buildFilteredCourseQuery(filters);
 
   const sql = `
     SELECT DISTINCT c.id, bm25(course_aliases_fts) as fts_score

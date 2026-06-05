@@ -1,11 +1,12 @@
 import { hasRequirementFilter } from "@uiuc-course-search/query-types";
-import type { RetrievalLane, SearchPlan } from "./search-planner-types.js";
+import type { RetrievalLane, SearchFilters, SearchPlan } from "./search-planner-types.js";
 import type { SearchCandidateBudget } from "./search-budget.js";
 import type { AppliedSearchControls } from "./search-controls.js";
 import {
   buildAliasLaneQuery,
   workloadSignalTypes,
 } from "./search-retrieval-plan-queries.js";
+import { sanitizeFtsQuery, titleLaneQuery } from "./search-text.js";
 
 export type RetrievalLaneExecution = {
   lane: RetrievalLane;
@@ -14,16 +15,24 @@ export type RetrievalLaneExecution = {
   reason: string;
 };
 
+export type RetrievalPlanInputs = {
+  filters: SearchFilters;
+  keywordQuery: string;
+  cleanKeywordQuery: string;
+  titleQuery: string;
+  semanticQuery: string;
+  aliasQuery: string;
+  workloadSignalTypes: string[];
+};
+
 export type RetrievalPlan = {
-  plan: SearchPlan;
   controls: AppliedSearchControls;
   budget: SearchCandidateBudget;
   isNavigational: boolean;
   hasKeywordQuery: boolean;
   hasSemanticQuery: boolean;
   lanes: RetrievalLaneExecution[];
-  aliasQuery: string;
-  workloadSignalTypes: string[];
+  inputs: RetrievalPlanInputs;
 };
 
 export function buildRetrievalPlan(
@@ -33,6 +42,7 @@ export function buildRetrievalPlan(
 ): RetrievalPlan {
   const hasKeywordQuery = plan.keywordQuery.trim().length > 0;
   const hasSemanticQuery = plan.semanticQuery.trim().length > 0;
+  const cleanKeywordQuery = hasKeywordQuery ? sanitizeFtsQuery(plan.keywordQuery) : "";
   const isNavigational = Boolean(
     (plan.filters.subject && plan.filters.number) ||
       plan.filters.crn,
@@ -41,7 +51,6 @@ export function buildRetrievalPlan(
   const signalTypes = workloadSignalTypes(plan);
 
   return {
-    plan,
     controls,
     budget,
     isNavigational,
@@ -99,8 +108,15 @@ export function buildRetrievalPlan(
         "planned FAQ/degree-audit sidecar; no executable help corpus configured",
       ),
     ],
-    aliasQuery,
-    workloadSignalTypes: signalTypes,
+    inputs: {
+      filters: plan.filters,
+      keywordQuery: plan.keywordQuery,
+      cleanKeywordQuery,
+      titleQuery: hasKeywordQuery ? titleLaneQuery(plan, cleanKeywordQuery) : "",
+      semanticQuery: plan.semanticQuery,
+      aliasQuery,
+      workloadSignalTypes: signalTypes,
+    },
   };
 }
 

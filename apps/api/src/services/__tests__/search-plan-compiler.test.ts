@@ -84,8 +84,9 @@ describe("createSearchPlan", () => {
     );
     const retrievalPlan = buildRetrievalPlan(planning.plan, controls, budget);
 
-    expect(retrievalPlan.plan).toBe(planning.plan);
-    expect(retrievalPlan.plan.filters).toEqual(planning.plan.filters);
+    expect(retrievalPlan.inputs.filters).toEqual(planning.plan.filters);
+    expect(retrievalPlan.inputs.keywordQuery).toBe(planning.plan.keywordQuery);
+    expect(retrievalPlan.inputs.semanticQuery).toBe(planning.plan.semanticQuery);
   });
 
   it("compiles negated subject language as avoidance plus requirement intent", async () => {

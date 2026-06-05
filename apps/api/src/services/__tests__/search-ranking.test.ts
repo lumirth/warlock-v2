@@ -657,6 +657,7 @@ describe('search SQL batching', () => {
       {} as VectorizeIndex,
       {} as Ai,
       await retrievalPlan(plan, 120),
+      plan,
     );
 
     expect(results).toHaveLength(120);

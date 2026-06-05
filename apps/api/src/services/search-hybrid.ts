@@ -7,6 +7,7 @@ import {
 import { applyRankingPolicy } from "./ranking/index.js";
 import { executeRetrievalLanes } from "./search-retrieval-lane-executors.js";
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
+import type { SearchPlan } from "./search-planner-types.js";
 import type { SearchResult } from "./search-types.js";
 
 export async function hybridSearch(
@@ -14,8 +15,9 @@ export async function hybridSearch(
   vectorize: VectorizeIndex,
   ai: Ai,
   retrievalPlan: RetrievalPlan,
+  rankingPlan: SearchPlan,
 ): Promise<SearchResult[]> {
-  const { plan, budget } = retrievalPlan;
+  const { budget } = retrievalPlan;
   const laneResults = await executeRetrievalLanes({
     db,
     vectorize,
@@ -53,7 +55,7 @@ export async function hybridSearch(
     });
   }
 
-  return applyRankingPolicy(rankedResults, plan, {
-    query: plan.keywordQuery || "",
+  return applyRankingPolicy(rankedResults, rankingPlan, {
+    query: rankingPlan.keywordQuery || "",
   }).slice(0, budget.termCandidateLimit);
 }

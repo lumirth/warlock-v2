@@ -42,7 +42,9 @@ reinterpret another layer's concept, it creates drift.
   only a facade; pass implementations stay in focused modules and share the
   span-masking helpers in `extraction/text.ts`.
 - `search-retrieval-plan*` owns executable lane selection, lane reasons, candidate
-  budgets, and planned lane inputs such as alias queries or workload signal types.
+  budgets, and planned lane inputs such as filters, sanitized keyword text, alias
+  queries, and workload signal types. It must not wrap the full `SearchPlan`.
+  Ranking receives internal intent explicitly as a separate `SearchPlan` argument.
 - `search-retrieval-lane-executors` owns the registry that turns enabled retrieval
   lanes into executable candidate-recall work.
 - `search-retrieval-lanes` is a compatibility barrel. Focused lane modules own
@@ -72,12 +74,18 @@ reinterpret another layer's concept, it creates drift.
   aggregate count reads, embedding flags, and route binding shapes.
 - `scripts/lib/*` owns repeated operational script primitives and script domain
   models. Top-level scripts are command adapters, not reusable domain subsystems.
+  Term maintenance scripts share Course Explorer term discovery and optional JSON
+  input loading through `scripts/lib/term-maintenance.ts`.
 - `scripts/workflows/*` owns script-only application workflows that compose CLI
   I/O, script primitives, and explicit API-side parser/transform/writer services.
   This is the named boundary for operational workflows that need app internals.
+  Runtime state such as writers, checkpoint stores, fetchers, and counters is
+  per invocation, not module-level state.
 - `apps/api/src/cisapi/parser.ts` is a compatibility facade. List, detail, XML
   utility, and cascade parsing live in focused parser modules so source-data
-  defects do not hide inside one mutable parser file.
+  defects do not hide inside one mutable parser file. XML parser call sites use
+  structured `htmlparser2` DOM helpers; subject-list parsing, course-list parsing,
+  and course-detail parsing should not hand-roll regexes.
 
 ## Naming Rules
 
@@ -104,8 +112,13 @@ These are the checks future changes should preserve or add as automated tests:
   `course-sync-application` or `enrichment-application`.
 - Retrieval execution flows through `executeRetrievalLanes`; `hybridSearch` does
   not hand-wire one `Promise.all` slot per lane.
+- Retrieval plans carry executable lane inputs, not `SearchPlan`. If retrieval
+  needs a value, it belongs in `RetrievalPlanInputs`; if ranking needs intent, pass
+  the planner artifact to ranking explicitly.
 - Retrieval lane implementations stay split by recall source. The
   `search-retrieval-lanes` barrel must not grow new SQL.
+- CISAPI list/detail parsers and subject-list consumers use the parser facade and
+  DOM helpers, not local XML regexes.
 - Fusion consumes a flat `laneResults` stream rather than one DTO property per
   retrieval lane.
 - Web search UI options derive values from `packages/query-types`; labels may be
@@ -130,6 +143,8 @@ These are the checks future changes should preserve or add as automated tests:
 - Top-level scripts remain CLI adapters. Large workflows live under
   `scripts/workflows/*`; reusable parsing/resume/report primitives stay under
   `scripts/lib/*`.
+- Historical sync workflow state is per run. Do not add module-level writer,
+  checkpoint, fetcher, or statistics objects to workflow modules.
 
 ## Policy Ownership
 

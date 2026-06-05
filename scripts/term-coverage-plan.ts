@@ -1,25 +1,26 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { asRecord, numericOrNull, positiveNumber, recordsFromArray, type JsonRecord } from './lib/json-shape.ts';
 import {
-  TERM_ORDER,
   compareTerms,
   currentTermFromStatus,
   inferCurrentTerm,
   normalizeTerm,
   parseTermStateId,
-  termId,
   type Term,
   type TermStatus,
 } from './lib/term-model.ts';
-import { endpoint, parseNonNegativeInt } from './lib/script-args.ts';
+import { parseNonNegativeInt } from './lib/script-args.ts';
+import {
+  discoverAvailableTerms,
+  loadOptionalJsonRecord,
+  type AvailableTerm,
+  type TermMaintenanceFetcher,
+} from './lib/term-maintenance.ts';
 
 const DEFAULT_FRONTEND_BASE = 'https://courses.illinois.edu';
 const DEFAULT_FROM_YEAR = 2004;
-
-type Fetcher = (request: Request) => Promise<Response>;
 
 export type TermCoverageArgs = {
   fromYear: number;
@@ -30,12 +31,6 @@ export type TermCoverageArgs = {
   output?: string;
   currentYear?: number;
   currentTerm?: Term;
-};
-
-export type AvailableTerm = {
-  year: number;
-  term: Term;
-  term_id: string;
 };
 
 export type TermCoverageRow = AvailableTerm & {
@@ -263,66 +258,28 @@ export function parseTermCoverageArgs(argv: string[]): TermCoverageArgs {
   return args;
 }
 
-export async function discoverAvailableTerms(
-  args: Pick<TermCoverageArgs, 'fromYear' | 'toYear' | 'frontendBase'>,
-  fetcher: Fetcher = request => fetch(request)
-): Promise<{ terms: AvailableTerm[]; warnings: string[] }> {
-  const terms: AvailableTerm[] = [];
-  const warnings: string[] = [];
-
-  for (let year = args.fromYear; year <= args.toYear; year += 1) {
-    const url = endpoint(args.frontendBase, `ajax/search/termlist/${year}`);
-    const response = await fetcher(new Request(url));
-    if (!response.ok) {
-      warnings.push(`term list ${year} failed with HTTP ${response.status}`);
-      continue;
-    }
-
-    const body = await response.json().catch(() => null) as unknown;
-    const record = asRecord(body);
-    if (!record) {
-      warnings.push(`term list ${year} returned a non-object response`);
-      continue;
-    }
-
-    for (const value of Object.values(record)) {
-      const term = normalizeTerm(value);
-      if (term) terms.push({ year, term, term_id: termId(year, term) });
-    }
-  }
-
-  terms.sort((left, right) => left.year - right.year || TERM_ORDER[left.term] - TERM_ORDER[right.term]);
-  return { terms, warnings };
-}
+export { discoverAvailableTerms };
 
 async function loadStatus(input?: string): Promise<{ source: string | null; status: JsonRecord | null }> {
-  if (!input) return { source: null, status: null };
-
-  const body = await readFile(input, 'utf8');
-  const parsed = JSON.parse(body) as unknown;
-  const record = asRecord(parsed);
-  if (!record) {
-    throw new Error('--status-input must contain a JSON object from /admin/sync/status');
-  }
-  return { source: input, status: record };
+  const result = await loadOptionalJsonRecord(
+    input,
+    '--status-input must contain a JSON object from /admin/sync/status',
+  );
+  return { source: result.source, status: result.value };
 }
 
 async function loadRetention(input?: string): Promise<{ source: string | null; scope: RetentionScope | null }> {
-  if (!input) return { source: null, scope: null };
-
-  const body = await readFile(input, 'utf8');
-  const parsed = JSON.parse(body) as unknown;
-  const record = asRecord(parsed);
-  if (!record) {
-    throw new Error('--retention-input must contain a JSON object from npm run data:term-retention');
-  }
-  return { source: input, scope: retainedTermScope(record) };
+  const result = await loadOptionalJsonRecord(
+    input,
+    '--retention-input must contain a JSON object from npm run data:term-retention',
+  );
+  return { source: result.source, scope: retainedTermScope(result.value) };
 }
 
 export async function buildTermCoverageReport(
   args: TermCoverageArgs,
   options: {
-    fetcher?: Fetcher;
+    fetcher?: TermMaintenanceFetcher;
     status?: JsonRecord | null;
     statusSource?: string | null;
     retention?: JsonRecord | null;

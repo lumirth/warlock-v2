@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { hasRequirementFilter } from "@uiuc-course-search/query-types";
-import type { SearchPlan } from "./search-planner-types.js";
+import type { SearchFilters } from "./search-planner-types.js";
 import {
   buildFilteredCourseQuery,
   hasFilteredCourseConstraints,
@@ -13,16 +13,16 @@ import {
 
 export async function requirementLaneSearch(
   db: D1Database,
-  plan: SearchPlan,
+  filters: SearchFilters,
   limit: number = 50,
 ): Promise<RankedLaneRow[]> {
-  const hasFilter = hasRequirementFilter(plan.filters);
+  const hasFilter = hasRequirementFilter(filters);
 
   if (!hasFilter) {
     return [];
   }
 
-  const filtered = buildFilteredCourseQuery(plan.filters);
+  const filtered = buildFilteredCourseQuery(filters);
 
   if (!hasFilteredCourseConstraints(filtered)) {
     return [];

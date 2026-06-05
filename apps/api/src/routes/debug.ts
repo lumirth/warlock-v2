@@ -5,6 +5,7 @@ import { parseSearchHttpRequest } from '../http/search-request.js';
 import { SearchPipeline } from '../services/search-pipeline.js';
 import { presentSearchDebugResponse } from '../services/search-debug-response-presenter.js';
 import { errorFields, logger } from '../observability/logger.js';
+import { parseSubjectsXml } from '../cisapi/parser.js';
 
 type Bindings = {
   DB: D1Database;
@@ -106,13 +107,7 @@ debugRoutes.get('/subjects/:year/:term', async (c) => {
     }
 
     const xml = await response.text();
-    const subjectRegex = /<subject id="([^"]+)"/g;
-    const subjects: string[] = [];
-    let match;
-
-    while ((match = subjectRegex.exec(xml)) !== null) {
-      subjects.push(match[1]);
-    }
+    const subjects = parseSubjectsXml(xml).map(subject => subject.id);
 
     return c.json({
       url,

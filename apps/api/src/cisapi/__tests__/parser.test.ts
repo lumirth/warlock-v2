@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { parseCourseDetailXml, parseSubjectCascadeXml } from '../parser.js';
+import {
+  parseCourseDetailXml,
+  parseEnrollmentStatusesXml,
+  parseSubjectCascadeXml,
+} from '../parser.js';
 
 // Helper to create a stream from a string for testing
 function createStream(str: string): ReadableStream<Uint8Array> {
@@ -76,6 +80,21 @@ const SAMPLE_CASCADE_XML = `<?xml version="1.0" encoding="UTF-8"?>
     </detailedSection>
   </cascadingCourse>
 </ns2:subject>`;
+
+describe('parseEnrollmentStatusesXml', () => {
+  it('extracts enrollment statuses from cascade XML with namespaces and entities', () => {
+    expect(parseEnrollmentStatusesXml(`
+      <ns2:subject xmlns:ns2="http://example.com">
+        <detailedSection id="11111">
+          <enrollmentStatus>Open</enrollmentStatus>
+        </detailedSection>
+        <detailedSection id="22222">
+          <enrollmentStatus>Wait &amp; List</enrollmentStatus>
+        </detailedSection>
+      </ns2:subject>
+    `)).toEqual(['Open', 'Wait & List']);
+  });
+});
 
 describe('parseSubjectCascadeXml', () => {
   it('parses subject id and label correctly', async () => {
@@ -279,6 +298,39 @@ describe('parseCourseDetailXml', () => {
     expect(result?.sections[0].meetings[0]).toMatchObject({
       type: 'Lecture',
       typeCode: '',
+    });
+  });
+
+  it('parses wrapped meeting and instructor collections in course detail XML', () => {
+    const result = parseCourseDetailXml(`
+      <course id="CLCV 100">
+        <subject id="CLCV">Classics</subject>
+        <label>Classical Mythology</label>
+        <detailedSection id="54321">
+          <sectionNumber>A</sectionNumber>
+          <meetings>
+            <meeting>
+              <type code="LCD">Lecture-Discussion</type>
+              <start>09:30 AM</start>
+              <end>10:45 AM</end>
+              <instructors>
+                <instructor>
+                  <firstName>Jane</firstName>
+                  <lastName>Doe</lastName>
+                </instructor>
+              </instructors>
+            </meeting>
+          </meetings>
+        </detailedSection>
+      </course>
+    `);
+
+    expect(result?.sections[0].meetings[0]).toMatchObject({
+      type: 'Lecture-Discussion',
+      typeCode: 'LCD',
+      start: '09:30',
+      end: '10:45',
+      instructors: [{ firstName: 'Jane', lastName: 'Doe' }],
     });
   });
 

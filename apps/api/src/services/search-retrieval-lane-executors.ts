@@ -44,7 +44,7 @@ type RetrievalLaneExecutor = {
 const keywordLaneExecutor = (lane: "exact" | "official_text"): RetrievalLaneExecutor => ({
   lane,
   execute: ({ db, retrievalPlan }, laneExecution) => {
-    return keywordSearch(db, retrievalPlan.plan, laneExecution.limit);
+    return keywordSearch(db, retrievalPlan.inputs, laneExecution.limit);
   },
 });
 
@@ -56,8 +56,8 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
     execute: ({ db, retrievalPlan }, laneExecution) => {
       return sectionKeywordSearch(
         db,
-        retrievalPlan.plan.keywordQuery,
-        retrievalPlan.plan.filters,
+        retrievalPlan.inputs.keywordQuery,
+        retrievalPlan.inputs.filters,
         laneExecution.limit,
       );
     },
@@ -65,13 +65,21 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
   requirement: {
     lane: "requirement",
     execute: ({ db, retrievalPlan }, laneExecution) => {
-      return requirementLaneSearch(db, retrievalPlan.plan, laneExecution.limit);
+      return requirementLaneSearch(
+        db,
+        retrievalPlan.inputs.filters,
+        laneExecution.limit,
+      );
     },
   },
   structured_section: {
     lane: "structured_section",
     execute: ({ db, retrievalPlan }, laneExecution) => {
-      return structuredSectionLaneSearch(db, retrievalPlan.plan, laneExecution.limit);
+      return structuredSectionLaneSearch(
+        db,
+        retrievalPlan.inputs.filters,
+        laneExecution.limit,
+      );
     },
   },
   student_language_alias: {
@@ -79,27 +87,26 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
     execute: ({ db, retrievalPlan }, laneExecution) => {
       return studentAliasLaneSearch(
         db,
-        retrievalPlan.plan,
+        retrievalPlan.inputs.filters,
+        retrievalPlan.inputs.aliasQuery,
         laneExecution.limit,
-        retrievalPlan.aliasQuery,
       );
     },
   },
   topic_semantic: {
     lane: "topic_semantic",
     execute: async ({ db, vectorize, ai, retrievalPlan }, laneExecution) => {
-      const plan = retrievalPlan.plan;
       const rawSemanticResults = await semanticSearch(
         vectorize,
         ai,
-        plan.semanticQuery,
-        plan.filters,
+        retrievalPlan.inputs.semanticQuery,
+        retrievalPlan.inputs.filters,
         laneExecution.limit,
       );
       const semanticResults = await postFilterSemanticResults(
         db,
         rawSemanticResults,
-        plan.filters,
+        retrievalPlan.inputs.filters,
       );
       return semanticResults.map((row, index): RetrievalLaneResult => ({
         id: row.id,
@@ -107,7 +114,7 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
         rank: index + 1,
         rawScore: row.score,
         reason: "Semantic topic recall.",
-        matchedTerms: [plan.semanticQuery].filter(Boolean),
+        matchedTerms: [retrievalPlan.inputs.semanticQuery].filter(Boolean),
       }));
     },
   },
@@ -116,9 +123,9 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
     execute: ({ db, retrievalPlan }, laneExecution) => {
       return workloadEvidenceLaneSearch(
         db,
-        retrievalPlan.plan,
+        retrievalPlan.inputs.filters,
+        retrievalPlan.inputs.workloadSignalTypes,
         laneExecution.limit,
-        retrievalPlan.workloadSignalTypes,
       );
     },
   },

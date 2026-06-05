@@ -1,11 +1,18 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { SearchFilters, SearchPlan } from "./search-planner-types.js";
+import type { SearchFilters } from "./search-planner-types.js";
 import { buildFilteredCourseQuery } from "./search-lane-query-builder.js";
 import {
   rankedLaneRow,
   type RankedLaneRow,
 } from "./search-retrieval-lane-result.js";
-import { escapeLike, sanitizeFtsQuery, titleLaneQuery } from "./search-text.js";
+import { escapeLike } from "./search-text.js";
+
+export type CourseKeywordLaneInput = {
+  filters: SearchFilters;
+  keywordQuery: string;
+  cleanKeywordQuery: string;
+  titleQuery: string;
+};
 
 export async function titleKeywordSearch(
   db: D1Database,
@@ -56,10 +63,10 @@ export async function titleKeywordSearch(
 
 export async function keywordSearch(
   db: D1Database,
-  plan: SearchPlan,
+  input: CourseKeywordLaneInput,
   limit: number = 50,
 ): Promise<RankedLaneRow[]> {
-  const { filters, keywordQuery } = plan;
+  const { filters, keywordQuery, cleanKeywordQuery, titleQuery } = input;
 
   if (filters.subject && filters.number && !keywordQuery?.trim()) {
     const exactSql = `
@@ -108,9 +115,7 @@ export async function keywordSearch(
 
   const filtered = buildFilteredCourseQuery(filters);
   const hasKeyword = keywordQuery && keywordQuery.trim().length > 0;
-  const cleanQuery = hasKeyword ? sanitizeFtsQuery(keywordQuery) : "";
-  const titleQuery = hasKeyword ? titleLaneQuery(plan, cleanQuery) : "";
-  const titleResults = hasKeyword
+  const titleResults = titleQuery
     ? await titleKeywordSearch(db, titleQuery, filters, limit)
     : [];
   const ftsMatchCondition = "courses_fts MATCH ?";
@@ -133,7 +138,7 @@ export async function keywordSearch(
   `;
 
   const result = await db.prepare(sql)
-    .bind(...(hasKeyword ? filtered.bindParams([cleanQuery], [limit]) : filtered.bindParams([limit])))
+    .bind(...(hasKeyword ? filtered.bindParams([cleanKeywordQuery], [limit]) : filtered.bindParams([limit])))
     .all<{ id: string; fts_score: number }>();
 
   const ftsResults = result.results.map((row, index) => rankedLaneRow(
@@ -143,7 +148,7 @@ export async function keywordSearch(
     hasKeyword ? "Official course text FTS recall." : "Structured course-filter recall.",
     {
       rawScore: row.fts_score,
-      matchedTerms: hasKeyword ? [cleanQuery] : undefined,
+      matchedTerms: hasKeyword ? [cleanKeywordQuery] : undefined,
     },
   ));
   if (titleResults.length === 0) {

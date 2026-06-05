@@ -132,7 +132,7 @@ describe("buildRetrievalPlan", () => {
     );
 
     expect(laneEnabled(result, "workload_evidence")).toBe(true);
-    expect(result.workloadSignalTypes).toEqual([
+    expect(result.inputs.workloadSignalTypes).toEqual([
       "low_writing",
       "writing_light",
       "few_papers",
@@ -150,7 +150,8 @@ describe("buildRetrievalPlan", () => {
     const result = retrievalPlan(input);
 
     expect(input.filters.subject).toBeUndefined();
-    expect(result.plan).toBe(input);
-    expect(result.plan.filters.subject).toBeUndefined();
+    expect(result.inputs.filters.subject).toBeUndefined();
+    expect(result.inputs.keywordQuery).toBe("cs");
+    expect(result.inputs.semanticQuery).toBe("cs");
   });
 });

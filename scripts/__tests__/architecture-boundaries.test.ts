@@ -1,7 +1,41 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+function sourceFiles(root: string): string[] {
+  return readdirSync(root)
+    .flatMap((entry) => {
+      const path = join(root, entry);
+      const stat = statSync(path);
+      if (stat.isDirectory()) return sourceFiles(path);
+      return /\.(ts|tsx)$/.test(entry) ? [path] : [];
+    });
+}
+
+function importSpecifiers(source: string): string[] {
+  return [
+    ...source.matchAll(/\bimport\b(?:[\s\S]*?\bfrom\s*)?['"]([^'"]+)['"]/g),
+    ...source.matchAll(/\bexport\b[\s\S]*?\bfrom\s*['"]([^'"]+)['"]/g),
+  ].map(match => match[1]);
+}
+
 describe('architecture boundaries', () => {
+  it('keeps public packages and web code from importing API internals', () => {
+    const checkedFiles = [
+      ...sourceFiles('packages/query-types'),
+      ...sourceFiles('apps/web/src'),
+    ].filter(file => !file.includes('node_modules'));
+
+    for (const file of checkedFiles) {
+      const imports = importSpecifiers(readFileSync(file, 'utf8'));
+      expect(imports, file).not.toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/apps\/api\/src|^\.\.\/\.\.\/apps\/api|^\.\.\/\.\.\/\.\.\/apps\/api/),
+        ]),
+      );
+    }
+  });
+
   it('keeps the search route as an adapter instead of a public response presenter', () => {
     const source = readFileSync('apps/api/src/routes/search.ts', 'utf8');
 
@@ -28,6 +62,28 @@ describe('architecture boundaries', () => {
     expect(executorSource).toContain('search-retrieval-course-lanes');
     expect(executorSource).toContain('search-retrieval-section-lanes');
     expect(laneBarrelSource).not.toMatch(/SELECT|FROM courses|JOIN sections|MATCH \?/);
+  });
+
+  it('keeps retrieval plans executable instead of carrying full planner state', () => {
+    const planSource = readFileSync('apps/api/src/services/search-retrieval-plan.ts', 'utf8');
+    const executorSource = readFileSync('apps/api/src/services/search-retrieval-lane-executors.ts', 'utf8');
+    const hybridSource = readFileSync('apps/api/src/services/search-hybrid.ts', 'utf8');
+    const retrievalPlanType = planSource.match(/export type RetrievalPlan = \{[\s\S]*?\n\};/)?.[0] ?? '';
+    const laneSources = [
+      'apps/api/src/services/search-retrieval-course-lanes.ts',
+      'apps/api/src/services/search-retrieval-section-lanes.ts',
+      'apps/api/src/services/search-retrieval-requirement-lanes.ts',
+      'apps/api/src/services/search-retrieval-alias-lanes.ts',
+      'apps/api/src/services/search-retrieval-workload-lanes.ts',
+    ].map(file => readFileSync(file, 'utf8'));
+
+    expect(planSource).toContain('inputs: RetrievalPlanInputs');
+    expect(retrievalPlanType).not.toContain('SearchPlan');
+    expect(executorSource).not.toContain('retrievalPlan.plan');
+    expect(hybridSource).toContain('rankingPlan: SearchPlan');
+    for (const source of laneSources) {
+      expect(source).not.toMatch(/type\s+\{[^}]*SearchPlan|SearchPlan\b/);
+    }
   });
 
   it('keeps student language interpretation free of executable retrieval policy', () => {
@@ -113,6 +169,44 @@ describe('architecture boundaries', () => {
     expect(historicalCli).not.toMatch(/discoverHistoricalTerms|CoordinatedRateLimitFetcher|subjectSnapshotSqlStatements/);
     expect(historicalWorkflow).toContain('../lib/historical-sync-config');
     expect(historicalWorkflow).toContain('../lib/historical-sync-sql-output');
+  });
+
+  it('keeps historical sync runtime state scoped to a single CLI invocation', () => {
+    const historicalWorkflow = readFileSync('scripts/workflows/historical-sync-workflow.ts', 'utf8');
+    const moduleScope = historicalWorkflow.split('function createHistoricalSyncRuntime')[0];
+
+    expect(moduleScope).not.toMatch(/let\s+(sqlWriter|logWriter)|new HistoricalSyncCheckpointStore|new CoordinatedRateLimitFetcher|const\s+stats\s*=\s*createSyncStats\(\)/);
+    expect(historicalWorkflow).toContain('function createHistoricalSyncRuntime');
+    expect(historicalWorkflow).toContain('const stats = createSyncStats()');
+    expect(historicalWorkflow).toContain('const checkpointStore = new HistoricalSyncCheckpointStore');
+    expect(historicalWorkflow).toContain('const historicalFetcher = new CoordinatedRateLimitFetcher');
+  });
+
+  it('keeps CISAPI XML parsing structured at parser call sites', () => {
+    const listParser = readFileSync('apps/api/src/cisapi/course-list-parser.ts', 'utf8');
+    const detailParser = readFileSync('apps/api/src/cisapi/course-detail-parser.ts', 'utf8');
+    const parallelSync = readFileSync('apps/api/src/services/parallel-sync.ts', 'utf8');
+    const termDiscovery = readFileSync('apps/api/src/services/term-discovery.ts', 'utf8');
+    const debugRoute = readFileSync('apps/api/src/routes/debug.ts', 'utf8');
+
+    expect(listParser).toContain('parseXmlDocument');
+    expect(detailParser).toContain('parseXmlDocument');
+    expect(`${listParser}\n${detailParser}`).not.toMatch(/new RegExp|\.match\(|\.exec\(/);
+    expect(parallelSync).toContain('parseSubjectsXml');
+    expect(termDiscovery).toContain('parseSubjectsXml');
+    expect(debugRoute).toContain('parseSubjectsXml');
+    expect(`${parallelSync}\n${termDiscovery}\n${debugRoute}`).not.toMatch(/<subject id=|matchAll\(/);
+  });
+
+  it('keeps operational term maintenance plumbing in script libraries', () => {
+    const coverage = readFileSync('scripts/term-coverage-plan.ts', 'utf8');
+    const retention = readFileSync('scripts/term-retention-plan.ts', 'utf8');
+    const maintenance = readFileSync('scripts/lib/term-maintenance.ts', 'utf8');
+
+    expect(coverage).toContain('./lib/term-maintenance');
+    expect(retention).toContain('./lib/term-maintenance');
+    expect(maintenance).toContain('discoverAvailableTerms');
+    expect(`${coverage}\n${retention}`).not.toMatch(/ajax\/search\/termlist|readFile\(input|response\.json\(\)\.catch/);
   });
 
   it('keeps ranking policy values in the ranking policy owner', () => {

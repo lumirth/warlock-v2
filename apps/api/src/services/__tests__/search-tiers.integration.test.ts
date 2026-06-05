@@ -24,8 +24,7 @@ function request(query: string) {
 }
 
 function planFromFirstSearchCall(): SearchPlan {
-  return vi.mocked(termRanking.hybridSearchWithTermRanking).mock.calls[0][3]
-    .plan;
+  return vi.mocked(termRanking.hybridSearchWithTermRanking).mock.calls[0][4];
 }
 
 const mockCourse = (overrides: Partial<Course> = {}): Course => ({
@@ -231,7 +230,7 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     await pipeline.search(request(query));
 
     for (const call of vi.mocked(termRanking.hybridSearchWithTermRanking).mock.calls) {
-      expect(call[3].plan.filters.subject).toBe('CS');
+      expect(call[4].filters.subject).toBe('CS');
     }
   });
 });

@@ -1,24 +1,22 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { SearchPlan } from "./search-planner-types.js";
+import type { SearchFilters } from "./search-planner-types.js";
 import { buildFilteredCourseQuery } from "./search-lane-query-builder.js";
 import {
   rankedLaneRow,
   type WorkloadLaneRow,
 } from "./search-retrieval-lane-result.js";
-import { workloadSignalTypes } from "./search-retrieval-plan-queries.js";
 
 export async function workloadEvidenceLaneSearch(
   db: D1Database,
-  plan: SearchPlan,
+  filters: SearchFilters,
+  signalTypes: string[],
   limit: number = 50,
-  plannedSignalTypes?: string[],
 ): Promise<WorkloadLaneRow[]> {
-  const signalTypes = plannedSignalTypes ?? workloadSignalTypes(plan);
   if (signalTypes.length === 0) {
     return [];
   }
 
-  const filtered = buildFilteredCourseQuery(plan.filters);
+  const filtered = buildFilteredCourseQuery(filters);
   const signalPlaceholders = signalTypes.map(() => "?").join(",");
   const signalCondition = `cs.signal_type IN (${signalPlaceholders})`;
 

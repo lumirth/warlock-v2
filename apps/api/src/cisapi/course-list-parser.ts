@@ -1,35 +1,30 @@
 import type { CISAPICourse, CISAPISubject } from './types.js';
-import { decodeXmlText } from './xml-utils.js';
+import {
+  descendantElements,
+  elementAttr,
+  elementText,
+  parseXmlDocument,
+} from './xml-utils.js';
 
 export function parseSubjectsXml(xml: string): CISAPISubject[] {
-  const subjects: CISAPISubject[] = [];
-  const subjectRegex = /<subject\s+id="([^"]+)"\s+href="([^"]+)"[^>]*>([^<]*)<\/subject>/g;
-
-  let match;
-  while ((match = subjectRegex.exec(xml)) !== null) {
-    subjects.push({
-      id: match[1],
-      href: match[2],
-      label: decodeXmlText(match[3]) || undefined,
-    });
-  }
-
-  return subjects;
+  const document = parseXmlDocument(xml);
+  return descendantElements(document, 'subject')
+    .map((subject) => ({
+      id: elementAttr(subject, 'id'),
+      href: elementAttr(subject, 'href'),
+      label: elementText(subject) || undefined,
+    }))
+    .filter((subject) => subject.id);
 }
 
 export function parseCoursesXml(xml: string, subjectId: string): CISAPICourse[] {
-  const courses: CISAPICourse[] = [];
-  const courseRegex = /<course\s+id="([^"]+)"\s+href="([^"]+)"[^>]*>([^<]*)<\/course>/g;
-
-  let match;
-  while ((match = courseRegex.exec(xml)) !== null) {
-    courses.push({
-      id: match[1],
-      href: match[2],
-      label: decodeXmlText(match[3]),
+  const document = parseXmlDocument(xml);
+  return descendantElements(document, 'course')
+    .map((course) => ({
+      id: elementAttr(course, 'id'),
+      href: elementAttr(course, 'href'),
+      label: elementText(course),
       subject: subjectId,
-    });
-  }
-
-  return courses;
+    }))
+    .filter((course) => course.id);
 }

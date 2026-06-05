@@ -5,6 +5,7 @@ import { upsertTermState } from '../db/term-state-repository.js';
 import type { TermStateStatus } from '../db/types.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
+import { parseEnrollmentStatusesXml, parseSubjectsXml } from '../cisapi/parser.js';
 
 const DEFAULT_FROM_YEAR = 2004;
 const TERM_ORDER: Record<string, number> = {
@@ -161,7 +162,7 @@ async function getClassificationSubjects(
   upstreamBackoff.recordSuccess();
 
   const xml = await response.text();
-  const subjects = [...xml.matchAll(/<subject id="([^"]+)"/g)].map(match => match[1]);
+  const subjects = parseSubjectsXml(xml).map(subject => subject.id);
   const subjectSet = new Set(subjects);
   return [
     ...DEFAULT_CLASSIFICATION_SUBJECTS.filter(subject => subjectSet.has(subject)),
@@ -190,15 +191,7 @@ async function readEnrollmentStatuses(
   upstreamBackoff.recordSuccess();
 
   const xml = await response.text();
-
-  const statuses: string[] = [];
-  const statusRegex = /<enrollmentStatus>([^<]*)<\/enrollmentStatus>/g;
-  let match;
-  while ((match = statusRegex.exec(xml)) !== null) {
-    statuses.push(match[1]);
-  }
-
-  return statuses;
+  return parseEnrollmentStatusesXml(xml);
 }
 
 function classifyEnrollmentStatuses(statuses: string[]): TermStateStatus {

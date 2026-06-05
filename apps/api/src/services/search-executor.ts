@@ -45,6 +45,7 @@ export async function executeSearchPlan(
     vectorize,
     ai,
     retrievalPlan,
+    plan,
   );
   const originalResultCount = results.length;
 
@@ -62,6 +63,7 @@ export async function executeSearchPlan(
         vectorize,
         ai,
         expandedRetrievalPlan,
+        fallbackPlan,
       );
       results = mergeResults(results, expandedResults, budget.executionResultLimit);
       if (results.length >= 3) {

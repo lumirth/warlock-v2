@@ -79,7 +79,6 @@ describe('search cache', () => {
       compilerEvents: [],
     };
     const retrievalPlan: RetrievalPlan = {
-      plan: planning.plan,
       controls: { sort: { field: 'relevance', direction: 'desc' }, scope: 'active' },
       budget: {
         pageLimit: 20,
@@ -96,8 +95,15 @@ describe('search cache', () => {
       hasKeywordQuery: false,
       hasSemanticQuery: false,
       lanes: [],
-      aliasQuery: '',
-      workloadSignalTypes: [],
+      inputs: {
+        filters: planning.plan.filters,
+        keywordQuery: '',
+        cleanKeywordQuery: '',
+        titleQuery: '',
+        semanticQuery: '',
+        aliasQuery: '',
+        workloadSignalTypes: [],
+      },
     };
     const result = {
       results: [],

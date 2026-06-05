@@ -1,3 +1,6 @@
+import { DomUtils, parseDocument } from 'htmlparser2';
+import type { AnyNode, Document, Element } from 'domhandler';
+
 export function decodeXmlText(value: string | undefined): string {
   if (!value) return '';
 
@@ -16,6 +19,59 @@ export function decodeXmlText(value: string | undefined): string {
     }
     return entity;
   });
+}
+
+export type XmlDocument = Document;
+export type XmlElement = Element;
+
+export function parseXmlDocument(xml: string): XmlDocument {
+  return parseDocument(xml, {
+    xmlMode: true,
+    lowerCaseAttributeNames: false,
+    lowerCaseTags: false,
+    recognizeSelfClosing: true,
+  });
+}
+
+export function localName(node: AnyNode): string {
+  const name = 'name' in node ? node.name : '';
+  const separator = name.indexOf(':');
+  return separator >= 0 ? name.slice(separator + 1) : name;
+}
+
+export function isXmlElement(node: AnyNode, name?: string): node is XmlElement {
+  if (node.type !== 'tag') return false;
+  return name ? localName(node) === name : true;
+}
+
+export function elementAttr(element: XmlElement | undefined, name: string): string {
+  return decodeXmlText(element?.attribs?.[name]).trim();
+}
+
+export function elementText(element: XmlElement | undefined): string {
+  if (!element) return '';
+  return decodeXmlText(DomUtils.textContent(element)).replace(/\s+/g, ' ').trim();
+}
+
+export function childElements(parent: AnyNode | undefined, name?: string): XmlElement[] {
+  if (!parent || !('children' in parent)) return [];
+  return parent.children.filter((child): child is XmlElement => isXmlElement(child, name));
+}
+
+export function descendantElements(parent: AnyNode | undefined, name?: string): XmlElement[] {
+  if (!parent) return [];
+  return DomUtils.findAll((node): node is XmlElement => isXmlElement(node, name), [parent]);
+}
+
+export function firstDescendantElement(
+  parent: AnyNode | undefined,
+  name: string,
+): XmlElement | undefined {
+  return descendantElements(parent, name)[0];
+}
+
+export function firstDescendantText(parent: AnyNode | undefined, name: string): string {
+  return elementText(firstDescendantElement(parent, name));
 }
 
 export function tagText(xml: string, tag: string): string {
