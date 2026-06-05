@@ -33,7 +33,7 @@ export function useSearchRefinements({
     typedQuery: state.draft.query,
     metaRawQuery: state.session.meta?.query.raw,
     residualQuery: state.session.meta?.query.residual,
-    activeFilters: state.session.activeAdvancedFilters,
+    activeFilters: derived.activeAdvancedFilters,
     sort: state.session.sort,
   }
 

@@ -556,28 +556,24 @@ describe('explainable ranking policy', () => {
 describe('retrieval fusion evidence', () => {
   it('keeps lane evidence separate from ranking policy components', () => {
     const fused = fuseRetrievalResults({
-      isNavigational: false,
-      courseKeywordResults: [{
-        id: 'CS-225',
-        lane: 'official_text',
-        rank: 1,
-        rawScore: -2,
-        matchedTerms: ['data structures'],
-        reason: 'Official course text FTS recall.',
-      }],
-      sectionKeywordResults: [],
-      requirementResults: [],
-      structuredSectionResults: [],
-      aliasResults: [],
-      semanticResults: [{
-        id: 'CS-225',
-        lane: 'topic_semantic',
-        rank: 3,
-        rawScore: 0.89,
-        matchedTerms: ['data structures'],
-        reason: 'Semantic topic recall.',
-      }],
-      workloadResults: [],
+      laneResults: [
+        {
+          id: 'CS-225',
+          lane: 'official_text',
+          rank: 1,
+          rawScore: -2,
+          matchedTerms: ['data structures'],
+          reason: 'Official course text FTS recall.',
+        },
+        {
+          id: 'CS-225',
+          lane: 'topic_semantic',
+          rank: 3,
+          rawScore: 0.89,
+          matchedTerms: ['data structures'],
+          reason: 'Semantic topic recall.',
+        },
+      ],
     });
 
     expect(fused[0]).toEqual(expect.objectContaining({

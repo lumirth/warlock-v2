@@ -48,5 +48,6 @@ export interface RetrievalLaneResult {
   rawScore?: number;
   matchedTerms?: string[];
   evidence?: string[];
+  claims?: string[];
   reason: string;
 }

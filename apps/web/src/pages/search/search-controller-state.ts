@@ -1,6 +1,7 @@
 import type {
   AdvancedSearchStateDto,
   SearchCourseResultDto,
+  SearchRequestDto,
   SearchResponseDto,
   SearchSort,
 } from '@uiuc-course-search/query-types'
@@ -19,8 +20,7 @@ export type SearchDraftState = {
 }
 
 export type SearchSessionState = {
-  activeSearchText: string
-  activeAdvancedFilters: AdvancedSearchStateDto
+  activeRequest: SearchRequestDto | null
   results: SearchCourseResultDto[]
   meta: SearchResponseDto['meta'] | null
   pagination: SearchPagination | null
@@ -47,8 +47,7 @@ export type SearchControllerAction =
   | { type: 'result-view/changed'; value: ResultViewMode }
   | {
       type: 'search/started'
-      query: string
-      filters: AdvancedSearchStateDto
+      request: SearchRequestDto
       mode: SearchExecutionMode
       sort: SearchSort
     }
@@ -71,8 +70,7 @@ export const INITIAL_SEARCH_DRAFT_STATE: SearchDraftState = {
 }
 
 export const INITIAL_SEARCH_SESSION_STATE: SearchSessionState = {
-  activeSearchText: '',
-  activeAdvancedFilters: {},
+  activeRequest: null,
   results: [],
   meta: null,
   pagination: null,
@@ -111,6 +109,14 @@ export function searchControllerReducer(
       return searchStartedState(state, action)
     case 'search/succeeded':
       return updateSession(state, {
+        activeRequest:
+          action.mode === 'append'
+            ? state.session.activeRequest
+            : activeRequestFromResponse(
+                action.response,
+                action.requestSort,
+                state.session.activeRequest
+              ),
         results:
           action.mode === 'append'
             ? [...state.session.results, ...(action.response.results || [])]
@@ -139,8 +145,7 @@ export function searchControllerReducer(
         },
         session: {
           ...state.session,
-          activeSearchText: '',
-          activeAdvancedFilters: {},
+          activeRequest: null,
           results: [],
           meta: null,
           pagination: null,
@@ -167,14 +172,13 @@ function searchStartedState(
   })
 
   if (action.mode === 'replace') {
-    nextState = updateDraft(nextState, { query: action.query })
+    nextState = updateDraft(nextState, { query: action.request.query })
   }
 
   if (!isAppend) {
     nextState = updateDraft(nextState, { inputDirty: false })
     nextState = updateSession(nextState, {
-      activeSearchText: action.query,
-      activeAdvancedFilters: action.filters,
+      activeRequest: withoutPaginationOffset(action.request),
     })
   }
 
@@ -187,6 +191,36 @@ function searchStartedState(
   }
 
   return nextState
+}
+
+function withoutPaginationOffset(request: SearchRequestDto): SearchRequestDto {
+  return {
+    ...request,
+    pagination: request.pagination
+      ? {
+          ...request.pagination,
+          offset: 0,
+        }
+      : undefined,
+  }
+}
+
+function activeRequestFromResponse(
+  response: SearchResponseDto,
+  requestSort: SearchSort,
+  previousRequest: SearchRequestDto | null
+): SearchRequestDto | null {
+  const interpretedRequest = response.meta?.interpretedRequest
+  if (!interpretedRequest) return previousRequest
+
+  return {
+    ...interpretedRequest,
+    sort: response.meta?.appliedSort ?? interpretedRequest.sort ?? requestSort,
+    pagination: {
+      limit: response.pagination.limit,
+      offset: 0,
+    },
+  }
 }
 
 function updateDraft(

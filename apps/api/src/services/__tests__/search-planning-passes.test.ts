@@ -3,6 +3,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { extractSearchPlanningInput } from "../search-plan-hints.js";
 import {
   createPlanningContext,
+  recordPlanningArtifacts,
   runPlanningPasses,
   type SearchPlanningPass,
 } from "../search-planning-passes.js";
@@ -41,6 +42,34 @@ describe("search planning pass harness", () => {
 
     await expect(runPlanningPasses(context(), [pass])).rejects.toThrow(
       'Search planning pass "missing_output" declared missing writes: resolved_plan',
+    );
+  });
+
+  it("rejects passes that declare an already-present artifact without producing a new revision", async () => {
+    const seedPlan: SearchPlanningPass = {
+      id: "seed_plan",
+      stage: "resolve",
+      reads: ["student_language_extraction"],
+      writes: ["resolved_plan"],
+      run(searchContext) {
+        searchContext.plan = {
+          filters: {},
+          keywordQuery: "",
+          semanticQuery: "",
+        };
+        recordPlanningArtifacts(searchContext, "resolved_plan");
+      },
+    };
+    const staleWriter: SearchPlanningPass = {
+      id: "stale_writer",
+      stage: "compile",
+      reads: ["resolved_plan"],
+      writes: ["resolved_plan"],
+      run() {},
+    };
+
+    await expect(runPlanningPasses(context(), [seedPlan, staleWriter])).rejects.toThrow(
+      'Search planning pass "stale_writer" declared missing writes: resolved_plan',
     );
   });
 });

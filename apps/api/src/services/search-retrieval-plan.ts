@@ -5,7 +5,7 @@ import type { AppliedSearchControls } from "./search-controls.js";
 import {
   buildAliasLaneQuery,
   workloadSignalTypes,
-} from "./search-retrieval-lanes.js";
+} from "./search-retrieval-plan-queries.js";
 
 export type RetrievalLaneExecution = {
   lane: RetrievalLane;
@@ -109,6 +109,10 @@ export function laneEnabled(
   laneName: RetrievalLane,
 ): boolean {
   return plan.lanes.some((laneInfo) => laneInfo.lane === laneName && laneInfo.enabled);
+}
+
+export function enabledRetrievalLanes(plan: RetrievalPlan): RetrievalLaneExecution[] {
+  return plan.lanes.filter(laneInfo => laneInfo.enabled);
 }
 
 function lane(

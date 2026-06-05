@@ -41,15 +41,26 @@ reinterpret another layer's concept, it creates drift.
 - `extraction/*` owns the student-language extraction passes. `extractor.ts` is
   only a facade; pass implementations stay in focused modules and share the
   span-masking helpers in `extraction/text.ts`.
-- `search-retrieval-plan*` owns executable lane selection and candidate budgets.
-- `search-retrieval-*` owns candidate recall and evidence from SQL, FTS, Vectorize,
-  and structured course data.
+- `search-retrieval-plan*` owns executable lane selection, lane reasons, candidate
+  budgets, and planned lane inputs such as alias queries or workload signal types.
+- `search-retrieval-lane-executors` owns the registry that turns enabled retrieval
+  lanes into executable candidate-recall work.
+- `search-retrieval-lanes` owns lane-local candidate recall and evidence from SQL,
+  FTS, Vectorize post-filtering, and structured course data. Individual lanes may
+  be split further when the file starts mixing unrelated recall policies.
 - `ranking/*` owns fusion, final ordering, ranking components, and ranking policy.
 - `search-response-presenter` owns translation from internal search artifacts into
   `SearchResponseDto`.
 - `apps/web/src/pages/search` owns UI state and rendering. It consumes public
   requests, public responses, and server-authored `nextRequest` actions. It should
-  not know internal planner field names.
+  not know internal planner field names. Its session state has one canonical
+  `activeRequest`; raw submitted text is temporary until the server returns an
+  interpreted request.
+- `course-sync-application` and `enrichment-application` own sync and enrichment
+  workflows. Routes validate HTTP input and call these services; they do not update
+  term state, coordinate GPA/RMP/scoring workflows, or choose embedding wiring.
+- `sync-operations` owns shared sync policy helpers such as term status resolution,
+  aggregate count reads, embedding flags, and route binding shapes.
 - `scripts/lib/*` owns repeated operational script primitives such as term models,
   CLI argument parsing, and JSON row-shape helpers.
 
@@ -72,8 +83,16 @@ These are the checks future changes should preserve or add as automated tests:
 - Public search responses do not expose `plan`, `extraction`, `retrievalPlan`,
   `budget`, or `compilerEvents`.
 - Routes do not manually assemble search response DTOs. They call the presenter.
+- Sync routes do not call low-level sync/enrichment services directly. They call
+  `course-sync-application` or `enrichment-application`.
+- Retrieval execution flows through `executeRetrievalLanes`; `hybridSearch` does
+  not hand-wire one `Promise.all` slot per lane.
+- Fusion consumes a flat `laneResults` stream rather than one DTO property per
+  retrieval lane.
 - Web search UI options derive values from `packages/query-types`; labels may be
   local presentation.
+- Web search follow-up actions derive from session `activeRequest`, which is
+  replaced by `meta.interpretedRequest` after a successful response.
 - Invalid explicit URL parameters follow one rule: reject with a clear error.
   Defaults apply only when a parameter is absent.
 - Planning passes declare artifacts and the pass harness verifies declared reads

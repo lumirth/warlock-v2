@@ -17,14 +17,7 @@ export interface FusedSearchScore {
 }
 
 export interface RetrievalLaneResults {
-  isNavigational: boolean;
-  courseKeywordResults: RankedLaneRow[];
-  sectionKeywordResults: RankedLaneRow[];
-  requirementResults: RankedLaneRow[];
-  structuredSectionResults: RankedLaneRow[];
-  aliasResults: RankedLaneRow[];
-  semanticResults: RankedLaneRow[];
-  workloadResults: WorkloadLaneRow[];
+  laneResults: RetrievalLaneResult[];
 }
 
 export function fuseRetrievalResults(lanes: RetrievalLaneResults): FusedSearchScore[] {
@@ -48,14 +41,8 @@ export function fuseRetrievalResults(lanes: RetrievalLaneResults): FusedSearchSc
     });
   };
 
-  addLaneRanks(lanes.courseKeywordResults);
-  addLaneRanks(lanes.sectionKeywordResults);
-  addLaneRanks(lanes.requirementResults);
-  addLaneRanks(lanes.structuredSectionResults);
-  addLaneRanks(lanes.aliasResults);
-  addLaneRanks(lanes.semanticResults);
-  addLaneRanks(lanes.workloadResults);
-  for (const row of lanes.workloadResults) {
+  addLaneRanks(lanes.laneResults);
+  for (const row of lanes.laneResults.filter(isWorkloadLaneRow)) {
     supportedClaims.set(row.id, new Set(row.claims));
   }
 
@@ -96,6 +83,10 @@ export function fuseRetrievalResults(lanes: RetrievalLaneResults): FusedSearchSc
     }
     return 0;
   });
+}
+
+function isWorkloadLaneRow(row: RetrievalLaneResult): row is WorkloadLaneRow {
+  return row.lane === "workload_evidence" && Array.isArray(row.claims);
 }
 
 function laneRrfScore(lane: RetrievalLane, rank: number): number {

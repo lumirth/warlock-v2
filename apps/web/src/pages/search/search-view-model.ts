@@ -4,10 +4,14 @@ import {
   hasAdvancedFilterValue,
 } from './search-filter-model'
 import type { SearchControllerState } from './search-controller-state'
-import type { SearchRecoveryGroup } from '@uiuc-course-search/query-types'
+import type {
+  AdvancedSearchStateDto,
+  SearchRecoveryGroup,
+} from '@uiuc-course-search/query-types'
 
 export type SearchViewModel = {
   activeRequestQuery: string
+  activeAdvancedFilters: AdvancedSearchStateDto
   hasActiveRequest: boolean
   resultCountLabel: string
   showingResultsLabel: string
@@ -22,17 +26,20 @@ export type SearchViewModel = {
 export function buildSearchViewModel(
   state: SearchControllerState
 ): SearchViewModel {
+  const activeAdvancedFilters = state.session.activeRequest
+    ? advancedStateFromRequest(state.session.activeRequest)
+    : {}
   const hasActiveStructuredFilters = hasAdvancedFilterValue(
-    state.session.activeAdvancedFilters
+    activeAdvancedFilters
   )
   const hasActiveRequest =
-    state.session.activeSearchText.trim().length > 0 ||
+    (state.session.activeRequest?.query.trim().length ?? 0) > 0 ||
     hasActiveStructuredFilters ||
     state.session.meta !== null ||
     state.session.loading ||
     state.session.loadingMore
   const activeRequestQuery = hasActiveRequest
-    ? state.session.activeSearchText
+    ? state.session.activeRequest?.query ?? ''
     : state.draft.query.trim()
   const resultCountLabel =
     state.session.pagination?.total !== undefined
@@ -52,9 +59,7 @@ export function buildSearchViewModel(
     : 'Results matching filters'
   const hasAdvancedDraftChanges = state.session.meta
     ? advancedFiltersChanged(
-        state.session.meta.interpretedRequest
-          ? advancedStateFromRequest(state.session.meta.interpretedRequest)
-          : {},
+        activeAdvancedFilters,
         state.draft.advancedDraft
       )
     : hasAdvancedFilterValue(state.draft.advancedDraft)
@@ -67,6 +72,7 @@ export function buildSearchViewModel(
 
   return {
     activeRequestQuery,
+    activeAdvancedFilters,
     hasActiveRequest,
     resultCountLabel,
     showingResultsLabel,

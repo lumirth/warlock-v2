@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { parseSubjectCascadeXmlFromString } from '../../apps/api/src/cisapi/parser.js';
 import { subjectSnapshotSqlStatements } from '../../apps/api/src/services/course-snapshot-writer.js';
 import { fromSubjectCascade } from '../../apps/api/src/transforms/course.js';
-import { chooseSqlOutputPlan, courseGenedSqlStatements, escapeSQL, makeCourseId } from '../historical-sync.js';
+import {
+  chooseSqlOutputPlan,
+  courseGenedSqlStatements,
+  escapeSQL,
+  makeCourseId,
+  parseHistoricalSyncArgs,
+} from '../historical-sync.js';
 
 // Real XML sample from ~/cisapp (trimmed to 1 course with 2 sections)
 const REAL_CS_CASCADE_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -100,6 +106,34 @@ function findSqlStatement(statements: string[], needle: string): string {
 }
 
 describe('Historical Sync SQL Generation', () => {
+  it('parses CLI args without reading process state', () => {
+    expect(parseHistoricalSyncArgs([
+      '--start-year=2020',
+      '--end-year=2021',
+      '--term=fall',
+      '--dry-run',
+      '--fresh',
+      '--allow-partial-output',
+    ], new Date('2026-06-01T12:34:56Z'))).toEqual({
+      startYear: 2020,
+      endYear: 2021,
+      termFilter: 'fall',
+      dryRun: true,
+      fresh: true,
+      allowPartialOutput: true,
+      sqlFile: 'historical-data-2026-06-01T12-34-56.sql',
+      logFile: 'historical-sync-2026-06-01T12-34-56.log',
+    });
+  });
+
+  it('returns help and rejects invalid year ranges without exiting the process', () => {
+    expect(parseHistoricalSyncArgs(['--help'])).toEqual(
+      expect.objectContaining({ kind: 'help' })
+    );
+    expect(() => parseHistoricalSyncArgs(['--start-year=2027', '--end-year=2026']))
+      .toThrow('--start-year (2027) cannot be greater than --end-year (2026)');
+  });
+
   it('appends resumed SQL output when checkpointed work already exists', () => {
     expect(chooseSqlOutputPlan({
       dryRun: false,

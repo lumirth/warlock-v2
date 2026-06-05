@@ -19,7 +19,7 @@ import {
   extractTerms,
   maskCompressedTermPhrases,
 } from './term.js';
-import type { ExtractionPass } from './types.js';
+import { recordExtractionArtifacts, type ExtractionPass } from './types.js';
 
 export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
   {
@@ -28,6 +28,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['attributes'],
     run(context) {
       context.residual = extractPositiveNoNotAliases(context.residual, context.hints);
+      recordExtractionArtifacts(context, 'attributes');
     },
   },
   {
@@ -36,6 +37,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['negations'],
     run(context) {
       context.residual = extractNegations(context.residual, context.hints);
+      recordExtractionArtifacts(context, 'negations');
     },
   },
   {
@@ -44,6 +46,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['strict_entities'],
     run(context) {
       context.residual = extractCourseCodesAndCrns(context.residual, context.hints);
+      recordExtractionArtifacts(context, 'strict_entities');
     },
   },
   {
@@ -52,6 +55,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['question_scaffolding'],
     run(context) {
       context.residual = extractQuestionScaffolding(context.residual);
+      recordExtractionArtifacts(context, 'question_scaffolding');
     },
   },
   {
@@ -60,6 +64,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['student_shorthand'],
     run(context) {
       context.residual = extractStudentShorthand(context.residual, context.hints);
+      recordExtractionArtifacts(context, 'student_shorthand');
     },
   },
   {
@@ -70,6 +75,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
       context.residual = extractTerms(context.residual, context.hints);
       context.residual = extractPartOfTerm(context.residual, context.hints);
       context.residual = maskCompressedTermPhrases(context.residual);
+      recordExtractionArtifacts(context, 'term_filters');
     },
   },
   {
@@ -78,6 +84,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['requirement_context'],
     run(context) {
       context.residual = extractContextualGeneds(context.residual, context.hints);
+      recordExtractionArtifacts(context, 'requirement_context');
     },
   },
   {
@@ -86,6 +93,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['attributes'],
     run(context) {
       context.residual = extractAttributesAndAliases(context.residual, context.hints);
+      recordExtractionArtifacts(context, 'attributes');
     },
   },
   {
@@ -94,6 +102,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['instructors'],
     run(context) {
       context.residual = extractInstructors(context.residual, context.hints);
+      recordExtractionArtifacts(context, 'instructors');
     },
   },
   {
@@ -102,6 +111,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['standalone_entities'],
     run(context) {
       context.residual = extractStandaloneEntities(context.residual, context.hints);
+      recordExtractionArtifacts(context, 'standalone_entities');
     },
   },
   {
@@ -110,6 +120,7 @@ export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
     writes: ['clean_residual'],
     run(context) {
       context.residual = cleanResidual(context.residual);
+      recordExtractionArtifacts(context, 'clean_residual');
     },
   },
 ];

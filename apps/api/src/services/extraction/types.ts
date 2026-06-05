@@ -23,6 +23,7 @@ export type ExtractionContext = {
   hints: Hint[];
   residual: string;
   artifacts: Set<ExtractionArtifact>;
+  artifactRevisions: Map<ExtractionArtifact, number>;
 };
 
 export type ExtractionPass = {
@@ -33,10 +34,12 @@ export type ExtractionPass = {
 };
 
 export function createExtractionContext(text: string): ExtractionContext {
+  const initialArtifacts: ExtractionArtifact[] = ['raw_text', 'normalized_text'];
   return {
     hints: [],
     residual: text.replace(/\u2019/g, "'"),
-    artifacts: new Set(['raw_text', 'normalized_text']),
+    artifacts: new Set(initialArtifacts),
+    artifactRevisions: new Map(initialArtifacts.map(artifact => [artifact, 1])),
   };
 }
 
@@ -46,11 +49,9 @@ export function runExtractionPasses(
 ): ExtractionResult {
   for (const pass of passes) {
     assertReadableArtifacts(context, pass);
+    const revisionsBefore = new Map(context.artifactRevisions);
     pass.run(context);
-    assertWritableArtifacts(context, pass);
-    for (const artifact of pass.writes) {
-      context.artifacts.add(artifact);
-    }
+    assertWritableArtifacts(context, pass, revisionsBefore);
   }
 
   return { hints: context.hints, residual: context.residual };
@@ -70,31 +71,28 @@ function assertReadableArtifacts(
 function assertWritableArtifacts(
   context: ExtractionContext,
   pass: ExtractionPass,
+  revisionsBefore: Map<ExtractionArtifact, number>,
 ): void {
-  const missing = pass.writes.filter((artifact) => !artifactIsPresent(context, artifact));
+  const missing = pass.writes.filter((artifact) => {
+    const before = revisionsBefore.get(artifact) ?? 0;
+    const after = context.artifactRevisions.get(artifact) ?? 0;
+    return after <= before;
+  });
   if (missing.length === 0) return;
   throw new Error(
     `Extraction pass "${pass.id}" declared missing writes: ${missing.join(', ')}`,
   );
 }
 
-function artifactIsPresent(
+export function recordExtractionArtifacts(
   context: ExtractionContext,
-  artifact: ExtractionArtifact,
-): boolean {
-  switch (artifact) {
-    case 'raw_text':
-    case 'normalized_text':
-    case 'negations':
-    case 'strict_entities':
-    case 'question_scaffolding':
-    case 'student_shorthand':
-    case 'term_filters':
-    case 'requirement_context':
-    case 'attributes':
-    case 'instructors':
-    case 'standalone_entities':
-    case 'clean_residual':
-      return Array.isArray(context.hints) && typeof context.residual === 'string';
+  ...artifacts: ExtractionArtifact[]
+): void {
+  for (const artifact of artifacts) {
+    context.artifacts.add(artifact);
+    context.artifactRevisions.set(
+      artifact,
+      (context.artifactRevisions.get(artifact) ?? 0) + 1,
+    );
   }
 }

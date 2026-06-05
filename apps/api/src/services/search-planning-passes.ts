@@ -52,6 +52,7 @@ export type SearchPlanningContext = {
   fallbackPlans: SearchPlan[];
   compilerEvents: SearchCompilerEvent[];
   artifacts: Set<PlanningArtifact>;
+  artifactRevisions: Map<PlanningArtifact, number>;
 };
 
 export type SearchPlanningPass = {
@@ -90,6 +91,12 @@ export function createPlanningContext(
     );
   }
 
+  const initialArtifacts: PlanningArtifact[] = [
+    "parsed_query",
+    "student_language_extraction",
+    "request_filter_hints",
+  ];
+
   return {
     db,
     query,
@@ -99,11 +106,8 @@ export function createPlanningContext(
     queryResidual: "",
     fallbackPlans: [],
     compilerEvents,
-    artifacts: new Set([
-      "parsed_query",
-      "student_language_extraction",
-      "request_filter_hints",
-    ]),
+    artifacts: new Set(initialArtifacts),
+    artifactRevisions: new Map(initialArtifacts.map(artifact => [artifact, 1])),
   };
 }
 
@@ -113,11 +117,9 @@ export async function runPlanningPasses(
 ): Promise<SearchPlanningContext> {
   for (const pass of passes) {
     assertReadableArtifacts(context, pass);
+    const revisionsBefore = new Map(context.artifactRevisions);
     await pass.run(context);
-    assertWritableArtifacts(context, pass);
-    for (const artifact of pass.writes) {
-      context.artifacts.add(artifact);
-    }
+    assertWritableArtifacts(context, pass, revisionsBefore);
   }
   return context;
 }
@@ -142,6 +144,7 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
       });
       context.plan = plan;
       context.queryResidual = plan.semanticQuery;
+      recordPlanningArtifacts(context, "resolved_plan");
     },
   },
   {
@@ -154,6 +157,7 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
       const result = compileQueryLanguageClause(clause, requirePlan(context));
       context.plan = result.plan;
       context.compilerEvents.push(...result.events);
+      recordPlanningArtifacts(context, "query_language", "resolved_plan");
     },
   },
   {
@@ -162,7 +166,10 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
     reads: ["request_filter_hints", "resolved_plan"],
     writes: ["request_filter_overrides", "resolved_plan"],
     run(context) {
-      if (!context.requestFilters) return;
+      if (!context.requestFilters) {
+        recordPlanningArtifacts(context, "request_filter_overrides", "resolved_plan");
+        return;
+      }
       const filterOverrides = searchPlanFiltersFromRequestFilters(context.requestFilters);
       context.plan = withSearchPlanUpdates(requirePlan(context), draft => {
         Object.assign(draft.filters, filterOverrides);
@@ -172,6 +179,7 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
           filters: Object.keys(filterOverrides ?? {}),
         }),
       );
+      recordPlanningArtifacts(context, "request_filter_overrides", "resolved_plan");
     },
   },
   {
@@ -182,6 +190,7 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
     run(context) {
       const result = compileIntroductoryGatewayIntent(requirePlan(context));
       context.plan = result.plan;
+      recordPlanningArtifacts(context, "introductory_gateway", "resolved_plan");
       if (!result.applied) return;
       context.queryResidual = result.plan.semanticQuery;
       context.compilerEvents.push(
@@ -202,6 +211,7 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
       );
       context.plan = result.plan;
       context.queryResidual = result.queryResidual;
+      recordPlanningArtifacts(context, "decision_rescue", "resolved_plan");
       if (!context.plan.rescue) return;
       context.compilerEvents.push(
         compilerEvent("rescue", "decision_search_rescue", "Compiled decision-oriented query rescue metadata", {
@@ -219,6 +229,7 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
     run(context) {
       const result = compileSortIntent(requirePlan(context), context.query);
       context.plan = result.plan;
+      recordPlanningArtifacts(context, "sort_intent", "resolved_plan");
       if (!result.applied) return;
       context.queryResidual = removeSortScaffolding(context.queryResidual);
       context.compilerEvents.push(
@@ -240,6 +251,7 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
         topicExpansionResult.plan,
         topicExpansions,
       );
+      recordPlanningArtifacts(context, "topic_expansion", "resolved_plan");
       if (topicExpansions.length === 0) return;
       context.compilerEvents.push(
         compilerEvent("compile", "topic_expansion", "Expanded student topic language for retrieval recall", {
@@ -259,6 +271,7 @@ export const SEARCH_PLANNING_PASSES: readonly SearchPlanningPass[] = [
         draft.semanticQuery = sanitizeFtsQuery(draft.semanticQuery);
       });
       context.fallbackPlans = buildFallbackPlans(context.plan, context.queryResidual);
+      recordPlanningArtifacts(context, "sanitized_plan", "fallback_plans");
       if (context.fallbackPlans.length > 0) {
         context.compilerEvents.push(
           compilerEvent("finalize", "fallback_plans", "Compiled low-result fallback retrieval plans", {
@@ -294,35 +307,28 @@ function assertReadableArtifacts(
 function assertWritableArtifacts(
   context: SearchPlanningContext,
   pass: SearchPlanningPass,
+  revisionsBefore: Map<PlanningArtifact, number>,
 ): void {
-  const missing = pass.writes.filter((artifact) => !artifactIsPresent(context, artifact));
+  const missing = pass.writes.filter((artifact) => {
+    const before = revisionsBefore.get(artifact) ?? 0;
+    const after = context.artifactRevisions.get(artifact) ?? 0;
+    return after <= before;
+  });
   if (missing.length === 0) return;
   throw new Error(
     `Search planning pass "${pass.id}" declared missing writes: ${missing.join(", ")}`,
   );
 }
 
-function artifactIsPresent(
+export function recordPlanningArtifacts(
   context: SearchPlanningContext,
-  artifact: PlanningArtifact,
-): boolean {
-  switch (artifact) {
-    case "parsed_query":
-      return Array.isArray(context.input.parsed.clauses);
-    case "student_language_extraction":
-      return Array.isArray(context.input.extraction.hints);
-    case "request_filter_hints":
-      return Array.isArray(context.planningInput.extraction.hints);
-    case "resolved_plan":
-    case "query_language":
-    case "request_filter_overrides":
-    case "introductory_gateway":
-    case "decision_rescue":
-    case "sort_intent":
-    case "topic_expansion":
-    case "sanitized_plan":
-      return context.plan !== undefined;
-    case "fallback_plans":
-      return Array.isArray(context.fallbackPlans);
+  ...artifacts: PlanningArtifact[]
+): void {
+  for (const artifact of artifacts) {
+    context.artifacts.add(artifact);
+    context.artifactRevisions.set(
+      artifact,
+      (context.artifactRevisions.get(artifact) ?? 0) + 1,
+    );
   }
 }

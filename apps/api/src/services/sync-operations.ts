@@ -1,4 +1,4 @@
-import type { D1Database, VectorizeIndex, Ai, Fetcher, KVNamespace } from '@cloudflare/workers-types';
+import type { Ai, D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
 import type { TermState, TermStateStatus } from '../db/types.js';
 
 export const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;

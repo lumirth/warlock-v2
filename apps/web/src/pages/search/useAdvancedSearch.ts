@@ -33,16 +33,16 @@ export function useAdvancedSearch({
     })
 
   const applyAdvancedSearch = () => {
-    const interpretedAdvanced = state.session.meta?.interpretedRequest
-      ? advancedStateFromRequest(state.session.meta.interpretedRequest)
+    const activeAdvanced = state.session.activeRequest
+      ? advancedStateFromRequest(state.session.activeRequest)
       : {}
     const plan = planAdvancedSearchApply({
       activeRequestQuery,
       currentInputQuery: state.draft.query,
       inputDirty: state.draft.inputDirty,
-      interpretedAdvanced,
+      interpretedAdvanced: activeAdvanced,
       draft: state.draft.advancedDraft,
-      interpretedQuery: state.session.meta?.interpretedRequest?.query,
+      interpretedQuery: state.session.activeRequest?.query,
     })
 
     if (plan.kind === 'clear') {
@@ -64,8 +64,8 @@ export function useAdvancedSearch({
   const resetAdvancedDraft = () => {
     dispatch({
       type: 'advanced/draft-replaced',
-      value: state.session.meta?.interpretedRequest
-        ? advancedStateFromRequest(state.session.meta.interpretedRequest)
+      value: state.session.activeRequest
+        ? advancedStateFromRequest(state.session.activeRequest)
         : {},
     })
   }

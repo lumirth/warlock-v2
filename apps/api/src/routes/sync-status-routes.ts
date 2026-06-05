@@ -3,7 +3,7 @@ import { getTermsByStatus } from '../db/term-state-repository.js';
 import { TERM_STATUSES, type SyncState, type TermState } from '../db/types.js';
 import { buildFreshnessSummary } from '../services/freshness.js';
 import { parseEnumParam } from '../http/params.js';
-import type { EnrichmentCoverage, SyncRouteBindings } from './sync-shared.js';
+import type { EnrichmentCoverage, SyncRouteBindings } from '../services/sync-operations.js';
 
 export const syncStatusRoutes = new Hono<{ Bindings: SyncRouteBindings }>();
 

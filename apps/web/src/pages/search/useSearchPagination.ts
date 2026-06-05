@@ -23,7 +23,7 @@ export function useSearchPagination({
       type: 'append',
       query: derived.activeRequestQuery,
       offset: nextOffset,
-      filters: state.session.activeAdvancedFilters,
+      filters: derived.activeAdvancedFilters,
       sort: state.session.sort,
     })
   }

@@ -75,7 +75,7 @@ const CONFIG = {
 } as const;
 
 // Parse command line arguments
-interface Args {
+export interface HistoricalSyncArgs {
   startYear: number;
   endYear: number;
   termFilter: string | null;
@@ -85,6 +85,8 @@ interface Args {
   sqlFile: string;
   logFile: string;
 }
+
+type HistoricalSyncParseResult = HistoricalSyncArgs | { kind: 'help'; usage: string };
 
 // File writers for SQL and logs
 let sqlWriter: fs.WriteStream | null = null;
@@ -170,46 +172,8 @@ async function closeFileWriters(): Promise<void> {
   await Promise.all(writers.map(closeWriter));
 }
 
-function parseArgs(): Args {
-  const args = process.argv.slice(2);
-  const currentYear = new Date().getFullYear();
-
-  let startYear: number = CONFIG.START_YEAR;
-  let endYear = currentYear;
-  let termFilter: string | null = null;
-  let dryRun = false;
-  let fresh = false;
-  let allowPartialOutput = false;
-  let sqlFile: string | null = null;
-  let logFile: string | null = null;
-
-  for (const arg of args) {
-    if (arg.startsWith('--start-year=')) {
-      startYear = parseInt(arg.split('=')[1], 10);
-      if (isNaN(startYear)) {
-        console.error(`Invalid --start-year value: ${arg}`);
-        process.exit(1);
-      }
-    } else if (arg.startsWith('--end-year=')) {
-      endYear = parseInt(arg.split('=')[1], 10);
-      if (isNaN(endYear)) {
-        console.error(`Invalid --end-year value: ${arg}`);
-        process.exit(1);
-      }
-    } else if (arg.startsWith('--term=')) {
-      termFilter = arg.split('=')[1].toLowerCase();
-    } else if (arg.startsWith('--sql-file=')) {
-      sqlFile = arg.split('=')[1];
-    } else if (arg.startsWith('--log-file=')) {
-      logFile = arg.split('=')[1];
-    } else if (arg === '--dry-run') {
-      dryRun = true;
-    } else if (arg === '--fresh') {
-      fresh = true;
-    } else if (arg === '--allow-partial-output') {
-      allowPartialOutput = true;
-    } else if (arg === '--help' || arg === '-h') {
-      console.log(`
+export function historicalSyncUsage(currentYear = new Date().getFullYear()): string {
+  return `
 Historical Sync Script
 
 Usage:
@@ -232,18 +196,58 @@ Examples:
   npx tsx scripts/historical-sync.ts --start-year=2020
   npx tsx scripts/historical-sync.ts --term=fall --start-year=2023
   npx tsx scripts/historical-sync.ts --dry-run
-`);
-      process.exit(0);
+`;
+}
+
+export function parseHistoricalSyncArgs(
+  args: string[],
+  now = new Date(),
+): HistoricalSyncParseResult {
+  const currentYear = now.getFullYear();
+
+  let startYear: number = CONFIG.START_YEAR;
+  let endYear = currentYear;
+  let termFilter: string | null = null;
+  let dryRun = false;
+  let fresh = false;
+  let allowPartialOutput = false;
+  let sqlFile: string | null = null;
+  let logFile: string | null = null;
+
+  for (const arg of args) {
+    if (arg.startsWith('--start-year=')) {
+      startYear = parseInt(arg.split('=')[1], 10);
+      if (isNaN(startYear)) {
+        throw new Error(`Invalid --start-year value: ${arg}`);
+      }
+    } else if (arg.startsWith('--end-year=')) {
+      endYear = parseInt(arg.split('=')[1], 10);
+      if (isNaN(endYear)) {
+        throw new Error(`Invalid --end-year value: ${arg}`);
+      }
+    } else if (arg.startsWith('--term=')) {
+      termFilter = arg.split('=')[1].toLowerCase();
+    } else if (arg.startsWith('--sql-file=')) {
+      sqlFile = arg.split('=')[1];
+    } else if (arg.startsWith('--log-file=')) {
+      logFile = arg.split('=')[1];
+    } else if (arg === '--dry-run') {
+      dryRun = true;
+    } else if (arg === '--fresh') {
+      fresh = true;
+    } else if (arg === '--allow-partial-output') {
+      allowPartialOutput = true;
+    } else if (arg === '--help' || arg === '-h') {
+      return { kind: 'help', usage: historicalSyncUsage(currentYear) };
     }
   }
 
   if (startYear > endYear) {
-    console.error(`Error: --start-year (${startYear}) cannot be greater than --end-year (${endYear})`);
-    process.exit(1);
+    throw new Error(`--start-year (${startYear}) cannot be greater than --end-year (${endYear})`);
   }
 
   // Generate default file names based on timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
   if (!sqlFile) {
     sqlFile = `historical-data-${timestamp}.sql`;
   }
@@ -301,7 +305,7 @@ async function robustFetch(url: string): Promise<string> {
   return historicalFetcher.fetchText(url);
 }
 
-function printSummary(args: Args, startTime: Date): void {
+function printSummary(args: HistoricalSyncArgs, startTime: Date): void {
   const endTime = new Date();
   const durationMs = endTime.getTime() - startTime.getTime();
   const durationMin = (durationMs / 1000 / 60).toFixed(2);
@@ -352,7 +356,7 @@ function printSummary(args: Args, startTime: Date): void {
   writeLog(`${'='.repeat(60)}\n`);
 }
 
-function writeSqlHeader(args: Args): void {
+function writeSqlHeader(args: HistoricalSyncArgs): void {
   writeSql('-- Historical course data sync');
   writeSql('-- Generated: ' + new Date().toISOString());
   writeSql(`-- Range: ${args.startYear} - ${args.endYear}`);
@@ -368,7 +372,12 @@ function writeTermStateSql(termResults: Map<string, { courses: number; sections:
 }
 
 async function main() {
-  const args = parseArgs();
+  const parsedArgs = parseHistoricalSyncArgs(process.argv.slice(2));
+  if (isHistoricalSyncHelp(parsedArgs)) {
+    console.log(parsedArgs.usage);
+    return;
+  }
+  const args = parsedArgs;
   const startTime = new Date();
 
   // Initialize log writer immediately; SQL writer is opened after checkpoint filtering
@@ -601,6 +610,12 @@ async function main() {
   if (stats.failedSubjects.length > 0 && !args.allowPartialOutput) {
     throw new Error(`Historical sync failed for ${stats.failedSubjects.length} subject(s). Re-run with --allow-partial-output to accept partial SQL output.`);
   }
+}
+
+function isHistoricalSyncHelp(
+  result: HistoricalSyncParseResult
+): result is Extract<HistoricalSyncParseResult, { kind: 'help' }> {
+  return (result as { kind?: string }).kind === 'help';
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -40,7 +40,7 @@ export function useSearchSorting({
     executeSearch({
       type: 'refresh',
       query: derived.activeRequestQuery,
-      filters: state.session.activeAdvancedFilters,
+      filters: derived.activeAdvancedFilters,
       sort: normalizedSort,
     })
   }

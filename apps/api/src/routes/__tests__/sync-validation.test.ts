@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { readTermAggregateCounts, resolveManualSyncTermStatus, syncRoutes } from '../sync.js';
+import { syncRoutes } from '../sync.js';
+import {
+  readTermAggregateCounts,
+  resolveManualSyncTermStatus,
+} from '../../services/sync-operations.js';
 import type { D1Database } from '@cloudflare/workers-types';
 
 describe('sync route validation', () => {

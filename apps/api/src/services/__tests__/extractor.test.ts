@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { EXTRACTION_PASSES, extract } from '../extractor.js';
+import {
+  createExtractionContext,
+  recordExtractionArtifacts,
+  runExtractionPasses,
+  type ExtractionPass,
+} from '../extraction/types.js';
 import type { Hint } from '../search-planner-types.js';
 
 describe('extract', () => {
@@ -21,6 +27,26 @@ describe('extract', () => {
       expect(pass.reads.length).toBeGreaterThan(0);
       expect(pass.writes.length).toBeGreaterThan(0);
     }
+  });
+
+  it('rejects extraction passes that claim an existing artifact without producing a new revision', () => {
+    const seed: ExtractionPass = {
+      id: 'seed_negation',
+      reads: ['normalized_text'],
+      writes: ['negations'],
+      run(context) {
+        recordExtractionArtifacts(context, 'negations');
+      },
+    };
+    const staleWriter: ExtractionPass = {
+      id: 'stale_negation',
+      reads: ['negations'],
+      writes: ['negations'],
+      run() {},
+    };
+
+    expect(() => runExtractionPasses(createExtractionContext('easy class'), [seed, staleWriter]))
+      .toThrow('Extraction pass "stale_negation" declared missing writes: negations');
   });
 
   describe('phase 1: entities', () => {

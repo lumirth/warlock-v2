@@ -62,8 +62,7 @@ async function runSearch({
 
   dispatch({
     type: 'search/started',
-    query: resolved.query,
-    filters: resolved.filters,
+    request: resolved.request,
     mode: resolved.mode,
     sort: resolved.sort,
   })

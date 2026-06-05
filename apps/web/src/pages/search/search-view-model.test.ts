@@ -39,7 +39,9 @@ describe('buildSearchViewModel', () => {
     const model = buildSearchViewModel(
       state({
         session: {
-          activeSearchText: 'online stats class',
+          activeRequest: {
+            query: 'online stats class',
+          },
           results: [{ id: 'STAT-100' } as SearchControllerState['session']['results'][number]],
           meta: {
             query: { raw: 'online stats class', residual: 'stats' },

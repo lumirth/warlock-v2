@@ -130,7 +130,7 @@ Add a course alias:
 Add a workload signal:
 
 1. Insert into `course_signals` with `signal_type`, `value`, `source`, `confidence`, and `explanation`.
-2. Extend `workloadSignalTypes()` in `apps/api/src/services/search-retrieval-lanes.ts` if the signal is a new preference family.
+2. Extend `workloadSignalTypes()` in `apps/api/src/services/search-retrieval-plan-queries.ts` if the signal is a new preference family.
 3. Add a ranking test when the signal should change order.
 
 ## Validation

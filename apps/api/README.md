@@ -30,7 +30,8 @@ The system automatically discovers new academic terms to sync:
 *   `http/search-request.ts` and `services/search-request.ts`: public request parsing and canonical immutable search request.
 *   `services/search-plan-compiler.ts`, `services/search-plan-hints.ts`, `services/search-plan-intent-passes.ts`, `services/query-resolver.ts`, `services/subject-resolution.ts`: query understanding and plan construction.
 *   `services/search-pipeline.ts`: planning/cache orchestration only.
-*   `services/search-retrieval-plan.ts`, `services/search-executor.ts`, `services/search-retrieval-lanes.ts`, `services/search-hybrid.ts`: executable retrieval planning and lane execution.
+*   `services/search-retrieval-plan.ts`, `services/search-retrieval-lane-executors.ts`, `services/search-retrieval-lanes.ts`, `services/search-hybrid.ts`: executable retrieval planning and lane execution.
+*   `services/course-sync-application.ts`, `services/enrichment-application.ts`, `services/sync-operations.ts`: sync and enrichment application workflows shared by cron, internal, and admin route adapters.
 *   `services/ranking/*`: named ranking components, final ordering controls, sort policy, workload/requirement/negative-preference policy.
 *   `services/search-response.ts`, `services/search-result-presentation.ts`, `services/search-ui-plan.ts`: response DTOs, explanations, chips, and recovery metadata.
 
