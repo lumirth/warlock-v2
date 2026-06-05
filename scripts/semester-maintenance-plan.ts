@@ -23,6 +23,7 @@ import {
   formatTermRetentionReport,
   type TermRetentionReport,
 } from './term-retention-plan.js';
+import { asRecord, type JsonRecord } from './lib/json-shape.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -34,7 +35,6 @@ const DEFAULT_FEEDBACK_LIMIT = 200;
 const WRANGLER_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
 
 type Fetcher = (request: Request) => Promise<Response>;
-type JsonRecord = Record<string, unknown>;
 type CommandRunner = (command: string, args: string[]) => Promise<string>;
 
 export type SemesterMaintenanceArgs = {
@@ -392,12 +392,6 @@ async function loadSyncStatus(args: SemesterMaintenanceArgs, options: RunOptions
     throw new Error('sync status response must be a JSON object');
   }
   return { source: url.toString(), status: parsed };
-}
-
-function asRecord(value: unknown): JsonRecord | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as JsonRecord
-    : null;
 }
 
 async function writeJson(file: string, value: unknown): Promise<void> {

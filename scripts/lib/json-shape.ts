@@ -16,7 +16,7 @@ export function numericOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-export function positiveNumber(value: number | null): boolean {
+export function positiveNumber(value: unknown): boolean {
   return typeof value === 'number' && value > 0;
 }
 

@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { asRecord, positiveNumber, recordsFromArray, type JsonRecord } from './lib/json-shape.ts';
 
 type Args = {
   input?: string;
@@ -10,8 +11,6 @@ type Args = {
   minHistoricalTerms: number;
   requireRmp: boolean;
 };
-
-type JsonRecord = Record<string, unknown>;
 
 export type FreshnessAuditCheck = {
   name: string;
@@ -86,32 +85,20 @@ function check(name: string, ok: boolean, detail: string): FreshnessAuditCheck {
   return { name, ok, detail };
 }
 
-function asRecord(value: unknown): JsonRecord | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as JsonRecord
-    : null;
-}
-
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 function syncStates(status: JsonRecord): JsonRecord[] {
-  return Array.isArray(status.syncStates)
-    ? status.syncStates.map(asRecord).filter((item): item is JsonRecord => item !== null)
-    : [];
+  return recordsFromArray(status.syncStates);
 }
 
 function termStates(status: JsonRecord): JsonRecord[] {
-  return Array.isArray(status.termStates)
-    ? status.termStates.map(asRecord).filter((item): item is JsonRecord => item !== null)
-    : [];
+  return recordsFromArray(status.termStates);
 }
 
 function enrichmentCoverage(status: JsonRecord): JsonRecord[] {
-  return Array.isArray(status.enrichmentCoverage)
-    ? status.enrichmentCoverage.map(asRecord).filter((item): item is JsonRecord => item !== null)
-    : [];
+  return recordsFromArray(status.enrichmentCoverage);
 }
 
 function syncStateById(status: JsonRecord, id: string): JsonRecord | null {
@@ -124,10 +111,6 @@ function termStateById(status: JsonRecord, id: string): JsonRecord | null {
 
 function enrichmentCoverageByTermId(status: JsonRecord, id: string): JsonRecord | null {
   return enrichmentCoverage(status).find(state => state.term_id === id) ?? null;
-}
-
-function positiveNumber(value: unknown): boolean {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
 function hasPositiveEnrichmentCoverage(row: JsonRecord | null): boolean {
@@ -150,12 +133,10 @@ function retainedTermIds(retention: JsonRecord | null): string[] {
   if (!retention) return [];
   const values = Array.isArray(retention.retained_term_ids)
     ? retention.retained_term_ids
-    : Array.isArray(retention.terms)
-      ? retention.terms
-        .map(asRecord)
-        .filter((item): item is JsonRecord => item !== null)
-        .filter(item => item.retention_decision === 'retain')
-        .map(item => item.term_id)
+      : Array.isArray(retention.terms)
+        ? recordsFromArray(retention.terms)
+          .filter(item => item.retention_decision === 'retain')
+          .map(item => item.term_id)
       : [];
   return values.filter((item): item is string => typeof item === 'string');
 }
@@ -164,12 +145,10 @@ function droppedTermIds(retention: JsonRecord | null): string[] {
   if (!retention) return [];
   const values = Array.isArray(retention.dropped_term_ids)
     ? retention.dropped_term_ids
-    : Array.isArray(retention.terms)
-      ? retention.terms
-        .map(asRecord)
-        .filter((item): item is JsonRecord => item !== null)
-        .filter(item => item.retention_decision === 'drop')
-        .map(item => item.term_id)
+      : Array.isArray(retention.terms)
+        ? recordsFromArray(retention.terms)
+          .filter(item => item.retention_decision === 'drop')
+          .map(item => item.term_id)
       : [];
   return values.filter((item): item is string => typeof item === 'string');
 }
