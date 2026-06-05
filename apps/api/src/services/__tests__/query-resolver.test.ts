@@ -208,7 +208,7 @@ describe('resolveQuery', () => {
 
       const extracted: ExtractedQuery = {
         rawQuery: 'easy humanities gened',
-        hints: [{ type: 'gened', value: 'humanities', confidence: 0.7 }],
+        hints: [{ type: 'requirement', value: 'humanities', confidence: 0.7 }],
         residual: 'easy'
       };
 
@@ -259,7 +259,7 @@ describe('resolveQuery', () => {
       expect(plan.filters.requirement).toEqual({ mode: 'single', codes: ['CS'] });
       expect(plan.ambiguities).toEqual([{
         term: 'cs',
-        chosen: { type: 'gened', value: 'CS', label: 'Cultural Studies' },
+        chosen: { type: 'requirement', value: 'CS', label: 'Cultural Studies' },
         alternatives: [{ type: 'subject', value: 'CS', label: 'Computer Science' }],
       }]);
     });
@@ -285,7 +285,7 @@ describe('resolveQuery', () => {
       expect(plan.ambiguities).toEqual([{
         term: 'CS',
         chosen: { type: 'subject', value: 'CS', label: 'Computer Science' },
-        alternatives: [{ type: 'gened', value: 'CS', label: 'Cultural Studies' }],
+        alternatives: [{ type: 'requirement', value: 'CS', label: 'Cultural Studies' }],
       }]);
     });
 
@@ -309,7 +309,7 @@ describe('resolveQuery', () => {
       expect(plan.filters.requirement).toBeUndefined();
       expect(plan.ambiguities?.[0]).toMatchObject({
         chosen: { type: 'subject', value: 'CS', label: 'Computer Science' },
-        alternatives: [{ type: 'gened', value: 'CS', label: 'Cultural Studies' }],
+        alternatives: [{ type: 'requirement', value: 'CS', label: 'Cultural Studies' }],
       });
     });
 
@@ -353,7 +353,7 @@ describe('resolveQuery', () => {
       expect(plan.filters.subject).toBeUndefined();
       expect(plan.filters.requirement).toEqual({ mode: 'single', codes: ['PS'] });
       expect(plan.ambiguities?.[0]).toMatchObject({
-        chosen: { type: 'gened', value: 'PS', label: 'Physical Sciences' },
+        chosen: { type: 'requirement', value: 'PS', label: 'Physical Sciences' },
         alternatives: [{ type: 'subject', value: 'PS', label: 'Political Science' }],
       });
     });
@@ -550,12 +550,12 @@ describe('resolveQuery', () => {
 
         const extracted: ExtractedQuery = {
           rawQuery: 'easy class',
-          hints: [{ type: 'difficulty', value: 'easy', confidence: 0.7 }],
+          hints: [{ type: 'workload', value: 'easy', confidence: 0.7 }],
           residual: 'class'
         };
 
         const plan = await resolveQuery(mockDb as unknown as D1Database, extracted);
-        expect(plan.filters.difficulty).toBe('easy');
+        expect(plan.filters.workload).toBe('easy');
       });
     });
   });

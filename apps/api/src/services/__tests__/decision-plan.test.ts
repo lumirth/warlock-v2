@@ -16,18 +16,18 @@ function plan(overrides: Partial<SearchPlan> = {}): SearchPlan {
 describe('compileDecisionSearchRescue', () => {
   it('turns generic gened language into an explicit any-GenEd constraint', () => {
     const searchPlan = plan({
-      filters: { difficulty: 'easy' },
+      filters: { workload: 'easy' },
     });
 
     const result = compileDecisionSearchRescue(searchPlan, 'easy cs gened', '');
 
     expect(result.plan.filters).toMatchObject({
-      difficulty: 'easy',
+      workload: 'easy',
       requirement: requirementFilter('any', GENERIC_GENED_CODES),
     });
     expect(result.plan.rescue?.queryTypes).toEqual(expect.arrayContaining(['requirement', 'subjective_vibe']));
     expect(searchPlan).toEqual({
-      filters: { difficulty: 'easy' },
+      filters: { workload: 'easy' },
       keywordQuery: '',
       semanticQuery: '',
     });
@@ -35,14 +35,14 @@ describe('compileDecisionSearchRescue', () => {
 
   it('does not broaden a specific GenEd bucket into generic any-GenEd', () => {
     const searchPlan = plan({
-      filters: { requirement: singleRequirementFilter('CS'), difficulty: 'easy' },
+      filters: { requirement: singleRequirementFilter('CS'), workload: 'easy' },
     });
 
     const result = compileDecisionSearchRescue(searchPlan, 'easy cs gened', '');
 
     expect(result.plan.filters).toMatchObject({
       requirement: singleRequirementFilter('CS'),
-      difficulty: 'easy',
+      workload: 'easy',
     });
     expect(result.plan.filters.requirement?.mode).toBe('single');
     expect(result.plan.rescue?.queryTypes).toEqual(expect.arrayContaining(['requirement', 'subjective_vibe']));

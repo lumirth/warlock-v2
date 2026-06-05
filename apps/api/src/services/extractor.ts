@@ -18,6 +18,32 @@ export interface ExtractionResult {
   residual: string;
 }
 
+type ExtractionArtifact =
+  | 'raw_text'
+  | 'normalized_text'
+  | 'negations'
+  | 'strict_entities'
+  | 'question_scaffolding'
+  | 'student_shorthand'
+  | 'term_filters'
+  | 'requirement_context'
+  | 'attributes'
+  | 'instructors'
+  | 'standalone_entities'
+  | 'clean_residual';
+
+type ExtractionContext = {
+  hints: Hint[];
+  residual: string;
+};
+
+type ExtractionPass = {
+  id: string;
+  reads: readonly ExtractionArtifact[];
+  writes: readonly ExtractionArtifact[];
+  run: (context: ExtractionContext) => void;
+};
+
 const STOP_PHRASES_REGEX = new RegExp(`\\b(${STOP_PHRASES.join('|')})\\b`, 'gi');
 
 function removeStopPhrases(text: string): string {
@@ -32,51 +58,118 @@ const ALIAS_REGISTRY = createDefaultRegistry();
 
 /**
  * Extract structured hints from natural language text.
- * Multi-pass extraction to ensure order independence.
+ * Explicit passes keep student-language interpretation separate from later retrieval.
  */
 export function extract(text: string): ExtractionResult {
-  const hints: Hint[] = [];
-  let residual = text.replace(/[’]/g, "'");
+  const context: ExtractionContext = {
+    hints: [],
+    residual: text.replace(/[’]/g, "'"),
+  };
 
-  // Pass 1: Negations & Strict Entities (Course Codes, CRNs)
-  // We extract negations early so they can capture terms before they are removed by aliases
-  residual = extractPositiveNoNotAliases(residual, hints);
-  residual = extractNegations(residual, hints);
-  residual = extractCourseCodesAndCrns(residual, hints);
-  residual = extractQuestionScaffolding(residual);
-  residual = extractStudentShorthand(residual, hints);
+  for (const pass of EXTRACTION_PASSES) {
+    pass.run(context);
+  }
 
-  // Pass 1.5: Term extraction (Spring 2026, etc.)
-  residual = extractTerms(residual, hints);
-  residual = extractPartOfTerm(residual, hints);
-  residual = maskCompressedTermPhrases(residual);
-  residual = extractContextualGeneds(residual, hints);
-
-  // Pass 2: Attributes and Aliases (Level, Credits, Days, Time, etc.)
-  residual = extractAttributesAndAliases(residual, hints);
-
-  // Pass 3: NLP Patterns (Instructors)
-  // We do this BEFORE standalone subjects so names like "Fagen" or words like "with" 
-  // in instructor patterns aren't caught as subjects.
-  residual = extractInstructors(residual, hints);
-
-  // Pass 4: Standalone Subjects & Numbers
-  // We do this after aliases and instructors to avoid matching "MWF" or names as subjects
-  residual = extractStandaloneEntities(residual, hints);
-
-  // Clean up residual
-  residual = residual.replace(/\s+/g, ' ').trim();
-
-  // Remove stop-phrases
-  residual = removeStopPhrases(residual);
-
-  return { hints, residual };
+  return { hints: context.hints, residual: context.residual };
 }
 
 /**
  * Alias for extract to match the requested interface.
  */
 export const extractQuery = extract;
+
+export const EXTRACTION_PASSES: readonly ExtractionPass[] = [
+  {
+    id: 'positive_no_not_aliases',
+    reads: ['normalized_text'],
+    writes: ['attributes'],
+    run(context) {
+      context.residual = extractPositiveNoNotAliases(context.residual, context.hints);
+    },
+  },
+  {
+    id: 'general_negations',
+    reads: ['normalized_text'],
+    writes: ['negations'],
+    run(context) {
+      context.residual = extractNegations(context.residual, context.hints);
+    },
+  },
+  {
+    id: 'course_codes_and_crns',
+    reads: ['normalized_text', 'negations'],
+    writes: ['strict_entities'],
+    run(context) {
+      context.residual = extractCourseCodesAndCrns(context.residual, context.hints);
+    },
+  },
+  {
+    id: 'question_scaffolding',
+    reads: ['normalized_text', 'strict_entities'],
+    writes: ['question_scaffolding'],
+    run(context) {
+      context.residual = extractQuestionScaffolding(context.residual);
+    },
+  },
+  {
+    id: 'student_shorthand',
+    reads: ['question_scaffolding'],
+    writes: ['student_shorthand'],
+    run(context) {
+      context.residual = extractStudentShorthand(context.residual, context.hints);
+    },
+  },
+  {
+    id: 'term_and_part_of_term',
+    reads: ['student_shorthand'],
+    writes: ['term_filters'],
+    run(context) {
+      context.residual = extractTerms(context.residual, context.hints);
+      context.residual = extractPartOfTerm(context.residual, context.hints);
+      context.residual = maskCompressedTermPhrases(context.residual);
+    },
+  },
+  {
+    id: 'contextual_requirements',
+    reads: ['term_filters'],
+    writes: ['requirement_context'],
+    run(context) {
+      context.residual = extractContextualGeneds(context.residual, context.hints);
+    },
+  },
+  {
+    id: 'attributes_and_aliases',
+    reads: ['requirement_context'],
+    writes: ['attributes'],
+    run(context) {
+      context.residual = extractAttributesAndAliases(context.residual, context.hints);
+    },
+  },
+  {
+    id: 'instructors',
+    reads: ['attributes'],
+    writes: ['instructors'],
+    run(context) {
+      context.residual = extractInstructors(context.residual, context.hints);
+    },
+  },
+  {
+    id: 'standalone_entities',
+    reads: ['instructors'],
+    writes: ['standalone_entities'],
+    run(context) {
+      context.residual = extractStandaloneEntities(context.residual, context.hints);
+    },
+  },
+  {
+    id: 'clean_residual',
+    reads: ['standalone_entities'],
+    writes: ['clean_residual'],
+    run(context) {
+      context.residual = removeStopPhrases(context.residual.replace(/\s+/g, ' ').trim());
+    },
+  },
+];
 
 /**
  * Helper to mask out matched ranges in a string to avoid fragile string.replace()
@@ -305,13 +398,13 @@ function extractContextualGeneds(text: string, hints: Hint[]): string {
       }
 
       hints.push({
-        type: 'gened',
+        type: 'requirement',
         value: rule.code,
         metadata: createMetadata('nlp', match[0], rule.confidence),
       });
       if (rule.code === 'NAT' && /\b(?:easy|chill)\b/i.test(match[0])) {
         hints.push({
-          type: 'difficulty',
+          type: 'workload',
           value: 'easy',
           metadata: createMetadata('nlp', match[0], 0.82),
         });
@@ -554,12 +647,12 @@ function extractAliases(text: string, hints: Hint[]): string {
 
     switch (match.kind) {
       case 'time': hintType = 'time'; value = match.canonical; break;
-      case 'difficulty': hintType = 'difficulty'; value = match.canonical; break;
+      case 'workload': hintType = 'workload'; value = match.canonical; break;
       case 'status': hintType = 'status'; value = match.canonical; break;
       case 'delivery': hintType = 'online'; value = match.canonical === 'true'; break;
       case 'days': hintType = 'days'; value = match.canonical; break;
       case 'subject': hintType = 'subject'; value = match.canonical; break;
-      case 'gened': hintType = 'gened'; value = match.canonical; break;
+      case 'requirement': hintType = 'requirement'; value = match.canonical; break;
       default: continue;
     }
 
@@ -691,6 +784,7 @@ const INSTRUCTOR_STOP_WORDS = new Set([
   'credit',
   'credits',
   'difficulty',
+  'workload',
   'easy',
   'evening',
   'friday',

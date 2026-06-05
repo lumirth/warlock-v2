@@ -8,7 +8,7 @@ import {
   SUBJECT_GENED_CONFLICTS,
 } from './student-language-lexicon.js';
 
-type InterpretationType = 'subject' | 'gened';
+type InterpretationType = 'subject' | 'requirement';
 
 export function resolveGened(value: string, plan: SearchPlan): void {
   const normalized = value.toLowerCase().trim();
@@ -45,12 +45,12 @@ export async function resolveSubjectHint(
     rawQuery,
   });
 
-  if (decision.preferred === 'gened') {
+  if (decision.preferred === 'requirement') {
     delete plan.filters.subject;
     plan.filters.requirement = singleRequirementFilter(genedCode);
     await addSubjectGenedAmbiguity(db, plan, {
       term: String(hint.metadata?.raw ?? hint.value),
-      chosen: 'gened',
+      chosen: 'requirement',
       subject,
       genedCode,
     });
@@ -148,7 +148,7 @@ function chooseSubjectOrGenedInterpretation(context: {
   ]);
 
   if (genedScore > subjectScore) {
-    return { preferred: 'gened', showAlternative: true };
+    return { preferred: 'requirement', showAlternative: true };
   }
 
   return {
@@ -185,7 +185,7 @@ function mentionsGenedCode(subject: string, rawQuery: string): boolean {
 }
 
 function hasRequirementCue(rawQuery: string): boolean {
-  return /\b(?:gened|gen\s*-?\s*ed|requirements?|fulfills?|counts?|category|bucket)\b/i.test(rawQuery);
+  return /\b(?:requirement|gen\s*-?\s*ed|requirements?|fulfills?|counts?|category|bucket)\b/i.test(rawQuery);
 }
 
 function hasStudentShoppingCue(rawQuery: string): boolean {
@@ -218,9 +218,9 @@ async function addSubjectGenedAmbiguity(
   const genedLabel = getGenedLabel(context.genedCode);
   const chosen = context.chosen === 'subject'
     ? { type: 'subject', value: context.subject, label: subjectLabel }
-    : { type: 'gened', value: context.genedCode, label: genedLabel };
+    : { type: 'requirement', value: context.genedCode, label: genedLabel };
   const alternative = context.chosen === 'subject'
-    ? { type: 'gened', value: context.genedCode, label: genedLabel }
+    ? { type: 'requirement', value: context.genedCode, label: genedLabel }
     : { type: 'subject', value: context.subject, label: subjectLabel };
 
   plan.ambiguities = plan.ambiguities || [];

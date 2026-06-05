@@ -132,7 +132,7 @@ describe('feedback corpus candidates', () => {
       target: 'score_audit',
       priority: 'high',
       query: 'CS 225',
-      scoreField: 'difficulty',
+      scoreField: 'workload',
       suggestedFailureClasses: ['course_code_navigation', 'score_quality', 'subject_alias'],
     });
     expect(report.candidates[0].suggestedGoldQuery).toBeUndefined();

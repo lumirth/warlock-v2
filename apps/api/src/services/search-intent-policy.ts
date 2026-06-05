@@ -32,9 +32,9 @@ export function applyStructuredNegation(
     return;
   }
 
-  if (field === "gened") {
-    plan.filters.not.geneds = plan.filters.not.geneds || [];
-    plan.filters.not.geneds.push(normalized.toUpperCase());
+  if (field === "requirement") {
+    plan.filters.not.requirementCodes = plan.filters.not.requirementCodes || [];
+    plan.filters.not.requirementCodes.push(normalized.toUpperCase());
     return;
   }
 

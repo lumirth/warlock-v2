@@ -27,8 +27,8 @@ export function searchPlanFiltersFromRequestFilters(
   if (requestFilters.number !== undefined) filters.number = requestFilters.number;
   if (requestFilters.term !== undefined) filters.term = requestFilters.term;
   if (requestFilters.year !== undefined) filters.year = requestFilters.year;
-  if (requestFilters.gened !== undefined) {
-    filters.requirement = singleRequirementFilter(requestFilters.gened);
+  if (requestFilters.requirement !== undefined) {
+    filters.requirement = singleRequirementFilter(requestFilters.requirement);
   }
   if (requestFilters.credits !== undefined) filters.credits = requestFilters.credits;
   if (requestFilters.days !== undefined) filters.days = requestFilters.days;
@@ -38,8 +38,8 @@ export function searchPlanFiltersFromRequestFilters(
   }
   if (requestFilters.online !== undefined) filters.online = requestFilters.online;
   if (requestFilters.status !== undefined) filters.status = requestFilters.status;
-  if (requestFilters.difficulty !== undefined) {
-    filters.difficulty = requestFilters.difficulty;
+  if (requestFilters.workload !== undefined) {
+    filters.workload = requestFilters.workload;
   }
   if (requestFilters.level !== undefined) filters.level = requestFilters.level;
 

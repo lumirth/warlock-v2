@@ -11,14 +11,14 @@ describe("parseSearchHttpRequest", () => {
         instructor: "  Fagen  ",
         term: "spring",
         year: "2026",
-        gened: "hum",
+        requirement: "hum",
         credits: "4",
         days: "mwf",
         time: "morning",
         part_of_term: "a",
         online: "yes",
         status: "open",
-        difficulty: "easy",
+        workload: "easy",
         level: "400",
         sort: "gpa",
         direction: "asc",
@@ -39,14 +39,14 @@ describe("parseSearchHttpRequest", () => {
             instructor: "Fagen",
             term: "spring",
             year: 2026,
-            gened: "HUM",
+            requirement: "HUM",
             credits: 4,
             days: "MWF",
             time: "morning",
             partOfTerm: "A",
             online: true,
             status: "open",
-            difficulty: "easy",
+            workload: "easy",
             level: 400,
           },
           sort: { field: "gpa", direction: "asc" },
@@ -57,7 +57,7 @@ describe("parseSearchHttpRequest", () => {
     });
   });
 
-  it("falls back for invalid sort, scope, and level without rejecting the search", () => {
+  it("rejects invalid explicit controls instead of silently reinterpreting them", () => {
     const parsed = parseSearchHttpRequest(
       new URLSearchParams({
         q: "history",
@@ -69,16 +69,8 @@ describe("parseSearchHttpRequest", () => {
     );
 
     expect(parsed).toEqual({
-      ok: true,
-      value: {
-        request: {
-          query: "history",
-          filters: {},
-          sort: { field: "relevance", direction: "desc" },
-          scope: "active",
-        },
-        pagination: { limit: 20, offset: 0 },
-      },
+      ok: false,
+      error: "sort must be one of: relevance, gpa, quality, workload, instructor_rating, level, credits",
     });
   });
 

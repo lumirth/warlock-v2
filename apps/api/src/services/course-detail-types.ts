@@ -1,5 +1,10 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { CourseDto, CourseGenedDto, CourseSectionDto, InstructorLinkDto } from '@uiuc-course-search/query-types';
+import type {
+  CourseDetailResponseDto,
+  CourseGenedDto,
+  CourseSectionDto,
+  InstructorLinkDto,
+} from '@uiuc-course-search/query-types';
 import type { Course } from '../db/types.js';
 import type { CourseSnapshot } from '../transforms/course.js';
 import type { ResolvedTerm } from './term-state.js';
@@ -31,7 +36,7 @@ export type CourseDetailErrorBody = {
 
 export type CourseDetailResponse = {
   status: 200 | 404 | 500 | 502 | 503;
-  body: CourseDto | CourseDetailErrorBody;
+  body: CourseDetailResponseDto | CourseDetailErrorBody;
   headers?: Record<string, string>;
 };
 

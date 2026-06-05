@@ -100,8 +100,10 @@ describe('course routes', () => {
       primary_instructor_rmp: 4.8,
       quality_score: 88,
       difficulty_score: 42,
-      _cached: false,
-      _term_status: 'active',
+      cache: {
+        cached: false,
+        termStatus: 'active',
+      },
     });
     expect(data.sections[0]).toMatchObject({
       crn: '12345',
@@ -139,8 +141,10 @@ describe('course routes', () => {
     expect(res.headers.get('X-Cache')).toBe('STALE');
     expect(data).toMatchObject({
       id: 'CS-225-2026-spring',
-      _stale: true,
-      _stale_reason: 'upstream returned 429',
+      cache: {
+        stale: true,
+        staleReason: 'upstream returned 429',
+      },
     });
   });
 });

@@ -4,23 +4,20 @@ import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { validateD1BackupEvidence, type D1BackupEvidenceArgs } from './lib/d1-backup-evidence.ts';
+import { asRecord } from './lib/json-shape.ts';
+import { isTerm, isTermStatus, type Term, type TermStatus } from './lib/term-model.ts';
+import { parseNonNegativeInt } from './lib/script-args.ts';
 import {
   runTermBackfill,
   type BackfillPageResult,
   type BackfillReport,
-  type Term,
-  type TermStatus,
 } from './term-backfill.ts';
 
-const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-const STATUSES = ['registrable', 'active', 'historical'] as const;
 const DEFAULT_PAGE_SIZE = 5;
 const MAX_PAGE_SIZE = 20;
 const DEFAULT_DATABASE = 'course-search-db-staging';
 
 type Fetcher = (request: Request) => Promise<Response>;
-type JsonRecord = Record<string, unknown>;
-
 export type CoverageBackfillArgs = {
   coveragePlan?: string;
   pageSize: number;
@@ -109,33 +106,12 @@ function usage(): string {
   ].join('\n');
 }
 
-function parseIntArg(value: string | undefined, name: string): number {
-  if (!value || !/^\d+$/.test(value)) {
-    throw new Error(`${name} must be a non-negative integer`);
-  }
-  return Number.parseInt(value, 10);
-}
-
-function isTerm(value: unknown): value is Term {
-  return typeof value === 'string' && (TERMS as readonly string[]).includes(value.toLowerCase());
-}
-
-function isStatus(value: unknown): value is TermStatus {
-  return typeof value === 'string' && (STATUSES as readonly string[]).includes(value.toLowerCase());
-}
-
-function asRecord(value: unknown): JsonRecord | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as JsonRecord
-    : null;
-}
-
 function normalizePlanTerm(value: unknown): CoveragePlanTerm | null {
   const row = asRecord(value);
   if (!row) return null;
   const year = typeof row.year === 'number' && Number.isInteger(row.year) ? row.year : null;
   const term = isTerm(row.term) ? row.term.toLowerCase() as Term : null;
-  const status = isStatus(row.expected_status) ? row.expected_status.toLowerCase() as TermStatus : null;
+  const status = isTermStatus(row.expected_status) ? row.expected_status.toLowerCase() as TermStatus : null;
   const termId = typeof row.term_id === 'string' ? row.term_id : year && term ? `${year}-${term}` : null;
   const reason = typeof row.reason === 'string' ? row.reason : 'needs backfill';
   const needsBackfill = row.needs_backfill === true;
@@ -185,13 +161,13 @@ export function parseCoverageBackfillArgs(argv: string[]): CoverageBackfillArgs 
       args.coveragePlan = next;
       index += 1;
     } else if (arg === '--page-size') {
-      args.pageSize = parseIntArg(next, '--page-size');
+      args.pageSize = parseNonNegativeInt(next, '--page-size');
       index += 1;
     } else if (arg === '--max-terms') {
-      args.maxTerms = parseIntArg(next, '--max-terms');
+      args.maxTerms = parseNonNegativeInt(next, '--max-terms');
       index += 1;
     } else if (arg === '--max-pages-per-term') {
-      args.maxPagesPerTerm = parseIntArg(next, '--max-pages-per-term');
+      args.maxPagesPerTerm = parseNonNegativeInt(next, '--max-pages-per-term');
       index += 1;
     } else if (arg === '--output') {
       args.output = next;

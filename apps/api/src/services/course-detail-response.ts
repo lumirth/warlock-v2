@@ -1,5 +1,8 @@
 import type { InstructorLinkDto } from '@uiuc-course-search/query-types';
-import { courseSnapshotToCourseDto, toCourseDto } from '../dto/course.js';
+import {
+  courseSnapshotToCourseDetailResponseDto,
+  toCourseDetailResponseDto,
+} from '../dto/course.js';
 import type {
   CourseDetailContext,
   CourseDetailEnrichment,
@@ -20,7 +23,7 @@ export function buildStoredCourseDetailResponse(
 
   return {
     status: 200,
-    body: toCourseDto(course, {
+    body: toCourseDetailResponseDto(course, {
       sections: enrichment.enrichedSections,
       instructorLinks: enrichment.linksMap,
       geneds: enrichment.geneds,
@@ -53,7 +56,7 @@ export function buildLiveCourseDetailResponse(
 
   return {
     status: 200,
-    body: courseSnapshotToCourseDto({
+    body: courseSnapshotToCourseDetailResponseDto({
       ...liveSnapshot.snapshot,
       course: {
         ...liveSnapshot.snapshot.course,

@@ -2,21 +2,29 @@
 
 Date: 2026-06-01
 
-Status: provisional architecture contract
+Status: superseded historical plan
+
+This file is retained as implementation history. The current source of truth for
+search ownership, public request/response boundaries, and naming is
+[`docs/architecture/search-ownership.md`](../architecture/search-ownership.md).
+In particular, the public contract now uses `requirement` and `workload`,
+`SearchResponseDto.meta` does not expose internal `plan`/`extraction`/
+`retrievalPlan`/`budget`/`compilerEvents`, and server-authored UI actions carry a
+canonical `nextRequest`.
 
 ## Implementation Resolution
 
-During the pre-alpha remediation pass on 2026-06-01, this contract was narrowed to the implemented Query Language v1 surface instead of carrying aspirational response-shape promises as active requirements.
+During the pre-alpha remediation pass on 2026-06-01, this contract was narrowed to the implemented Query Language v1 surface instead of carrying aspirational response-shape promises as active requirements. Later architecture work narrowed the public contract again; use the ownership record above for current decisions.
 
 Implemented v1 now means:
 
-- Supported power syntax is applied end to end: `subject`, `gened`, `gened:any`, `gened:all`, `credits`, `level`, `crn`, `status`, `online`, `days`, `time`, `term`, `partOfTerm`/`pot`, and explicit `difficulty`.
+- Supported power syntax is applied end to end: `subject`, legacy `gened` aliases at parser edges, `requirement`, `requirement:any`, `requirement:all`, `credits`, `level`, `crn`, `status`, `online`, `days`, `time`, `term`, `partOfTerm`/`pot`, and explicit `workload`.
 - Unsupported `field:value` syntax remains residual text rather than disappearing silently.
 - Quoted phrases are fed into keyword and semantic query text.
 - Dash negation is supported for schedule/delivery tokens such as `-morning`, `-friday`, and `-online`. Unsupported dash negations remain residual text.
 - Natural-language negation is supported for known time/day/delivery terms such as `no morning`, `avoid Friday`, and `not online`. Unsupported negations such as `no exams` remain residual text.
 - Primary results never silently relax hard filters. Relaxed suggestions are disabled for this pre-alpha version rather than mixed into primary results.
-- The API response is the shared `SearchResponseDto`/`CourseDto` shape in `packages/query-types`. It exposes interpreted query evidence through `meta.extraction`, `meta.plan`, `meta.fallback`, and term metadata. Rich per-result `MatchEvidence` and section-grain result objects are future work, not an active v1 requirement.
+- The API response is the shared public `SearchResponseDto` shape in `packages/query-types`. It exposes public query evidence through `meta.interpretation`, `meta.interpretedRequest`, `meta.ui`, `meta.fallback`, term metadata, per-result `MatchEvidence`, and section-grain result objects. Internal planner, extraction, retrieval, budget, and compiler-event artifacts stay behind the API presenter.
 
 This document makes explicit the search contract that is already strongly implied by the current project: the shared query types, golden queries, extractor/parser code, previous query-system plans, and the product's stated desire to be the lowest-friction UIUC course search engine.
 

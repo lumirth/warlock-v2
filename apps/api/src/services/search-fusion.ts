@@ -1,5 +1,6 @@
 import type { RetrievalLane } from "./search-planner-types.js";
 import type { RetrievalLaneResult } from "./search-types.js";
+import { RANKING_POLICY } from "./ranking/ranking-policy.js";
 
 export type RankedLaneRow = RetrievalLaneResult;
 export type WorkloadLaneRow = RankedLaneRow & { claims: string[] };
@@ -25,20 +26,6 @@ export interface RetrievalLaneResults {
   semanticResults: RankedLaneRow[];
   workloadResults: WorkloadLaneRow[];
 }
-
-const RRF_K = 60;
-
-const LANE_WEIGHTS: Record<RetrievalLane, number> = {
-  exact: 9,
-  official_text: 1.8,
-  requirement: 2.4,
-  section_text: 1.6,
-  structured_section: 2,
-  student_language_alias: 2.1,
-  topic_semantic: 1.4,
-  workload_evidence: 2.2,
-  help_path: 1,
-};
 
 export function fuseRetrievalResults(lanes: RetrievalLaneResults): FusedSearchScore[] {
   const laneRanks = new Map<string, Partial<Record<RetrievalLane, number>>>();
@@ -112,7 +99,8 @@ export function fuseRetrievalResults(lanes: RetrievalLaneResults): FusedSearchSc
 }
 
 function laneRrfScore(lane: RetrievalLane, rank: number): number {
-  return LANE_WEIGHTS[lane] / (RRF_K + rank);
+  return RANKING_POLICY.retrievalFusion.laneWeights[lane]
+    / (RANKING_POLICY.retrievalFusion.rrfK + rank);
 }
 
 function bestKeywordLikeRank(

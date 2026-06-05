@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
-import { requirementFilter, WORKLOAD_FILTER_THRESHOLDS } from '@uiuc-course-search/query-types';
+import { requirementFilter } from '@uiuc-course-search/query-types';
 import { buildFilterClauses, requirementLaneSearch, TIME_RANGES } from '../search.js';
+import { WORKLOAD_FILTER_THRESHOLDS } from '../ranking/ranking-policy.js';
 import type { SearchFilters, SearchPlan } from '../search-planner-types.js';
 
 describe('buildFilterClauses', () => {
@@ -101,7 +102,7 @@ describe('buildFilterClauses', () => {
 
   describe('difficulty filter', () => {
     it('generates workload-only SQL for difficulty=easy', () => {
-      const filters: SearchFilters = { difficulty: 'easy' };
+      const filters: SearchFilters = { workload: 'easy' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
       expect(result.where.some(w => w.includes('c.difficulty_score <= ?'))).toBe(true);
@@ -109,7 +110,7 @@ describe('buildFilterClauses', () => {
     });
 
     it('generates workload-only SQL for difficulty=hard', () => {
-      const filters: SearchFilters = { difficulty: 'hard' };
+      const filters: SearchFilters = { workload: 'hard' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
       expect(result.where.some(w => w.includes('c.difficulty_score > ?'))).toBe(true);
@@ -172,7 +173,7 @@ describe('buildFilterClauses', () => {
     });
 
     it('excludes negated gen-ed attributes through course_gened', () => {
-      const filters: SearchFilters = { not: { geneds: ['QR'] } };
+      const filters: SearchFilters = { not: { requirementCodes: ['QR'] } };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('course_gened cg_neg'))).toBe(true);
       expect(result.params.filter(param => param === 'QR')).toHaveLength(2);
@@ -223,7 +224,7 @@ describe('requirementLaneSearch', () => {
       },
     } as unknown as D1Database;
     const plan: SearchPlan = {
-      filters: { subject: 'CS', difficulty: 'easy' },
+      filters: { subject: 'CS', workload: 'easy' },
       keywordQuery: '',
       semanticQuery: '',
       rescue: {

@@ -15,7 +15,7 @@ export interface ResultSelector {
   subject?: string;
   number?: string;
   titleIncludes?: string;
-  gened?: string;
+  requirement?: string;
   level_gte?: number;
   level_lte?: number;
 }
@@ -28,7 +28,7 @@ export interface ResultCoherenceExpectation {
   all_top_k?: {
     subjects?: string[];
     no_subjects?: string[];
-    gened?: string;
+    requirement?: string;
     level_gte?: number;
     level_lte?: number;
   };
@@ -52,7 +52,7 @@ export interface GoldQuery {
     subject?: string;
     level_gte?: number;
     level_lte?: number;
-    gened?: string;
+    requirement?: string;
     no_subject?: string;
   };
   category:
@@ -79,7 +79,7 @@ export type QueryFailureClass =
   | 'introductory_gateway'
   | 'topical_intro'
   | 'instructor_name'
-  | 'gened_language'
+  | 'requirement_language'
   | 'schedule_delivery'
   | 'score_quality'
   | 'power_syntax'
@@ -100,7 +100,6 @@ export interface EvalResult {
     title: string;
     subject: string;
     number: string;
-    gened?: string | null;
     geneds?: Array<{
       categoryId?: string;
       category_id?: string;

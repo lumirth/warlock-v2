@@ -392,7 +392,7 @@ describe('decision-search ranking policy', () => {
     ];
 
     const reranked = applyRankingPolicy(results, {
-      filters: { subject: 'PHYS', difficulty: 'easy' },
+      filters: { subject: 'PHYS', workload: 'easy' },
       semanticQuery: 'physics for non majors',
       keywordQuery: 'physics for non majors',
       softPreferences: { lowWorkload: 0.84, nonMajorFriendly: 0.72 },
@@ -447,7 +447,7 @@ describe('explainable ranking policy', () => {
     ], {
       filters: {
         requirement: singleRequirementFilter('NAT'),
-        difficulty: 'easy',
+        workload: 'easy',
         not: { subjects: ['MATH'] },
       },
       semanticQuery: 'easy science but no math',
@@ -503,7 +503,7 @@ describe('explainable ranking policy', () => {
         laneMatches: ['student_language_alias'],
       },
     ], {
-      filters: { subject: 'PHYS', difficulty: 'easy' },
+      filters: { subject: 'PHYS', workload: 'easy' },
       semanticQuery: 'physics for non majors',
       keywordQuery: 'physics for non majors',
       softPreferences: { lowWorkload: 0.84, nonMajorFriendly: 0.72 },

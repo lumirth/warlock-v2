@@ -2,9 +2,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateD1BackupEvidence, type D1BackupEvidenceArgs } from './lib/d1-backup-evidence.ts';
+import { STATUSES, TERMS, type Term, type TermStatus } from './lib/term-model.ts';
+import { endpoint, parseEnumArg, parseNonNegativeInt } from './lib/script-args.ts';
 
-const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-const STATUSES = ['registrable', 'active', 'historical'] as const;
 const DEFAULT_PAGE_SIZE = 5;
 const MAX_PAGE_SIZE = 20;
 const DEFAULT_DATABASE = 'course-search-db-staging';
@@ -13,8 +13,6 @@ const DEFAULT_RETRY_DELAY_MS = 2_000;
 const DEFAULT_PAGE_TIMEOUT_MS = 120_000;
 const TRANSIENT_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
-type Term = typeof TERMS[number];
-type TermStatus = typeof STATUSES[number];
 type Fetcher = (request: Request) => Promise<Response>;
 type Sleeper = (ms: number) => Promise<void>;
 type ProgressReporter = (page: BackfillPageResult, report: BackfillReport) => void;
@@ -128,20 +126,6 @@ function usage(): string {
   ].join('\n');
 }
 
-function parseIntArg(value: string | undefined, name: string): number {
-  if (!value || !/^\d+$/.test(value)) {
-    throw new Error(`${name} must be a non-negative integer`);
-  }
-  return Number.parseInt(value, 10);
-}
-
-function parseEnumArg<T extends string>(value: string | undefined, name: string, allowed: readonly T[]): T {
-  if (!value || !(allowed as readonly string[]).includes(value)) {
-    throw new Error(`${name} must be one of: ${allowed.join(', ')}`);
-  }
-  return value as T;
-}
-
 export function parseBackfillArgs(argv: string[]): BackfillArgs {
   const args: BackfillArgs = {
     pageSize: DEFAULT_PAGE_SIZE,
@@ -171,7 +155,7 @@ export function parseBackfillArgs(argv: string[]): BackfillArgs {
     if (!next) continue;
 
     if (arg === '--year') {
-      args.year = parseIntArg(next, '--year');
+      args.year = parseNonNegativeInt(next, '--year');
       i += 1;
     } else if (arg === '--term') {
       args.term = parseEnumArg(next.toLowerCase(), '--term', TERMS);
@@ -180,16 +164,16 @@ export function parseBackfillArgs(argv: string[]): BackfillArgs {
       args.status = parseEnumArg(next.toLowerCase(), '--status', STATUSES);
       i += 1;
     } else if (arg === '--page-size') {
-      args.pageSize = parseIntArg(next, '--page-size');
+      args.pageSize = parseNonNegativeInt(next, '--page-size');
       i += 1;
     } else if (arg === '--start-offset') {
-      args.startOffset = parseIntArg(next, '--start-offset');
+      args.startOffset = parseNonNegativeInt(next, '--start-offset');
       i += 1;
     } else if (arg === '--max-pages') {
-      args.maxPages = parseIntArg(next, '--max-pages');
+      args.maxPages = parseNonNegativeInt(next, '--max-pages');
       i += 1;
     } else if (arg === '--page-timeout-ms') {
-      args.pageTimeoutMs = parseIntArg(next, '--page-timeout-ms');
+      args.pageTimeoutMs = parseNonNegativeInt(next, '--page-timeout-ms');
       i += 1;
     } else if (arg === '--output') {
       args.output = next;
@@ -241,10 +225,6 @@ function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
     throw new Error(`${name} is required`);
   }
   return value;
-}
-
-function endpoint(baseUrl: string, path: string): URL {
-  return new URL(path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
 }
 
 function sleep(ms: number): Promise<void> {

@@ -85,7 +85,7 @@ debugRoutes.get('/search-plan', async (c) => {
         number: searchResult.course.number,
         avg_gpa: searchResult.course.avg_gpa,
         geneds: genedsByCourseId.get(searchResult.course.id) ?? [],
-        _score: searchResult.score,
+        score: searchResult.score,
       })),
       meta: {
         query: result.meta.query,

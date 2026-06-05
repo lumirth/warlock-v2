@@ -1,4 +1,5 @@
 import {
+  advancedStateFromRequest,
   advancedFiltersChanged,
   hasAdvancedFilterValue,
 } from './search-filter-model'
@@ -22,42 +23,47 @@ export function buildSearchViewModel(
   state: SearchControllerState
 ): SearchViewModel {
   const hasActiveStructuredFilters = hasAdvancedFilterValue(
-    state.activeAdvancedFilters
+    state.session.activeAdvancedFilters
   )
   const hasActiveRequest =
-    state.activeSearchText.trim().length > 0 ||
+    state.session.activeSearchText.trim().length > 0 ||
     hasActiveStructuredFilters ||
-    state.meta !== null ||
-    state.loading ||
-    state.loadingMore
+    state.session.meta !== null ||
+    state.session.loading ||
+    state.session.loadingMore
   const activeRequestQuery = hasActiveRequest
-    ? state.activeSearchText
-    : state.query.trim()
+    ? state.session.activeSearchText
+    : state.draft.query.trim()
   const resultCountLabel =
-    state.pagination?.total !== undefined
-      ? `${state.pagination.total.toLocaleString()} ${
-          state.pagination.total === 1 ? 'result' : 'results'
+    state.session.pagination?.total !== undefined
+      ? `${state.session.pagination.total.toLocaleString()} ${
+          state.session.pagination.total === 1 ? 'result' : 'results'
         }`
-      : `${state.results.length.toLocaleString()} ${
-          state.results.length === 1 ? 'result' : 'results'
+      : `${state.session.results.length.toLocaleString()} ${
+          state.session.results.length === 1 ? 'result' : 'results'
         }`
   const showingResultsLabel =
-    state.pagination?.total !== undefined &&
-    state.pagination.total > state.results.length
-      ? `Showing ${state.results.length.toLocaleString()} of ${state.pagination.total.toLocaleString()}`
-      : `Showing ${state.results.length.toLocaleString()}`
-  const resultsHeadingLabel = state.meta?.query.raw
-    ? `Results for ${state.meta.query.raw}`
+    state.session.pagination?.total !== undefined &&
+    state.session.pagination.total > state.session.results.length
+      ? `Showing ${state.session.results.length.toLocaleString()} of ${state.session.pagination.total.toLocaleString()}`
+      : `Showing ${state.session.results.length.toLocaleString()}`
+  const resultsHeadingLabel = state.session.meta?.query.raw
+    ? `Results for ${state.session.meta.query.raw}`
     : 'Results matching filters'
-  const hasAdvancedDraftChanges = state.meta
-    ? advancedFiltersChanged(state.meta.ui?.advanced || {}, state.advancedDraft)
-    : hasAdvancedFilterValue(state.advancedDraft)
+  const hasAdvancedDraftChanges = state.session.meta
+    ? advancedFiltersChanged(
+        state.session.meta.interpretedRequest
+          ? advancedStateFromRequest(state.session.meta.interpretedRequest)
+          : {},
+        state.draft.advancedDraft
+      )
+    : hasAdvancedFilterValue(state.draft.advancedDraft)
   const showFirstRunExamples =
-    !state.meta && !state.loading && !hasActiveRequest && !state.error
+    !state.session.meta && !state.session.loading && !hasActiveRequest && !state.session.error
   const isRefreshingResults =
-    state.loading && (state.meta !== null || state.results.length > 0)
-  const showInitialSkeleton = state.loading && !isRefreshingResults
-  const recoveryGroups = state.meta?.fallback?.recoveryGroups ?? []
+    state.session.loading && (state.session.meta !== null || state.session.results.length > 0)
+  const showInitialSkeleton = state.session.loading && !isRefreshingResults
+  const recoveryGroups = state.session.meta?.fallback?.recoveryGroups ?? []
 
   return {
     activeRequestQuery,

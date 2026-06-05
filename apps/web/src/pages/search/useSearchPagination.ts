@@ -12,19 +12,19 @@ export function useSearchPagination({
   executeSearch: ExecuteSearch
 }) {
   const loadMoreResults = () => {
-    if (!state.pagination?.hasMore) {
+    if (!state.session.pagination?.hasMore) {
       return
     }
     const nextOffset =
-      state.pagination.nextOffset ??
-      state.pagination.offset + state.pagination.limit
+      state.session.pagination.nextOffset ??
+      state.session.pagination.offset + state.session.pagination.limit
 
     executeSearch({
       type: 'append',
       query: derived.activeRequestQuery,
       offset: nextOffset,
-      filters: state.activeAdvancedFilters,
-      sort: state.sort,
+      filters: state.session.activeAdvancedFilters,
+      sort: state.session.sort,
     })
   }
 

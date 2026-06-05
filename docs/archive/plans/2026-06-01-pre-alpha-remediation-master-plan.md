@@ -28,7 +28,9 @@ The project is pre-alpha, pre-production, and greenfield. Prefer simple, direct,
 
 ## Search Contract Reference
 
-Use `docs/plans/2026-06-01-search-contract-v1.md` as the provisional organizing contract for the search product while working through this plan. It encodes the current best understanding of what the app is trying to be: a low-friction UIUC course search engine that answers ordinary student search intent across natural language, structured constraints, soft preferences, and UIUC-specific course concepts.
+Use `docs/architecture/search-ownership.md` as the current organizing contract for search ownership, public DTOs, request codecs, response presentation, and naming. `docs/archive/plans/2026-06-01-search-contract-v1.md` is retained as historical context, not as the active source of truth.
+
+The current product understanding remains a low-friction UIUC course search engine that answers ordinary student search intent across natural language, structured constraints, soft preferences, and UIUC-specific course concepts.
 
 That contract is extrapolated from established project patterns, not handed down as an infallible spec. An implementation agent should question, refine, or replace parts of it when user evidence, source data, UI behavior, or platform constraints show that the contract is wrong. The expected behavior is deliberate revision with notes and tests, not quiet drift.
 
@@ -45,7 +47,7 @@ The remediation effort is complete only when all of the following are true:
 - Admin/internal/dev-only routes are not publicly callable without authorization.
 - The frontend and backend share explicit DTOs for current API responses.
 - Search query features exposed to users are either implemented end to end or removed from parser/UI/docs.
-- The provisional search contract in `docs/plans/2026-06-01-search-contract-v1.md` has either been implemented and covered by evals, or deliberately revised with evidence and matching tests.
+- The provisional search contract in `docs/archive/plans/2026-06-01-search-contract-v1.md` has either been implemented and covered by evals, or deliberately revised with evidence and matching tests.
 - A short final remediation report lists any deferred items, and each deferred item has owner approval.
 
 ## Suggested Work Order
@@ -792,12 +794,12 @@ Users and tests can believe a query feature works when it is silently ignored. T
    - `"data structures"`
    - `spring 2026`
    - `intro spanish`
-2. Compare `meta.plan.filters` and final SQL behavior.
+2. Compare the internal debug plan/presenter interpretation and final SQL behavior.
 3. If parsed fields do not affect results, the issue is real.
 
 ## Preferred Fix
 
-Use `docs/plans/2026-06-01-search-contract-v1.md` as the starting definition of the search contract and Query Language v1, then implement only the parts that remain after deliberate refinement.
+Use `docs/architecture/search-ownership.md` as the starting definition of search ownership and public contract boundaries, then implement only the parts that remain after deliberate refinement.
 
 The contract is provisional. If implementation reveals that a proposed intent, filter, ranking behavior, or result-shape requirement is wrong for the product, revise the contract directly, explain the evidence, and update tests/evals to match. Do not silently implement a different contract in code.
 

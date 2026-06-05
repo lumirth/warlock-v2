@@ -80,13 +80,13 @@ export function AdvancedSearchFields({
             }
           />
           <AdvancedTextField
-            id="advanced-gened"
-            label="GenEd"
+            id="advanced-requirement"
+            label="Requirement"
             maxLength={6}
             placeholder="HUM"
-            value={advancedDraft.gened ?? ''}
+            value={advancedDraft.requirement ?? ''}
             onChange={(value) =>
-              onAdvancedDraftChange('gened', value.toUpperCase() || undefined)
+              onAdvancedDraftChange('requirement', value.toUpperCase() || undefined)
             }
           />
           <AdvancedSelectField
@@ -219,11 +219,11 @@ export function AdvancedSearchFields({
             id="advanced-workload"
             label="Workload"
             placeholder="Any workload"
-            value={advancedDraft.difficulty}
+            value={advancedDraft.workload}
             options={WORKLOAD_OPTIONS}
             onChange={(value) =>
               onAdvancedDraftChange(
-                'difficulty',
+                'workload',
                 value === 'easy' || value === 'hard' ? value : undefined
               )
             }

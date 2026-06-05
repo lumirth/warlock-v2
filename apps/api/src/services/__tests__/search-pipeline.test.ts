@@ -548,7 +548,7 @@ describe("SearchPipeline", () => {
           metadata: { source: "alias", confidence: 0.9, raw: "online" },
         },
         {
-          type: "gened",
+          type: "requirement",
           value: "US",
           metadata: { source: "alias", confidence: 0.9, raw: "us minority" },
         },

@@ -4,7 +4,6 @@ import {
   advancedFiltersContradictQuery,
   cleanAdvancedFilters,
   hasAdvancedFilterValue,
-  meaningfulResidualQuery,
 } from './search-filter-model'
 
 export type AdvancedSearchApplyContext = {
@@ -13,7 +12,7 @@ export type AdvancedSearchApplyContext = {
   inputDirty: boolean
   interpretedAdvanced: AdvancedSearchStateDto
   draft: AdvancedSearchStateDto
-  residualQuery?: string
+  interpretedQuery?: string
 }
 
 export type AdvancedSearchApplyPlan =
@@ -60,7 +59,7 @@ function freeTextForAdvancedApply(
 ): string {
   if (context.inputDirty) return context.currentInputQuery.trim()
   if (contradictsQuery) {
-    return meaningfulResidualQuery(context.residualQuery || '')
+    return context.interpretedQuery?.trim() || ''
   }
   return context.activeRequestQuery
 }

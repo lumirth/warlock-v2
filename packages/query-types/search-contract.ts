@@ -68,9 +68,9 @@ export const SEARCH_STATUS_VALUES = [
 
 export type SearchStatusFilter = (typeof SEARCH_STATUS_VALUES)[number];
 
-export const SEARCH_DIFFICULTY_VALUES = ["easy", "hard"] as const;
+export const SEARCH_WORKLOAD_VALUES = ["easy", "hard"] as const;
 
-export type SearchDifficultyFilter = (typeof SEARCH_DIFFICULTY_VALUES)[number];
+export type SearchWorkloadFilter = (typeof SEARCH_WORKLOAD_VALUES)[number];
 
 export const SEARCH_LEVEL_VALUES = [100, 200, 300, 400, 500] as const;
 
@@ -100,10 +100,10 @@ export function isSearchStatusFilter(value: unknown): value is SearchStatusFilte
   return includesSearchValue(SEARCH_STATUS_VALUES, value);
 }
 
-export function isSearchDifficultyFilter(
+export function isSearchWorkloadFilter(
   value: unknown,
-): value is SearchDifficultyFilter {
-  return includesSearchValue(SEARCH_DIFFICULTY_VALUES, value);
+): value is SearchWorkloadFilter {
+  return includesSearchValue(SEARCH_WORKLOAD_VALUES, value);
 }
 
 export function isSearchLevelFilter(value: unknown): value is SearchLevelFilter {
@@ -116,14 +116,14 @@ export type SearchRequestFiltersDto = {
   instructor?: string;
   term?: SearchTermFilter;
   year?: number;
-  gened?: string;
+  requirement?: string;
   credits?: number;
   days?: string;
   time?: SearchTimeFilter;
   partOfTerm?: string;
   online?: boolean;
   status?: SearchStatusFilter;
-  difficulty?: SearchDifficultyFilter;
+  workload?: SearchWorkloadFilter;
   level?: SearchLevelFilter;
 };
 
@@ -135,14 +135,14 @@ export const SEARCH_REQUEST_FILTER_KEYS = [
   "instructor",
   "term",
   "year",
-  "gened",
+  "requirement",
   "credits",
   "days",
   "time",
   "partOfTerm",
   "online",
   "status",
-  "difficulty",
+  "workload",
   "level",
 ] as const satisfies readonly SearchRequestFilterKey[];
 
@@ -254,8 +254,8 @@ function compactSearchRequestFilters(
   const term = normalizeEnumSearchString(filters.term, SEARCH_TERM_VALUES, "lower");
   if (term) compact.term = term;
   if (filters.year !== undefined) compact.year = filters.year;
-  const gened = normalizeSearchString(filters.gened, "upper");
-  if (gened) compact.gened = gened;
+  const requirement = normalizeSearchString(filters.requirement, "upper");
+  if (requirement) compact.requirement = requirement;
   if (filters.credits !== undefined) compact.credits = filters.credits;
   const days = normalizeSearchString(filters.days, "upper");
   if (days) compact.days = days;
@@ -270,12 +270,12 @@ function compactSearchRequestFilters(
     "lower",
   );
   if (status) compact.status = status;
-  const difficulty = normalizeEnumSearchString(
-    filters.difficulty,
-    SEARCH_DIFFICULTY_VALUES,
+  const workload = normalizeEnumSearchString(
+    filters.workload,
+    SEARCH_WORKLOAD_VALUES,
     "lower",
   );
-  if (difficulty) compact.difficulty = difficulty;
+  if (workload) compact.workload = workload;
   if (isSearchLevelFilter(filters.level)) compact.level = filters.level;
 
   return compact;

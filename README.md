@@ -60,9 +60,8 @@ Normal clone/build/test should not depend on large generated historical SQL arti
 
 ## Active Docs
 
-- `docs/plans/2026-06-01-pre-alpha-remediation-master-plan.md`
+- `docs/architecture/search-ownership.md`
 - `docs/plans/2026-06-01-stabilization-hardening-master-plan.md`
-- `docs/plans/2026-06-01-search-contract-v1.md`
 - `docs/plans/2026-06-03-decision-course-search-foundation.md`
 - `docs/search-interpretation-chip-model.md`
 - `docs/deployment-checklist.md`

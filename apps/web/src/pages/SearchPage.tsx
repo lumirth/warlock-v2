@@ -15,27 +15,27 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
       {includeH1 && <h1 className="sr-only">UIUC Course Search</h1>}
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <SearchForm
-          query={state.query}
+          query={state.draft.query}
           showFirstRunExamples={derived.showFirstRunExamples}
           onQueryChange={actions.setQuery}
           onSubmit={actions.handleSearchSubmit}
           onExampleSearch={actions.runExampleSearch}
         />
 
-        {state.error && (
+        {state.session.error && (
           <Alert variant="destructive">
             <AlertCircleIcon aria-hidden />
             <AlertTitle>That search did not go through</AlertTitle>
-            <AlertDescription>{state.error}</AlertDescription>
+            <AlertDescription>{state.session.error}</AlertDescription>
           </Alert>
         )}
 
-        {state.meta && (
+        {state.session.meta && (
           <RefinePanel
-            meta={state.meta}
+            meta={state.session.meta}
             resultCountLabel={derived.resultCountLabel}
-            advancedOpen={state.advancedOpen}
-            advancedDraft={state.advancedDraft}
+            advancedOpen={state.draft.advancedOpen}
+            advancedDraft={state.draft.advancedDraft}
             hasAdvancedDraftChanges={derived.hasAdvancedDraftChanges}
             onAdvancedOpenChange={actions.setAdvancedOpen}
             onAdvancedDraftChange={actions.updateAdvancedDraft}
@@ -46,7 +46,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
           />
         )}
 
-        {state.meta && (
+        {state.session.meta && (
           <div>
             <FeedbackButton
               buttonLabel="Results not right?"
@@ -55,11 +55,11 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
               issue="expected_different_results"
               fullWidth
               context={{
-                query: state.meta.query.raw,
+                query: state.session.meta.query.raw,
                 metadata: {
-                  resultCount: state.results.length,
-                  hasMore: state.pagination?.hasMore === true,
-                  typedQuery: state.query.trim() || null,
+                  resultCount: state.session.results.length,
+                  hasMore: state.session.pagination?.hasMore === true,
+                  typedQuery: state.draft.query.trim() || null,
                   effectiveQuery: derived.activeRequestQuery || null,
                 },
               }}
@@ -68,13 +68,13 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
         )}
 
         <ResultsList
-          meta={state.meta}
-          results={state.results}
-          pagination={state.pagination}
-          loading={state.loading}
-          loadingMore={state.loadingMore}
-          sort={state.sort}
-          resultViewMode={state.resultViewMode}
+          meta={state.session.meta}
+          results={state.session.results}
+          pagination={state.session.pagination}
+          loading={state.session.loading}
+          loadingMore={state.session.loadingMore}
+          sort={state.session.sort}
+          resultViewMode={state.draft.resultViewMode}
           showInitialSkeleton={derived.showInitialSkeleton}
           isRefreshingResults={derived.isRefreshingResults}
           resultsHeadingLabel={derived.resultsHeadingLabel}

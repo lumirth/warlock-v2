@@ -4,17 +4,15 @@ import {
   buildCourseExplorerSectionUrl,
   buildRmpProfessorUrl,
   buildRmpSearchUrl,
-  COURSE_USEFULNESS_POLICY,
   getQualityTierLabel,
   getQualityTierRank,
   getWorkloadTierLabel,
   getWorkloadTierRank,
-  normalizeGpaWorkload,
   requirementFilter,
   normalizeSearchRequestDto,
+  decodeSearchRequestQuery,
+  searchRequestToQueryEntries,
   toNormalizedQualityScore,
-  WORKLOAD_FILTER_THRESHOLDS,
-  WORKLOAD_TIER_THRESHOLDS,
 } from './index.js';
 
 describe('shared external link builders', () => {
@@ -87,37 +85,11 @@ describe('shared course score tiers', () => {
     expect(toNormalizedQualityScore(Number.NaN)).toBeNull();
   });
 
-  it('keeps workload filter thresholds in the shared policy layer', () => {
-    expect(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive).toBe(
-      WORKLOAD_TIER_THRESHOLDS.MODERATE,
-    );
-    expect(WORKLOAD_FILTER_THRESHOLDS.easy.fallbackMinGpa).toBe(3.5);
-    expect(WORKLOAD_FILTER_THRESHOLDS.hard.minScoreExclusive).toBe(
-      WORKLOAD_TIER_THRESHOLDS.HARD,
-    );
-    expect(WORKLOAD_FILTER_THRESHOLDS.hard.fallbackMaxGpa).toBe(3.0);
-    expect(normalizeGpaWorkload(3.5)).toBe(0);
-  });
-
   it('keeps workload filters aligned with displayed workload tiers', () => {
-    expect(
-      getWorkloadTierLabel(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive),
-    ).toBe('Easy');
-    expect(
-      getWorkloadTierLabel(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive + 1),
-    ).toBe('Moderate');
-    expect(
-      getWorkloadTierLabel(WORKLOAD_FILTER_THRESHOLDS.hard.minScoreExclusive),
-    ).toBe('Moderate');
-    expect(
-      getWorkloadTierLabel(WORKLOAD_FILTER_THRESHOLDS.hard.minScoreExclusive + 1),
-    ).toBe('Hard');
-  });
-
-  it('names usefulness policy thresholds instead of spreading raw score cutoffs', () => {
-    expect(COURSE_USEFULNESS_POLICY.EASY_INTENT.MIN_QUALITY_TIER_RANK).toBe(3);
-    expect(COURSE_USEFULNESS_POLICY.EASY_INTENT.PREFERRED_WORKLOAD_TIER).toBe('Easy');
-    expect(COURSE_USEFULNESS_POLICY.FUSION.QUALITY_TIER_WEIGHT).toBe(0.08);
+    expect(getWorkloadTierLabel(45)).toBe('Easy');
+    expect(getWorkloadTierLabel(46)).toBe('Moderate');
+    expect(getWorkloadTierLabel(75)).toBe('Moderate');
+    expect(getWorkloadTierLabel(76)).toBe('Hard');
   });
 });
 
@@ -140,7 +112,7 @@ describe('shared public search contract', () => {
       query: 'online stats class',
       filters: {
         subject: ' stat ',
-        gened: ' hum ',
+        requirement: ' hum ',
         online: true,
       },
       scope: 'all',
@@ -149,7 +121,7 @@ describe('shared public search contract', () => {
       query: 'online stats class',
       filters: {
         subject: 'STAT',
-        gened: 'HUM',
+        requirement: 'HUM',
         online: true,
       },
       sort: { field: 'gpa', direction: 'desc' },
@@ -170,4 +142,94 @@ describe('shared public search contract', () => {
       scope: 'active',
     });
   });
+
+  it('serializes and decodes search URL params through the canonical codec', () => {
+    const entries = searchRequestToQueryEntries({
+      query: 'online stats class',
+      filters: {
+        subject: ' stat ',
+        requirement: ' hum ',
+        online: true,
+        workload: 'easy',
+      },
+      sort: { field: 'gpa', direction: 'desc' },
+      scope: 'all',
+      pagination: { limit: 25, offset: 50 },
+    });
+
+    expect(entries).toEqual([
+      ['q', 'online stats class'],
+      ['limit', '25'],
+      ['offset', '50'],
+      ['subject', 'STAT'],
+      ['requirement', 'HUM'],
+      ['online', 'true'],
+      ['workload', 'easy'],
+      ['scope', 'all'],
+      ['sort', 'gpa'],
+      ['direction', 'desc'],
+    ]);
+
+    const decoded = decodeSearchRequestQuery(paramReader(entries));
+    expect(decoded).toEqual({
+      ok: true,
+      value: {
+        request: {
+          query: 'online stats class',
+          filters: {
+            subject: 'STAT',
+            requirement: 'HUM',
+            online: true,
+            workload: 'easy',
+          },
+          sort: { field: 'gpa', direction: 'desc' },
+          scope: 'all',
+        },
+        pagination: { limit: 25, offset: 50 },
+      },
+    });
+  });
+
+  it('rejects invalid explicit URL controls instead of silently reinterpreting them', () => {
+    expect(decodeSearchRequestQuery(paramReader([
+      ['q', 'history'],
+      ['sort', 'not-real'],
+    ]))).toEqual({
+      ok: false,
+      error: 'sort must be one of: relevance, gpa, quality, workload, instructor_rating, level, credits',
+    });
+
+    expect(decodeSearchRequestQuery(paramReader([
+      ['q', 'history'],
+      ['scope', 'past'],
+    ]))).toEqual({
+      ok: false,
+      error: 'scope must be one of: active, all',
+    });
+
+    expect(decodeSearchRequestQuery(paramReader([
+      ['q', 'history'],
+      ['sort', 'gpa'],
+      ['direction', 'sideways'],
+    ]))).toEqual({
+      ok: false,
+      error: 'direction must be one of: asc, desc',
+    });
+
+    expect(decodeSearchRequestQuery(paramReader([
+      ['q', 'history'],
+      ['level', '700'],
+    ]))).toEqual({
+      ok: false,
+      error: 'level must be one of: 100, 200, 300, 400, 500',
+    });
+  });
 });
+
+function paramReader(entries: Array<[string, string]>): { get(name: string): string | null } {
+  return {
+    get(name) {
+      return entries.find(([key]) => key === name)?.[1] ?? null;
+    },
+  };
+}

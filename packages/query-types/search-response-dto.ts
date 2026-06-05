@@ -1,10 +1,5 @@
-import type { CourseDto } from "./course-dto.js";
-import type {
-  AdvancedSearchStateDto,
-  SearchRequestDto,
-  SearchScope,
-  SearchSort,
-} from "./search-contract.js";
+import type { SearchCourseResultDto } from "./course-dto.js";
+import type { SearchRequestDto, SearchScope, SearchSort } from "./search-contract.js";
 
 export type SearchInterpretationQueryType =
   | "exact_course"
@@ -92,8 +87,8 @@ export type SearchChipType =
   | "credits"
   | "online"
   | "status"
-  | "difficulty"
-  | "gened"
+  | "workload"
+  | "requirement"
   | "term"
   | "partOfTerm"
   | "negation"
@@ -121,6 +116,7 @@ export type SearchMetaDto = {
   };
   appliedSort?: SearchSort;
   appliedScope?: SearchScope;
+  interpretedRequest?: SearchRequestDto;
   term?: {
     activeTermId: string | null;
     registrableTermId: string | null;
@@ -131,7 +127,7 @@ export type SearchMetaDto = {
 };
 
 export type SearchResponseDto = {
-  results: CourseDto[];
+  results: SearchCourseResultDto[];
   meta: SearchMetaDto;
   pagination: {
     total: number;
@@ -173,6 +169,5 @@ export type SearchAmbiguityActionDto = {
 
 export type SearchUiPlanDto = {
   chips: SearchChipDto[];
-  advanced: AdvancedSearchStateDto;
   ambiguityActions: SearchAmbiguityActionDto[];
 };

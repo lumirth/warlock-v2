@@ -17,13 +17,16 @@ export function useSearchController() {
     undefined,
     () => ({
       ...INITIAL_SEARCH_CONTROLLER_STATE,
-      resultViewMode: readStoredResultViewMode(),
+      draft: {
+        ...INITIAL_SEARCH_CONTROLLER_STATE.draft,
+        resultViewMode: readStoredResultViewMode(),
+      },
     })
   )
   const derived = buildSearchViewModel(state)
   const { executeSearch } = useSearchExecution({
     dispatch,
-    currentSort: state.sort,
+    currentSort: state.session.sort,
   })
   const advancedActions = useAdvancedSearch({
     state,
@@ -51,7 +54,7 @@ export function useSearchController() {
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    executeSearch({ type: 'submit', query: state.query })
+    executeSearch({ type: 'submit', query: state.draft.query })
   }
 
   return {

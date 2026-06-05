@@ -39,7 +39,7 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         break;
       }
 
-      case 'gened':
+      case 'requirement':
         resolveGened(String(hint.value), plan);
         break;
 
@@ -119,8 +119,8 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         plan.filters.status = hint.value as string;
         break;
 
-      case 'difficulty':
-        plan.filters.difficulty = hint.value as 'easy' | 'hard';
+      case 'workload':
+        plan.filters.workload = hint.value as 'easy' | 'hard';
         break;
 
       case 'negation': {
@@ -136,8 +136,8 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
             plan.filters.not.days.push(negValue.value);
           } else if (negValue.target === 'subject') {
             applyStructuredNegation('subject', negValue.value, plan);
-          } else if (negValue.target === 'gened') {
-            applyStructuredNegation('gened', negValue.value, plan);
+          } else if (negValue.target === 'requirement') {
+            applyStructuredNegation('requirement', negValue.value, plan);
           } else if (negValue.target === 'keyword' || negValue.target === 'workload') {
             applyStructuredNegation(negValue.target, negValue.value, plan);
           }

@@ -2,7 +2,7 @@ import type { RequirementFilter, SearchRequestFiltersDto, SearchSort } from "@ui
 
 export type QueryHintType =
   | "instructor"
-  | "gened"
+  | "requirement"
   | "subject"
   | "credits"
   | "term"
@@ -12,7 +12,7 @@ export type QueryHintType =
   | "crn"
   | "days"
   | "time"
-  | "difficulty"
+  | "workload"
   | "online"
   | "status"
   | "negation"
@@ -45,13 +45,13 @@ export interface SearchFilters {
   credits?: number;
   online?: boolean;
   status?: string;
-  difficulty?: "easy" | "hard";
+  workload?: "easy" | "hard";
   not?: {
     time?: string[];
     days?: string[];
     instructor_ids?: number[];
     subjects?: string[];
-    geneds?: string[];
+    requirementCodes?: string[];
     keywords?: string[];
   };
   term?: string;
@@ -196,8 +196,8 @@ export type HintType =
   | "credits"
   | "online"
   | "status"
-  | "difficulty"
-  | "gened"
+  | "workload"
+  | "requirement"
   | "term"
   | "partOfTerm"
   | "negation";
@@ -232,7 +232,7 @@ export interface ParsedClause {
   filters: FieldFilter[];
   negations: string[];
   phrases: string[];
-  genedMode?: {
+  requirementMode?: {
     any?: string[];
     all?: string[];
   };

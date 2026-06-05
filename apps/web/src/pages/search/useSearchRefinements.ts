@@ -30,12 +30,11 @@ export function useSearchRefinements({
 }) {
   const context = {
     activeRequestQuery: derived.activeRequestQuery,
-    typedQuery: state.query,
-    metaRawQuery: state.meta?.query.raw,
-    residualQuery: state.meta?.query.residual,
-    activeFilters: state.activeAdvancedFilters,
-    visibleAdvanced: state.meta?.ui?.advanced,
-    sort: state.sort,
+    typedQuery: state.draft.query,
+    metaRawQuery: state.session.meta?.query.raw,
+    residualQuery: state.session.meta?.query.residual,
+    activeFilters: state.session.activeAdvancedFilters,
+    sort: state.session.sort,
   }
 
   const runRefinementPlan = (plan: SearchRefinementPlan) => {

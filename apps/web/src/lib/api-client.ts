@@ -1,5 +1,5 @@
 import type {
-  CourseDto,
+  CourseDetailResponseDto,
   FeedbackResponseDto,
   FeedbackSubmitDto,
   SearchRequestDto,
@@ -68,13 +68,13 @@ export class ApiClient {
     term?: string,
     year?: number,
     signal?: AbortSignal
-  ): Promise<CourseDto> {
+  ): Promise<CourseDetailResponseDto> {
     const params = new URLSearchParams()
     if (term) params.append('term', term)
     if (year) params.append('year', year.toString())
     const queryString = params.toString() ? `?${params.toString()}` : ''
 
-    return this.fetch<CourseDto>(
+    return this.fetch<CourseDetailResponseDto>(
       `api/course/${subject}/${number}${queryString}`,
       { signal }
     )

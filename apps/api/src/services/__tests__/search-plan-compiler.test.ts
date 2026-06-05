@@ -61,7 +61,7 @@ describe("createSearchPlan", () => {
     const planning = await createSearchPlan(db(), "is cs 225 hard");
 
     expect(planning.plan.filters).toMatchObject({ subject: "CS", number: "225" });
-    expect(planning.plan.filters.difficulty).toBeUndefined();
+    expect(planning.plan.filters.workload).toBeUndefined();
     expect(planning.queryResidual).toBe("");
     expect(planning.compilerEvents.map((event) => event.type)).toEqual(
       expect.arrayContaining([
@@ -93,7 +93,7 @@ describe("createSearchPlan", () => {
 
     expect(planning.plan.filters.subject).toBeUndefined();
     expect(planning.plan.filters).toMatchObject({
-      difficulty: "easy",
+      workload: "easy",
       requirement: { mode: "single", codes: ["NAT"] },
       not: { subjects: ["MATH"] },
     });
@@ -112,7 +112,7 @@ describe("createSearchPlan", () => {
       codes: ["CS"],
     });
     expect(culturalStudies.plan.ambiguities?.[0]).toMatchObject({
-      chosen: { type: "gened", value: "CS", label: "Cultural Studies" },
+      chosen: { type: "requirement", value: "CS", label: "Cultural Studies" },
       alternatives: [
         { type: "subject", value: "CS", label: "Computer Science" },
       ],

@@ -14,7 +14,7 @@ export interface ApiSearchResult {
     attributeCode?: string | null;
     attribute_code?: string | null;
   }>;
-  _score?: number;
+  score?: number;
 }
 
 export interface SearchResponseForEval {
@@ -177,8 +177,8 @@ export function checkInvariants(query: GoldQuery, results: ApiSearchResult[]): s
       violations.push(`Result ${result.id} has forbidden subject=${query.invariants.no_subject}`);
     }
 
-    if (query.invariants.gened && !resultHasGened(result, query.invariants.gened)) {
-      violations.push(`Result ${result.id} does not satisfy GenEd ${query.invariants.gened}`);
+    if (query.invariants.requirement && !resultSatisfiesRequirement(result, query.invariants.requirement)) {
+      violations.push(`Result ${result.id} does not satisfy requirement ${query.invariants.requirement}`);
     }
   }
 
@@ -190,8 +190,8 @@ function resultLevel(result: ApiSearchResult): number | null {
   return Number.isFinite(parsed) ? parsed * 100 : null;
 }
 
-function resultHasGened(result: ApiSearchResult, gened: string): boolean {
-  const canonical = canonicalGenedCode(gened);
+function resultSatisfiesRequirement(result: ApiSearchResult, requirement: string): boolean {
+  const canonical = canonicalGenedCode(requirement);
   if (!canonical) return false;
   return (result.geneds ?? []).some(entry =>
     canonicalGenedCode(entry.categoryId ?? entry.category_id) === canonical
@@ -209,7 +209,7 @@ function selectorMatches(selector: ResultSelector, result: ApiSearchResult): boo
   ) {
     return false;
   }
-  if (selector.gened && !resultHasGened(result, selector.gened)) return false;
+  if (selector.requirement && !resultSatisfiesRequirement(result, selector.requirement)) return false;
 
   const level = resultLevel(result);
   if (selector.level_gte !== undefined && (level === null || level < selector.level_gte)) return false;
@@ -267,10 +267,10 @@ export function checkResultCoherence(query: GoldQuery, results: ApiSearchResult[
     }
   }
 
-  if (expected.all_top_k?.gened) {
+  if (expected.all_top_k?.requirement) {
     for (const result of topResults) {
-      if (!resultHasGened(result, expected.all_top_k.gened)) {
-        violations.push(`Result ${result.id} does not include GenEd ${expected.all_top_k.gened}`);
+      if (!resultSatisfiesRequirement(result, expected.all_top_k.requirement)) {
+        violations.push(`Result ${result.id} does not include requirement ${expected.all_top_k.requirement}`);
       }
     }
   }

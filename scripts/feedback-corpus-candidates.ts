@@ -236,7 +236,7 @@ function normalizeResolution(row: Record<string, unknown>): FeedbackCandidateRes
     year: optionalInteger(row.year),
     crn: optionalString(row.crn),
     instructorName: optionalString(row.instructorName) ?? optionalString(row.instructor_name),
-    scoreField: optionalString(row.scoreField) ?? optionalString(row.score_field),
+    scoreField: normalizeScoreField(optionalString(row.scoreField) ?? optionalString(row.score_field)),
   };
 }
 
@@ -385,6 +385,12 @@ function normalizeKeyPart(value: string | undefined): string {
   return value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? '';
 }
 
+function normalizeScoreField(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return normalized === 'difficulty' ? 'workload' : normalized;
+}
+
 function extractRows(value: unknown): FeedbackExportRow[] {
   if (Array.isArray(value)) {
     return value.flatMap(item => extractRows(item));
@@ -431,7 +437,7 @@ function normalizeRow(row: FeedbackExportRow): Required<Pick<FeedbackExportRow, 
     year: optionalInteger(row.year),
     crn: optionalString(row.crn),
     instructorName: optionalString(row.instructorName) ?? optionalString(row.instructor_name),
-    scoreField: optionalString(row.scoreField) ?? optionalString(row.score_field),
+    scoreField: normalizeScoreField(optionalString(row.scoreField) ?? optionalString(row.score_field)),
     expected: optionalString(row.expected),
     message: optionalString(row.message),
     metadata: row.metadata,
@@ -530,7 +536,7 @@ function inferFailureClasses(candidate: ReturnType<typeof normalizeRow> & {
   }
 
   if (/\b(gen\s*ed|gened|humanities|natural sciences|cultural studies|quantitative reasoning|advanced composition|writing intensive)\b/i.test(haystack)) {
-    classes.add('gened_language');
+    classes.add('requirement_language');
   }
 
   if (mentionsSchedule(candidate)) {

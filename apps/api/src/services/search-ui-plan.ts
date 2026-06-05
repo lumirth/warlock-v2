@@ -1,7 +1,7 @@
 import type {
-  AdvancedSearchStateDto,
   SearchAmbiguityActionDto,
   SearchChipDto,
+  SearchRequestDto,
   SearchRequestFiltersDto,
   SearchUiPlanDto,
   NormalizedSearchRequestDto,
@@ -17,7 +17,7 @@ import type {
 } from './search-planner-types.js';
 import {
   effectiveRequirementFilter,
-  isSearchDifficultyFilter,
+  isSearchWorkloadFilter,
   isSearchLevelFilter,
   isSearchStatusFilter,
   isSearchTermFilter,
@@ -28,6 +28,7 @@ import {
   ambiguitySearchAction,
   removeSearchIntentAction,
 } from '../dto/search-actions.js';
+import { meaningfulResidualQuery } from './search-request-text.js';
 
 export function buildSearchUiPlan(
   hints: Hint[],
@@ -35,16 +36,30 @@ export function buildSearchUiPlan(
   residual: string,
   request: NormalizedSearchRequestDto,
 ): SearchUiPlanDto {
-  const advanced = buildAdvancedState(hints, plan.filters, residual);
+  const interpretedFilters = publicFiltersFromPlan(hints, plan.filters, residual);
   return {
     chips: buildSearchChips(hints, plan, residual, request),
-    advanced,
     ambiguityActions: buildAmbiguityActions(
       plan.ambiguities ?? [],
       request,
       residual,
-      advanced,
+      interpretedFilters,
     ),
+  };
+}
+
+export function buildInterpretedSearchRequest(
+  hints: Hint[],
+  plan: SearchPlan,
+  residual: string,
+  request: NormalizedSearchRequestDto,
+): SearchRequestDto {
+  const filters = publicFiltersFromPlan(hints, plan.filters, residual);
+  return {
+    query: meaningfulResidualQuery(residual),
+    filters: Object.keys(filters).length > 0 ? filters : undefined,
+    sort: request.sort,
+    scope: request.scope,
   };
 }
 
@@ -69,16 +84,16 @@ function buildSearchChips(
     ),
   }));
 
-  if (shouldShowGenericGenedChip(hints, plan.filters)) {
+  if (shouldShowGenericRequirementChip(hints, plan.filters)) {
     chips.push({
-      id: 'gened-any',
-      type: 'gened',
-      label: 'Any GenEd',
+      id: 'requirement-any',
+      type: 'requirement',
+      label: 'Any Requirement',
       value: 'any',
       source: 'natural_language',
       removable: true,
       editable: false,
-      action: removeSearchIntentAction(request, undefined, 'gened'),
+      action: removeSearchIntentAction(request, undefined, 'requirement'),
     });
   }
 
@@ -128,7 +143,7 @@ function shouldHideAssumptionChip(kind: string, hints: Hint[], filters: SearchFi
   }
 
   if (kind === 'low_workload') {
-    return filters.difficulty === 'easy' || hints.some(hint => hint.type === 'difficulty' && hint.value === 'easy');
+    return filters.workload === 'easy' || hints.some(hint => hint.type === 'workload' && hint.value === 'easy');
   }
 
   if (kind === 'online_preferred') {
@@ -142,11 +157,11 @@ function shouldHideAssumptionChip(kind: string, hints: Hint[], filters: SearchFi
   return false;
 }
 
-function shouldShowGenericGenedChip(hints: Hint[], filters: SearchFilters): boolean {
+function shouldShowGenericRequirementChip(hints: Hint[], filters: SearchFilters): boolean {
   const requirement = effectiveRequirementFilter(filters);
   return requirement?.mode === 'any'
     && isGenericAnyGenedFilter(requirement.codes)
-    && !hints.some(hint => hint.type === 'gened');
+    && !hints.some(hint => hint.type === 'requirement');
 }
 
 function textToRemoveForAssumption(kind: string, residual: string): string | undefined {
@@ -159,25 +174,31 @@ function textToRemoveForAssumption(kind: string, residual: string): string | und
   return residual || undefined;
 }
 
-function buildAdvancedState(hints: Hint[], filters: SearchFilters, residual: string): AdvancedSearchStateDto {
+function publicFiltersFromPlan(hints: Hint[], filters: SearchFilters, residual: string): SearchRequestFiltersDto {
   const instructorHint = hints.find((hint) => hint.type === 'instructor');
 
-  return {
+  return compactPublicFilters({
     subject: filters.subject,
     number: filters.number,
     instructor: instructorHint ? formatDisplayHintValue(instructorHint, residual) : undefined,
     term: publicTerm(filters.term),
     year: filters.year,
-    gened: publicRequirementCode(filters),
+    requirement: publicRequirementCode(filters),
     credits: filters.credits,
     days: filters.days,
     time: publicTime(filters.time),
     online: filters.online,
     status: publicStatus(filters.status),
-    difficulty: filters.difficulty,
+    workload: filters.workload,
     level: publicLevel(filters.level),
     partOfTerm: filters.partOfTerm,
-  };
+  });
+}
+
+function compactPublicFilters(filters: SearchRequestFiltersDto): SearchRequestFiltersDto {
+  return Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== undefined),
+  ) as SearchRequestFiltersDto;
 }
 
 function publicRequirementCode(filters: SearchFilters): string | undefined {
@@ -189,19 +210,19 @@ function publicRequirementCode(filters: SearchFilters): string | undefined {
   return requirement.codes[0];
 }
 
-function publicTerm(value: string | undefined): AdvancedSearchStateDto['term'] {
+function publicTerm(value: string | undefined): SearchRequestFiltersDto['term'] {
   return isSearchTermFilter(value) ? value : undefined;
 }
 
-function publicTime(value: string | undefined): AdvancedSearchStateDto['time'] {
+function publicTime(value: string | undefined): SearchRequestFiltersDto['time'] {
   return isSearchTimeFilter(value) ? value : undefined;
 }
 
-function publicStatus(value: string | undefined): AdvancedSearchStateDto['status'] {
+function publicStatus(value: string | undefined): SearchRequestFiltersDto['status'] {
   return isSearchStatusFilter(value) ? value : undefined;
 }
 
-function publicLevel(value: number | undefined): AdvancedSearchStateDto['level'] {
+function publicLevel(value: number | undefined): SearchRequestFiltersDto['level'] {
   return isSearchLevelFilter(value) ? value : undefined;
 }
 
@@ -233,8 +254,8 @@ function ambiguityFilter(
     return { subject: value.toUpperCase() };
   }
 
-  if (type === 'gened') {
-    return { gened: value.toUpperCase() };
+  if (type === 'requirement') {
+    return { requirement: value.toUpperCase() };
   }
 
   return {};
@@ -269,10 +290,10 @@ function formatHintLabel(hint: Hint, residual = ''): string {
       return hint.value ? 'Online' : 'In person';
     case 'status':
       return `${capitalize(formatHintValue(hint.value))} sections`;
-    case 'difficulty':
+    case 'workload':
       return `${capitalize(formatHintValue(hint.value))} workload`;
-    case 'gened':
-      return `GenEd ${formatHintValue(hint.value)}`;
+    case 'requirement':
+      return `Requirement ${formatHintValue(hint.value)}`;
     case 'term': {
       const term = hint.value as TermValue;
       return `${capitalize(term.term)} ${term.year}`;
@@ -287,15 +308,15 @@ function formatHintLabel(hint: Hint, residual = ''): string {
 }
 
 function formatResolvedHintLabel(hint: Hint, plan: SearchPlan, residual = ''): string {
-  if (isSubjectHintResolvedAsGened(hint, plan)) {
-    return `GenEd ${formatHintValue(hint.value)}`;
+  if (isSubjectHintResolvedAsRequirement(hint, plan)) {
+    return `Requirement ${formatHintValue(hint.value)}`;
   }
 
   return formatHintLabel(hint, residual);
 }
 
 function formatResolvedHintValue(hint: Hint, plan: SearchPlan, residual: string): string {
-  if (isSubjectHintResolvedAsGened(hint, plan)) {
+  if (isSubjectHintResolvedAsRequirement(hint, plan)) {
     return formatHintValue(hint.value).toUpperCase();
   }
 
@@ -384,12 +405,12 @@ function filterFromHint(hint: Hint): Partial<SearchRequestFiltersDto> {
       const status = formatHintValue(hint.value);
       return isSearchStatusFilter(status) ? { status } : {};
     }
-    case 'difficulty':
-      return isSearchDifficultyFilter(hint.value)
-        ? { difficulty: hint.value }
+    case 'workload':
+      return isSearchWorkloadFilter(hint.value)
+        ? { workload: hint.value }
         : {};
-    case 'gened':
-      return { gened: formatHintValue(hint.value).toUpperCase() };
+    case 'requirement':
+      return { requirement: formatHintValue(hint.value).toUpperCase() };
     case 'term': {
       const value = hint.value as TermValue;
       return {
@@ -408,14 +429,14 @@ function resolvedFilterFromHint(
   hint: Hint,
   plan: SearchPlan,
 ): Partial<SearchRequestFiltersDto> {
-  if (isSubjectHintResolvedAsGened(hint, plan)) {
-    return { gened: formatHintValue(hint.value).toUpperCase() };
+  if (isSubjectHintResolvedAsRequirement(hint, plan)) {
+    return { requirement: formatHintValue(hint.value).toUpperCase() };
   }
 
   return filterFromHint(hint);
 }
 
-function isSubjectHintResolvedAsGened(hint: Hint, plan: SearchPlan): boolean {
+function isSubjectHintResolvedAsRequirement(hint: Hint, plan: SearchPlan): boolean {
   const requirement = effectiveRequirementFilter(plan.filters);
   return hint.type === 'subject'
     && !plan.filters.subject

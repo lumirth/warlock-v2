@@ -1,5 +1,6 @@
 import {
   effectiveRequirementFilter,
+  getQualityTierLabel,
   type CourseGenedDto,
   type MatchEvidence,
   type MatchEvidenceKind,
@@ -20,7 +21,7 @@ export type SearchResultEvidenceContext = {
   plan: SearchPlan;
   rawQuery: string;
   hints?: Hint[];
-  geneds?: CourseGenedDto[];
+  requirementCodes?: CourseGenedDto[];
 };
 
 export type SearchResultPresentation = {
@@ -46,14 +47,12 @@ export function buildSearchResultPresentation(
 }
 
 function qualityEvidenceLabel(score: number): string {
-  if (score >= 90) return 'Excellent course quality';
-  if (score >= 80) return 'Strong course quality';
-  if (score >= 70) return 'Good course quality';
-  return 'Course quality signal';
+  const label = getQualityTierLabel(score);
+  return label ? `${label} quality tier` : 'Course quality signal';
 }
 
-function difficultyEvidenceLabel(difficulty: 'easy' | 'hard'): string {
-  return difficulty === 'easy' ? 'Easier workload fit' : 'Harder workload fit';
+function workloadEvidenceLabel(workload: 'easy' | 'hard'): string {
+  return workload === 'easy' ? 'Easier workload fit' : 'Harder workload fit';
 }
 
 function normalizeText(value: string | null | undefined): string {
@@ -87,7 +86,7 @@ function resultRequirementCodes(
   result: SearchResult,
   context: SearchResultEvidenceContext,
 ): string[] {
-  return searchResultRequirementCodes(result, context.geneds);
+  return searchResultRequirementCodes(result, context.requirementCodes);
 }
 
 function hasStructuredRequirementEvidence(
@@ -147,16 +146,16 @@ export function buildMatchEvidence(
       addEvidence(
         evidence,
         seen,
-        'gened',
-        isGenericGened ? 'Any GenEd' : `GenEd ${genedFilters.join(', ')}`,
+        'requirement',
+        isGenericGened ? 'Any Requirement' : `Requirement ${genedFilters.join(', ')}`,
         'filter',
         'hard',
         matchedCodes.join(', '),
       );
     }
-  } else if (hasHint(context.hints, 'gened') && courseRequirementCodes.length > 0) {
+  } else if (hasHint(context.hints, 'requirement') && courseRequirementCodes.length > 0) {
     const value = courseRequirementCodes.join(', ');
-    addEvidence(evidence, seen, 'gened', `GenEd ${value}`, 'query', 'soft', value);
+    addEvidence(evidence, seen, 'requirement', `Requirement ${value}`, 'query', 'soft', value);
   }
 
   if (filters.days) {
@@ -188,8 +187,8 @@ export function buildMatchEvidence(
     addEvidence(evidence, seen, 'instructor', 'Instructor match', 'filter', 'hard', course.primary_instructor ?? undefined);
   }
 
-  if (filters.difficulty) {
-    addEvidence(evidence, seen, 'difficulty', difficultyEvidenceLabel(filters.difficulty), 'filter', 'soft', filters.difficulty);
+  if (filters.workload) {
+    addEvidence(evidence, seen, 'workload', workloadEvidenceLabel(filters.workload), 'filter', 'soft', filters.workload);
     if (typeof course.quality_score === 'number') {
       addEvidence(evidence, seen, 'quality', qualityEvidenceLabel(course.quality_score), 'metadata', 'soft', course.quality_score.toFixed(0));
     }
@@ -208,7 +207,7 @@ export function buildMatchEvidence(
 
   if (result.laneMatches?.includes('requirement') && courseRequirementCodes.length > 0) {
     const value = courseRequirementCodes.join(', ');
-    addEvidence(evidence, seen, 'gened', `GenEd ${value}`, 'filter', 'soft', value);
+    addEvidence(evidence, seen, 'requirement', `Requirement ${value}`, 'filter', 'soft', value);
   }
 
   if (result.laneMatches?.includes('structured_section')) {

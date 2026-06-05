@@ -41,13 +41,13 @@ describe('result coherence checks', () => {
     expect(violations).toEqual(['results expected to be non-empty']);
   });
 
-  it('matches required gen-ed selectors against the full gened set, not just the flattened code', () => {
+  it('matches required requirement selectors against the full requirement set, not just the flattened code', () => {
     const violations = checkResultCoherence(
       query({
         non_empty: true,
         top_k: 1,
-        must_include: [{ gened: 'WCC' }],
-        all_top_k: { gened: 'WCC' },
+        must_include: [{ requirement: 'WCC' }],
+        all_top_k: { requirement: 'WCC' },
       }),
       [culturalStudiesResult],
     );
@@ -59,13 +59,13 @@ describe('result coherence checks', () => {
     const violations = checkResultCoherence(
       query({
         top_k: 1,
-        all_top_k: { gened: 'US' },
+        all_top_k: { requirement: 'US' },
       }),
       [culturalStudiesResult],
     );
 
     expect(violations).toEqual([
-      'Result 2026-spring-CLCV-100 does not include GenEd US',
+      'Result 2026-spring-CLCV-100 does not include requirement US',
     ]);
   });
 });

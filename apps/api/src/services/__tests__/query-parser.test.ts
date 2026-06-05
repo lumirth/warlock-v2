@@ -14,10 +14,10 @@ describe('parseQuery', () => {
   });
 
   describe('field:value syntax', () => {
-    it('extracts gened:HUM', () => {
+    it('extracts gened:HUM as requirement syntax', () => {
       const result = parseQuery('easy gened:HUM');
       expect(result.clauses[0].filters).toContainEqual({
-        field: 'gened',
+        field: 'requirement',
         value: 'HUM',
       });
       expect(result.clauses[0].residual).toBe('easy');
@@ -59,13 +59,13 @@ describe('parseQuery', () => {
   describe('gened:any/all syntax', () => {
     it('extracts gened:any(HUM,US)', () => {
       const result = parseQuery('gened:any(HUM,US) easy');
-      expect(result.clauses[0].genedMode?.any).toEqual(['HUM', 'US']);
+      expect(result.clauses[0].requirementMode?.any).toEqual(['HUM', 'US']);
       expect(result.clauses[0].residual).toBe('easy');
     });
 
     it('extracts gened:all(NW,US)', () => {
       const result = parseQuery('gened:all(NW,US)');
-      expect(result.clauses[0].genedMode?.all).toEqual(['NW', 'US']);
+      expect(result.clauses[0].requirementMode?.all).toEqual(['NW', 'US']);
     });
   });
 

@@ -1,7 +1,11 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { hasRequirementFilter } from "@uiuc-course-search/query-types";
 import type { RetrievalLane, SearchFilters, SearchPlan } from "./search-planner-types.js";
-import { buildFilterClauses } from "./search-filters.js";
+import {
+  buildFilteredCourseQuery,
+  hasFilteredCourseConstraints,
+  RETRIEVAL_LANE_SPECS,
+} from "./search-lane-query-builder.js";
 import type { RankedLaneRow, WorkloadLaneRow } from "./search-fusion.js";
 import { chunkValues } from "./search-loaders.js";
 import { escapeLike, sanitizeFtsQuery, titleLaneQuery } from "./search-text.js";
@@ -37,14 +41,10 @@ export async function titleKeywordSearch(
   const titleNeedle = keywordQuery.replace(/"/g, "").toLowerCase().trim();
   if (!titleNeedle) return [];
 
-  const filterResults = buildFilterClauses(filters);
-  const { joins, where, params, having, havingParams } = filterResults;
+  const filtered = buildFilteredCourseQuery(filters);
   const titlePrefix = `${escapeLike(titleNeedle)}%`;
   const titleContains = `%${escapeLike(titleNeedle)}%`;
   const titleWhere = "LOWER(c.title) LIKE ? ESCAPE '\\'";
-  const whereClause = where.length > 0
-    ? `WHERE ${where.join(" AND ")} AND ${titleWhere}`
-    : `WHERE ${titleWhere}`;
 
   const sql = `
     SELECT c.id,
@@ -54,10 +54,10 @@ export async function titleKeywordSearch(
         ELSE 3
       END) as title_rank
     FROM courses c
-    ${joins.join(" ")}
-    ${whereClause}
-    GROUP BY c.id
-    ${having ? "HAVING " + having : ""}
+    ${filtered.joinSql}
+    ${filtered.whereSql([titleWhere])}
+    ${filtered.groupBySql("c.id")}
+    ${filtered.havingSql}
     ORDER BY title_rank ASC,
       c.year DESC,
       CASE c.term WHEN 'fall' THEN 1 WHEN 'spring' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END,
@@ -67,7 +67,7 @@ export async function titleKeywordSearch(
   `;
 
   const result = await db.prepare(sql)
-    .bind(titleNeedle, titlePrefix, ...params, titleContains, ...(havingParams ?? []), limit)
+    .bind(titleNeedle, titlePrefix, ...filtered.bindParams([titleContains], [limit]))
     .all<{ id: string; title_rank: number }>();
 
   return result.results.map((row, index) => rankedLaneRow(
@@ -131,43 +131,34 @@ export async function keywordSearch(
     }
   }
 
-  const filterResults = buildFilterClauses(filters);
-  const { joins, where, params } = filterResults;
-
-  const whereClause = where.length > 0
-    ? "WHERE " + where.join(" AND ")
-    : "";
-  const joinClause = joins.join(" ");
+  const filtered = buildFilteredCourseQuery(filters);
   const hasKeyword = keywordQuery && keywordQuery.trim().length > 0;
   const cleanQuery = hasKeyword ? sanitizeFtsQuery(keywordQuery) : "";
   const titleQuery = hasKeyword ? titleLaneQuery(plan, cleanQuery) : "";
   const titleResults = hasKeyword
     ? await titleKeywordSearch(db, titleQuery, filters, limit)
     : [];
-  const finalParams = hasKeyword
-    ? [...params, cleanQuery, limit]
-    : [...params, limit];
+  const ftsMatchCondition = "courses_fts MATCH ?";
 
   const sql = hasKeyword ? `
     SELECT DISTINCT c.id, bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0) as fts_score
     FROM courses_fts fts
     JOIN courses c ON c.rowid = fts.rowid
-    ${joinClause}
-    ${whereClause}
-    ${whereClause ? "AND" : "WHERE"} courses_fts MATCH ?
+    ${filtered.joinSql}
+    ${filtered.whereSql([ftsMatchCondition])}
     ORDER BY fts_score ASC
     LIMIT ?
   ` : `
     SELECT DISTINCT c.id, 0 as fts_score
     FROM courses c
-    ${joinClause}
-    ${whereClause}
+    ${filtered.joinSql}
+    ${filtered.whereSql()}
     ORDER BY c.year DESC, c.subject, c.number
     LIMIT ?
   `;
 
   const result = await db.prepare(sql)
-    .bind(...finalParams)
+    .bind(...(hasKeyword ? filtered.bindParams([cleanQuery], [limit]) : filtered.bindParams([limit])))
     .all<{ id: string; fts_score: number }>();
 
   const ftsResults = result.results.map((row, index) => rankedLaneRow(
@@ -206,13 +197,10 @@ export async function sectionKeywordSearch(
     return [];
   }
 
-  const filterResults = buildFilterClauses(filters);
-  const { joins, where, params } = filterResults;
-  const whereClause = where.length > 0
-    ? "WHERE " + where.join(" AND ")
-    : "";
-  const uniqueJoins = joins.filter(join => !join.includes("JOIN sections s "));
-  const joinClause = uniqueJoins.join(" ");
+  const filtered = buildFilteredCourseQuery(filters);
+  const joinClause = filtered.joins
+    .filter(join => !join.includes("JOIN sections s "))
+    .join(" ");
 
   const sql = `
     SELECT DISTINCT c.id, bm25(sections_fts) as fts_score
@@ -220,15 +208,14 @@ export async function sectionKeywordSearch(
     JOIN sections s ON s.rowid = fts.rowid
     JOIN courses c ON s.course_id = c.id
     ${joinClause}
-    ${whereClause}
-    ${whereClause ? "AND" : "WHERE"} sections_fts MATCH ?
+    ${filtered.whereSql(["sections_fts MATCH ?"])}
     ORDER BY fts_score ASC
     LIMIT ?
   `;
 
   const escapedQuery = sanitizeFtsQuery(keywordQuery);
   const result = await db.prepare(sql)
-    .bind(...params, escapedQuery, limit)
+    .bind(...filtered.bindParams([escapedQuery], [limit]))
     .all<{ id: string; fts_score: number }>();
 
   return result.results.map((row, index) => rankedLaneRow(
@@ -251,33 +238,32 @@ export async function requirementLaneSearch(
     return [];
   }
 
-  const filterResults = buildFilterClauses(plan.filters);
-  const { joins, where, params, groupBy, having, havingParams } = filterResults;
+  const filtered = buildFilteredCourseQuery(plan.filters);
 
-  if (where.length === 0 && joins.length === 0) {
+  if (!hasFilteredCourseConstraints(filtered)) {
     return [];
   }
 
   const sql = `
     SELECT DISTINCT c.id
     FROM courses c
-    ${joins.join(" ")}
-    ${where.length > 0 ? "WHERE " + where.join(" AND ") : ""}
-    ${groupBy ? "GROUP BY " + groupBy : ""}
-    ${having ? "HAVING " + having : ""}
+    ${filtered.joinSql}
+    ${filtered.whereSql()}
+    ${filtered.groupBySql()}
+    ${filtered.havingSql}
     ORDER BY c.year DESC, c.subject, c.number
     LIMIT ?
   `;
 
   const result = await db.prepare(sql)
-    .bind(...params, ...(havingParams ?? []), limit)
+    .bind(...filtered.bindParams([limit]))
     .all<{ id: string }>();
 
   return result.results.map((row, index) => rankedLaneRow(
     "requirement",
     row.id,
     index,
-    "Structured requirement mapping recall.",
+    RETRIEVAL_LANE_SPECS.requirement.resultReason,
   ));
 }
 
@@ -304,32 +290,31 @@ export async function structuredSectionLaneSearch(
     return [];
   }
 
-  const filterResults = buildFilterClauses(plan.filters);
-  const { joins, where, params, groupBy, having, havingParams } = filterResults;
-  if (joins.length === 0 && where.length === 0) {
+  const filtered = buildFilteredCourseQuery(plan.filters);
+  if (!hasFilteredCourseConstraints(filtered)) {
     return [];
   }
 
   const sql = `
     SELECT DISTINCT c.id
     FROM courses c
-    ${joins.join(" ")}
-    ${where.length > 0 ? "WHERE " + where.join(" AND ") : ""}
-    ${groupBy ? "GROUP BY " + groupBy : ""}
-    ${having ? "HAVING " + having : ""}
+    ${filtered.joinSql}
+    ${filtered.whereSql()}
+    ${filtered.groupBySql()}
+    ${filtered.havingSql}
     ORDER BY c.year DESC, c.subject, c.number
     LIMIT ?
   `;
 
   const result = await db.prepare(sql)
-    .bind(...params, ...(havingParams ?? []), limit)
+    .bind(...filtered.bindParams([limit]))
     .all<{ id: string }>();
 
   return result.results.map((row, index) => rankedLaneRow(
     "structured_section",
     row.id,
     index,
-    "Structured section constraint recall.",
+    RETRIEVAL_LANE_SPECS.structured_section.resultReason,
   ));
 }
 
@@ -344,34 +329,30 @@ export async function studentAliasLaneSearch(
     return [];
   }
 
-  const filterResults = buildFilterClauses(plan.filters);
-  const { joins, where, params, groupBy, having, havingParams } = filterResults;
-  const whereClause = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
-  const joinClause = joins.join(" ");
+  const filtered = buildFilteredCourseQuery(plan.filters);
 
   const sql = `
     SELECT DISTINCT c.id, bm25(course_aliases_fts) as fts_score
     FROM course_aliases_fts fts
     JOIN course_aliases ca ON ca.rowid = fts.rowid
     JOIN courses c ON c.id = ca.course_id
-    ${joinClause}
-    ${whereClause}
-    ${whereClause ? "AND" : "WHERE"} course_aliases_fts MATCH ?
-    ${groupBy ? "GROUP BY " + groupBy : ""}
-    ${having ? "HAVING " + having : ""}
+    ${filtered.joinSql}
+    ${filtered.whereSql(["course_aliases_fts MATCH ?"])}
+    ${filtered.groupBySql()}
+    ${filtered.havingSql}
     ORDER BY fts_score ASC
     LIMIT ?
   `;
 
   const result = await db.prepare(sql)
-    .bind(...params, aliasQuery, ...(havingParams ?? []), limit)
+    .bind(...filtered.bindParams([aliasQuery], [limit]))
     .all<{ id: string; fts_score: number }>();
 
   return result.results.map((row, index) => rankedLaneRow(
     "student_language_alias",
     row.id,
     index,
-    "Student-language alias FTS recall.",
+    RETRIEVAL_LANE_SPECS.student_language_alias.resultReason,
     { rawScore: row.fts_score, matchedTerms: [aliasQuery] },
   ));
 }
@@ -387,10 +368,9 @@ export async function workloadEvidenceLaneSearch(
     return [];
   }
 
-  const filterResults = buildFilterClauses(plan.filters);
-  const { joins, where, params, groupBy, having, havingParams } = filterResults;
+  const filtered = buildFilteredCourseQuery(plan.filters);
   const signalPlaceholders = signalTypes.map(() => "?").join(",");
-  const whereParts = [`cs.signal_type IN (${signalPlaceholders})`, ...where];
+  const signalCondition = `cs.signal_type IN (${signalPlaceholders})`;
 
   const sql = `
     SELECT c.id,
@@ -398,16 +378,16 @@ export async function workloadEvidenceLaneSearch(
       MAX(COALESCE(cs.confidence, 0) * COALESCE(cs.value, 0)) as evidence_score
     FROM course_signals cs
     JOIN courses c ON c.id = cs.course_id
-    ${joins.join(" ")}
-    WHERE ${whereParts.join(" AND ")}
-    ${groupBy ? "GROUP BY " + groupBy + ", c.id" : "GROUP BY c.id"}
-    ${having ? "HAVING " + having : ""}
+    ${filtered.joinSql}
+    ${filtered.whereSql([signalCondition])}
+    ${filtered.groupBySql("c.id")}
+    ${filtered.havingSql}
     ORDER BY evidence_score DESC, c.year DESC, c.subject, c.number
     LIMIT ?
   `;
 
   const result = await db.prepare(sql)
-    .bind(...signalTypes, ...params, ...(havingParams ?? []), limit)
+    .bind(...filtered.bindParams(signalTypes, [limit]))
     .all<{ id: string; claims: string | null; evidence_score: number | null }>();
 
   return result.results.map((row, index) => {
@@ -440,9 +420,9 @@ export async function postFilterSemanticResults(
     .some(value => value !== undefined && value !== null && (Array.isArray(value) ? value.length > 0 : true));
   if (!hasActiveFilters) return semanticResults;
 
-  const { joins, where, params, groupBy, having, havingParams } = buildFilterClauses(filters);
+  const filtered = buildFilteredCourseQuery(filters);
 
-  if (where.length === 0 && joins.length === 0 && !having) return semanticResults;
+  if (!hasFilteredCourseConstraints(filtered)) return semanticResults;
 
   const courseIds = semanticResults.map(row => row.id);
   const validIdSet = new Set<string>();
@@ -453,14 +433,13 @@ export async function postFilterSemanticResults(
     const sql = `
       SELECT c.id
       FROM courses c
-      ${joins.join(" ")}
-      WHERE c.id IN (${placeholders})
-      ${where.length > 0 ? "AND " + where.join(" AND ") : ""}
-      ${groupBy ? "GROUP BY " + groupBy : ""}
-      ${having ? "HAVING " + having : ""}
+      ${filtered.joinSql}
+      ${filtered.whereSql([`c.id IN (${placeholders})`])}
+      ${filtered.groupBySql()}
+      ${filtered.havingSql}
     `;
 
-    const finalParams = [...batch, ...params, ...(havingParams || [])];
+    const finalParams = filtered.bindParams(batch);
     const validIdsResult = await db.prepare(sql)
       .bind(...finalParams)
       .all<{ id: string }>();
@@ -499,7 +478,7 @@ export function workloadSignalTypes(plan: SearchPlan): string[] {
   const types = new Set<string>();
   const soft = plan.softPreferences ?? {};
 
-  if (soft.lowWorkload || plan.filters.difficulty === "easy") {
+  if (soft.lowWorkload || plan.filters.workload === "easy") {
     ["low_workload", "high_avg_gpa", "non_major_friendly"].forEach(type => types.add(type));
   }
   if (soft.lowWriting) {

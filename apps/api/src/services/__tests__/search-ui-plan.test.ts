@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { normalizeSearchRequestDto } from '@uiuc-course-search/query-types';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { Hint, SearchPlan } from '../search-planner-types.js';
-import { buildSearchUiPlan } from '../search-ui-plan.js';
+import {
+  buildInterpretedSearchRequest,
+  buildSearchUiPlan,
+} from '../search-ui-plan.js';
 
 const request = (query: string, filters = {}) =>
   normalizeSearchRequestDto({ query, filters });
@@ -21,7 +24,7 @@ describe('buildSearchUiPlan', () => {
         metadata: { source: 'nlp', confidence: 0.8, raw: 'professor fagen' },
       },
       {
-        type: 'difficulty',
+        type: 'workload',
         value: 'hard',
         metadata: { source: 'alias', confidence: 0.9, raw: 'hard' },
       },
@@ -31,7 +34,7 @@ describe('buildSearchUiPlan', () => {
       filters: {
         subject: 'CS',
         number: '225',
-        difficulty: 'hard',
+        workload: 'hard',
         instructor_ids: [1],
       },
       keywordQuery: 'systems',
@@ -45,11 +48,28 @@ describe('buildSearchUiPlan', () => {
       'Topic: systems',
     ]);
     expect(plan.chips[0].action?.nextRequest.query).toBe('professor fagen hard systems');
-    expect(plan.advanced).toMatchObject({
-      subject: 'CS',
-      number: '225',
-      instructor: 'fagen',
-      difficulty: 'hard',
+    expect(buildInterpretedSearchRequest(
+      hints,
+      {
+        filters: {
+          subject: 'CS',
+          number: '225',
+          workload: 'hard',
+          instructor_ids: [1],
+        },
+        keywordQuery: 'systems',
+        semanticQuery: 'systems',
+      },
+      'systems',
+      request('CS 225 professor fagen hard systems'),
+    )).toMatchObject({
+      query: 'systems',
+      filters: {
+        subject: 'CS',
+        number: '225',
+        instructor: 'fagen',
+        workload: 'hard',
+      },
     });
   });
 
@@ -61,19 +81,19 @@ describe('buildSearchUiPlan', () => {
       ambiguities: [{
         term: 'CS',
         chosen: { type: 'subject', value: 'CS', label: 'Computer Science' },
-        alternatives: [{ type: 'gened', value: 'CS', label: 'Cultural Studies' }],
+        alternatives: [{ type: 'requirement', value: 'CS', label: 'Cultural Studies' }],
       }],
     };
 
     expect(buildSearchUiPlan([], plan, '', request('CS')).ambiguityActions).toEqual([{
-      id: '0-0-gened-CS',
+      id: '0-0-requirement-CS',
       term: 'CS',
       label: 'Cultural Studies',
       action: {
         kind: 'run_search',
         nextRequest: {
           query: '',
-          filters: { gened: 'CS' },
+          filters: { requirement: 'CS' },
           sort: { field: 'relevance', direction: 'desc' },
           scope: 'active',
         },
@@ -84,7 +104,7 @@ describe('buildSearchUiPlan', () => {
   it('renders subject shorthand as a GenEd chip when the resolver chose the requirement meaning', () => {
     const hints: Hint[] = [
       {
-        type: 'difficulty',
+        type: 'workload',
         value: 'easy',
         metadata: { source: 'alias', confidence: 0.9, raw: 'easy' },
       },
@@ -95,25 +115,27 @@ describe('buildSearchUiPlan', () => {
       },
     ];
     const plan: SearchPlan = {
-      filters: { difficulty: 'easy', requirement: singleRequirementFilter('CS') },
+      filters: { workload: 'easy', requirement: singleRequirementFilter('CS') },
       keywordQuery: '',
       semanticQuery: '',
       ambiguities: [{
         term: 'cs',
-        chosen: { type: 'gened', value: 'CS', label: 'Cultural Studies' },
+        chosen: { type: 'requirement', value: 'CS', label: 'Cultural Studies' },
         alternatives: [{ type: 'subject', value: 'CS', label: 'Computer Science' }],
       }],
     };
 
     const ui = buildSearchUiPlan(hints, plan, '', request('easy cs'));
 
-    expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'GenEd CS']);
+    expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'Requirement CS']);
     expect(ui.chips[1].action?.nextRequest.query).toBe('easy');
-    expect(ui.advanced.gened).toBe('CS');
-    expect(ui.advanced.subject).toBeUndefined();
+    expect(buildInterpretedSearchRequest(hints, plan, '', request('easy cs')).filters).toMatchObject({
+      requirement: 'CS',
+      workload: 'easy',
+    });
     expect(ui.ambiguityActions[0].action.nextRequest).toMatchObject({
       query: '',
-      filters: { subject: 'CS', difficulty: 'easy' },
+      filters: { subject: 'CS', workload: 'easy' },
     });
   });
 
@@ -134,7 +156,17 @@ describe('buildSearchUiPlan', () => {
     ]);
     expect(plan.chips[0].value).toBe('fagen');
     expect(plan.chips[0].action?.nextRequest.query).toBe('algorithms');
-    expect(plan.advanced.instructor).toBe('fagen');
+    expect(buildInterpretedSearchRequest([{
+      type: 'instructor',
+      value: 'fagen algorithms',
+      metadata: { source: 'nlp', confidence: 0.8, raw: 'professor fagen algorithms' },
+    }], {
+      filters: { instructor_ids: [3365] },
+      keywordQuery: 'algorithms',
+      semanticQuery: 'algorithms',
+    }, 'algorithms', request('professor fagen algorithms')).filters).toMatchObject({
+      instructor: 'fagen',
+    });
   });
 
   it('labels introductory level boosts in student-facing language', () => {
@@ -189,11 +221,11 @@ describe('buildSearchUiPlan', () => {
 
   it('hides low-workload assumptions already represented by an easy workload chip', () => {
     const plan = buildSearchUiPlan([{
-      type: 'difficulty',
+      type: 'workload',
       value: 'easy',
       metadata: { source: 'alias', confidence: 0.9, raw: 'easy' },
     }], {
-      filters: { difficulty: 'easy' },
+      filters: { workload: 'easy' },
       keywordQuery: '',
       semanticQuery: '',
       rescue: {
@@ -213,7 +245,7 @@ describe('buildSearchUiPlan', () => {
     }, '', request('easy'));
 
     expect(plan.chips).toEqual([
-      expect.objectContaining({ type: 'difficulty', label: 'Easy workload', action: expect.any(Object) }),
+      expect.objectContaining({ type: 'workload', label: 'Easy workload', action: expect.any(Object) }),
     ]);
   });
 
@@ -254,12 +286,30 @@ describe('buildSearchUiPlan', () => {
 
     expect(plan.chips).toEqual([
       expect.objectContaining({
-        id: 'gened-any',
-        type: 'gened',
-        label: 'Any GenEd',
+        id: 'requirement-any',
+        type: 'requirement',
+        label: 'Any Requirement',
       }),
     ]);
-    expect(plan.advanced.gened).toBeUndefined();
+    expect(buildInterpretedSearchRequest([], {
+      filters: {
+        requirement: requirementFilter('any', [
+          'HUM',
+          'NAT',
+          'SBS',
+          'CS',
+          'QR',
+          'QR1',
+          'QR2',
+          'NW',
+          'US',
+          'WCC',
+          'ACP',
+        ]),
+      },
+      keywordQuery: '',
+      semanticQuery: '',
+    }, '', request('gened')).filters?.requirement).toBeUndefined();
   });
 
   it('preserves part-of-term filters in chips and advanced state', () => {
@@ -281,6 +331,16 @@ describe('buildSearchUiPlan', () => {
         }),
       }),
     ]);
-    expect(plan.advanced.partOfTerm).toBe('B');
+    expect(buildInterpretedSearchRequest([{
+      type: 'partOfTerm',
+      value: 'B',
+      metadata: { source: 'regex', confidence: 0.8, raw: 'part B' },
+    }], {
+      filters: { partOfTerm: 'B' },
+      keywordQuery: '',
+      semanticQuery: '',
+    }, '', request('part B')).filters).toMatchObject({
+      partOfTerm: 'B',
+    });
   });
 });

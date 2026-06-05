@@ -1,5 +1,4 @@
 import {
-  COURSE_USEFULNESS_POLICY,
   getQualityTierLabel,
   getQualityTierRank,
 } from "@uiuc-course-search/query-types";
@@ -16,6 +15,7 @@ import {
   nullDataPenaltyComponent,
   workloadPreferenceComponents,
 } from "./workload-components.js";
+import { RANKING_POLICY } from "./ranking-policy.js";
 
 export function rankingComponentsForResult(
   result: SearchResult,
@@ -28,9 +28,27 @@ export function rankingComponentsForResult(
     exactnessComponent(result),
     qualityTierComponent(result.course),
     requirementComponent(result, plan),
-    laneMatchComponent(result, "structured_section", "availability_term", 0.35, "Section constraints matched structured offering data."),
-    laneMatchComponent(result, "student_language_alias", "student_language", 0.25, "Student-language aliases matched this course."),
-    laneMatchComponent(result, "workload_evidence", "workload_evidence", 0.45, "Workload evidence matched the subjective preference."),
+    laneMatchComponent(
+      result,
+      "structured_section",
+      "availability_term",
+      RANKING_POLICY.components.laneMatch.structuredSection,
+      "Section constraints matched structured offering data.",
+    ),
+    laneMatchComponent(
+      result,
+      "student_language_alias",
+      "student_language",
+      RANKING_POLICY.components.laneMatch.studentLanguageAlias,
+      "Student-language aliases matched this course.",
+    ),
+    laneMatchComponent(
+      result,
+      "workload_evidence",
+      "workload_evidence",
+      RANKING_POLICY.components.laneMatch.workloadEvidence,
+      "Workload evidence matched the subjective preference.",
+    ),
     ...workloadPreferenceComponents(result, plan),
     eligibilityComponent(result.course, plan),
     negativePreferenceComponent(result.course, plan),
@@ -78,7 +96,7 @@ function exactnessComponent(result: SearchResult): RankingScoreComponent | null 
     .map(row => row.reason);
   return scoreComponent(
     "exactness",
-    6,
+    RANKING_POLICY.components.exactness,
     "Exact course or CRN lookup dominates broad relevance signals.",
     evidence,
   );
@@ -90,7 +108,7 @@ function qualityTierComponent(course: Course): RankingScoreComponent | null {
   const label = getQualityTierLabel(course.quality_score);
   return scoreComponent(
     "quality_tier",
-    tierRank * COURSE_USEFULNESS_POLICY.FUSION.QUALITY_TIER_WEIGHT,
+    tierRank * RANKING_POLICY.components.qualityTierWeight,
     `${label} quality tier contributes a small trust component.`,
     label ? [label] : undefined,
   );

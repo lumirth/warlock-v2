@@ -2,7 +2,7 @@ import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   SEARCH_SORT_DEFAULT_DIRECTIONS,
-  type CourseDto,
+  type SearchCourseResultDto,
   type SearchSort,
   type SortField,
 } from '@uiuc-course-search/query-types'
@@ -26,8 +26,8 @@ import {
   formatTermLabel,
   getCourseKey,
   getCoursePath,
-  getDifficultyLabel,
-  getDifficultyTone,
+  getWorkloadLabel,
+  getWorkloadTone,
   toneTextClass,
 } from './search-result-model'
 import { sortButtonLabel } from './search-sort-model'
@@ -37,7 +37,7 @@ export function CourseResultsTable({
   sort,
   onSort,
 }: {
-  results: CourseDto[]
+  results: SearchCourseResultDto[]
   sort: SearchSort
   onSort: (field: Exclude<SortField, 'relevance'>) => void
 }) {
@@ -59,14 +59,14 @@ export function CourseResultsTable({
       </TableHeader>
       <TableBody>
         {results.map((course) => {
-          const isHistorical = course._historical === true
+          const isHistorical = course.search?.historical === true
           const qualityLabel =
             typeof course.quality_score === 'number'
               ? getQualityLabel(course.quality_score)
               : null
           const workloadLabel =
             typeof course.difficulty_score === 'number'
-              ? getDifficultyLabel(course.difficulty_score)
+              ? getWorkloadLabel(course.difficulty_score)
               : null
 
           return (
@@ -118,7 +118,7 @@ export function CourseResultsTable({
                   <span
                     className={cn(
                       'font-semibold',
-                      toneTextClass(getDifficultyTone(course.difficulty_score!))
+                      toneTextClass(getWorkloadTone(course.difficulty_score!))
                     )}
                   >
                     {workloadLabel}

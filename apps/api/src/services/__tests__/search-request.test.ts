@@ -11,7 +11,7 @@ describe("search request normalization", () => {
       filters: {
         subject: "cs",
         instructor: "  Fagen  ",
-        gened: "hum",
+        requirement: "hum",
         days: "mwf",
         online: true,
       },
@@ -24,7 +24,7 @@ describe("search request normalization", () => {
       filters: {
         subject: "CS",
         instructor: "Fagen",
-        gened: "HUM",
+        requirement: "HUM",
         days: "MWF",
         online: true,
       },
@@ -42,7 +42,7 @@ describe("search request normalization", () => {
       filters: {
         subject: "CS",
         instructor: "Fagen",
-        gened: "HUM",
+        requirement: "hum",
         credits: 4,
         partOfTerm: "a",
       },

@@ -28,7 +28,7 @@ export type FeedbackSubmitDto = {
   year?: number;
   crn?: string;
   instructorName?: string;
-  scoreField?: "quality" | "difficulty" | "gpa" | "rmp";
+  scoreField?: "quality" | "workload" | "gpa" | "rmp";
   expected?: string;
   message?: string;
   anonymousSessionId?: string;

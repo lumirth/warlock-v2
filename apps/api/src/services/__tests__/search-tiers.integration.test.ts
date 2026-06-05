@@ -141,12 +141,12 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     const query = 'easy ai classes';
     
     const extraction: ExtractionResult = {
-      hints: [{ type: 'difficulty', value: 'easy', metadata: { source: 'regex', confidence: 0.9, raw: 'easy' } }],
+      hints: [{ type: 'workload', value: 'easy', metadata: { source: 'regex', confidence: 0.9, raw: 'easy' } }],
       residual: 'ai classes'
     };
 
     const plan: SearchPlan = {
-      filters: { difficulty: 'easy' },
+      filters: { workload: 'easy' },
       semanticQuery: 'ai classes',
       keywordQuery: 'ai classes'
     };
@@ -164,7 +164,7 @@ describe('SearchPipeline Tiered Logic Integration', () => {
     expect(topicRegistry.expandTopics).toHaveBeenCalledWith('ai');
     expect(termRanking.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
     expect(planFromFirstSearchCall()).toMatchObject({
-      filters: { difficulty: 'easy' },
+      filters: { workload: 'easy' },
       semanticQuery: 'ai artificial intelligence',
       keywordQuery: 'ai OR artificial OR intelligence',
       softPreferences: { topicExpansions: ['artificial intelligence'] },
@@ -180,7 +180,7 @@ describe('SearchPipeline Tiered Logic Integration', () => {
       hints: [
         { type: 'subject', value: 'CS', metadata: { source: 'regex', confidence: 0.9, raw: 'CS' } },
         { type: 'level', value: 400, metadata: { source: 'regex', confidence: 0.9, raw: '400' } },
-        { type: 'gened', value: 'HUM', metadata: { source: 'regex', confidence: 0.9, raw: 'HUM' } }
+        { type: 'requirement', value: 'HUM', metadata: { source: 'regex', confidence: 0.9, raw: 'HUM' } }
       ],
       residual: ''
     };

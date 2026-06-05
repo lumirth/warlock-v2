@@ -29,8 +29,8 @@ export function useSearchSorting({
   executeSearch: ExecuteSearch
 }) {
   useEffect(() => {
-    writeStoredResultViewMode(state.resultViewMode)
-  }, [state.resultViewMode])
+    writeStoredResultViewMode(state.draft.resultViewMode)
+  }, [state.draft.resultViewMode])
 
   const setResultViewMode = (value: ResultViewMode) =>
     dispatch({ type: 'result-view/changed', value })
@@ -40,7 +40,7 @@ export function useSearchSorting({
     executeSearch({
       type: 'refresh',
       query: derived.activeRequestQuery,
-      filters: state.activeAdvancedFilters,
+      filters: state.session.activeAdvancedFilters,
       sort: normalizedSort,
     })
   }
@@ -53,16 +53,16 @@ export function useSearchSorting({
   }
 
   const toggleSortDirection = () => {
-    if (state.sort.field === 'relevance') return
+    if (state.session.sort.field === 'relevance') return
 
     applySort({
-      field: state.sort.field,
-      direction: state.sort.direction === 'asc' ? 'desc' : 'asc',
+      field: state.session.sort.field,
+      direction: state.session.sort.direction === 'asc' ? 'desc' : 'asc',
     })
   }
 
   const handleTableSort = (field: Exclude<SortField, 'relevance'>) => {
-    applySort(nextSortForField(field, state.sort))
+    applySort(nextSortForField(field, state.session.sort))
   }
 
   return {

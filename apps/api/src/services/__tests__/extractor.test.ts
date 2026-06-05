@@ -1,8 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { extract } from '../extractor.js';
+import { EXTRACTION_PASSES, extract } from '../extractor.js';
 import type { Hint } from '../search-planner-types.js';
 
 describe('extract', () => {
+  it('declares the extraction pipeline as named passes', () => {
+    expect(EXTRACTION_PASSES.map(pass => pass.id)).toEqual([
+      'positive_no_not_aliases',
+      'general_negations',
+      'course_codes_and_crns',
+      'question_scaffolding',
+      'student_shorthand',
+      'term_and_part_of_term',
+      'contextual_requirements',
+      'attributes_and_aliases',
+      'instructors',
+      'standalone_entities',
+      'clean_residual',
+    ]);
+    for (const pass of EXTRACTION_PASSES) {
+      expect(pass.reads.length).toBeGreaterThan(0);
+      expect(pass.writes.length).toBeGreaterThan(0);
+    }
+  });
+
   describe('phase 1: entities', () => {
     it('extracts course code "CS 225"', () => {
       const result = extract('CS 225');
@@ -93,7 +113,7 @@ describe('extract', () => {
 
     it('extracts difficulty "easy"', () => {
       const result = extract('easy class');
-      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'difficulty', value: 'easy' }));
+      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'workload', value: 'easy' }));
     });
 
     describe('intro as boost', () => {
@@ -244,7 +264,7 @@ describe('extract', () => {
 
     it('extracts positive no/not aliases before generic negation masking', () => {
       expect(extract('not hard').hints).toContainEqual(
-        expect.objectContaining({ type: 'difficulty', value: 'easy' })
+        expect.objectContaining({ type: 'workload', value: 'easy' })
       );
       expect(extract('not full').hints).toContainEqual(
         expect.objectContaining({ type: 'status', value: 'open' })
@@ -285,7 +305,7 @@ describe('extract', () => {
         })
       );
       expect(result.hints).toContainEqual(
-        expect.objectContaining({ type: 'gened', value: 'NAT' })
+        expect.objectContaining({ type: 'requirement', value: 'NAT' })
       );
       expect(result.hints).not.toContainEqual(
         expect.objectContaining({ type: 'subject', value: 'MATH' })
@@ -301,22 +321,22 @@ describe('extract', () => {
         })
       );
       expect(result.hints).toContainEqual(
-        expect.objectContaining({ type: 'gened', value: 'NAT' })
+        expect.objectContaining({ type: 'requirement', value: 'NAT' })
       );
     });
 
     it('recognizes contextual gen-ed language without stealing protected science subjects', () => {
       expect(extract('social science class').hints).toContainEqual(
-        expect.objectContaining({ type: 'gened', value: 'SBS' })
+        expect.objectContaining({ type: 'requirement', value: 'SBS' })
       );
       expect(extract('diversity').hints).toContainEqual(
-        expect.objectContaining({ type: 'gened', value: 'CS' })
+        expect.objectContaining({ type: 'requirement', value: 'CS' })
       );
       expect(extract('computer science class').hints).toContainEqual(
         expect.objectContaining({ type: 'subject', value: 'CS' })
       );
       expect(extract('computer science class').hints).not.toContainEqual(
-        expect.objectContaining({ type: 'gened', value: 'NAT' })
+        expect.objectContaining({ type: 'requirement', value: 'NAT' })
       );
     });
 
@@ -326,7 +346,7 @@ describe('extract', () => {
         expect.objectContaining({ type: 'subject', value: 'CHEM' })
       );
       expect(orgo.hints).not.toContainEqual(
-        expect.objectContaining({ type: 'difficulty', value: 'hard' })
+        expect.objectContaining({ type: 'workload', value: 'hard' })
       );
       expect(orgo.residual).toContain('organic');
 

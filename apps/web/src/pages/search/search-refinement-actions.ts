@@ -36,7 +36,6 @@ export type RefinementContext = {
   metaRawQuery?: string
   residualQuery?: string
   activeFilters: AdvancedSearchStateDto
-  visibleAdvanced?: AdvancedSearchStateDto
   sort?: SearchSort
 }
 

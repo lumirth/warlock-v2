@@ -1,9 +1,7 @@
 import type { SearchFilters } from "./search-planner-types.js";
-import {
-  WORKLOAD_FILTER_THRESHOLDS,
-  effectiveRequirementFilter,
-} from "@uiuc-course-search/query-types";
+import { effectiveRequirementFilter } from "@uiuc-course-search/query-types";
 import { canonicalGenedCode, canonicalGenedCodes } from "./gened-codes.js";
+import { WORKLOAD_FILTER_THRESHOLDS } from "./ranking/ranking-policy.js";
 
 export const TIME_RANGES: Record<string, { start?: string; end?: string }> = {
   early: { end: "09:00" },
@@ -113,14 +111,14 @@ export function buildFilterClauses(
   }
 
   if (requirement?.mode === "all") {
-    canonicalGenedCodes(requirement.codes).forEach((gened, index) => {
+    canonicalGenedCodes(requirement.codes).forEach((requirement, index) => {
       const alias = `cg_all_${index}`;
       where.push(`EXISTS (
         SELECT 1 FROM course_gened ${alias}
         WHERE ${alias}.course_id = c.id
           AND (${alias}.category_id = ? OR ${canonicalAttributeCodeSql(alias)} = ?)
       )`);
-      params.push(gened, gened);
+      params.push(requirement, requirement);
     });
   }
 
@@ -180,8 +178,8 @@ export function buildFilterClauses(
     params.push(...statuses);
   }
 
-  if (filters.difficulty) {
-    const thresholds = WORKLOAD_FILTER_THRESHOLDS[filters.difficulty];
+  if (filters.workload) {
+    const thresholds = WORKLOAD_FILTER_THRESHOLDS[filters.workload];
 
     if ("minScoreExclusive" in thresholds) {
       where.push(
@@ -274,16 +272,16 @@ export function buildFilterClauses(
       params.push(...subjects);
     }
 
-    if (filters.not.geneds?.length) {
-      const geneds = canonicalGenedCodes(filters.not.geneds);
-      if (geneds.length > 0) {
-        const placeholders = geneds.map(() => "?").join(",");
+    if (filters.not.requirementCodes?.length) {
+      const requirementCodes = canonicalGenedCodes(filters.not.requirementCodes);
+      if (requirementCodes.length > 0) {
+        const placeholders = requirementCodes.map(() => "?").join(",");
         where.push(`NOT EXISTS (
           SELECT 1 FROM course_gened cg_neg
           WHERE cg_neg.course_id = c.id
             AND (cg_neg.category_id IN (${placeholders}) OR ${canonicalAttributeCodeSql("cg_neg")} IN (${placeholders}))
         )`);
-        params.push(...geneds, ...geneds);
+        params.push(...requirementCodes, ...requirementCodes);
       }
     }
 

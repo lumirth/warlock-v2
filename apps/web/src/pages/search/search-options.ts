@@ -1,4 +1,10 @@
 import {
+  SEARCH_LEVEL_VALUES,
+  SEARCH_SORT_FIELDS,
+  SEARCH_STATUS_VALUES,
+  SEARCH_TERM_VALUES,
+  SEARCH_TIME_VALUES,
+  SEARCH_WORKLOAD_VALUES,
   type SortField,
 } from '@uiuc-course-search/query-types'
 
@@ -20,18 +26,51 @@ export type TableSortColumn = {
   className?: string
 }
 
-export const TERM_OPTIONS: SelectOption[] = [
-  { value: 'spring', label: 'Spring' },
-  { value: 'summer', label: 'Summer' },
-  { value: 'fall', label: 'Fall' },
-  { value: 'winter', label: 'Winter' },
-]
+const TERM_LABELS = {
+  spring: 'Spring',
+  summer: 'Summer',
+  fall: 'Fall',
+  winter: 'Winter',
+} as const satisfies Record<(typeof SEARCH_TERM_VALUES)[number], string>
 
-export const TIME_OPTIONS: SelectOption[] = [
-  { value: 'morning', label: 'Morning' },
-  { value: 'afternoon', label: 'Afternoon' },
-  { value: 'evening', label: 'Evening' },
-]
+const TIME_LABELS = {
+  early: 'Early',
+  morning: 'Morning',
+  midday: 'Midday',
+  afternoon: 'Afternoon',
+  evening: 'Evening',
+} as const satisfies Record<(typeof SEARCH_TIME_VALUES)[number], string>
+
+const STATUS_LABELS = {
+  open: 'Open',
+  available: 'Available',
+  closed: 'Closed',
+} as const satisfies Record<(typeof SEARCH_STATUS_VALUES)[number], string>
+
+const WORKLOAD_LABELS = {
+  easy: 'Easier',
+  hard: 'Harder',
+} as const satisfies Record<(typeof SEARCH_WORKLOAD_VALUES)[number], string>
+
+const SORT_FIELD_LABELS = {
+  relevance: 'Relevance',
+  gpa: 'Avg GPA',
+  quality: 'Quality',
+  workload: 'Workload',
+  instructor_rating: 'Instructor rating',
+  level: 'Level',
+  credits: 'Credits',
+} as const satisfies Record<SortField, string>
+
+export const TERM_OPTIONS: SelectOption[] = SEARCH_TERM_VALUES.map((value) => ({
+  value,
+  label: TERM_LABELS[value],
+}))
+
+export const TIME_OPTIONS: SelectOption[] = SEARCH_TIME_VALUES.map((value) => ({
+  value,
+  label: TIME_LABELS[value],
+}))
 
 export const PART_OF_TERM_OPTIONS: SelectOption[] = [
   { value: '1', label: 'Full term' },
@@ -44,42 +83,29 @@ export const DELIVERY_OPTIONS: SelectOption[] = [
   { value: 'false', label: 'In person' },
 ]
 
-export const STATUS_OPTIONS: SelectOption[] = [
-  { value: 'open', label: 'Open' },
-  { value: 'closed', label: 'Closed' },
-]
+export const STATUS_OPTIONS: SelectOption[] = SEARCH_STATUS_VALUES.map((value) => ({
+  value,
+  label: STATUS_LABELS[value],
+}))
 
-export const WORKLOAD_OPTIONS: SelectOption[] = [
-  { value: 'easy', label: 'Easier' },
-  { value: 'hard', label: 'Harder' },
-]
+export const WORKLOAD_OPTIONS: SelectOption[] = SEARCH_WORKLOAD_VALUES.map((value) => ({
+  value,
+  label: WORKLOAD_LABELS[value],
+}))
 
-export const LEVEL_OPTIONS: SelectOption[] = [
-  { value: '100', label: '100 level' },
-  { value: '200', label: '200 level' },
-  { value: '300', label: '300 level' },
-  { value: '400', label: '400 level' },
-  { value: '500', label: '500+ level' },
-]
+export const LEVEL_OPTIONS: SelectOption[] = SEARCH_LEVEL_VALUES.map((value) => ({
+  value: String(value),
+  label: value === 500 ? '500+ level' : `${value} level`,
+}))
 
-export const SORT_FIELD_OPTIONS: SortFieldOption[] = [
-  { value: 'relevance', label: 'Relevance' },
-  { value: 'gpa', label: 'Avg GPA' },
-  { value: 'quality', label: 'Quality' },
-  { value: 'workload', label: 'Workload' },
-  { value: 'instructor_rating', label: 'Instructor rating' },
-  { value: 'level', label: 'Level' },
-  { value: 'credits', label: 'Credits' },
-]
+export const SORT_FIELD_OPTIONS: SortFieldOption[] = SEARCH_SORT_FIELDS.map((value) => ({
+  value,
+  label: SORT_FIELD_LABELS[value],
+}))
 
-export const TABLE_SORT_COLUMNS: TableSortColumn[] = [
-  { field: 'quality', label: 'Quality' },
-  { field: 'workload', label: 'Workload' },
-  { field: 'gpa', label: 'Avg GPA' },
-  { field: 'instructor_rating', label: 'Instructor rating' },
-  { field: 'level', label: 'Level' },
-  { field: 'credits', label: 'Credits' },
-]
+export const TABLE_SORT_COLUMNS: TableSortColumn[] = SEARCH_SORT_FIELDS
+  .filter((field): field is Exclude<SortField, 'relevance'> => field !== 'relevance')
+  .map((field) => ({ field, label: SORT_FIELD_LABELS[field] }))
 
 export const FIRST_RUN_EXAMPLE_QUERIES = [
   'CS 225',

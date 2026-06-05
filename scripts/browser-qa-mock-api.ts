@@ -1,7 +1,7 @@
 import { createServer, type ServerResponse } from 'node:http';
 import type {
-  CourseDto,
   SearchActionDto,
+  SearchCourseResultDto,
   SearchRequestDto,
   SearchResponseDto,
   SearchUiPlanDto,
@@ -9,7 +9,7 @@ import type {
 
 const PORT = Number(process.env.QA_MOCK_API_PORT ?? 8787);
 
-const course: CourseDto = {
+const course: SearchCourseResultDto = {
   id: 'CS-225-2026-spring',
   subject: 'CS',
   number: '225',
@@ -126,20 +126,20 @@ const course: CourseDto = {
 	    },
   ],
   course_explorer_url: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
-  _score: 1,
-  _keywordRank: 1,
-  _historical: false,
-  _cached: true,
-  _term_status: 'active',
+  search: {
+    score: 1,
+    keywordRank: 1,
+    historical: false,
+  },
   match_evidence: [
     { kind: 'course_code', label: 'Course CS 225', source: 'filter', weight: 'hard', value: 'CS 225' },
-    { kind: 'gened', label: 'GenEd QR', source: 'filter', weight: 'hard', value: 'QR' },
+    { kind: 'requirement', label: 'Requirement QR', source: 'filter', weight: 'hard', value: 'QR' },
     { kind: 'keyword', label: 'Strong keyword match', source: 'keyword', weight: 'rank', value: '1' },
   ],
   warnings: [],
 };
 
-function courseVariant(overrides: Partial<CourseDto>): CourseDto {
+function courseVariant(overrides: Partial<SearchCourseResultDto>): SearchCourseResultDto {
   return {
     ...course,
     ...overrides,
@@ -157,7 +157,6 @@ function searchAction(nextRequest: SearchRequestDto): SearchActionDto {
 function searchUi(query: string): SearchUiPlanDto {
   const lower = query.toLowerCase();
   const chips: SearchUiPlanDto['chips'] = [];
-  const advanced: SearchUiPlanDto['advanced'] = {};
   const ambiguityActions: SearchUiPlanDto['ambiguityActions'] = [];
 
   if (lower.includes('cs 225')) {
@@ -171,8 +170,6 @@ function searchUi(query: string): SearchUiPlanDto {
       editable: true,
       action: searchAction({ query: query.replace(/cs\s*225/i, '').trim() }),
     });
-    advanced.subject = 'CS';
-    advanced.number = '225';
   }
 
   if (lower.includes('fagen')) {
@@ -191,14 +188,13 @@ function searchUi(query: string): SearchUiPlanDto {
           .trim(),
       }),
     });
-    advanced.instructor = 'fagen';
   }
 
   if (lower.includes('gened') || lower.includes('gened:cs')) {
     chips.push({
-      id: 'gened-CS',
-      type: 'gened',
-      label: 'GenEd Cultural Studies',
+      id: 'requirement-CS',
+      type: 'requirement',
+      label: 'Requirement Cultural Studies',
       value: 'CS',
       source: 'natural_language',
       removable: true,
@@ -207,12 +203,11 @@ function searchUi(query: string): SearchUiPlanDto {
         query: query.replace(/\bgened\b/i, '').trim(),
       }),
     });
-    advanced.gened = 'CS';
     ambiguityActions.push({
-      id: 'gened-CS-alternative',
+      id: 'requirement-CS-alternative',
       term: 'CS',
       label: 'Cultural Studies',
-      action: searchAction({ query: '', filters: { gened: 'CS' } }),
+      action: searchAction({ query: '', filters: { requirement: 'CS' } }),
     });
   }
 
@@ -242,13 +237,12 @@ function searchUi(query: string): SearchUiPlanDto {
           .trim(),
       }),
     });
-    advanced.subject = 'CS';
   }
 
-  return { chips, advanced, ambiguityActions };
+  return { chips, ambiguityActions };
 }
 
-function introResults(): CourseDto[] {
+function introResults(): SearchCourseResultDto[] {
   const firstPage = [
     courseVariant({
       id: 'CS-124-2026-spring',
@@ -256,7 +250,7 @@ function introResults(): CourseDto[] {
       title: 'Introduction to Computer Science I',
       description: 'A first programming and computer science course for students beginning the CS sequence.',
       credit_hours: 3,
-      _score: 0.98,
+      search: { score: 0.98 },
       match_evidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
@@ -268,7 +262,7 @@ function introResults(): CourseDto[] {
       title: 'Freshman Orientation',
       description: 'Orientation to computer science study, department resources, and first-year planning.',
       credit_hours: 1,
-      _score: 0.92,
+      search: { score: 0.92 },
       match_evidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
@@ -280,7 +274,7 @@ function introResults(): CourseDto[] {
       title: 'Introduction to Computing',
       description: 'Computing concepts and programming for students from a broad range of majors.',
       credit_hours: 3,
-      _score: 0.88,
+      search: { score: 0.88 },
       match_evidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
@@ -296,7 +290,7 @@ function introResults(): CourseDto[] {
       title: `Introductory CS Topic ${index + 1}`,
       description: 'Additional introductory CS result used to exercise paginated exploration in Browser QA.',
       credit_hours: 3,
-      _score: 0.75 - index / 100,
+      search: { score: 0.75 - index / 100 },
       match_evidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
       ],
@@ -304,7 +298,7 @@ function introResults(): CourseDto[] {
   ];
 }
 
-function defaultResults(query: string): CourseDto[] {
+function defaultResults(query: string): SearchCourseResultDto[] {
   return query.toLowerCase().includes('empty') ? [] : [
     course,
     courseVariant({
@@ -314,7 +308,7 @@ function defaultResults(query: string): CourseDto[] {
       description: 'Discrete mathematical structures frequently encountered in computer science.',
       credit_hours: 3,
       primary_instructor: null,
-      _score: 0.82,
+      search: { score: 0.82 },
       match_evidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'keyword', label: 'Keyword match', source: 'keyword', weight: 'rank', value: '2' },

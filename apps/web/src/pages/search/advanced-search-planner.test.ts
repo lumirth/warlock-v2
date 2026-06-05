@@ -10,7 +10,7 @@ describe('planAdvancedSearchApply', () => {
         inputDirty: false,
         interpretedAdvanced: {},
         draft: { subject: 'CS' },
-        residualQuery: 'algorithms',
+        interpretedQuery: 'algorithms',
       })
     ).toEqual({
       kind: 'search',
@@ -27,7 +27,7 @@ describe('planAdvancedSearchApply', () => {
         inputDirty: true,
         interpretedAdvanced: { subject: 'CS' },
         draft: { subject: 'PHIL' },
-        residualQuery: 'intro to',
+        interpretedQuery: '',
       })
     ).toEqual({
       kind: 'search',
@@ -44,7 +44,7 @@ describe('planAdvancedSearchApply', () => {
         inputDirty: false,
         interpretedAdvanced: { subject: 'CS' },
         draft: { subject: 'PHIL' },
-        residualQuery: 'algorithms',
+        interpretedQuery: 'algorithms',
       })
     ).toEqual({
       kind: 'search',
@@ -54,7 +54,7 @@ describe('planAdvancedSearchApply', () => {
     })
   })
 
-  it('does not preserve weak residual scaffolding as a new query', () => {
+  it('uses the canonical interpreted query supplied by the server', () => {
     expect(
       planAdvancedSearchApply({
         activeRequestQuery: 'intro to CS',
@@ -62,7 +62,7 @@ describe('planAdvancedSearchApply', () => {
         inputDirty: false,
         interpretedAdvanced: { subject: 'CS' },
         draft: { subject: 'PHIL' },
-        residualQuery: 'intro to',
+        interpretedQuery: '',
       })
     ).toEqual({
       kind: 'search',
@@ -80,7 +80,7 @@ describe('planAdvancedSearchApply', () => {
         inputDirty: false,
         interpretedAdvanced: { subject: 'CS' },
         draft: {},
-        residualQuery: '',
+        interpretedQuery: '',
       })
     ).toEqual({ kind: 'clear' })
   })

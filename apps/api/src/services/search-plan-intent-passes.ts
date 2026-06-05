@@ -152,14 +152,14 @@ function applySortIntent(plan: SearchPlan, rawQuery: string): boolean {
     inferredSort = { field: 'instructor_rating', direction: 'desc' };
   } else if (/\b(?:easiest|least\s+(?:work|workload)|lowest\s+workload)\b/.test(normalized)) {
     inferredSort = { field: 'workload', direction: 'asc' };
-    plan.filters.difficulty = plan.filters.difficulty ?? 'easy';
+    plan.filters.workload = plan.filters.workload ?? 'easy';
     plan.softPreferences = {
       ...(plan.softPreferences ?? {}),
       lowWorkload: 0.86,
     };
   } else if (/\b(?:hardest|most\s+difficult|highest\s+workload)\b/.test(normalized)) {
     inferredSort = { field: 'workload', direction: 'desc' };
-    plan.filters.difficulty = plan.filters.difficulty ?? 'hard';
+    plan.filters.workload = plan.filters.workload ?? 'hard';
   }
 
   if (!inferredSort) {

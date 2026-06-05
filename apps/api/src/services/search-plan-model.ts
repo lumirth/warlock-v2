@@ -41,7 +41,7 @@ function cloneSearchFilters(filters: SearchFilters): SearchFilters {
     if (filters.not.days) not.days = [...filters.not.days];
     if (filters.not.instructor_ids) not.instructor_ids = [...filters.not.instructor_ids];
     if (filters.not.subjects) not.subjects = [...filters.not.subjects];
-    if (filters.not.geneds) not.geneds = [...filters.not.geneds];
+    if (filters.not.requirementCodes) not.requirementCodes = [...filters.not.requirementCodes];
     if (filters.not.keywords) not.keywords = [...filters.not.keywords];
     clone.not = not;
   }

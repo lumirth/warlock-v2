@@ -65,7 +65,7 @@ Latest verification run after data-artifact cleanup and final checklist updates:
 - Contextual enrichment is deterministic, bounded, and checkpointed.
 - Historical sync scripts typecheck and use the parser string adapter.
 - Query Language v1 power fields are either applied end to end or left in residual text when unsupported.
-- The search contract was revised in `docs/plans/2026-06-01-search-contract-v1.md` to match implemented V1 instead of carrying aspirational per-result evidence requirements.
+- The search contract was revised in `docs/archive/plans/2026-06-01-search-contract-v1.md` during remediation; current search ownership now lives in `docs/architecture/search-ownership.md`.
 - Search negation uses course-level anti-join semantics.
 - Unsupported dash and natural-language negations are kept in residual text instead of being silently dropped.
 - Hard search constraints are no longer silently relaxed into primary results.

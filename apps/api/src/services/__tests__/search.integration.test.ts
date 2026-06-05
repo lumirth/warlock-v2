@@ -291,8 +291,10 @@ describe('Worker API integration', () => {
       quality_score: number | null;
       difficulty_score: number | null;
       sections?: Array<{ crn: string; status: string }>;
-      _cached?: boolean;
-      _term_status?: string;
+      cache?: {
+        cached?: boolean;
+        termStatus?: string;
+      };
     };
 
     expect(data).toMatchObject({
@@ -304,8 +306,10 @@ describe('Worker API integration', () => {
       primary_instructor_rmp: null,
       quality_score: 88,
       difficulty_score: 42,
-      _cached: true,
-      _term_status: 'active',
+      cache: {
+        cached: true,
+        termStatus: 'active',
+      },
     });
     expect(data.sections?.[0]).toMatchObject({ crn: '12345', status: 'Open' });
   });

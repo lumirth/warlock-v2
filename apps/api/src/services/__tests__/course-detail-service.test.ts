@@ -23,8 +23,10 @@ describe('CourseDetailService', () => {
     expect(browserFetch).not.toHaveBeenCalled();
     expect(result.body).toMatchObject({
       id: 'CS-225-2026-spring',
-      _cached: true,
-      _age_seconds: 2,
+      cache: {
+        cached: true,
+        ageSeconds: 2,
+      },
       sections: [{
         crn: '12345',
         partOfTerm: 'A',
@@ -51,7 +53,9 @@ describe('CourseDetailService', () => {
     expect(browserFetch).not.toHaveBeenCalled();
     expect(result.body).toMatchObject({
       id: 'CS-225-2026-spring',
-      _stale: true,
+      cache: {
+        stale: true,
+      },
     });
   });
 
@@ -70,8 +74,10 @@ describe('CourseDetailService', () => {
       primary_instructor_rmp: 4.8,
       quality_score: 88,
       difficulty_score: 42,
-      _cached: false,
-      _term_status: 'active',
+      cache: {
+        cached: false,
+        termStatus: 'active',
+      },
       sections: [{
         crn: '12345',
         instructorRmp: 4.8,
@@ -99,8 +105,10 @@ describe('CourseDetailService', () => {
     });
     expect(result.body).toMatchObject({
       id: 'CS-225-2026-spring',
-      _stale: true,
-      _stale_reason: 'upstream returned 503',
+      cache: {
+        stale: true,
+        staleReason: 'upstream returned 503',
+      },
     });
   });
 

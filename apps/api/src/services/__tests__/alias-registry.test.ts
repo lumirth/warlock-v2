@@ -24,25 +24,25 @@ describe('AliasRegistry', () => {
     });
   });
 
-  describe('difficulty aliases', () => {
+  describe('workload aliases', () => {
     it('matches "easy"', () => {
       const matches = registry.match('easy class');
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'difficulty', canonical: 'easy' })
+        expect.objectContaining({ kind: 'workload', canonical: 'easy' })
       );
     });
 
     it('matches "gpa booster" as easy', () => {
       const matches = registry.match('gpa booster');
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'difficulty', canonical: 'easy' })
+        expect.objectContaining({ kind: 'workload', canonical: 'easy' })
       );
     });
 
     it('matches "hard"', () => {
       const matches = registry.match('hard class');
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'difficulty', canonical: 'hard' })
+        expect.objectContaining({ kind: 'workload', canonical: 'hard' })
       );
     });
   });
@@ -155,32 +155,32 @@ describe('AliasRegistry', () => {
     });
   });
 
-  describe('gened aliases with cue rule', () => {
+  describe('requirement aliases with cue rule', () => {
     it('matches common gened phrases like "humanities" without cue', () => {
       const matches = registry.match('humanities');
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'gened', canonical: 'HUM' })
+        expect.objectContaining({ kind: 'requirement', canonical: 'HUM' })
       );
     });
 
     it('matches "humanities gen ed" with cue', () => {
       const matches = registry.match('humanities gen ed');
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'gened', canonical: 'HUM' })
+        expect.objectContaining({ kind: 'requirement', canonical: 'HUM' })
       );
     });
 
     it('matches "humanities requirement" with cue', () => {
       const matches = registry.match('humanities requirement');
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'gened', canonical: 'HUM' })
+        expect.objectContaining({ kind: 'requirement', canonical: 'HUM' })
       );
     });
 
     it('matches gened code directly without cue', () => {
       const matches = registry.match('HUM');
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'gened', canonical: 'HUM' })
+        expect.objectContaining({ kind: 'requirement', canonical: 'HUM' })
       );
     });
 
@@ -188,7 +188,7 @@ describe('AliasRegistry', () => {
       const matches = registry.match('easy cs gened');
 
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'gened', canonical: 'CS', raw: 'cs gened' })
+        expect.objectContaining({ kind: 'requirement', canonical: 'CS', raw: 'cs gened' })
       );
       expect(matches).not.toContainEqual(
         expect.objectContaining({ kind: 'subject', canonical: 'CS' })
@@ -199,7 +199,7 @@ describe('AliasRegistry', () => {
       const matches = registry.match('easy ps gened');
 
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'gened', canonical: 'PS', raw: 'ps gened' })
+        expect.objectContaining({ kind: 'requirement', canonical: 'PS', raw: 'ps gened' })
       );
       expect(matches).not.toContainEqual(
         expect.objectContaining({ kind: 'subject', canonical: 'PS' })
@@ -218,7 +218,7 @@ describe('AliasRegistry', () => {
     it('matches "gpa booster" before "gpa"', () => {
       const matches = registry.match('gpa booster class');
       expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'difficulty', canonical: 'easy' })
+        expect.objectContaining({ kind: 'workload', canonical: 'easy' })
       );
     });
   });

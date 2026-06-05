@@ -11,7 +11,10 @@ import { Scorecard } from '../components/Scorecard'
 import { SectionsTable } from '../components/SectionsTable'
 import { FeedbackButton } from '../components/FeedbackButton'
 import { api } from '../lib/api-client'
-import type { CourseDto, CourseGenedDto } from '@uiuc-course-search/query-types'
+import type {
+  CourseDetailResponseDto,
+  CourseGenedDto,
+} from '@uiuc-course-search/query-types'
 
 function genedLabel(gened: CourseGenedDto): string {
   const category = gened.categoryName ?? gened.categoryId
@@ -20,7 +23,7 @@ function genedLabel(gened: CourseGenedDto): string {
   return category
 }
 
-function detailRows(course: CourseDto): Array<{ label: string; value: string }> {
+function detailRows(course: CourseDetailResponseDto): Array<{ label: string; value: string }> {
   return [
     { label: 'Course information', value: course.course_info },
     { label: 'Degree attributes', value: course.degree_attributes },
@@ -41,7 +44,7 @@ export function CoursePage() {
     ? parseInt(searchParams.get('year')!)
     : undefined
 
-  const [course, setCourse] = useState<CourseDto | null>(null)
+  const [course, setCourse] = useState<CourseDetailResponseDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -166,7 +169,7 @@ export function CoursePage() {
           <div className="flex flex-col gap-3">
             <Scorecard
               qualityScore={course.quality_score}
-              difficultyScore={course.difficulty_score}
+              workloadScore={course.difficulty_score}
               avgGpa={course.avg_gpa}
               medianGpa={course.median_gpa}
               gpaSampleSize={course.gpa_sample_size}
@@ -187,7 +190,7 @@ export function CoursePage() {
                 year: course.year,
                 metadata: {
                   qualityScore: course.quality_score,
-                  difficultyScore: course.difficulty_score,
+                  workloadScore: course.difficulty_score,
                   avgGpa: course.avg_gpa,
                   primaryInstructorRmp: course.primary_instructor_rmp,
                 },

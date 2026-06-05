@@ -57,8 +57,8 @@ export const CORPUS_COVERAGE_REQUIREMENTS: CorpusCoverageRequirement[] = [
     queryIds: [40, 41, 59, 60, 61, 62, 63, 64, 69, 71],
   },
   {
-    failureClass: 'gened_language',
-    description: 'GenEd aliases, explicit GenEd syntax, and ambiguous subject/GenEd terms',
+    failureClass: 'requirement_language',
+    description: 'Requirement aliases, explicit GenEd syntax, and ambiguous subject/requirement terms',
     minimumCases: 8,
     queryIds: [11, 18, 19, 31, 32, 33, 34, 43, 44, 49],
   },

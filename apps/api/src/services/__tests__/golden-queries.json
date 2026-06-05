@@ -11,10 +11,10 @@
     "input": "easy humanities gen ed",
     "expected": {
       "hints": [
-        { "type": "difficulty", "value": "easy" },
-        { "type": "gened", "value": "HUM" }
+        { "type": "workload", "value": "easy" },
+        { "type": "requirement", "value": "HUM" }
       ],
-      "filters": { "difficulty": "easy", "requirement": { "mode": "single", "codes": ["HUM"] } },
+      "filters": { "workload": "easy", "requirement": { "mode": "single", "codes": ["HUM"] } },
       "residual": ""
     },
     "note": "Cue words like 'gen ed' are now removed from residual"
@@ -22,7 +22,7 @@
   {
     "input": "humanities",
     "expected": {
-      "hints": [{ "type": "gened", "value": "HUM" }],
+      "hints": [{ "type": "requirement", "value": "HUM" }],
       "filters": { "requirement": { "mode": "single", "codes": ["HUM"] } },
       "residual": ""
     },
@@ -56,11 +56,11 @@
     "input": "easy online gen ed",
     "expected": {
       "hints": [
-        { "type": "difficulty", "value": "easy" },
+        { "type": "workload", "value": "easy" },
         { "type": "online", "value": true }
       ],
       "filters": {
-        "difficulty": "easy",
+        "workload": "easy",
         "online": true,
         "requirement": { "mode": "any", "codes": ["HUM", "NAT", "SBS", "CS", "QR", "QR1", "QR2", "NW", "US", "WCC", "ACP"] }
       },
@@ -92,8 +92,8 @@
   {
     "input": "gened:HUM easy",
     "expected": {
-      "hints": [{ "type": "difficulty", "value": "easy" }],
-      "filters": { "requirement": { "mode": "single", "codes": ["HUM"] }, "difficulty": "easy" },
+      "hints": [{ "type": "workload", "value": "easy" }],
+      "filters": { "requirement": { "mode": "single", "codes": ["HUM"] }, "workload": "easy" },
       "residual": ""
     },
     "note": "Power-user syntax gened:HUM"

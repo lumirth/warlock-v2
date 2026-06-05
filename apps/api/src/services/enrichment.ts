@@ -1,11 +1,11 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 import { errorFields, logger } from '../observability/logger.js';
 import {
-  SCORING,
+  COURSE_SCORE_POLICY,
   normalizeGpa,
-  normalizeGpaDifficulty,
+  normalizeGpaWorkload,
   normalizeRmp,
-} from '@uiuc-course-search/query-types';
+} from './course-score-policy.js';
 
 const SCORE_UPDATE_BATCH_SIZE = 500;
 
@@ -52,11 +52,11 @@ function validRmpMetric(value: number | null | undefined): number | null {
   return typeof value === 'number' && value > 0 ? value : null;
 }
 
-function difficultyFromGpa(avgGpa: number): number {
-  return clampScore(normalizeGpaDifficulty(avgGpa));
+function workloadFromGpa(avgGpa: number): number {
+  return clampScore(normalizeGpaWorkload(avgGpa));
 }
 
-function difficultyFromRmp(difficulty: number): number {
+function workloadFromRmp(difficulty: number): number {
   return clampScore(normalizeRmp(difficulty));
 }
 
@@ -66,28 +66,28 @@ export function calculateCourseScores(source: CourseScoreSource): CourseScoreRes
   const quality = weightedAverage([
     {
       value: typeof source.avg_gpa === 'number' ? scoreFromGpa(source.avg_gpa) : null,
-      weight: SCORING.QUALITY.GPA_WEIGHT,
+      weight: COURSE_SCORE_POLICY.QUALITY.GPA_WEIGHT,
     },
     {
       value: typeof rmpRating === 'number' ? scoreFromRmpRating(rmpRating) : null,
-      weight: SCORING.QUALITY.RMP_WEIGHT,
+      weight: COURSE_SCORE_POLICY.QUALITY.RMP_WEIGHT,
     },
   ]);
 
-  const difficulty = weightedAverage([
+  const workload = weightedAverage([
     {
-      value: typeof source.avg_gpa === 'number' ? difficultyFromGpa(source.avg_gpa) : null,
-      weight: SCORING.DIFFICULTY.GPA_WEIGHT,
+      value: typeof source.avg_gpa === 'number' ? workloadFromGpa(source.avg_gpa) : null,
+      weight: COURSE_SCORE_POLICY.WORKLOAD.GPA_WEIGHT,
     },
     {
-      value: rmpDifficulty === null ? null : difficultyFromRmp(rmpDifficulty),
-      weight: SCORING.DIFFICULTY.RMP_WEIGHT,
+      value: rmpDifficulty === null ? null : workloadFromRmp(rmpDifficulty),
+      weight: COURSE_SCORE_POLICY.WORKLOAD.RMP_WEIGHT,
     },
   ]);
 
   return {
     qualityScore: quality === null ? null : roundScore(quality),
-    difficultyScore: difficulty === null ? null : roundScore(difficulty),
+    difficultyScore: workload === null ? null : roundScore(workload),
     primaryInstructorRmp: rmpRating ?? null,
   };
 }

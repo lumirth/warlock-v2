@@ -2,15 +2,20 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-
-const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-const STATUSES = ['registrable', 'active', 'historical'] as const;
-const TERM_ORDER: Record<Term, number> = {
-  winter: 0,
-  spring: 1,
-  summer: 2,
-  fall: 3,
-};
+import { asRecord, numericOrNull, positiveOrFallback, recordsFromArray, type JsonRecord } from './lib/json-shape.ts';
+import {
+  TERM_ORDER,
+  compareTerms,
+  currentTermFromStatus,
+  inferCurrentTerm,
+  normalizeStatus,
+  normalizeTerm,
+  parseTermStateId,
+  termId,
+  type Term,
+  type TermStatus,
+} from './lib/term-model.ts';
+import { endpoint, parseNonNegativeFloat, parseNonNegativeInt } from './lib/script-args.ts';
 
 const DEFAULT_FRONTEND_BASE = 'https://courses.illinois.edu';
 const DEFAULT_FROM_YEAR = 2004;
@@ -28,10 +33,7 @@ const ROW_BYTE_ESTIMATE = {
   subjectSyncState: 192,
 } as const;
 
-type Term = typeof TERMS[number];
-type TermStatus = typeof STATUSES[number];
 type Fetcher = (request: Request) => Promise<Response>;
-type JsonRecord = Record<string, unknown>;
 
 export type TermRetentionArgs = {
   fromYear: number;
@@ -96,98 +98,8 @@ export type TermRetentionReport = {
   prune_sql: string;
 };
 
-function termId(year: number, term: Term): string {
-  return `${year}-${term}`;
-}
-
-function isTerm(value: unknown): value is Term {
-  return typeof value === 'string' && (TERMS as readonly string[]).includes(value.toLowerCase());
-}
-
-function normalizeTerm(value: unknown): Term | null {
-  return isTerm(value) ? value.toLowerCase() as Term : null;
-}
-
-function normalizeStatus(value: unknown): TermStatus | null {
-  return typeof value === 'string' && (STATUSES as readonly string[]).includes(value.toLowerCase())
-    ? value.toLowerCase() as TermStatus
-    : null;
-}
-
-function parseNonNegativeInt(value: string | undefined, name: string): number {
-  if (!value || !/^\d+$/.test(value)) {
-    throw new Error(`${name} must be a non-negative integer`);
-  }
-  return Number.parseInt(value, 10);
-}
-
-function parseNonNegativeFloat(value: string | undefined, name: string): number {
-  if (!value || !/^\d+(\.\d+)?$/.test(value)) {
-    throw new Error(`${name} must be a non-negative number`);
-  }
-  return Number.parseFloat(value);
-}
-
-function inferCurrentTerm(date = new Date()): Term {
-  const month = date.getMonth() + 1;
-  if (month <= 1) return 'winter';
-  if (month <= 5) return 'spring';
-  if (month <= 8) return 'summer';
-  return 'fall';
-}
-
-function endpoint(baseUrl: string, path: string): URL {
-  return new URL(path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
-}
-
-function asRecord(value: unknown): JsonRecord | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as JsonRecord
-    : null;
-}
-
-function numericOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function positiveOrFallback(value: number | null, fallback: number): number {
-  return typeof value === 'number' && value > 0 ? value : fallback;
-}
-
 function statusTermStates(status: JsonRecord | null): JsonRecord[] {
-  return Array.isArray(status?.termStates)
-    ? status.termStates.map(asRecord).filter((item): item is JsonRecord => item !== null)
-    : [];
-}
-
-function parseTermStateId(row: JsonRecord): string | null {
-  if (typeof row.term_id === 'string') return row.term_id;
-  const year = numericOrNull(row.year);
-  const term = normalizeTerm(row.term);
-  return year && term ? termId(year, term) : null;
-}
-
-function currentTermFromStatus(status: JsonRecord | null): { year: number; term: Term } | null {
-  const freshness = asRecord(status?.freshness);
-  const currentTermId = typeof freshness?.currentTermId === 'string'
-    ? freshness.currentTermId
-    : typeof freshness?.configuredCurrentTermId === 'string'
-      ? freshness.configuredCurrentTermId
-      : null;
-  if (!currentTermId) return null;
-
-  const match = /^(\d{4})-([a-z]+)$/i.exec(currentTermId);
-  if (!match) return null;
-
-  const term = normalizeTerm(match[2]);
-  if (!term) return null;
-
-  return { year: Number.parseInt(match[1], 10), term };
-}
-
-function compareTerms(year: number, term: Term, currentYear: number, currentTerm: Term): number {
-  if (year !== currentYear) return year - currentYear;
-  return TERM_ORDER[term] - TERM_ORDER[currentTerm];
+  return recordsFromArray(status?.termStates);
 }
 
 function expectedStatus(row: AvailableTerm, stored: JsonRecord | undefined, currentYear: number, currentTerm: Term): TermStatus {

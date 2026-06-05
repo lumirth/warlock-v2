@@ -2,7 +2,7 @@ import type { ParsedQuery, ParsedClause, FieldFilter } from './search-planner-ty
 
 const SUPPORTED_FIELD_FILTERS = new Set([
   'subject',
-  'gened',
+  'requirement',
   'credits',
   'level',
   'crn',
@@ -14,12 +14,12 @@ const SUPPORTED_FIELD_FILTERS = new Set([
   'partofterm',
   'part_of_term',
   'pot',
-  'difficulty',
+  'workload',
 ]);
 
 /**
  * Parse power-user syntax from a query string.
- * Extracts: field:value, gened:any(...), gened:all(...), -negations, "phrases"
+ * Extracts: field:value, requirement:any(...), requirement:all(...), -negations, "phrases"
  */
 export function parseQuery(query: string): ParsedQuery {
   // For now, we don't support top-level OR, so single clause
@@ -35,24 +35,24 @@ function parseClause(text: string): ParsedClause {
   const filters: FieldFilter[] = [];
   const negations: string[] = [];
   const phrases: string[] = [];
-  let genedMode: ParsedClause['genedMode'] = undefined;
+  let requirementMode: ParsedClause['requirementMode'] = undefined;
   let residual = text;
 
-  // 1. Extract gened:any(...) and gened:all(...)
-  const genedAnyRegex = /gened:any\(([^)]+)\)/gi;
-  const genedAllRegex = /gened:all\(([^)]+)\)/gi;
+  // 1. Extract requirement:any(...) and requirement:all(...).
+  const requirementAnyRegex = /(?:requirement|gened):any\(([^)]+)\)/gi;
+  const requirementAllRegex = /(?:requirement|gened):all\(([^)]+)\)/gi;
 
-  const anyMatch = genedAnyRegex.exec(residual);
+  const anyMatch = requirementAnyRegex.exec(residual);
   if (anyMatch) {
-    genedMode = genedMode || {};
-    genedMode.any = anyMatch[1].split(',').map(s => s.trim().toUpperCase());
+    requirementMode = requirementMode || {};
+    requirementMode.any = anyMatch[1].split(',').map(s => s.trim().toUpperCase());
     residual = residual.replace(anyMatch[0], ' ');
   }
 
-  const allMatch = genedAllRegex.exec(residual);
+  const allMatch = requirementAllRegex.exec(residual);
   if (allMatch) {
-    genedMode = genedMode || {};
-    genedMode.all = allMatch[1].split(',').map(s => s.trim().toUpperCase());
+    requirementMode = requirementMode || {};
+    requirementMode.all = allMatch[1].split(',').map(s => s.trim().toUpperCase());
     residual = residual.replace(allMatch[0], ' ');
   }
 
@@ -106,13 +106,16 @@ function parseClause(text: string): ParsedClause {
     filters,
     negations,
     phrases,
-    genedMode,
+    requirementMode,
     residual,
   };
 }
 
 function normalizeFieldName(field: string): string {
-  return field.toLowerCase().replace(/-/g, '_');
+  const normalized = field.toLowerCase().replace(/-/g, '_');
+  if (normalized === 'gened') return 'requirement';
+  if (normalized === 'difficulty') return 'workload';
+  return normalized;
 }
 
 function isSupportedNegationToken(token: string): boolean {

@@ -1,7 +1,7 @@
 import {
   getWorkloadTierLabel,
-  type CourseDto,
   type CourseGenedDto,
+  type CourseDto,
   type SearchChipDto,
   type SearchRecoveryGroup,
 } from '@uiuc-course-search/query-types'
@@ -17,11 +17,11 @@ export type CourseResultMetric = {
   title?: string
 }
 
-export function getDifficultyLabel(score: number): string {
+export function getWorkloadLabel(score: number): string {
   return getWorkloadTierLabel(score) ?? 'Easy'
 }
 
-export function getDifficultyTone(score: number): Tone {
+export function getWorkloadTone(score: number): Tone {
   const label = getWorkloadTierLabel(score)
   if (label === 'Hard') return 'destructive'
   if (label === 'Moderate') return 'warning'
@@ -50,7 +50,7 @@ export function getCoursePath(course: CourseDto): string {
 
 export function getCourseMetrics(course: CourseDto): CourseResultMetric[] {
   const qualityScore = course.quality_score
-  const difficultyScore = course.difficulty_score
+  const workloadScore = course.difficulty_score
   const primaryInstructorRmp = course.primary_instructor_rmp
   const avgGpa = course.avg_gpa
   const stats: CourseResultMetric[] = []
@@ -67,11 +67,11 @@ export function getCourseMetrics(course: CourseDto): CourseResultMetric[] {
           : undefined,
     })
   }
-  if (typeof difficultyScore === 'number') {
+  if (typeof workloadScore === 'number') {
     stats.push({
       label: 'Workload',
-      value: getDifficultyLabel(difficultyScore),
-      tone: getDifficultyTone(difficultyScore),
+      value: getWorkloadLabel(workloadScore),
+      tone: getWorkloadTone(workloadScore),
     })
   }
   if (typeof primaryInstructorRmp === 'number') {
@@ -95,7 +95,7 @@ export function getChipClass(chip: SearchChipDto): string {
   return cn(
     chip.type === 'instructor' &&
       'border-primary/30 bg-primary/5 text-foreground',
-    chip.type === 'difficulty' &&
+    chip.type === 'workload' &&
       'border-warning/30 bg-warning/10 text-foreground',
     (chip.type === 'courseCode' || chip.type === 'subject') &&
       'border-primary/30 bg-primary/5 text-foreground',
@@ -107,10 +107,10 @@ export function formatTermLabel(term: string, year: number): string {
   return `${term.charAt(0).toUpperCase()}${term.slice(1).toLowerCase()} ${year}`
 }
 
-export function genedLabel(gened: CourseGenedDto): string {
-  const category = gened.categoryName ?? gened.categoryId
-  if (gened.attributeName) return `${category}: ${gened.attributeName}`
-  if (gened.attributeCode) return `${category}: ${gened.attributeCode}`
+export function genedLabel(requirement: CourseGenedDto): string {
+  const category = requirement.categoryName ?? requirement.categoryId
+  if (requirement.attributeName) return `${category}: ${requirement.attributeName}`
+  if (requirement.attributeCode) return `${category}: ${requirement.attributeCode}`
   return category
 }
 

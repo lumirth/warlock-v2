@@ -1,12 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { getQualityLabel, getQualityTone } from '../utils/grading'
-import { DIFFICULTY } from '../config/constants'
+import {
+  getQualityLabel,
+  getQualityTone,
+  getWorkloadLabel,
+  getWorkloadTone,
+} from '../utils/grading'
 
 interface ScorecardProps {
   qualityScore: number | null
-  difficultyScore: number | null
+  workloadScore: number | null
   avgGpa?: number | null
   medianGpa?: number | null
   gpaSampleSize?: number | null
@@ -15,7 +19,7 @@ interface ScorecardProps {
 
 export function Scorecard({
   qualityScore,
-  difficultyScore,
+  workloadScore,
   avgGpa,
   medianGpa,
   gpaSampleSize,
@@ -26,27 +30,17 @@ export function Scorecard({
   const qualityTone = getQualityTone(qualityLabel)
 
   // Explicit check for null/undefined to handle 0 correctly
-  const hasDifficulty =
-    difficultyScore !== null && difficultyScore !== undefined
+  const hasWorkload =
+    workloadScore !== null && workloadScore !== undefined
   const hasAvgGpa = typeof avgGpa === 'number'
   const hasMedianGpa = typeof medianGpa === 'number'
   const hasPrimaryRating = typeof primaryInstructorRmp === 'number'
 
-  const difficultyLabel = !hasDifficulty
+  const workloadLabel = !hasWorkload
     ? 'N/A'
-    : difficultyScore! > DIFFICULTY.HARD
-      ? 'Hard'
-      : difficultyScore! > DIFFICULTY.MODERATE
-        ? 'Moderate'
-        : 'Easy'
+    : getWorkloadLabel(workloadScore!)
 
-  const difficultyTone = !hasDifficulty
-    ? 'muted'
-    : difficultyScore! > DIFFICULTY.HARD
-      ? 'destructive'
-      : difficultyScore! > DIFFICULTY.MODERATE
-        ? 'warning'
-        : 'success'
+  const workloadTone = getWorkloadTone(workloadLabel)
 
   const toneClass = (tone: 'success' | 'warning' | 'destructive' | 'muted') =>
     cn(
@@ -72,9 +66,9 @@ export function Scorecard({
           <div className="flex items-center justify-between gap-4">
             <dt className="text-muted-foreground text-sm">Workload</dt>
             <dd
-              className={cn('text-sm font-semibold', toneClass(difficultyTone))}
+              className={cn('text-sm font-semibold', toneClass(workloadTone))}
             >
-              {difficultyLabel}
+              {workloadLabel}
             </dd>
           </div>
           {hasPrimaryRating && (

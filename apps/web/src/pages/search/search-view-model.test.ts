@@ -5,18 +5,30 @@ import {
 } from './search-controller-state'
 import { buildSearchViewModel } from './search-view-model'
 
+type StateOverrides = {
+  draft?: Partial<SearchControllerState['draft']>
+  session?: Partial<SearchControllerState['session']>
+}
+
 function state(
-  overrides: Partial<SearchControllerState> = {}
+  overrides: StateOverrides = {}
 ): SearchControllerState {
   return {
     ...INITIAL_SEARCH_CONTROLLER_STATE,
-    ...overrides,
+    draft: {
+      ...INITIAL_SEARCH_CONTROLLER_STATE.draft,
+      ...overrides.draft,
+    },
+    session: {
+      ...INITIAL_SEARCH_CONTROLLER_STATE.session,
+      ...overrides.session,
+    },
   }
 }
 
 describe('buildSearchViewModel', () => {
   it('shows the first-run helper only before any active request exists', () => {
-    const model = buildSearchViewModel(state({ query: '' }))
+    const model = buildSearchViewModel(state({ draft: { query: '' } }))
 
     expect(model.showFirstRunExamples).toBe(true)
     expect(model.hasActiveRequest).toBe(false)
@@ -26,18 +38,20 @@ describe('buildSearchViewModel', () => {
   it('derives active request labels from the canonical response state', () => {
     const model = buildSearchViewModel(
       state({
-        activeSearchText: 'online stats class',
-        results: [{ id: 'STAT-100' } as SearchControllerState['results'][number]],
-        meta: {
-          query: { raw: 'online stats class', residual: 'stats' },
-          timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
-        },
-        pagination: {
-          total: 41,
-          limit: 20,
-          offset: 0,
-          hasMore: true,
-          nextOffset: 20,
+        session: {
+          activeSearchText: 'online stats class',
+          results: [{ id: 'STAT-100' } as SearchControllerState['session']['results'][number]],
+          meta: {
+            query: { raw: 'online stats class', residual: 'stats' },
+            timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
+          },
+          pagination: {
+            total: 41,
+            limit: 20,
+            offset: 0,
+            hasMore: true,
+            nextOffset: 20,
+          },
         },
       })
     )
@@ -50,15 +64,17 @@ describe('buildSearchViewModel', () => {
 
   it('distinguishes initial skeletons from result refreshes', () => {
     expect(
-      buildSearchViewModel(state({ loading: true })).showInitialSkeleton
+      buildSearchViewModel(state({ session: { loading: true } })).showInitialSkeleton
     ).toBe(true)
 
     const refreshing = buildSearchViewModel(
       state({
-        loading: true,
-        meta: {
-          query: { raw: 'cs', residual: 'cs' },
-          timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+        session: {
+          loading: true,
+          meta: {
+            query: { raw: 'cs', residual: 'cs' },
+            timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+          },
         },
       })
     )

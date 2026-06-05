@@ -1,5 +1,4 @@
 import {
-  COURSE_USEFULNESS_POLICY,
   getQualityTierLabel,
   getQualityTierRank,
   getWorkloadTierLabel,
@@ -8,6 +7,7 @@ import type { Course } from "../../db/types.js";
 import type { SearchPlan } from "../search-planner-types.js";
 import type { RankingScoreComponent, SearchResult } from "../search-types.js";
 import { catalogLevel } from "./ranking-text.js";
+import { RANKING_POLICY } from "./ranking-policy.js";
 import { scoreComponent } from "./score-utils.js";
 
 export function workloadPreferenceComponents(
@@ -27,20 +27,20 @@ export function workloadPreferenceComponents(
 
   if (
     qualityTierRank !== null &&
-    qualityTierRank >= COURSE_USEFULNESS_POLICY.EASY_INTENT.MIN_QUALITY_TIER_RANK
+    qualityTierRank >= RANKING_POLICY.components.easyIntent.minQualityTierRank
   ) {
     components.push(scoreComponent(
       "workload_preference",
-      0.25,
+      RANKING_POLICY.components.easyIntent.boosts.qualityTier,
       `${qualityLabel} quality tier supports an easy or low-risk course choice.`,
       qualityLabel ? [qualityLabel] : undefined,
     ));
   }
 
-  if (workloadTier === COURSE_USEFULNESS_POLICY.EASY_INTENT.PREFERRED_WORKLOAD_TIER) {
+  if (workloadTier === RANKING_POLICY.components.easyIntent.preferredWorkloadTier) {
     components.push(scoreComponent(
       "workload_preference",
-      0.3,
+      RANKING_POLICY.components.easyIntent.boosts.workloadTier,
       "Displayed workload tier is Easy.",
       [workloadTier],
     ));
@@ -48,11 +48,11 @@ export function workloadPreferenceComponents(
 
   if (
     typeof course.avg_gpa === "number" &&
-    course.avg_gpa >= COURSE_USEFULNESS_POLICY.EASY_INTENT.MIN_AVG_GPA
+    course.avg_gpa >= RANKING_POLICY.components.easyIntent.minAverageGpa
   ) {
     components.push(scoreComponent(
       "workload_preference",
-      0.2,
+      RANKING_POLICY.components.easyIntent.boosts.averageGpa,
       "Average GPA evidence supports a lower-risk workload interpretation.",
       [`Avg GPA ${course.avg_gpa.toFixed(2)}`],
     ));
@@ -73,7 +73,7 @@ export function workloadPreferenceComponents(
   if (result.laneMatches?.includes("workload_evidence")) {
     components.push(scoreComponent(
       "workload_evidence",
-      0.3,
+      RANKING_POLICY.components.easyIntent.boosts.workloadEvidence,
       "Structured workload evidence reinforces the easy/low-workload preference.",
       result.supportedSubjectiveClaims,
     ));
@@ -94,14 +94,14 @@ export function eligibilityComponent(
   if (!/\b(prereq|prerequisite|consent|restricted|permission|credit or concurrent)\b/.test(text)) {
     return scoreComponent(
       "eligibility",
-      0.35,
+      RANKING_POLICY.components.eligibility.noListedPrereq,
       "No listed prerequisite risk found in exposed course text.",
     );
   }
 
   return scoreComponent(
     "eligibility",
-    -0.35,
+    RANKING_POLICY.components.eligibility.prerequisiteRisk,
     "Prerequisite, consent, or restriction language is visible in course text.",
   );
 }
@@ -126,7 +126,7 @@ export function nullDataPenaltyComponent(
     ? null
     : scoreComponent(
       "null_data_penalty",
-      -0.35,
+      RANKING_POLICY.components.nullSubjectiveEvidencePenalty,
       "Subjective preference has no visible workload, quality, or GPA evidence for this course.",
     );
 }
@@ -139,15 +139,16 @@ function hasEasyOrAccessibleIntent(plan: SearchPlan): boolean {
     || soft.lowReading
     || soft.lowExams
     || soft.nonMajorFriendly
-    || plan.filters.difficulty === "easy",
+    || plan.filters.workload === "easy",
   );
 }
 
 function easyIntentLevelValue(level: number | null): number {
-  if (level === 100) return 0.55;
-  if (level === 200) return 0.35;
-  if (level === 300) return 0.05;
-  if (level === 400) return -0.35;
-  if (level !== null && level >= 500) return -1.25;
+  const levelPolicy = RANKING_POLICY.components.easyIntent.level;
+  if (level === 100) return levelPolicy.level100;
+  if (level === 200) return levelPolicy.level200;
+  if (level === 300) return levelPolicy.level300;
+  if (level === 400) return levelPolicy.level400;
+  if (level !== null && level >= 500) return levelPolicy.level500Plus;
   return 0;
 }

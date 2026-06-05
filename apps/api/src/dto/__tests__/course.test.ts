@@ -8,7 +8,7 @@ import {
 } from '../../services/search-result-presentation.js';
 import type { CourseSnapshot } from '../../transforms/course.js';
 import {
-  courseSnapshotToCourseDto,
+  courseSnapshotToCourseDetailResponseDto,
   searchResultToCourseDto,
   toCourseDto,
   toInstructorLinkDto,
@@ -74,7 +74,7 @@ describe('search result DTO evidence', () => {
           days: 'MWF',
           time: 'morning',
           online: true,
-          difficulty: 'easy',
+          workload: 'easy',
           term: 'spring',
           year: 2026,
         },
@@ -82,17 +82,17 @@ describe('search result DTO evidence', () => {
         keywordQuery: 'data structures',
         semanticQuery: 'data structures',
       },
-      geneds: courseGeneds,
+      requirementCodes: courseGeneds,
     });
 
     expect(evidence.map(item => item.kind)).toEqual(expect.arrayContaining([
       'course_code',
       'title',
-      'gened',
+      'requirement',
       'schedule',
       'delivery',
       'instructor',
-      'difficulty',
+      'workload',
       'quality',
       'topic',
       'term',
@@ -100,8 +100,8 @@ describe('search result DTO evidence', () => {
       'semantic',
     ]));
     expect(evidence.find(item => item.kind === 'course_code')).toMatchObject({ weight: 'hard' });
-    expect(evidence.find(item => item.kind === 'difficulty')?.label).toBe('Easier workload fit');
-    expect(evidence.find(item => item.kind === 'quality')?.label).toBe('Excellent course quality');
+    expect(evidence.find(item => item.kind === 'workload')?.label).toBe('Easier workload fit');
+    expect(evidence.find(item => item.kind === 'quality')?.label).toBe('Excellent quality tier');
     expect(evidence.find(item => item.kind === 'semantic')).toMatchObject({ source: 'semantic' });
     expect(evidence.find(item => item.kind === 'keyword')?.label).toBe('Strong keyword match');
     expect(evidence.find(item => item.kind === 'semantic')?.label).toBe('Related topic match');
@@ -173,12 +173,12 @@ describe('search result DTO evidence', () => {
           confidence: 0.82,
         },
       },
-      geneds: courseGeneds,
+      requirementCodes: courseGeneds,
     });
 
     expect(dto.explanation?.matchedChips).toEqual(['Online preferred', 'Low writing preferred']);
     expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining([
-      expect.stringContaining('GenEd'),
+      expect.stringContaining('Requirement'),
       'Student-language alias match',
     ]));
     expect(dto.explanation?.watchOut).toEqual(expect.arrayContaining([
@@ -188,14 +188,14 @@ describe('search result DTO evidence', () => {
     expect(dto.explanation?.confidence.label).toBe('medium');
   });
 
-  it('labels generic GenEd filters as Any GenEd in result evidence', () => {
+  it('labels generic requirement filters as Any Requirement in result evidence', () => {
     const dto = searchResultToCourseDto(searchResult({
       course: { ...course },
       laneMatches: ['requirement'],
     }), {
       rawQuery: 'easy cs gened',
       hints: [],
-      geneds: [{
+      requirementCodes: [{
         categoryId: 'QR',
         categoryName: 'Quantitative Reasoning',
         attributeCode: 'QR2',
@@ -204,7 +204,7 @@ describe('search result DTO evidence', () => {
       plan: {
         filters: {
           subject: 'CS',
-          difficulty: 'easy',
+          workload: 'easy',
           requirement: requirementFilter('any', [
             'HUM',
             'NAT',
@@ -224,23 +224,23 @@ describe('search result DTO evidence', () => {
       },
     });
 
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any GenEd: QR, QR2']));
-    expect(dto.match_evidence?.find(item => item.kind === 'gened')).toMatchObject({
-      label: 'Any GenEd',
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any Requirement: QR, QR2']));
+    expect(dto.match_evidence?.find(item => item.kind === 'requirement')).toMatchObject({
+      label: 'Any Requirement',
       value: 'QR, QR2',
       weight: 'hard',
     });
     expect(dto.explanation?.confidence.reasons).toContain('Requirement evidence came from structured mappings.');
   });
 
-  it('explains Cultural Studies sub-attributes from full GenEd DTOs', () => {
+  it('explains Cultural Studies sub-attributes from full requirement DTOs', () => {
     const dto = searchResultToCourseDto(searchResult({
       course: { ...course },
       laneMatches: ['requirement'],
     }), {
       rawQuery: 'us minority class',
       hints: [],
-      geneds: [{
+      requirementCodes: [{
         categoryId: 'CS',
         categoryName: 'Cultural Studies',
         attributeCode: 'US',
@@ -253,12 +253,12 @@ describe('search result DTO evidence', () => {
       },
     });
 
-    expect(dto.match_evidence?.find(item => item.kind === 'gened')).toMatchObject({
-      label: 'GenEd US',
+    expect(dto.match_evidence?.find(item => item.kind === 'requirement')).toMatchObject({
+      label: 'Requirement US',
       value: 'US',
       weight: 'hard',
     });
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['GenEd US: US']));
+    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Requirement US: US']));
   });
 
   it('includes explicit sort controls as ordering explanation without changing score evidence', () => {
@@ -312,7 +312,7 @@ describe('search result DTO evidence', () => {
     });
 
     expect(dto.match_evidence?.map(item => item.label)).not.toContain('Requirement lane match');
-    expect(dto.match_evidence?.some(item => item.kind === 'gened')).toBe(false);
+    expect(dto.match_evidence?.some(item => item.kind === 'requirement')).toBe(false);
     expect(dto.explanation?.confidence.reasons).not.toContain('Requirement evidence came from structured mappings.');
     expect(dto.explanation?.confidence.score).toBe(0.74);
     expect(dto.explanation?.confidence.label).toBe('medium');
@@ -425,7 +425,7 @@ describe('search result DTO evidence', () => {
       }],
     };
 
-    const dto = courseSnapshotToCourseDto(snapshot, {
+    const dto = courseSnapshotToCourseDetailResponseDto(snapshot, {
       instructorLinks: {
         'Lovelace, A': toInstructorLinkDto({
           instructor_name: 'Lovelace, A',
@@ -443,7 +443,7 @@ describe('search result DTO evidence', () => {
       id: 'CS-225-2026-spring',
       course_info: 'Prerequisite: CS 173.',
       median_gpa: 3.6,
-      _cached: false,
+      cache: { cached: false },
     });
     expect(dto.geneds).toEqual([{
       categoryId: 'QR',

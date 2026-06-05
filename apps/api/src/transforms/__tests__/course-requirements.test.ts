@@ -81,7 +81,6 @@ describe('courseSnapshotRequirementEvidence', () => {
       codes: [],
       labels: [],
       summaryCode: null,
-      geneds: [],
     });
   });
 });

@@ -1,6 +1,7 @@
 import type { Course, Meeting, Section } from '../db/types.js';
 import type {
   CourseSectionMeetingDto,
+  CourseDetailResponseDto,
   CourseExplorerUrlInput,
   CourseDto,
   CourseGenedDto,
@@ -10,6 +11,7 @@ import type {
   ResultExplanation,
   ResultWarning,
   SectionMatchDto,
+  SearchCourseResultDto,
 } from '@uiuc-course-search/query-types';
 import {
   buildCourseExplorerCourseUrl,
@@ -77,20 +79,26 @@ export type CourseDtoOptions = {
   instructorLinks?: Record<string, InstructorLinkDto>;
   geneds?: CourseGenedDto[];
   medianGpa?: number | null;
+};
+
+export type SearchCourseResultDtoOptions = CourseDtoOptions & {
   score?: number;
   semanticRank?: number;
   keywordRank?: number;
   historical?: boolean;
+  matchEvidence?: MatchEvidence[];
+  explanation?: ResultExplanation;
+  warnings?: ResultWarning[];
+  sectionMatches?: SectionMatchDto[];
+};
+
+export type CourseDetailResponseDtoOptions = CourseDtoOptions & {
   cached?: boolean;
   stale?: boolean;
   staleReason?: string | null;
   ageSeconds?: number;
   fetchedAt?: number;
   termStatus?: string;
-  matchEvidence?: MatchEvidence[];
-  explanation?: ResultExplanation;
-  warnings?: ResultWarning[];
-  sectionMatches?: SectionMatchDto[];
 };
 
 type SectionMeetingWithStats = Omit<Meeting, 'id'> & {
@@ -212,20 +220,6 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
     instructor_links: options.instructorLinks ?? {},
     course_explorer_url: buildCourseExplorerCourseUrl(course),
     sections: options.sections,
-    _score: options.score,
-    _semanticRank: options.semanticRank,
-    _keywordRank: options.keywordRank,
-    _historical: options.historical,
-    _cached: options.cached,
-    _stale: options.stale,
-    _stale_reason: options.staleReason,
-    _age_seconds: options.ageSeconds,
-    _fetched_at: options.fetchedAt,
-    _term_status: options.termStatus,
-    match_evidence: options.matchEvidence,
-    explanation: options.explanation,
-    warnings: options.warnings,
-    section_matches: options.sectionMatches,
   };
 }
 
@@ -246,6 +240,44 @@ export function courseSnapshotToCourseDto(
     geneds: providedGeneds ?? snapshotGenedsToDto(snapshot),
     sections: providedSections ?? snapshotSectionsToDto(snapshot, instructorLinks),
   });
+}
+
+export function toCourseDetailResponseDto(
+  course: CourseSource,
+  options: CourseDetailResponseDtoOptions = {},
+): CourseDetailResponseDto {
+  const dto = toCourseDto(course, options);
+  const cache = {
+    cached: options.cached,
+    stale: options.stale,
+    staleReason: options.staleReason,
+    ageSeconds: options.ageSeconds,
+    fetchedAt: options.fetchedAt,
+    termStatus: options.termStatus,
+  };
+
+  return Object.values(cache).some((value) => value !== undefined)
+    ? { ...dto, cache }
+    : dto;
+}
+
+export function courseSnapshotToCourseDetailResponseDto(
+  snapshot: CourseSnapshot,
+  options: CourseDetailResponseDtoOptions = {},
+): CourseDetailResponseDto {
+  const dto = courseSnapshotToCourseDto(snapshot, options);
+  const cache = {
+    cached: options.cached,
+    stale: options.stale,
+    staleReason: options.staleReason,
+    ageSeconds: options.ageSeconds,
+    fetchedAt: options.fetchedAt,
+    termStatus: options.termStatus,
+  };
+
+  return Object.values(cache).some((value) => value !== undefined)
+    ? { ...dto, cache }
+    : dto;
 }
 
 function snapshotGenedsToDto(snapshot: CourseSnapshot): CourseGenedDto[] {
@@ -341,16 +373,23 @@ function buildSectionCourseExplorerUrl(section: SectionWithStats): string | unde
   });
 }
 
-export function searchResultToCourseDto(result: SearchResult, context?: SearchResultEvidenceContext): CourseDto {
+export function searchResultToCourseDto(
+  result: SearchResult,
+  context?: SearchResultEvidenceContext,
+): SearchCourseResultDto {
   const presentation = buildSearchResultPresentation(result, context);
-  return toCourseDto(result.course, {
-    score: result.score,
-    semanticRank: result.semanticRank,
-    keywordRank: result.keywordRank,
-    historical: result.historical,
-    geneds: context?.geneds,
-    matchEvidence: presentation.matchEvidence,
+  return {
+    ...toCourseDto(result.course, {
+      geneds: context?.requirementCodes,
+    }),
+    search: {
+      score: result.score,
+      semanticRank: result.semanticRank,
+      keywordRank: result.keywordRank,
+      historical: result.historical,
+    },
+    match_evidence: presentation.matchEvidence,
     explanation: presentation.explanation,
     warnings: presentation.warnings,
-  });
+  };
 }

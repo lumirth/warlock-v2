@@ -33,15 +33,15 @@ export type ContextualGenedRule = {
 
 export type PositiveNoNotAlias = {
   pattern: RegExp;
-  type: Extract<HintType, "difficulty" | "status">;
+  type: Extract<HintType, "workload" | "status">;
   value: "easy" | "open";
 };
 
 export type StudentLanguageAliasKind =
-  | "gened"
+  | "requirement"
   | "delivery"
   | "status"
-  | "difficulty"
+  | "workload"
   | "days"
   | "time";
 
@@ -55,8 +55,8 @@ export type StudentLanguageAliasEntry = {
 export const GENED_CUES = [
   "gen ed",
   "gened",
-  "gen-ed",
   "requirement",
+  "gen-ed",
   "category",
 ];
 
@@ -66,8 +66,8 @@ export const STUDENT_LANGUAGE_ALIAS_ENTRIES: StudentLanguageAliasEntry[] = [
   { kind: "time", canonical: "midday", aliases: ["midday", "mid day", "around noon"] },
   { kind: "time", canonical: "afternoon", aliases: ["afternoon", "after noon", "after lunch"] },
   { kind: "time", canonical: "evening", aliases: ["evening", "night", "after 5"] },
-  { kind: "difficulty", canonical: "easy", aliases: ["easy", "simple", "chill", "low workload", "grade booster", "gpa booster", "easy a", "not hard"] },
-  { kind: "difficulty", canonical: "hard", aliases: ["hard", "difficult", "challenging", "tough"] },
+  { kind: "workload", canonical: "easy", aliases: ["easy", "simple", "chill", "low workload", "grade booster", "gpa booster", "easy a", "not hard"] },
+  { kind: "workload", canonical: "hard", aliases: ["hard", "difficult", "challenging", "tough"] },
   { kind: "status", canonical: "open", aliases: ["open", "available", "has seats", "not full", "no waitlist"] },
   { kind: "status", canonical: "closed", aliases: ["closed", "full", "waitlist"] },
   { kind: "delivery", canonical: "true", aliases: ["online", "remote", "virtual", "asynchronous", "async"] },
@@ -76,28 +76,28 @@ export const STUDENT_LANGUAGE_ALIAS_ENTRIES: StudentLanguageAliasEntry[] = [
   { kind: "days", canonical: "TR", aliases: ["tr", "tuesday thursday", "tue thu", "tue thur", "t r", "tuth"] },
   { kind: "days", canonical: "MW", aliases: ["mw", "monday wednesday", "mon wed"] },
   { kind: "days", canonical: "WF", aliases: ["wf", "wednesday friday", "wed fri"] },
-  { kind: "gened", canonical: "HUM", aliases: ["humanities", "humanities and the arts", "arts"], requiresCue: true },
-  { kind: "gened", canonical: "NAT", aliases: ["natural sciences", "nat sci", "science"], requiresCue: true },
-  { kind: "gened", canonical: "PS", aliases: ["physical sciences", "physical"], requiresCue: true },
-  { kind: "gened", canonical: "SBS", aliases: ["social sciences", "behavioral sciences", "social and behavioral"], requiresCue: true },
-  { kind: "gened", canonical: "CS", aliases: ["cultural studies"], requiresCue: true },
-  { kind: "gened", canonical: "QR", aliases: ["quantitative reasoning", "quantitative", "quant"], requiresCue: true },
-  { kind: "gened", canonical: "NW", aliases: ["non western", "non-western", "nonwestern"], requiresCue: true },
-  { kind: "gened", canonical: "US", aliases: ["us minority", "minority cultures"], requiresCue: true },
-  { kind: "gened", canonical: "WCC", aliases: ["western comparative", "western"], requiresCue: true },
-  { kind: "gened", canonical: "ACP", aliases: ["advanced composition", "adv comp", "writing intensive"], requiresCue: true },
-  { kind: "gened", canonical: "HUM", aliases: ["hum", "humanities", "humanities and the arts"] },
-  { kind: "gened", canonical: "NAT", aliases: ["nat", "nat sci", "natural sciences"] },
-  { kind: "gened", canonical: "PS", aliases: ["ps gened", "ps gen ed", "physical sciences"] },
-  { kind: "gened", canonical: "SBS", aliases: ["sbs", "social sciences", "behavioral sciences", "social and behavioral"] },
-  { kind: "gened", canonical: "CS", aliases: ["cs gened", "cs gen ed", "cultural studies"] },
-  { kind: "gened", canonical: "QR", aliases: ["qr", "quantitative reasoning"] },
-  { kind: "gened", canonical: "QR1", aliases: ["qr1", "qr 1"] },
-  { kind: "gened", canonical: "QR2", aliases: ["qr2", "qr 2"] },
-  { kind: "gened", canonical: "NW", aliases: ["nw", "non western", "non-western"] },
-  { kind: "gened", canonical: "US", aliases: ["us minority", "minority cultures"] },
-  { kind: "gened", canonical: "WCC", aliases: ["wcc", "western comparative"] },
-  { kind: "gened", canonical: "ACP", aliases: ["acp", "advanced composition", "writing intensive"] },
+  { kind: "requirement", canonical: "HUM", aliases: ["humanities", "humanities and the arts", "arts"], requiresCue: true },
+  { kind: "requirement", canonical: "NAT", aliases: ["natural sciences", "nat sci", "science"], requiresCue: true },
+  { kind: "requirement", canonical: "PS", aliases: ["physical sciences", "physical"], requiresCue: true },
+  { kind: "requirement", canonical: "SBS", aliases: ["social sciences", "behavioral sciences", "social and behavioral"], requiresCue: true },
+  { kind: "requirement", canonical: "CS", aliases: ["cultural studies"], requiresCue: true },
+  { kind: "requirement", canonical: "QR", aliases: ["quantitative reasoning", "quantitative", "quant"], requiresCue: true },
+  { kind: "requirement", canonical: "NW", aliases: ["non western", "non-western", "nonwestern"], requiresCue: true },
+  { kind: "requirement", canonical: "US", aliases: ["us minority", "minority cultures"], requiresCue: true },
+  { kind: "requirement", canonical: "WCC", aliases: ["western comparative", "western"], requiresCue: true },
+  { kind: "requirement", canonical: "ACP", aliases: ["advanced composition", "adv comp", "writing intensive"], requiresCue: true },
+  { kind: "requirement", canonical: "HUM", aliases: ["hum", "humanities", "humanities and the arts"] },
+  { kind: "requirement", canonical: "NAT", aliases: ["nat", "nat sci", "natural sciences"] },
+  { kind: "requirement", canonical: "PS", aliases: ["ps requirement", "ps gen ed", "ps gened", "physical sciences"] },
+  { kind: "requirement", canonical: "SBS", aliases: ["sbs", "social sciences", "behavioral sciences", "social and behavioral"] },
+  { kind: "requirement", canonical: "CS", aliases: ["cs requirement", "cs gen ed", "cs gened", "cultural studies"] },
+  { kind: "requirement", canonical: "QR", aliases: ["qr", "quantitative reasoning"] },
+  { kind: "requirement", canonical: "QR1", aliases: ["qr1", "qr 1"] },
+  { kind: "requirement", canonical: "QR2", aliases: ["qr2", "qr 2"] },
+  { kind: "requirement", canonical: "NW", aliases: ["nw", "non western", "non-western"] },
+  { kind: "requirement", canonical: "US", aliases: ["us minority", "minority cultures"] },
+  { kind: "requirement", canonical: "WCC", aliases: ["wcc", "western comparative"] },
+  { kind: "requirement", canonical: "ACP", aliases: ["acp", "advanced composition", "writing intensive"] },
 ];
 
 export const GENED_SYNONYMS: Record<string, string[]> = {
@@ -189,6 +189,7 @@ export const LEVEL_KEYWORDS_SOFT: Record<string, number> = {
 export const STOP_PHRASES = [
   "gen ed",
   "gened",
+  "requirement",
   "gen-ed",
   "section",
   "sections",
@@ -244,7 +245,6 @@ export const NEGATION_TARGET_STOP_WORDS = new Set([
   "course",
   "courses",
   "gen",
-  "gened",
   "ed",
   "requirement",
   "requirements",
@@ -328,17 +328,17 @@ export const STUDENT_SHORTHAND_RULES: StudentShorthandRule[] = [
 export const CONTEXTUAL_GENED_RULES: ContextualGenedRule[] = [
   {
     code: "SBS",
-    pattern: /\b(?:social\s+(?:and\s+behavioral\s+)?sciences?|behavioral\s+sciences?|social\s+science\s+(?:class|course|requirement|gen\s*-?\s*ed|gened))\b/gi,
+    pattern: /\b(?:social\s+(?:and\s+behavioral\s+)?sciences?|behavioral\s+sciences?|social\s+science\s+(?:class|course|requirement|gen\s*-?\s*ed|requirement))\b/gi,
     confidence: 0.86,
   },
   {
     code: "NAT",
-    pattern: /\b(?:natural\s+sciences?|nat\s+sci|science\s+(?:class|course|requirement|gen\s*-?\s*ed|gened)|(?:easy|chill|need|counts?\s+for|fulfills?)\s+science)\b/gi,
+    pattern: /\b(?:natural\s+sciences?|nat\s+sci|science\s+(?:class|course|requirement|gen\s*-?\s*ed|requirement)|(?:easy|chill|need|counts?\s+for|fulfills?)\s+science)\b/gi,
     confidence: 0.84,
   },
   {
     code: "ACP",
-    pattern: /\b(?:advanced\s+composition|adv\s+comp|writing\s+(?:requirement|intensive|gen\s*-?\s*ed|gened))\b/gi,
+    pattern: /\b(?:advanced\s+composition|adv\s+comp|writing\s+(?:requirement|intensive|gen\s*-?\s*ed|requirement))\b/gi,
     confidence: 0.86,
   },
   {
@@ -349,7 +349,7 @@ export const CONTEXTUAL_GENED_RULES: ContextualGenedRule[] = [
 ];
 
 export const POSITIVE_NO_NOT_ALIASES: PositiveNoNotAlias[] = [
-  { pattern: /\bnot\s+hard\b/gi, type: "difficulty", value: "easy" },
+  { pattern: /\bnot\s+hard\b/gi, type: "workload", value: "easy" },
   { pattern: /\bnot\s+full\b/gi, type: "status", value: "open" },
   { pattern: /\bno\s+waitlist\b/gi, type: "status", value: "open" },
 ];

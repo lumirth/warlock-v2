@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { ApiClient } from './api-client'
-import type { CourseDto } from '@uiuc-course-search/query-types'
+import type { CourseDetailResponseDto } from '@uiuc-course-search/query-types'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -8,7 +8,7 @@ afterEach(() => {
 
 describe('ApiClient', () => {
   it('returns the shared course DTO without client-side shape normalization', async () => {
-    const course: CourseDto = {
+    const course: CourseDetailResponseDto = {
       id: 'CS-225-2026-spring',
       subject: 'CS',
       number: '225',
@@ -153,13 +153,13 @@ describe('ApiClient', () => {
         instructor: 'Fagen',
         term: 'spring',
         year: 2026,
-        gened: 'HUM',
+        requirement: 'HUM',
         credits: 4,
         days: 'MWF',
         time: 'morning',
         online: true,
         status: 'open',
-        difficulty: 'easy',
+        workload: 'easy',
         level: 400,
       },
       scope: 'all',
@@ -167,7 +167,7 @@ describe('ApiClient', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.example.test/api/search?q=algorithms&limit=20&offset=0&subject=CS&number=225&instructor=Fagen&term=spring&year=2026&gened=HUM&credits=4&days=MWF&time=morning&online=true&status=open&difficulty=easy&level=400&scope=all&sort=gpa&direction=desc',
+      'https://api.example.test/api/search?q=algorithms&limit=20&offset=0&subject=CS&number=225&instructor=Fagen&term=spring&year=2026&requirement=HUM&credits=4&days=MWF&time=morning&online=true&status=open&workload=easy&level=400&scope=all&sort=gpa&direction=desc',
       { signal: undefined }
     )
   })

@@ -97,7 +97,7 @@ function applyDecisionSearchRescue(
     if (/\bcounts?\s+for\s+something\b/i.test(rawQuery)) {
       assumptions.set(
         'requirement_ambiguous',
-        assumption('requirement_ambiguous', 'Could mean GenEd, elective, major requirement, or advanced hours', 0.68)
+        assumption('requirement_ambiguous', 'Could mean Requirement, elective, major requirement, or advanced hours', 0.68)
       );
     }
   }
@@ -162,7 +162,7 @@ function applyDecisionSearchRescue(
     assumptions.set('credit_count', assumption('credit_count', `${plan.filters.credits} credit hours`, 0.92));
   }
 
-  if (plan.filters.difficulty === 'easy') {
+  if (plan.filters.workload === 'easy') {
     queryTypes.add('subjective_vibe');
     plan.softPreferences = { ...plan.softPreferences, lowWorkload: plan.softPreferences?.lowWorkload ?? 0.8 };
     assumptions.set('low_workload', assumption('low_workload', 'Low workload preferred', 0.82));

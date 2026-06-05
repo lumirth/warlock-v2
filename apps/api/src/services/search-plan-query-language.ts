@@ -45,16 +45,16 @@ export function compileQueryLanguageClause(
       );
     }
 
-    if (clause.genedMode) {
-      if (clause.genedMode.any) {
-        draft.filters.requirement = requirementFilter('any', clause.genedMode.any);
+    if (clause.requirementMode) {
+      if (clause.requirementMode.any) {
+        draft.filters.requirement = requirementFilter('any', clause.requirementMode.any);
       }
-      if (clause.genedMode.all) {
-        draft.filters.requirement = requirementFilter('all', clause.genedMode.all);
+      if (clause.requirementMode.all) {
+        draft.filters.requirement = requirementFilter('all', clause.requirementMode.all);
       }
       events.push(
         compilerEvent('compile', 'query_language_requirements', 'Applied explicit requirement mode', {
-          mode: clause.genedMode.any ? 'any' : 'all',
+          mode: clause.requirementMode.any ? 'any' : 'all',
         }),
       );
     }
@@ -98,7 +98,7 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
     case 'subject':
       plan.filters.subject = filter.value.toUpperCase();
       break;
-    case 'gened':
+    case 'requirement':
       plan.filters.requirement = singleRequirementFilter(filter.value);
       break;
     case 'credits': {
@@ -141,9 +141,9 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
     case 'pot':
       plan.filters.partOfTerm = filter.value.toUpperCase();
       break;
-    case 'difficulty':
+    case 'workload':
       if (filter.value === 'easy' || filter.value === 'hard') {
-        plan.filters.difficulty = filter.value;
+        plan.filters.workload = filter.value;
       }
       break;
   }
@@ -151,7 +151,7 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
 
 function applyNegationToken(token: string, plan: SearchPlan): void {
   const normalized = token.toLowerCase();
-  const fieldMatch = /^(subject|gened|keyword|workload):(.+)$/.exec(normalized);
+  const fieldMatch = /^(subject|requirement|keyword|workload):(.+)$/.exec(normalized);
   if (fieldMatch) {
     applyStructuredNegation(fieldMatch[1], fieldMatch[2], plan);
     return;

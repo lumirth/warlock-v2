@@ -1,38 +1,28 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import { resolveQuery } from "./query-resolver.js";
-import { sanitizeFtsQuery } from "./search-text.js";
-import {
-  compileDecisionSearchExpansions,
-  compileDecisionSearchRescue,
-} from "./decision-plan.js";
 import {
   type SearchRequestFiltersDto,
 } from "@uiuc-course-search/query-types";
 import {
   deepFreeze,
-  searchPlanFiltersFromRequestFilters,
 } from "./search-request.js";
 import {
   extractSearchPlanningInput,
-  withRequestFilterHints,
 } from "./search-plan-hints.js";
-import { compileQueryLanguageClause } from "./search-plan-query-language.js";
 import {
-  buildFallbackPlans,
-  compileIntroductoryGatewayIntent,
-  compileSortIntent,
-  compileTopicExpansion,
-  removeSortScaffolding,
-} from "./search-plan-intent-passes.js";
-import { withSearchPlanUpdates } from "./search-plan-model.js";
+  createPlanningContext,
+  runPlanningPasses,
+} from "./search-planning-passes.js";
 import {
-  compilerEvent,
-  type SearchCompilerEvent,
   type SearchPlanningInput,
   type SearchPlanningResult,
 } from "./search-planning-types.js";
 
 export { extractSearchPlanningInput } from "./search-plan-hints.js";
+export {
+  SEARCH_PLANNING_PASSES,
+  type PlanningArtifact,
+  type SearchPlanningPass,
+} from "./search-planning-passes.js";
 export type {
   SearchCompilerEvent,
   SearchCompilerEventStage,
@@ -46,120 +36,18 @@ export async function createSearchPlan(
   input: SearchPlanningInput = extractSearchPlanningInput(query),
   requestFilters?: SearchRequestFiltersDto,
 ): Promise<SearchPlanningResult> {
-  const compilerEvents: SearchCompilerEvent[] = [
-    compilerEvent("parse", "query_language", "Parsed query language clauses", {
-      clauses: input.parsed.clauses.length,
-      filters: input.parsed.clauses.flatMap((clause) => clause.filters).length,
-    }),
-    compilerEvent("extract", "student_language", "Extracted student-language hints", {
-      hints: input.extraction.hints.map((hint) => hint.type),
-      residual: input.extraction.residual,
-    }),
-  ];
-  const planningInput = withRequestFilterHints(input, requestFilters);
-  if (requestFilters) {
-    compilerEvents.push(
-      compilerEvent("extract", "request_filter_hints", "Merged structured request filters as explicit hints", {
-        filters: Object.keys(requestFilters).filter((key) => requestFilters[key as keyof SearchRequestFiltersDto] !== undefined),
-      }),
-    );
-  }
-
-  let plan = await resolveQuery(db, planningInput.extracted);
-  compilerEvents.push(
-    compilerEvent("resolve", "validated_hints", "Resolved extracted hints into structured filters", {
-      filters: Object.keys(plan.filters),
-      keywordQuery: plan.keywordQuery,
-      semanticQuery: plan.semanticQuery,
-    }),
+  const context = await runPlanningPasses(
+    createPlanningContext(db, query, input, requestFilters),
   );
-  plan = withSearchPlanUpdates(plan, draft => {
-    draft.rawQuery = query;
-  });
-  let queryResidual = plan.semanticQuery;
-
-  const clause = planningInput.parsed.clauses[0];
-  const queryLanguageResult = compileQueryLanguageClause(clause, plan);
-  plan = queryLanguageResult.plan;
-  compilerEvents.push(...queryLanguageResult.events);
-
-  if (requestFilters) {
-    const filterOverrides = searchPlanFiltersFromRequestFilters(requestFilters);
-    plan = withSearchPlanUpdates(plan, draft => {
-      Object.assign(draft.filters, filterOverrides);
-    });
-    compilerEvents.push(
-      compilerEvent("compile", "request_filter_overrides", "Applied canonical structured request filters", {
-        filters: Object.keys(filterOverrides ?? {}),
-      }),
-    );
+  if (!context.plan) {
+    throw new Error("Search planning completed without a plan");
   }
-
-  const introductoryResult = compileIntroductoryGatewayIntent(plan);
-  plan = introductoryResult.plan;
-  if (introductoryResult.applied) {
-    queryResidual = plan.semanticQuery;
-    compilerEvents.push(
-      compilerEvent("compile", "introductory_gateway", "Compiled introductory subject search as gateway intent"),
-    );
-  }
-
-  const rescueResult = compileDecisionSearchRescue(plan, query, queryResidual);
-  plan = rescueResult.plan;
-  queryResidual = rescueResult.queryResidual;
-  if (plan.rescue) {
-    compilerEvents.push(
-      compilerEvent("rescue", "decision_search_rescue", "Compiled decision-oriented query rescue metadata", {
-        queryTypes: plan.rescue.queryTypes,
-        negativeTerms: plan.rescue.negativeTerms,
-      }),
-    );
-  }
-
-  const sortResult = compileSortIntent(plan, query);
-  plan = sortResult.plan;
-  if (sortResult.applied) {
-    queryResidual = removeSortScaffolding(queryResidual);
-    compilerEvents.push(
-      compilerEvent("compile", "sort_intent", "Compiled sort language into request sort intent", {
-        sort: sortResult.inferredSort,
-      }),
-    );
-  }
-
-  const topicExpansionResult = compileTopicExpansion(plan);
-  plan = topicExpansionResult.plan;
-  const topicExpansions = topicExpansionResult.expansions;
-  plan = compileDecisionSearchExpansions(plan, topicExpansions);
-  if (topicExpansions.length > 0) {
-    compilerEvents.push(
-      compilerEvent("compile", "topic_expansion", "Expanded student topic language for retrieval recall", {
-        expansions: topicExpansions,
-      }),
-    );
-  }
-
-  plan = withSearchPlanUpdates(plan, draft => {
-    draft.keywordQuery = sanitizeFtsQuery(draft.keywordQuery);
-    draft.semanticQuery = sanitizeFtsQuery(draft.semanticQuery);
-  });
-  const fallbackPlans = buildFallbackPlans(plan, queryResidual);
-  if (fallbackPlans.length > 0) {
-    compilerEvents.push(
-      compilerEvent("finalize", "fallback_plans", "Compiled low-result fallback retrieval plans", {
-        fallbackPlans: fallbackPlans.length,
-      }),
-    );
-  }
-  compilerEvents.push(
-    compilerEvent("finalize", "sanitize_and_freeze", "Sanitized retrieval query text and froze compiled plan"),
-  );
 
   return deepFreeze({
-    extraction: planningInput.extraction,
-    queryResidual,
-    plan,
-    fallbackPlans,
-    compilerEvents,
+    extraction: context.planningInput.extraction,
+    queryResidual: context.queryResidual,
+    plan: context.plan,
+    fallbackPlans: context.fallbackPlans,
+    compilerEvents: context.compilerEvents,
   });
 }

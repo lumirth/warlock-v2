@@ -12,7 +12,6 @@ const baseContext: RefinementContext = {
   metaRawQuery: 'CS',
   residualQuery: '',
   activeFilters: { subject: 'CS' },
-  visibleAdvanced: { subject: 'CS' },
   sort: { field: 'relevance', direction: 'desc' },
 }
 
@@ -20,14 +19,14 @@ describe('search refinement actions', () => {
   it('turns public ambiguity actions into canonical filter-only refinement requests', () => {
     const plan = planAmbiguityAction(
       {
-        id: '0-0-gened-CS',
+        id: '0-0-requirement-CS',
         term: 'CS',
         label: 'Cultural Studies',
         action: {
           kind: 'run_search',
           nextRequest: {
             query: '',
-            filters: { gened: 'CS' },
+            filters: { requirement: 'CS' },
             sort: { field: 'relevance', direction: 'desc' },
             scope: 'active',
           },
@@ -38,10 +37,10 @@ describe('search refinement actions', () => {
 
     expect(plan).toEqual({
       kind: 'search',
-      draft: { gened: 'CS' },
+      draft: { requirement: 'CS' },
       request: {
         query: '',
-        filters: { gened: 'CS' },
+        filters: { requirement: 'CS' },
         sort: { field: 'relevance', direction: 'desc' },
       },
     })

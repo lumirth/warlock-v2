@@ -104,7 +104,6 @@ describe("Search Routes", () => {
     expect("extraction" in data.meta).toBe(false);
     expect(data.meta.ui).toEqual({
       chips: [],
-      advanced: {},
       ambiguityActions: [],
     });
     expect(searchSpy).toHaveBeenCalledWith(
@@ -205,7 +204,7 @@ describe("Search Routes", () => {
     });
 
     const res = await app.request(
-      "/api/search?q=systems&subject=cs&number=225&instructor=Fagen&term=spring&year=2026&gened=hum&credits=4&days=mwf&time=morning&online=true&status=open&difficulty=easy&level=400",
+      "/api/search?q=systems&subject=cs&number=225&instructor=Fagen&term=spring&year=2026&requirement=hum&credits=4&days=mwf&time=morning&online=true&status=open&workload=easy&level=400",
       {},
       {
         DB: mockDB,
@@ -228,13 +227,13 @@ describe("Search Routes", () => {
           instructor: "Fagen",
           term: "spring",
           year: 2026,
-          gened: "HUM",
+          requirement: "HUM",
           credits: 4,
           days: "MWF",
           time: "morning",
           online: true,
           status: "open",
-          difficulty: "easy",
+          workload: "easy",
           level: 400,
         },
         sort: { field: "relevance", direction: "desc" },
@@ -341,13 +340,14 @@ describe("Search Routes", () => {
     const data = (await res.json()) as SearchResponseDto;
     expect(data.meta.appliedSort).toEqual({ field: "gpa", direction: "asc" });
     expect(data.meta.appliedScope).toBe("all");
-    expect(data.meta.ui?.advanced).toMatchObject({
-      level: 500,
+    expect(data.meta.interpretedRequest).toMatchObject({
+      query: "history",
+      filters: { level: 500 },
       scope: "all",
     });
   });
 
-  it("falls invalid new controls back to relevance, active scope, and no level", async () => {
+  it("rejects invalid new controls instead of silently falling back", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
       meta: {
@@ -381,20 +381,14 @@ describe("Search Routes", () => {
       } as unknown as ExecutionContext,
     );
 
-    expect(res.status).toBe(200);
-    expect(searchSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        query: "history",
-        filters: {},
-        sort: { field: "relevance", direction: "desc" },
-        scope: "active",
-      }),
-      { limit: 20, offset: 0 },
-      expect.any(Function),
-    );
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({
+      error: "sort must be one of: relevance, gpa, quality, workload, instructor_rating, level, credits",
+    });
+    expect(searchSpy).not.toHaveBeenCalled();
   });
 
-  it("does not apply level filters with trailing malformed characters", async () => {
+  it("rejects level filters with trailing malformed characters", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
       meta: {
@@ -428,17 +422,11 @@ describe("Search Routes", () => {
       } as unknown as ExecutionContext,
     );
 
-    expect(res.status).toBe(200);
-    expect(searchSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        query: "history",
-        filters: {},
-        sort: { field: "relevance", direction: "desc" },
-        scope: "active",
-      }),
-      { limit: 20, offset: 0 },
-      expect.any(Function),
-    );
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({
+      error: "level must be an integer",
+    });
+    expect(searchSpy).not.toHaveBeenCalled();
   });
 
   it("returns a stable generic response for internal search failures", async () => {

@@ -4,7 +4,7 @@ import {
   STUDENT_LANGUAGE_ALIAS_ENTRIES,
 } from './student-language-lexicon.js';
 
-export type AliasKind = 'subject' | 'gened' | 'delivery' | 'status' | 'difficulty' | 'days' | 'time';
+export type AliasKind = 'subject' | 'requirement' | 'delivery' | 'status' | 'workload' | 'days' | 'time';
 
 export interface AliasEntry {
   kind: AliasKind;
@@ -185,7 +185,7 @@ function isBoundaryCharacter(character: string): boolean {
 }
 
 function kindPriority(kind: AliasKind): number {
-  if (kind === 'gened') return 3;
+  if (kind === 'requirement') return 3;
   if (kind === 'subject') return 2;
   return 1;
 }

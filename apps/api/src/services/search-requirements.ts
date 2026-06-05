@@ -9,21 +9,21 @@ export function structuredRequirementCodes(
   return normalizeCanonicalRequirementCodes(codes);
 }
 
-export function genedDtoRequirementCodes(geneds: readonly CourseGenedDto[] | undefined): string[] {
+export function genedDtoRequirementCodes(requirementCodes: readonly CourseGenedDto[] | undefined): string[] {
   return normalizeCanonicalRequirementCodes(
-    (geneds ?? []).flatMap(gened => [
-      gened.categoryId,
-      gened.attributeCode ?? "",
+    (requirementCodes ?? []).flatMap(requirement => [
+      requirement.categoryId,
+      requirement.attributeCode ?? "",
     ]),
   );
 }
 
 export function searchResultRequirementCodes(
   result: SearchResult,
-  geneds?: readonly CourseGenedDto[],
+  requirementCodes?: readonly CourseGenedDto[],
 ): string[] {
   return structuredRequirementCodes([
-    ...genedDtoRequirementCodes(geneds),
+    ...genedDtoRequirementCodes(requirementCodes),
     ...(result.requirementCodes ?? []),
   ]);
 }

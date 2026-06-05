@@ -99,18 +99,22 @@ function hasInstructorFilter(body: JsonRecord | null): boolean {
     return false;
   }
 
-  const ui = (meta as JsonRecord).ui;
-  if (!ui || typeof ui !== 'object' || Array.isArray(ui)) {
+  const interpretedRequest = (meta as JsonRecord).interpretedRequest;
+  if (
+    !interpretedRequest
+    || typeof interpretedRequest !== 'object'
+    || Array.isArray(interpretedRequest)
+  ) {
     return false;
   }
 
-  const advanced = (ui as JsonRecord).advanced;
-  if (!advanced || typeof advanced !== 'object' || Array.isArray(advanced)) {
+  const filters = (interpretedRequest as JsonRecord).filters;
+  if (!filters || typeof filters !== 'object' || Array.isArray(filters)) {
     return false;
   }
 
-  return typeof (advanced as JsonRecord).instructor === 'string'
-    && ((advanced as JsonRecord).instructor as string).trim().length > 0;
+  return typeof (filters as JsonRecord).instructor === 'string'
+    && ((filters as JsonRecord).instructor as string).trim().length > 0;
 }
 
 function hasSyncStatusBody(body: JsonRecord | null): boolean {

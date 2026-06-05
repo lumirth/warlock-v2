@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 import type {
-  CourseDto,
   MatchEvidence,
   SearchChipDto,
+  SearchCourseResultDto,
   SearchMetaDto,
   SearchRecoveryGroup,
   SearchSort,
@@ -50,7 +50,7 @@ export function ResultsList({
   onLoadMore,
 }: {
   meta: SearchMetaDto | null
-  results: CourseDto[]
+  results: SearchCourseResultDto[]
   pagination: SearchPagination | null
   loading: boolean
   loadingMore: boolean
@@ -172,8 +172,8 @@ function ResultsSkeleton() {
   )
 }
 
-function CourseResultCard({ course }: { course: CourseDto }) {
-  const isHistorical = course._historical === true
+function CourseResultCard({ course }: { course: SearchCourseResultDto }) {
+  const isHistorical = course.search?.historical === true
 
   return (
     <Link
@@ -235,7 +235,7 @@ function CourseResultCard({ course }: { course: CourseDto }) {
   )
 }
 
-function ScoreSummary({ course }: { course: CourseDto }) {
+function ScoreSummary({ course }: { course: SearchCourseResultDto }) {
   const stats = getCourseMetrics(course)
   if (stats.length === 0) return null
 

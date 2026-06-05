@@ -6,6 +6,7 @@ import {
   type SearchRequestDto,
   type SearchRequestFiltersDto,
 } from "@uiuc-course-search/query-types";
+import { meaningfulResidualQuery } from "../services/search-request-text.js";
 
 export function searchActionFromRequest(
   request: SearchRequestDto,
@@ -56,13 +57,13 @@ function requestWithAppliedAmbiguity(
   residual: string,
 ): SearchRequestDto {
   const nextFilters = { ...baseFilters };
-  if (filter.gened) {
+  if (filter.requirement) {
     delete nextFilters.subject;
     delete nextFilters.number;
-    nextFilters.gened = filter.gened;
+    nextFilters.requirement = filter.requirement;
   }
   if (filter.subject) {
-    delete nextFilters.gened;
+    delete nextFilters.requirement;
     nextFilters.subject = filter.subject;
   }
 
@@ -120,33 +121,4 @@ function removeTextFromQuery(source: string, textToRemove: string): string {
   return `${normalizedSource.slice(0, index)} ${normalizedSource.slice(index + normalizedRemove.length)}`
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function meaningfulResidualQuery(residual: string): string {
-  const weakResidualTerms = new Set([
-    "a",
-    "an",
-    "and",
-    "by",
-    "class",
-    "classes",
-    "course",
-    "courses",
-    "find",
-    "for",
-    "in",
-    "intro",
-    "introduction",
-    "of",
-    "search",
-    "the",
-    "to",
-  ]);
-  const trimmedResidual = residual.trim();
-  const meaningfulTokens = trimmedResidual
-    .toLowerCase()
-    .split(/[^a-z0-9+#]+/)
-    .filter((token) => token && !weakResidualTerms.has(token));
-
-  return meaningfulTokens.length > 0 ? trimmedResidual : "";
 }

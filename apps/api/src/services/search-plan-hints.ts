@@ -21,8 +21,8 @@ function mapHintType(type: string): QueryHintType {
     credits: 'credits',
     online: 'online',
     status: 'status',
-    difficulty: 'difficulty',
-    gened: 'gened',
+    difficulty: 'workload',
+    requirement: 'requirement',
     term: 'term',
     partOfTerm: 'partOfTerm',
     negation: 'negation',
@@ -145,10 +145,10 @@ function hintsFromRequestFilters(filters?: SearchRequestFiltersDto): Hint[] {
       ),
     );
   }
-  if (filters.gened) {
+  if (filters.requirement) {
     addRequestFilterHint(
       hints,
-      requestFilterHint('gened', filters.gened, filters.gened),
+      requestFilterHint('requirement', filters.requirement, filters.requirement),
     );
   }
   if (filters.credits !== undefined) {
@@ -181,10 +181,10 @@ function hintsFromRequestFilters(filters?: SearchRequestFiltersDto): Hint[] {
       requestFilterHint('status', filters.status, filters.status),
     );
   }
-  if (filters.difficulty) {
+  if (filters.workload) {
     addRequestFilterHint(
       hints,
-      requestFilterHint('difficulty', filters.difficulty, filters.difficulty),
+      requestFilterHint('workload', filters.workload, filters.workload),
     );
   }
 

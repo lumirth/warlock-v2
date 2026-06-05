@@ -68,7 +68,7 @@ export type MatchEvidenceKind =
   | "number"
   | "crn"
   | "title"
-  | "gened"
+  | "requirement"
   | "schedule"
   | "delivery"
   | "instructor"
@@ -77,7 +77,6 @@ export type MatchEvidenceKind =
   | "topic"
   | "semantic"
   | "keyword"
-  | "difficulty"
   | "quality"
   | "term";
 
@@ -151,18 +150,32 @@ export type CourseDto = {
   instructor_links: Record<string, InstructorLinkDto>;
   course_explorer_url?: string;
   sections?: CourseSectionDto[];
-  _score?: number;
-  _semanticRank?: number;
-  _keywordRank?: number;
-  _historical?: boolean;
-  _cached?: boolean;
-  _stale?: boolean;
-  _stale_reason?: string | null;
-  _age_seconds?: number;
-  _fetched_at?: number;
-  _term_status?: string;
+};
+
+export type SearchCourseMetadataDto = {
+  score?: number;
+  semanticRank?: number;
+  keywordRank?: number;
+  historical?: boolean;
+};
+
+export type SearchCourseResultDto = CourseDto & {
+  search?: SearchCourseMetadataDto;
   match_evidence?: MatchEvidence[];
   explanation?: ResultExplanation;
   warnings?: ResultWarning[];
   section_matches?: SectionMatchDto[];
+};
+
+export type CourseDetailCacheDto = {
+  cached?: boolean;
+  stale?: boolean;
+  staleReason?: string | null;
+  ageSeconds?: number;
+  fetchedAt?: number;
+  termStatus?: string;
+};
+
+export type CourseDetailResponseDto = CourseDto & {
+  cache?: CourseDetailCacheDto;
 };
