@@ -408,7 +408,7 @@ export function searchResultToCourseDto(
   const presentation = buildSearchResultPresentation(result, context);
   return {
     course: toCourseDto(result.course, {
-      requirements: context?.requirementCodes,
+      requirements: context?.requirements,
     }),
     search: {
       score: result.score,

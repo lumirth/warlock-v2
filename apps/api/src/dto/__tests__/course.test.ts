@@ -41,7 +41,7 @@ const course: Course = {
   updated_at: 1,
 };
 
-const courseGeneds = [
+const courseRequirements = [
   {
     categoryId: 'QR',
     categoryName: 'Quantitative Reasoning',
@@ -82,7 +82,7 @@ describe('search result DTO evidence', () => {
         keywordQuery: 'data structures',
         semanticQuery: 'data structures',
       },
-      requirementCodes: courseGeneds,
+      requirements: courseRequirements,
     });
 
     expect(evidence.map(item => item.kind)).toEqual(expect.arrayContaining([
@@ -173,7 +173,7 @@ describe('search result DTO evidence', () => {
           confidence: 0.82,
         },
       },
-      requirementCodes: courseGeneds,
+      requirements: courseRequirements,
     });
 
     expect(dto.explanation?.matchedChips).toEqual(['Online preferred', 'Low writing preferred']);
@@ -195,7 +195,7 @@ describe('search result DTO evidence', () => {
     }), {
       rawQuery: 'easy cs gened',
       hints: [],
-      requirementCodes: [{
+      requirements: [{
         categoryId: 'QR',
         categoryName: 'Quantitative Reasoning',
         attributeCode: 'QR2',
@@ -240,7 +240,7 @@ describe('search result DTO evidence', () => {
     }), {
       rawQuery: 'us minority class',
       hints: [],
-      requirementCodes: [{
+      requirements: [{
         categoryId: 'CS',
         categoryName: 'Cultural Studies',
         attributeCode: 'US',

@@ -61,7 +61,7 @@ export async function presentSearchResponse(input: {
         plan: result.meta.plan,
         rawQuery: result.meta.query.raw,
         hints: result.meta.extraction.hints,
-        requirementCodes: requirementsByCourseId.get(searchResult.course.id) ?? [],
+        requirements: requirementsByCourseId.get(searchResult.course.id) ?? [],
       }),
     ),
     meta: {

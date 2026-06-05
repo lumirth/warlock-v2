@@ -21,7 +21,7 @@ export type SearchResultEvidenceContext = {
   plan: SearchPlan;
   rawQuery: string;
   hints?: Hint[];
-  requirementCodes?: CourseRequirementDto[];
+  requirements?: CourseRequirementDto[];
 };
 
 export type SearchResultPresentation = {
@@ -86,7 +86,7 @@ function resultRequirementCodes(
   result: SearchResult,
   context: SearchResultEvidenceContext,
 ): string[] {
-  return searchResultRequirementCodes(result, context.requirementCodes);
+  return searchResultRequirementCodes(result, context.requirements);
 }
 
 function hasStructuredRequirementEvidence(
