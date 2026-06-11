@@ -16,7 +16,7 @@ export async function runRmpAndScoringEnrichment(
     rmpAuthToken: env.RMP_AUTH_TOKEN,
     internalToken: env.INTERNAL_TOKEN,
   });
-  const enrichment = await coordinateEnrichment(env.DB, env.SELF, env.INTERNAL_TOKEN);
+  const enrichment = await coordinateEnrichment(env.DB);
   return { ...result, enrichment };
 }
 
@@ -28,8 +28,8 @@ export async function processRmpTeachers(
   return { status: 'complete', message: 'Batch processed', count: teachers.length };
 }
 
-export async function runScoringEnrichment(env: Pick<EnrichmentApplicationEnv, 'DB' | 'SELF' | 'INTERNAL_TOKEN'>) {
-  const result = await coordinateEnrichment(env.DB, env.SELF, env.INTERNAL_TOKEN);
+export async function runScoringEnrichment(env: Pick<EnrichmentApplicationEnv, 'DB'>) {
+  const result = await coordinateEnrichment(env.DB);
   return { message: 'Scoring enrichment complete', ...result };
 }
 

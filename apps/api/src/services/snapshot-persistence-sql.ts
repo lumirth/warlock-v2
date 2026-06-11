@@ -41,11 +41,6 @@ export function snapshotOperationStatement(
       return subjectUpsertStatement(operation.subject);
     case 'course.upsert':
       return courseUpsertStatement(operation.course);
-    case 'course_gened.delete_null_attribute':
-      return {
-        sql: 'DELETE FROM course_gened WHERE course_id = ? AND category_id = ? AND attribute_code IS NULL',
-        params: [operation.courseId, operation.categoryId],
-      };
     case 'course_gened.upsert':
       return courseGenedUpsertStatement(operation.gened);
     case 'course_gened.prune_stale':
@@ -200,7 +195,7 @@ function courseGenedPruneStaleStatement(cleanup: GenEdCleanup): SnapshotSqlState
   }
 
   const keepClauses = cleanup.currentKeys
-    .map(() => '(category_id = ? AND COALESCE(attribute_code, \'\') = ?)')
+    .map(() => '(category_id = ? AND attribute_code = ?)')
     .join(' OR ');
   return {
     sql: `DELETE FROM course_gened WHERE course_id = ? AND NOT (${keepClauses})`,

@@ -34,7 +34,10 @@ Record namespace IDs or rule IDs, expressions, thresholds, action, and deploy/da
 
 ## Database Bootstrap
 
-Use the canonical baseline in `apps/api/migrations/0001_initial_schema.sql`. It must remain byte-for-byte identical to `apps/api/src/db/schema.sql`.
+`apps/api/migrations/` is the ordered, immutable upgrade path for existing D1 databases.
+`apps/api/src/db/schema.sql` is the current-state bootstrap for a brand-new database.
+Never rewrite an applied migration to make it resemble the current schema. Add the next
+numbered migration and update the bootstrap schema in the same change.
 
 Run before deployment:
 

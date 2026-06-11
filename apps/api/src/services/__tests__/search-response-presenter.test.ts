@@ -113,6 +113,10 @@ function pipelineResult(input: {
           semanticTermIds: [],
         },
       },
+      retrievalExecution: {
+        successfulLanes: [],
+        failedLanes: [],
+      },
     },
   };
 }

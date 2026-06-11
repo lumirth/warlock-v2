@@ -139,7 +139,7 @@ describe('scheduled worker', () => {
     await Promise.all(ctx.promises);
 
     expect(callOrder).toEqual(['rmp', 'enrichment']);
-    expect(coordinateEnrichment).toHaveBeenCalledWith(environment.DB, environment.SELF, 'internal-token');
+    expect(coordinateEnrichment).toHaveBeenCalledWith(environment.DB);
   });
 
   it('dispatches course sync through the coordinator for default cron schedules', async () => {

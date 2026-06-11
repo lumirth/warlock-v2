@@ -189,7 +189,6 @@ describe('snapshot persistence operations', () => {
       'subject.upsert',
       'course.upsert',
       'course_gened.upsert',
-      'course_gened.delete_null_attribute',
       'course_gened.upsert',
       'course_gened.prune_stale',
       'section.upsert',

@@ -6,6 +6,7 @@ import {
 } from "./search-loaders.js";
 import { applyRankingPolicy } from "./ranking/index.js";
 import { executeRetrievalLanes } from "./search-retrieval-lane-executors.js";
+import type { RetrievalExecutionResult } from "./search-retrieval-lane-executors.js";
 import { countSearchCandidates } from "./search-candidate-count.js";
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
 import type { SearchPlan } from "./search-planner-types.js";
@@ -17,7 +18,11 @@ export async function hybridSearch(
   ai: Ai,
   retrievalPlan: RetrievalPlan,
   rankingPlan: SearchPlan,
-): Promise<{ results: SearchResult[]; totalResults: number }> {
+): Promise<{
+  results: SearchResult[];
+  totalResults: number;
+  retrievalExecution: RetrievalExecutionResult;
+}> {
   const { budget } = retrievalPlan;
   const execution = await executeRetrievalLanes({
     db,
@@ -32,7 +37,7 @@ export async function hybridSearch(
   });
 
   if (scores.length === 0) {
-    return { results: [], totalResults };
+    return { results: [], totalResults, retrievalExecution: execution };
   }
 
   const courseIds = scores.map(score => score.id);
@@ -62,5 +67,6 @@ export async function hybridSearch(
       query: rankingPlan.keywordQuery || "",
     }).slice(0, budget.browseableResultLimit),
     totalResults,
+    retrievalExecution: execution,
   };
 }

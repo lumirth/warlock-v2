@@ -265,7 +265,7 @@ describe('Historical Sync SQL Generation', () => {
     expect(sql).toContain('ON CONFLICT(course_id, category_id, attribute_code) DO UPDATE SET');
   });
 
-  it('pre-cleans nullable GenEd attribute rows before historical SQL insert', () => {
+  it('stores category-only GenEd rows with a stable non-null key', () => {
     const courseId = makeCourseId('CLCV', '100', 2026, 'spring');
     const sql = courseGenedSqlStatements(courseId, [{
       categoryId: 'HUM',
@@ -275,9 +275,8 @@ describe('Historical Sync SQL Generation', () => {
     }]);
 
     expect(sql).toEqual([
-      "DELETE FROM course_gened WHERE course_id = 'CLCV-100-2026-spring' AND category_id = 'HUM' AND attribute_code IS NULL;",
-      "INSERT INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES ('CLCV-100-2026-spring', 'HUM', 'Humanities - Lit Arts', NULL, NULL) ON CONFLICT(course_id, category_id, attribute_code) DO UPDATE SET category_name = excluded.category_name, attribute_name = excluded.attribute_name;",
-      "DELETE FROM course_gened WHERE course_id = 'CLCV-100-2026-spring' AND NOT ((category_id = 'HUM' AND COALESCE(attribute_code, '') = ''));",
+      "INSERT INTO course_gened (course_id, category_id, category_name, attribute_code, attribute_name) VALUES ('CLCV-100-2026-spring', 'HUM', 'Humanities - Lit Arts', '', NULL) ON CONFLICT(course_id, category_id, attribute_code) DO UPDATE SET category_name = excluded.category_name, attribute_name = excluded.attribute_name;",
+      "DELETE FROM course_gened WHERE course_id = 'CLCV-100-2026-spring' AND NOT ((category_id = 'HUM' AND attribute_code = ''));",
     ]);
   });
 
@@ -303,7 +302,7 @@ describe('Historical Sync SQL Generation', () => {
       },
     ]);
     expect(sql.at(-1)).toBe(
-      "DELETE FROM course_gened WHERE course_id = 'AAS-100-2026-spring' AND NOT ((category_id = 'CS' AND COALESCE(attribute_code, '') = 'US') OR (category_id = 'SBS' AND COALESCE(attribute_code, '') = ''));"
+      "DELETE FROM course_gened WHERE course_id = 'AAS-100-2026-spring' AND NOT ((category_id = 'CS' AND attribute_code = 'US') OR (category_id = 'SBS' AND attribute_code = ''));"
     );
   });
 

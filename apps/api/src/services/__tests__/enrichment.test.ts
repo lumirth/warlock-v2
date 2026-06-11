@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { calculateCourseScores, coordinateEnrichment, enrichCoursesWithGpa, enrichCoursesWithScores } from '../enrichment.js';
-import type { D1Database, Fetcher } from '@cloudflare/workers-types';
+import type { D1Database } from '@cloudflare/workers-types';
 
-function createSetBasedDb() {
+function createSetBasedDb(options: { failScoreUpdate?: boolean } = {}) {
   const stateWrites: unknown[][] = [];
   const linkRebuildBinds: unknown[][] = [];
   const linkDeleteBinds: unknown[][] = [];
@@ -72,7 +72,10 @@ function createSetBasedDb() {
       }),
     };
     }),
-    batch: vi.fn(async () => []),
+    batch: vi.fn(async () => {
+      if (options.failScoreUpdate) throw new Error('score update failed');
+      return [];
+    }),
   };
 
   return { db, stateWrites, linkRebuildBinds, linkDeleteBinds, updateBinds, preparedSql };
@@ -81,15 +84,7 @@ function createSetBasedDb() {
 describe('coordinateEnrichment', () => {
   it('rebuilds every registrable or active term in set-based passes and recomputes scores once', async () => {
     const { db, stateWrites, linkRebuildBinds, linkDeleteBinds, updateBinds, preparedSql } = createSetBasedDb();
-    const selfBinding: { fetch: ReturnType<typeof vi.fn> } = {
-      fetch: vi.fn(),
-    };
-
-    const result = await coordinateEnrichment(
-      db as unknown as D1Database,
-      selfBinding as unknown as Fetcher,
-      'internal-token'
-    );
+    const result = await coordinateEnrichment(db as unknown as D1Database);
 
     expect(result).toEqual({
       taskCount: 15468,
@@ -97,7 +92,6 @@ describe('coordinateEnrichment', () => {
       linkCount: 15468,
       scoreUpdateCount: 1,
     });
-    expect(selfBinding.fetch).not.toHaveBeenCalled();
     expect(linkRebuildBinds).toEqual([
       ['2026-fall', 2026, 'fall'],
       ['2026-summer', 2026, 'summer'],
@@ -111,10 +105,20 @@ describe('coordinateEnrichment', () => {
     expect(preparedSql.some(sql => sql.includes('confidence_score') || sql.includes('match_method'))).toBe(false);
     expect(updateBinds).toEqual([[85.3, 25, 4.5, 'CS-225-2026-spring']]);
     expect(stateWrites).toEqual([
-      ['enrichment:2026-fall', 'running', 0],
-      ['enrichment:2026-fall', 'complete', 7734],
-      ['enrichment:2026-summer', 'running', 0],
-      ['enrichment:2026-summer', 'complete', 7734],
+      ['enrichment', expect.any(Number), 'running', 0, null, null],
+      ['enrichment', expect.any(Number), 'complete', 15468, null, null],
+    ]);
+  });
+
+  it('marks the whole workflow failed when score enrichment fails', async () => {
+    const { db, stateWrites } = createSetBasedDb({ failScoreUpdate: true });
+
+    await expect(coordinateEnrichment(db as unknown as D1Database))
+      .rejects.toThrow('score update failed');
+
+    expect(stateWrites).toEqual([
+      ['enrichment', expect.any(Number), 'running', 0, null, null],
+      ['enrichment', expect.any(Number), 'failed', 15468, null, null],
     ]);
   });
 });
@@ -139,6 +143,36 @@ describe('course score enrichment', () => {
     expect(executedSql[0]).toContain('instructor IS NULL');
     expect(executedSql[1]).toContain('INSERT INTO gpa_stats');
     expect(executedSql[1]).not.toContain('ON CONFLICT(subject, number, instructor)');
+  });
+
+  it('surfaces course-average rebuild failures instead of reporting partial enrichment', async () => {
+    const db = {
+      prepare: vi.fn(() => ({
+        run: vi.fn(async () => {
+          throw new Error('aggregate rebuild failed');
+        }),
+      })),
+    };
+
+    await expect(enrichCoursesWithGpa(db as unknown as D1Database))
+      .rejects.toThrow('aggregate rebuild failed');
+  });
+
+  it('surfaces aggregate lookup failures instead of reporting partial enrichment', async () => {
+    let prepareCount = 0;
+    const db = {
+      prepare: vi.fn(() => {
+        prepareCount += 1;
+        return {
+          run: vi.fn(async () => ({})),
+          all: vi.fn(async () => ({ success: false, results: [] })),
+        };
+      }),
+    };
+
+    await expect(enrichCoursesWithGpa(db as unknown as D1Database))
+      .rejects.toThrow('Failed to load aggregate GPA updates');
+    expect(prepareCount).toBe(3);
   });
 
   it('normalizes GPA and RMP data into 0-100 quality and difficulty scores', () => {
@@ -239,5 +273,16 @@ describe('course score enrichment', () => {
       [85.3, 25, 4.5, 'CS-225-2026-spring'],
     ]);
     expect(db.batch).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces score-source lookup failures instead of reporting zero updates', async () => {
+    const db = {
+      prepare: vi.fn(() => ({
+        all: vi.fn(async () => ({ success: false, results: [] })),
+      })),
+    };
+
+    await expect(enrichCoursesWithScores(db as unknown as D1Database))
+      .rejects.toThrow('Failed to load course score sources');
   });
 });

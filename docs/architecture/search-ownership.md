@@ -55,6 +55,10 @@ not redefine it.
   preferences, ambiguity, and warnings.
 - `RetrievalPlan` contains only executable lanes, inputs, and budgets. A lane
   that cannot execute is not a retrieval lane.
+- Retrieval execution records successful and failed lanes separately. Degraded
+  execution may return useful results, but internal/debug metadata must not
+  pretend every planned lane ran successfully, and degraded results are not
+  written to the normal result cache.
 - Exact course and CRN recall still obey all hard filters.
 - Search ranks one stable, bounded browse window before pagination and counts
   the complete executable candidate union separately. `pagination.totalResults`

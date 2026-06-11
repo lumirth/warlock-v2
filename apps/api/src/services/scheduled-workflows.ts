@@ -147,7 +147,7 @@ async function handleWeeklyRmpEnrichment(env: ScheduledWorkflowEnv, runId: strin
     });
     logger.info('cron.weekly.rmp.complete', { runId, ...rmpResult });
     logger.info('cron.weekly.rmp.enrichment.start', { runId });
-    const enrichment = await coordinateEnrichment(env.DB, env.SELF, env.INTERNAL_TOKEN);
+    const enrichment = await coordinateEnrichment(env.DB);
     logger.info('cron.weekly.rmp.enrichment.complete', { runId, ...enrichment });
   } catch (err) {
     logger.error('cron.weekly.rmp.failed', { runId, ...errorFields(err) });
@@ -168,7 +168,7 @@ async function handleGpaResume(env: ScheduledWorkflowEnv, runId: string, cron: s
       logger.info('cron.gpaResume.enrichment.start', { runId });
       await enrichCoursesWithGpa(env.DB);
       await enrichCoursesWithScores(env.DB);
-      await coordinateEnrichment(env.DB, env.SELF, env.INTERNAL_TOKEN);
+      await coordinateEnrichment(env.DB);
       logger.info('cron.gpaResume.enrichment.dispatched', { runId });
     }
   } catch (err) {

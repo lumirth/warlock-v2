@@ -60,6 +60,10 @@ function mockExecution(results: SearchResult[]): void {
           semanticTermIds: [],
         },
       },
+      retrievalExecution: {
+        successfulLanes: [],
+        failedLanes: [],
+      },
     }),
   );
 }

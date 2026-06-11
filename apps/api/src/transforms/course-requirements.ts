@@ -3,13 +3,14 @@ import {
   normalizeRequirementCodes,
   type CourseRequirementDto,
 } from '@uiuc-course-search/query-types';
-import type { CourseGened } from '../db/types.js';
 import type { CourseSnapshot } from './course.js';
 
-export type CourseRequirementSourceRow = Pick<
-  CourseGened,
-  'category_id' | 'category_name' | 'attribute_code' | 'attribute_name'
->;
+export type CourseRequirementSourceRow = {
+  category_id: string;
+  category_name: string | null;
+  attribute_code: string | null;
+  attribute_name: string | null;
+};
 
 type CourseRequirementEvidence = {
   requirements: CourseRequirementDto[];

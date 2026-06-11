@@ -88,7 +88,19 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
 export type RetrievalExecutionResult = {
   laneResults: RetrievalLaneResult[];
   successfulLanes: RetrievalLane[];
+  failedLanes: RetrievalLane[];
 };
+
+export type RetrievalExecutionSummary = Omit<RetrievalExecutionResult, "laneResults">;
+
+export function summarizeRetrievalExecution(
+  execution: RetrievalExecutionResult,
+): RetrievalExecutionSummary {
+  return {
+    successfulLanes: execution.successfulLanes,
+    failedLanes: execution.failedLanes,
+  };
+}
 
 export async function executeRetrievalLanes(
   context: RetrievalLaneExecutorContext,
@@ -119,6 +131,9 @@ export async function executeRetrievalLanes(
     laneResults: runs.flatMap((run) => run.rows),
     successfulLanes: runs
       .filter((run) => !run.failed)
+      .map((run) => run.lane),
+    failedLanes: runs
+      .filter((run) => run.failed)
       .map((run) => run.lane),
   };
 }

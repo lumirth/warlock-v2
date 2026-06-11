@@ -16,7 +16,7 @@ function createDb(previous: SyncStateRow | null = null) {
   const db = {
     prepare: vi.fn((sql: string) => ({
       bind: vi.fn((...args: unknown[]) => ({
-        first: vi.fn(async () => sql.includes('SELECT last_sync') ? previous : null),
+        first: vi.fn(async () => sql.includes('SELECT * FROM sync_state') ? previous : null),
         run: vi.fn(async () => {
           stateWrites.push(args);
           return {};
@@ -100,7 +100,14 @@ describe('coordinateRmpSync', () => {
     expect(result).toEqual({ count: 26, pages: 3 });
     const fetchBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
     expect(fetchBody.variables.cursor).toBe('expired-cursor');
-    expect(stateWrites.at(-1)).toEqual(['rmp', 'complete', 26, 3, 'new-cursor']);
+    expect(stateWrites.at(-1)).toEqual([
+      'rmp',
+      expect.any(Number),
+      'complete',
+      26,
+      3,
+      'new-cursor',
+    ]);
   });
 
   it('requires the RMP auth binding instead of relying on a hardcoded token', async () => {
@@ -125,8 +132,15 @@ describe('coordinateRmpSync', () => {
     });
 
     expect(result).toEqual({ count: 1, pages: 1 });
-    expect(stateWrites[0]).toEqual(['rmp', 'running', 0, 0, null]);
-    expect(stateWrites.at(-1)).toEqual(['rmp', 'complete', 1, 1, 'cursor-1']);
+    expect(stateWrites[0]).toEqual(['rmp', expect.any(Number), 'running', 0, 0, null]);
+    expect(stateWrites.at(-1)).toEqual([
+      'rmp',
+      expect.any(Number),
+      'complete',
+      1,
+      1,
+      'cursor-1',
+    ]);
     expect(selfBinding.fetch).toHaveBeenCalledWith(
       'http://internal/internal/sync-rmp-batch',
       expect.objectContaining({
@@ -160,7 +174,14 @@ describe('coordinateRmpSync', () => {
     expect(result).toEqual({ count: 101, pages: 4 });
     const fetchBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
     expect(fetchBody.variables.cursor).toBe('stored-cursor');
-    expect(stateWrites.at(-1)).toEqual(['rmp', 'complete', 101, 4, 'new-cursor']);
+    expect(stateWrites.at(-1)).toEqual([
+      'rmp',
+      expect.any(Number),
+      'complete',
+      101,
+      4,
+      'new-cursor',
+    ]);
   });
 });
 
@@ -188,7 +209,10 @@ describe('processRmpBatch', () => {
         avgDifficulty: 2,
         department: 'Computer Science',
         wouldTakeAgainPercent: 100,
-        teacherRatingTags: [],
+        teacherRatingTags: [
+          { tagName: 'Helpful', tagCount: 1 },
+          { tagName: 'Clear', tagCount: 2 },
+        ],
       },
       {
         id: 'Teacher-2',
@@ -211,5 +235,9 @@ describe('processRmpBatch', () => {
       ['Lovelace, A', 'Hopper, G'],
     ]);
     expect(updates.every(update => !update.sql.includes('fetched_at'))).toBe(true);
+    expect(teachers[0].teacherRatingTags.map(tag => tag.tagName)).toEqual([
+      'Helpful',
+      'Clear',
+    ]);
   });
 });

@@ -17,6 +17,7 @@ This project is pre-alpha, has no users, and has no compatibility obligations. D
 - GPA reset: weekly.
 - RMP sync: weekly when `RMP_AUTH_TOKEN` is configured.
 - Course score and instructor-link enrichment: automatically after GPA completion, after weekly RMP completion, and after explicit admin source/enrichment triggers.
+- Semantic embeddings: updated and stale vectors pruned as part of a subject sync when `SYNC_EMBEDDINGS=true`; an embedding failure fails that subject sync instead of silently leaving Vectorize stale.
 
 ## Freshness Evidence
 
@@ -36,6 +37,10 @@ The response includes:
 - `freshness.staleTermIds`
 - `freshness.staleSyncStateIds`
 - `freshness.thresholds`
+
+The global `sync_state` row `enrichment` is complete only after every selected term's
+instructor links and the global course scores have both completed. Subject sync state is
+also the semantic-index freshness signal when embedding sync is enabled.
 
 Write that response to an artifact and run the non-destructive audit before deciding whether any data mutation is needed:
 

@@ -131,6 +131,10 @@ describe('search cache', () => {
         compilerEvents: [],
         plan: planning.plan,
         retrievalPlan,
+        retrievalExecution: {
+          successfulLanes: [],
+          failedLanes: [],
+        },
       },
     } satisfies SearchPipelineResult;
     const request = normalizeSearchRequestDto({
@@ -144,5 +148,49 @@ describe('search cache', () => {
     await expect(getCachedSearchPlan(kv, request)).resolves.toEqual(planning);
     await expect(getCachedSearchResult(kv, request)).resolves.toEqual(result);
     expect(expirationTtls.every((ttl) => ttl >= 60)).toBe(true);
+  });
+
+  it('does not cache partially degraded search results', async () => {
+    const kv = memoryKv();
+    const request = normalizeSearchRequestDto({ query: 'data structures' });
+    const degradedResult = {
+      results: [],
+      totalResults: 0,
+      meta: {
+        query: { raw: request.query, residual: request.query },
+        extraction: { hints: [] },
+        compilerEvents: [],
+        plan: {
+          filters: {},
+          keywordQuery: request.query,
+          semanticQuery: request.query,
+        },
+        retrievalPlan: {
+          controls: { sort: { field: 'relevance', direction: 'desc' }, scope: 'active' },
+          budget: {
+            browseableResultLimit: MAX_BROWSEABLE_SEARCH_RESULTS,
+            semanticLaneResultLimit: 100,
+          },
+          lanes: [],
+          inputs: {
+            filters: {},
+            keywordQuery: request.query,
+            cleanKeywordQuery: request.query,
+            titleQuery: request.query,
+            semanticQuery: request.query,
+            scope: 'active',
+            semanticTermIds: [],
+          },
+        },
+        retrievalExecution: {
+          successfulLanes: ['official_text'],
+          failedLanes: ['topic_semantic'],
+        },
+      },
+    } satisfies SearchPipelineResult;
+
+    await cacheSearchResult(kv, request, degradedResult);
+
+    await expect(getCachedSearchResult(kv, request)).resolves.toBeNull();
   });
 });

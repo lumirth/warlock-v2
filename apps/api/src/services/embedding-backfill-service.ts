@@ -3,16 +3,12 @@ import {
   normalizeRequirementCodes,
   type SearchScope,
 } from '@uiuc-course-search/query-types';
-import {
-  upsertCourseEmbeddings,
-  type CourseEmbeddingData,
-} from './embeddings.js';
+import { upsertCourseEmbeddingsInBatches, type CourseEmbeddingData } from './embeddings.js';
 import {
   courseRequirementRowsToDto,
   type CourseRequirementSourceRow,
 } from '../transforms/course-requirements.js';
 
-const EMBEDDING_BACKFILL_BATCH_SIZE = 25;
 const REQUIREMENT_LOOKUP_BATCH_SIZE = 50;
 const TERM_ORDER_SQL = `
   CASE c.term
@@ -100,13 +96,7 @@ export async function backfillCourseEmbeddings(
     requirementsByCourseId.get(course.id) ?? [],
   ));
 
-  for (let index = 0; index < embeddingData.length; index += EMBEDDING_BACKFILL_BATCH_SIZE) {
-    await upsertCourseEmbeddings(
-      vectorize,
-      ai,
-      embeddingData.slice(index, index + EMBEDDING_BACKFILL_BATCH_SIZE),
-    );
-  }
+  await upsertCourseEmbeddingsInBatches(vectorize, ai, embeddingData);
 
   return {
     scope: command.scope,

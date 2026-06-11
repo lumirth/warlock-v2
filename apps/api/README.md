@@ -52,6 +52,8 @@ The system automatically discovers new academic terms to sync:
 *   `transforms/course.ts`: canonical CISAPI-to-`CourseSnapshot` transform.
 *   `transforms/course-requirements.ts`: canonical full requirement evidence from snapshots.
 *   `services/embeddings.ts`: vector embedding generation/storage from canonical snapshot evidence.
+*   `migrations/*.sql`: immutable ordered upgrades for existing D1 databases.
+*   `src/db/schema.sql`: current-state bootstrap for a new database.
 
 Full requirement behavior uses `course_gened`, `CourseRequirementDto`, and `transforms/course-requirements.ts`.
 

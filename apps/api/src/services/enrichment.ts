@@ -1,6 +1,6 @@
-import type { D1Database, Fetcher } from '@cloudflare/workers-types';
+import type { D1Database } from '@cloudflare/workers-types';
 import type { SyncRunStatus } from '../db/types.js';
-import { errorFields, logger } from '../observability/logger.js';
+import { upsertSyncState } from '../db/sync-state-repository.js';
 import {
   COURSE_SCORE_POLICY,
   normalizeGpa,
@@ -8,7 +8,7 @@ import {
   normalizeRmp,
 } from './course-score-policy.js';
 
-const SCORE_UPDATE_BATCH_SIZE = 500;
+const COURSE_UPDATE_BATCH_SIZE = 500;
 const INSTRUCTOR_COURSE_CONTEXTS_SQL = `
   SELECT DISTINCT
     ? AS term_id,
@@ -110,49 +110,53 @@ export function calculateCourseScores(source: CourseScoreSource): CourseScoreRes
  * Coordinator: Identifies all unique instructor-course contexts and dispatches batches.
  */
 export async function coordinateEnrichment(
-  db: D1Database,
-  _selfBinding: Fetcher,
-  _internalToken?: string
+  db: D1Database
 ): Promise<{ taskCount: number; batchCount: number; linkCount: number; scoreUpdateCount: number }> {
-  const termResult = await db.prepare(`
-    SELECT term_id, year, term FROM term_state
-    WHERE status IN ('registrable', 'active')
-    ORDER BY
-      CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
-      year DESC, CASE term
-      WHEN 'fall' THEN 4
-      WHEN 'summer' THEN 3
-      WHEN 'spring' THEN 2
-      WHEN 'winter' THEN 1
-    END DESC
-  `).all<{ term_id: string; year: number; term: string }>();
-
-  if (!termResult.success || termResult.results.length === 0) {
-    return { taskCount: 0, batchCount: 0, linkCount: 0, scoreUpdateCount: 0 };
-  }
-
   let taskCount = 0;
   let linkCount = 0;
-  for (const term of termResult.results) {
-    await updateEnrichmentState(db, term.term_id, 'running', 0);
-    const linkResult = await rebuildInstructorCourseLinks(db, {
-      termId: term.term_id,
-      year: term.year,
-      term: term.term,
-    });
-    taskCount += linkResult.contextCount;
-    linkCount += linkResult.linkCount;
-    await updateEnrichmentState(db, term.term_id, 'complete', linkResult.contextCount);
+  await updateEnrichmentState(db, 'running', 0);
+
+  try {
+    const termResult = await db.prepare(`
+      SELECT term_id, year, term FROM term_state
+      WHERE status IN ('registrable', 'active')
+      ORDER BY
+        CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+        year DESC, CASE term
+        WHEN 'fall' THEN 4
+        WHEN 'summer' THEN 3
+        WHEN 'spring' THEN 2
+        WHEN 'winter' THEN 1
+      END DESC
+    `).all<{ term_id: string; year: number; term: string }>();
+
+    if (!termResult.success) {
+      throw new Error('Failed to load terms for enrichment');
+    }
+
+    for (const term of termResult.results) {
+      const linkResult = await rebuildInstructorCourseLinks(db, {
+        termId: term.term_id,
+        year: term.year,
+        term: term.term,
+      });
+      taskCount += linkResult.contextCount;
+      linkCount += linkResult.linkCount;
+    }
+
+    const scores = await enrichCoursesWithScores(db);
+    await updateEnrichmentState(db, 'complete', taskCount);
+
+    return {
+      taskCount,
+      batchCount: termResult.results.length,
+      linkCount,
+      scoreUpdateCount: scores.updated,
+    };
+  } catch (error) {
+    await updateEnrichmentState(db, 'failed', taskCount);
+    throw error;
   }
-
-  const scores = await enrichCoursesWithScores(db);
-
-  return {
-    taskCount,
-    batchCount: termResult.results.length,
-    linkCount,
-    scoreUpdateCount: scores.updated,
-  };
 }
 
 async function rebuildInstructorCourseLinks(
@@ -259,49 +263,42 @@ async function rebuildInstructorCourseLinks(
 
 async function updateEnrichmentState(
   db: D1Database,
-  termId: string,
   status: SyncRunStatus,
   taskCount: number
 ): Promise<void> {
-  await db.prepare(`
-    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
-    VALUES (?, unixepoch(), ?, ?, NULL, NULL)
-    ON CONFLICT(id) DO UPDATE SET
-      last_sync = excluded.last_sync,
-      last_status = excluded.last_status,
-      items_synced = excluded.items_synced,
-      cursor = excluded.cursor,
-      etag = excluded.etag
-  `).bind(`enrichment:${termId}`, status, taskCount).run();
+  await upsertSyncState(db, {
+    id: 'enrichment',
+    last_sync: Math.floor(Date.now() / 1000),
+    last_status: status,
+    items_synced: taskCount,
+    cursor: null,
+    etag: null,
+  });
 }
 
 /**
  * Propagates course-wide GPA averages from gpa_stats to the courses table.
  */
 export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
-  try {
-    await db.prepare(`
-      DELETE FROM gpa_stats
-      WHERE instructor IS NULL
-    `).run();
+  await db.prepare(`
+    DELETE FROM gpa_stats
+    WHERE instructor IS NULL
+  `).run();
 
-    await db.prepare(`
-      INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, median_gpa, sample_size, last_updated)
-      SELECT
-        subject,
-        number,
-        NULL as instructor,
-        CAST(SUM(avg_gpa * sample_size) AS REAL) / SUM(sample_size) as avg_gpa,
-        NULL as median_gpa,
-        SUM(sample_size) as sample_size,
-        unixepoch() as last_updated
-      FROM gpa_stats
-      WHERE instructor IS NOT NULL
-      GROUP BY subject, number
-    `).run();
-  } catch (err) {
-    logger.error('enrichment.aggregateCourseStats.failed', { ...errorFields(err) });
-  }
+  await db.prepare(`
+    INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, median_gpa, sample_size, last_updated)
+    SELECT
+      subject,
+      number,
+      NULL as instructor,
+      CAST(SUM(avg_gpa * sample_size) AS REAL) / SUM(sample_size) as avg_gpa,
+      NULL as median_gpa,
+      SUM(sample_size) as sample_size,
+      unixepoch() as last_updated
+    FROM gpa_stats
+    WHERE instructor IS NOT NULL
+    GROUP BY subject, number
+  `).run();
 
   const result = await db.prepare(`
     SELECT
@@ -319,13 +316,14 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
     )
   `).all<{ subject: string; number: string; avg_gpa: number; sample_size: number }>();
 
-  if (!result.success) return;
+  if (!result.success) {
+    throw new Error('Failed to load aggregate GPA updates');
+  }
 
   const updates = result.results;
-  const BATCH_SIZE = 500;
 
-  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-    const chunk = updates.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < updates.length; i += COURSE_UPDATE_BATCH_SIZE) {
+    const chunk = updates.slice(i, i + COURSE_UPDATE_BATCH_SIZE);
     const statements = chunk.map(stat =>
       db.prepare(`
         UPDATE courses
@@ -363,13 +361,16 @@ export async function enrichCoursesWithScores(db: D1Database): Promise<{ updated
       OR AVG(CASE WHEN r.difficulty > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.difficulty END) IS NOT NULL
   `).all<CourseScoreSource>();
 
-  if (!result.success || result.results.length === 0) {
+  if (!result.success) {
+    throw new Error('Failed to load course score sources');
+  }
+  if (result.results.length === 0) {
     return { updated: 0 };
   }
 
   let updated = 0;
-  for (let i = 0; i < result.results.length; i += SCORE_UPDATE_BATCH_SIZE) {
-    const chunk = result.results.slice(i, i + SCORE_UPDATE_BATCH_SIZE);
+  for (let i = 0; i < result.results.length; i += COURSE_UPDATE_BATCH_SIZE) {
+    const chunk = result.results.slice(i, i + COURSE_UPDATE_BATCH_SIZE);
     const statements = chunk.map((row) => {
       const scores = calculateCourseScores(row);
       updated++;

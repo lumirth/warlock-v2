@@ -6,7 +6,7 @@ import type {
 } from "./search-plan-compiler.js";
 
 // Bump whenever cached internal plan or pipeline-result shapes change.
-const SEARCH_CACHE_VERSION = "v14";
+const SEARCH_CACHE_VERSION = "v15";
 const SEARCH_PLAN_TTL_SECONDS = 5 * 60;
 const SEARCH_RESULT_TTL_SECONDS = 60;
 
@@ -58,6 +58,9 @@ export function cacheSearchResult(
   request: NormalizedSearchRequestDto,
   result: SearchPipelineResult,
 ): Promise<void> {
+  if (result.meta.retrievalExecution.failedLanes.length > 0) {
+    return Promise.resolve();
+  }
   return putJson(
     kv,
     searchResultCacheKey(request),

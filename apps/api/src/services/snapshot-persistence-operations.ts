@@ -15,7 +15,6 @@ export type GenEdCleanup = {
 export type SnapshotPersistenceOperation =
   | { kind: 'subject.upsert'; subject: SubjectSnapshot['subject'] }
   | { kind: 'course.upsert'; course: CourseSnapshot['course'] }
-  | { kind: 'course_gened.delete_null_attribute'; courseId: string; categoryId: string }
   | { kind: 'course_gened.upsert'; gened: Omit<CourseGened, 'id'> }
   | { kind: 'course_gened.prune_stale'; cleanup: GenEdCleanup }
   | { kind: 'section.upsert'; section: CourseSnapshot['sections'][number]['section'] }
@@ -105,13 +104,6 @@ export function courseGenedPersistenceOperations(
   const operations: SnapshotPersistenceOperation[] = [];
 
   for (const gened of genEdCategories) {
-    if (gened.attributeCode === null) {
-      operations.push({
-        kind: 'course_gened.delete_null_attribute',
-        courseId,
-        categoryId: gened.categoryId,
-      });
-    }
     operations.push({
       kind: 'course_gened.upsert',
       gened: courseGenedRow(courseId, gened),
@@ -143,25 +135,10 @@ function appendCourseWriteOperations(
   snapshot: CourseSnapshot
 ): void {
   operations.push({ kind: 'course.upsert', course: snapshot.course });
-
-  for (const gened of snapshot.genEdCategories) {
-    if (gened.attributeCode === null) {
-      operations.push({
-        kind: 'course_gened.delete_null_attribute',
-        courseId: snapshot.course.id,
-        categoryId: gened.categoryId,
-      });
-    }
-    operations.push({
-      kind: 'course_gened.upsert',
-      gened: courseGenedRow(snapshot.course.id, gened),
-    });
-  }
-
-  operations.push({
-    kind: 'course_gened.prune_stale',
-    cleanup: courseGenedCleanup(snapshot.course.id, snapshot.genEdCategories),
-  });
+  operations.push(...courseGenedPersistenceOperations(
+    snapshot.course.id,
+    snapshot.genEdCategories
+  ));
 }
 
 function sectionPersistenceOperations(courses: CourseSnapshot[]): {
@@ -240,7 +217,7 @@ function courseGenedRow(
     course_id: courseId,
     category_id: gened.categoryId,
     category_name: gened.categoryName,
-    attribute_code: gened.attributeCode,
+    attribute_code: gened.attributeCode ?? '',
     attribute_name: gened.attributeName,
   };
 }

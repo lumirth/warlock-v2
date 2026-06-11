@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS app_meta (
 );
 
 INSERT OR REPLACE INTO app_meta (key, value, updated_at)
-VALUES ('schema_version', '0001_initial_schema', unixepoch());
+VALUES ('schema_version', '0002_course_gened_key', unixepoch());
 
 -- Core course table
 CREATE TABLE IF NOT EXISTS courses (
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS course_gened (
     course_id TEXT NOT NULL,
     category_id TEXT NOT NULL,
     category_name TEXT,
-    attribute_code TEXT,
+    attribute_code TEXT NOT NULL DEFAULT '',
     attribute_name TEXT,
     UNIQUE(course_id, category_id, attribute_code),
     FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE

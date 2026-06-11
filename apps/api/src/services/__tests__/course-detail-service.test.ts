@@ -284,7 +284,7 @@ function fakeDb(options: { existingCourse?: boolean; ageSeconds?: number } = {})
               results: [{
                 category_id: 'QR',
                 category_name: 'Quantitative Reasoning',
-                attribute_code: null,
+                attribute_code: '',
                 attribute_name: null,
               }],
             };

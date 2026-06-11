@@ -1,11 +1,14 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { parseSubjectsXml, parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
 import { writeSubjectSnapshotToD1 } from './course-snapshot-writer.js';
-import { courseSnapshotToEmbeddingData, upsertCourseEmbedding } from './embeddings.js';
+import {
+  courseSnapshotToEmbeddingData,
+  deleteCourseEmbeddings,
+  upsertCourseEmbeddingsInBatches,
+} from './embeddings.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
 import { fromSubjectCascade } from '../transforms/course.js';
-import { errorFields, logger } from '../observability/logger.js';
 import type { SyncRunStatus } from '../db/types.js';
 
 const SUBJECT_SYNC_LOCK_TTL_SECONDS = 30 * 60;
@@ -110,30 +113,43 @@ async function saveSubjectData(
   ai?: Ai
 ): Promise<{ coursesCount: number; sectionsCount: number }> {
   const snapshot = fromSubjectCascade(parsed, year, term);
+  let embeddingData: ReturnType<typeof courseSnapshotToEmbeddingData>[] | undefined;
+
+  if (vectorize && ai) {
+    const existingCourseIds = await loadSubjectCourseIds(db, parsed.subjectId, year, term);
+    const currentCourseIds = new Set(snapshot.courses.map(course => course.course.id));
+    await deleteCourseEmbeddings(
+      vectorize,
+      existingCourseIds.filter(courseId => !currentCourseIds.has(courseId))
+    );
+    embeddingData = snapshot.courses.map(courseSnapshotToEmbeddingData);
+  }
+
   const { coursesCount, sectionsCount } =
     await writeSubjectSnapshotToD1(db, snapshot);
 
-  // Process Embeddings
-  if (vectorize && ai) {
-    // Process embeddings in parallel chunks to speed up
-    const EMBEDDING_CONCURRENCY = 5;
-    for (let i = 0; i < snapshot.courses.length; i += EMBEDDING_CONCURRENCY) {
-      const chunk = snapshot.courses.slice(i, i + EMBEDDING_CONCURRENCY);
-      await Promise.all(chunk.map(async (courseSnapshot) => {
-        try {
-          await upsertCourseEmbedding(
-            vectorize,
-            ai,
-            courseSnapshotToEmbeddingData(courseSnapshot)
-          );
-        } catch (e) {
-          logger.error('parallelSync.embedding.failed', { courseId: courseSnapshot.course.id, ...errorFields(e) });
-        }
-      }));
-    }
+  if (vectorize && ai && embeddingData) {
+    await upsertCourseEmbeddingsInBatches(vectorize, ai, embeddingData);
   }
 
   return { coursesCount, sectionsCount };
+}
+
+async function loadSubjectCourseIds(
+  db: D1Database,
+  subject: string,
+  year: number,
+  term: string
+): Promise<string[]> {
+  const result = await db.prepare(`
+    SELECT id FROM courses
+    WHERE subject = ? AND year = ? AND term = ?
+  `).bind(subject, year, term).all<{ id: string }>();
+
+  if (!result.success) {
+    throw new Error(`Failed to load existing course IDs for ${subject} ${year} ${term}`);
+  }
+  return result.results.map(row => row.id);
 }
 
 export async function getSubjectsForTerm(

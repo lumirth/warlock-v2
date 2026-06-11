@@ -3,9 +3,11 @@ import type { CourseSnapshot } from '../../transforms/course.js';
 import {
   courseSnapshotToEmbeddingData,
   createCourseEmbeddingText,
+  deleteCourseEmbeddings,
   generateEmbeddings,
   searchCourses,
   upsertCourseEmbeddings,
+  upsertCourseEmbeddingsInBatches,
 } from '../embeddings.js';
 
 function snapshot(): CourseSnapshot {
@@ -169,6 +171,44 @@ describe('course embeddings', () => {
         },
       },
     ]);
+  });
+
+  it('deletes stale semantic vectors as one explicit lifecycle operation', async () => {
+    const deleteByIds = vi.fn(async () => ({}));
+
+    await deleteCourseEmbeddings({ deleteByIds } as never, [
+      'CS-125-2026-fall',
+      'CS-126-2026-fall',
+    ]);
+
+    expect(deleteByIds).toHaveBeenCalledWith([
+      'CS-125-2026-fall',
+      'CS-126-2026-fall',
+    ]);
+  });
+
+  it('owns provider-safe batching for every embedding workflow', async () => {
+    const ai = {
+      run: vi.fn(async (_model: string, input: { text: string[] }) => ({
+        data: input.text.map(() => [0, 1, 2]),
+      })),
+    };
+    const vectorize = { upsert: vi.fn(async () => ({})) };
+    const courses = Array.from({ length: 26 }, (_, index) => ({
+      id: `CS-${index}-2026-fall`,
+      termId: '2026-fall',
+      subject: 'CS',
+      number: String(index),
+      title: `Course ${index}`,
+      description: null,
+      requirementSummaryCode: null,
+      primary_instructor: null,
+    }));
+
+    await upsertCourseEmbeddingsInBatches(vectorize as never, ai as never, courses);
+
+    expect(ai.run).toHaveBeenCalledTimes(2);
+    expect(vectorize.upsert).toHaveBeenCalledTimes(2);
   });
 
   it('applies semantic metadata filters before Vectorize selects top matches', async () => {

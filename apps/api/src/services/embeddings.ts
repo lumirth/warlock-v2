@@ -3,6 +3,8 @@ import type { SearchFilters } from './search-planner-types.js';
 import type { CourseSnapshot } from '../transforms/course.js';
 import { courseSnapshotRequirementEvidence } from '../transforms/course-requirements.js';
 
+const COURSE_EMBEDDING_BATCH_SIZE = 25;
+
 export interface CourseEmbeddingData {
   id: string;
   termId: string;
@@ -107,12 +109,26 @@ export async function upsertCourseEmbeddings(
   }));
 }
 
-export async function upsertCourseEmbedding(
+export async function upsertCourseEmbeddingsInBatches(
   vectorize: VectorizeIndex,
   ai: Ai,
-  course: CourseEmbeddingData
+  courses: CourseEmbeddingData[]
 ): Promise<void> {
-  await upsertCourseEmbeddings(vectorize, ai, [course]);
+  for (let index = 0; index < courses.length; index += COURSE_EMBEDDING_BATCH_SIZE) {
+    await upsertCourseEmbeddings(
+      vectorize,
+      ai,
+      courses.slice(index, index + COURSE_EMBEDDING_BATCH_SIZE)
+    );
+  }
+}
+
+export async function deleteCourseEmbeddings(
+  vectorize: VectorizeIndex,
+  courseIds: string[]
+): Promise<void> {
+  if (courseIds.length === 0) return;
+  await vectorize.deleteByIds(courseIds);
 }
 
 export type SemanticSearchOptions = {

@@ -64,7 +64,7 @@ export interface CourseGened {
   course_id: string;
   category_id: string;
   category_name: string | null;
-  attribute_code: string | null;
+  attribute_code: string;
   attribute_name: string | null;
 }
 

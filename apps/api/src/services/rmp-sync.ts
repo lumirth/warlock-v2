@@ -1,6 +1,7 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 import { internalAuthHeaders } from '../middleware/auth.js';
 import type { SyncRunStatus } from '../db/types.js';
+import { getSyncState, upsertSyncState } from '../db/sync-state-repository.js';
 
 const RMP_GRAPHQL_URL = 'https://www.ratemyprofessors.com/graphql';
 const UIUC_SCHOOL_ID = 'U2Nob29sLTExMTI='; // School-1112 (UIUC)
@@ -64,14 +65,6 @@ interface RmpResponse {
     };
   };
   errors?: unknown[];
-}
-
-interface RmpSyncState {
-  last_sync: number | null;
-  last_status: SyncRunStatus | null;
-  items_synced: number | null;
-  cursor: number | null;
-  etag: string | null;
 }
 
 interface CoordinateRmpSyncOptions {
@@ -150,11 +143,7 @@ export async function coordinateRmpSync(
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const previous = await db.prepare(`
-    SELECT last_sync, last_status, items_synced, cursor, etag
-    FROM sync_state
-    WHERE id = ?
-  `).bind(RMP_SYNC_ID).first<RmpSyncState>();
+  const previous = await getSyncState(db, RMP_SYNC_ID);
 
   if (previous?.last_status === 'running' && previous.last_sync && now - previous.last_sync < RUNNING_LOCK_TTL_SECONDS) {
     throw new Error('RMP sync is already running.');
@@ -226,16 +215,14 @@ async function updateRmpSyncState(
   db: D1Database,
   state: { status: SyncRunStatus; totalSynced: number; pageCount: number; cursor: string | null }
 ): Promise<void> {
-  await db.prepare(`
-    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
-    VALUES (?, unixepoch(), ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      last_sync = excluded.last_sync,
-      last_status = excluded.last_status,
-      items_synced = excluded.items_synced,
-      cursor = excluded.cursor,
-      etag = excluded.etag
-  `).bind(RMP_SYNC_ID, state.status, state.totalSynced, state.pageCount, state.cursor).run();
+  await upsertSyncState(db, {
+    id: RMP_SYNC_ID,
+    last_sync: Math.floor(Date.now() / 1000),
+    last_status: state.status,
+    items_synced: state.totalSynced,
+    cursor: state.pageCount,
+    etag: state.cursor,
+  });
 }
 
 /**
@@ -246,7 +233,7 @@ export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]
 
   const statements = teachers.map(node => {
     const normalizedName = normalizeRmpName(node.firstName, node.lastName);
-    const topTags = node.teacherRatingTags
+    const topTags = [...node.teacherRatingTags]
       .sort((a, b) => b.tagCount - a.tagCount)
       .slice(0, 5)
       .map(t => t.tagName);

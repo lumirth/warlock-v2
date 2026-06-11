@@ -37,6 +37,7 @@ describe("executeRetrievalLanes", () => {
     })).resolves.toEqual({
       laneResults: [],
       successfulLanes: ["official_text"],
+      failedLanes: ["section_text"],
     });
   });
 

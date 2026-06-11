@@ -27,6 +27,7 @@ export async function presentSearchDebugResponse(input: {
     compilerEvents: SearchPipelineResult["meta"]["compilerEvents"];
     plan: SearchPipelineResult["meta"]["plan"];
     retrievalPlan: SearchPipelineResult["meta"]["retrievalPlan"];
+    retrievalExecution: SearchPipelineResult["meta"]["retrievalExecution"];
   };
 }> {
   const { db, pagination, result } = input;
@@ -53,6 +54,7 @@ export async function presentSearchDebugResponse(input: {
       compilerEvents: result.meta.compilerEvents,
       plan: result.meta.plan,
       retrievalPlan: result.meta.retrievalPlan,
+      retrievalExecution: result.meta.retrievalExecution,
     },
   };
 }

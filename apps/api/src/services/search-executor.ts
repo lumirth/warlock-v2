@@ -13,11 +13,16 @@ import { hybridSearch } from "./search-hybrid.js";
 import { applyTermRankingPolicy } from "./ranking/index.js";
 import type { SearchResult } from "./search-types.js";
 import { getCurrentTermStates } from "./term-state.js";
+import {
+  summarizeRetrievalExecution,
+  type RetrievalExecutionSummary,
+} from "./search-retrieval-lane-executors.js";
 
 type SearchExecutionResult = {
   results: SearchResult[];
   totalResults: number;
   retrievalPlan: RetrievalPlan;
+  retrievalExecution: RetrievalExecutionSummary;
 };
 
 export async function executeSearchPlan(
@@ -55,5 +60,6 @@ export async function executeSearchPlan(
     results: controlledResults,
     totalResults: retrieval.totalResults,
     retrievalPlan,
+    retrievalExecution: summarizeRetrievalExecution(retrieval.retrievalExecution),
   };
 }

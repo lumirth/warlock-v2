@@ -32,7 +32,10 @@ Wrangler starts on another port, set `VITE_API_PROXY_TARGET`, for example
 
 ## Database
 
-The canonical greenfield schema is `apps/api/migrations/0001_initial_schema.sql`. It must remain byte-for-byte identical to `apps/api/src/db/schema.sql`.
+`apps/api/migrations/` is the immutable ordered upgrade path for existing D1
+databases. `apps/api/src/db/schema.sql` is the current-state bootstrap for new
+databases. `npm run db:verify` proves both paths converge to the same schema and
+exercises supported upgrade behavior.
 
 Verify clean local bootstrap with:
 

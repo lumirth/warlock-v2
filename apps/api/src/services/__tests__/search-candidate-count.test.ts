@@ -42,6 +42,7 @@ describe("countSearchCandidates", () => {
       {
         laneResults: [],
         successfulLanes: ["structured_course"],
+        failedLanes: [],
       },
     )).resolves.toBe(451);
 
@@ -77,6 +78,7 @@ describe("countSearchCandidates", () => {
           },
         ],
         successfulLanes: ["official_text", "section_text", "topic_semantic"],
+        failedLanes: [],
       },
     )).resolves.toBe(83);
 
@@ -106,6 +108,7 @@ describe("countSearchCandidates", () => {
       {
         laneResults: [],
         successfulLanes: ["official_text"],
+        failedLanes: ["section_text", "topic_semantic"],
       },
     )).resolves.toBe(19);
 

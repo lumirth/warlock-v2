@@ -102,6 +102,7 @@ export class SearchPipeline {
         compilerEvents,
         plan,
         retrievalPlan: execution.retrievalPlan,
+        retrievalExecution: execution.retrievalExecution,
       },
     };
 
