@@ -64,8 +64,9 @@ export type SnapshotPersistenceOperation =
       syncTimestamp: number;
     };
 
-type SnapshotPersistencePlan = {
-  operations: SnapshotPersistenceOperation[];
+export type SnapshotPersistencePlan = {
+  writeOperations: SnapshotPersistenceOperation[];
+  finalizeOperations: SnapshotPersistenceOperation[];
   coursesCount: number;
   sectionsCount: number;
 };
@@ -73,25 +74,25 @@ type SnapshotPersistencePlan = {
 export function subjectSnapshotPersistencePlan(
   snapshot: SubjectSnapshot
 ): SnapshotPersistencePlan {
-  const operations: SnapshotPersistenceOperation[] = [
+  const writeOperations: SnapshotPersistenceOperation[] = [
     { kind: 'subject.upsert', subject: snapshot.subject },
   ];
 
   for (const courseSnapshot of snapshot.courses) {
-    appendCourseWriteOperations(operations, courseSnapshot);
+    appendCourseWriteOperations(writeOperations, courseSnapshot);
   }
 
   const sectionPlan = sectionPersistenceOperations(snapshot.courses);
-  operations.push(...sectionPlan.operations);
-  operations.push(...subjectStalePruneOperations(
-    snapshot.subject.id,
-    snapshot.year,
-    snapshot.term,
-    snapshot.syncTimestamp
-  ));
+  writeOperations.push(...sectionPlan.operations);
 
   return {
-    operations,
+    writeOperations,
+    finalizeOperations: subjectStalePruneOperations(
+      snapshot.subject.id,
+      snapshot.year,
+      snapshot.term,
+      snapshot.syncTimestamp
+    ),
     coursesCount: snapshot.courses.length,
     sectionsCount: sectionPlan.sectionsCount,
   };

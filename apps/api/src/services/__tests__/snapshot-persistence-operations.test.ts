@@ -10,7 +10,10 @@ import {
   snapshotOperationStatement,
   snapshotOperationsSqlStatements,
 } from '../snapshot-persistence-sql.js';
-import { subjectSnapshotSqlStatements } from '../course-snapshot-writer.js';
+import {
+  subjectSnapshotSqlStatements,
+  writeSubjectSnapshotToD1,
+} from '../course-snapshot-writer.js';
 
 function sampleSnapshot(): SubjectSnapshot {
   return {
@@ -154,7 +157,7 @@ function renderBoundSql(sql: string, params: unknown[]): string {
   return `${normalizeSql(rendered)};`;
 }
 
-function captureD1PreparedStatements(operations: ReturnType<typeof subjectSnapshotPersistencePlan>['operations']) {
+function captureD1PreparedStatements(operations: ReturnType<typeof subjectSnapshotPersistencePlan>['writeOperations']) {
   const prepared: { sql: string; params: unknown[] }[] = [];
   const db = {
     prepare: vi.fn((sql: string) => ({
@@ -173,12 +176,16 @@ function captureD1PreparedStatements(operations: ReturnType<typeof subjectSnapsh
 }
 
 describe('snapshot persistence operations', () => {
-  it('compiles snapshots into typed writes and stale-prune operations', () => {
-    const kinds = subjectSnapshotPersistencePlan(sampleSnapshot()).operations.map(
+  it('separates typed writes from destructive subject finalization', () => {
+    const plan = subjectSnapshotPersistencePlan(sampleSnapshot());
+    const writeKinds = plan.writeOperations.map(
+      operation => operation.kind
+    );
+    const finalizeKinds = plan.finalizeOperations.map(
       operation => operation.kind
     );
 
-    expect(kinds).toEqual([
+    expect(writeKinds).toEqual([
       'subject.upsert',
       'course.upsert',
       'course_gened.upsert',
@@ -191,6 +198,8 @@ describe('snapshot persistence operations', () => {
       'instructor.upsert',
       'meeting_instructor.link',
       'meeting_instructor.link',
+    ]);
+    expect(finalizeKinds).toEqual([
       'subject.prune_stale_meeting_instructors',
       'subject.prune_stale_meetings',
       'subject.prune_stale_sections',
@@ -200,7 +209,8 @@ describe('snapshot persistence operations', () => {
   });
 
   it('renders D1 prepared statements and raw SQL from the same operation statements', () => {
-    const operations = subjectSnapshotPersistencePlan(sampleSnapshot()).operations;
+    const plan = subjectSnapshotPersistencePlan(sampleSnapshot());
+    const operations = [...plan.writeOperations, ...plan.finalizeOperations];
     const canonicalStatements = operations.map(snapshotOperationStatement);
     const d1Prepared = captureD1PreparedStatements(operations);
     const rawSql = snapshotOperationsSqlStatements(operations);
@@ -216,6 +226,56 @@ describe('snapshot persistence operations', () => {
         renderBoundSql(statement.sql, statement.params)
       )
     );
+  });
+
+  it('only finalizes stale data after every write batch succeeds', async () => {
+    const executedSql: string[][] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn(() => ({ sql })),
+      })),
+      batch: vi.fn(async (statements: Array<{ sql: string }>) => {
+        executedSql.push(statements.map(statement => statement.sql));
+        if (executedSql.length === 2) throw new Error('write batch failed');
+        return [];
+      }),
+    } as unknown as D1Database;
+
+    await expect(writeSubjectSnapshotToD1(db, sampleSnapshot(), { batchSize: 4 }))
+      .rejects.toThrow('write batch failed');
+
+    expect(executedSql.flat().some(sql => sql.startsWith('DELETE FROM courses'))).toBe(false);
+  });
+
+  it('rejects invalid write batch sizes instead of entering an invalid chunk loop', async () => {
+    const db = {
+      prepare: vi.fn(),
+      batch: vi.fn(),
+    } as unknown as D1Database;
+
+    await expect(writeSubjectSnapshotToD1(db, sampleSnapshot(), { batchSize: 0 }))
+      .rejects.toThrow('positive integer');
+    expect(db.batch).not.toHaveBeenCalled();
+  });
+
+  it('commits all stale-prune operations together after chunked writes', async () => {
+    const executedSql: string[][] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn(() => ({ sql })),
+      })),
+      batch: vi.fn(async (statements: Array<{ sql: string }>) => {
+        executedSql.push(statements.map(statement => statement.sql));
+        return [];
+      }),
+    } as unknown as D1Database;
+
+    await writeSubjectSnapshotToD1(db, sampleSnapshot(), { batchSize: 4 });
+
+    expect(executedSql.length).toBeGreaterThan(2);
+    expect(executedSql.at(-1)).toHaveLength(5);
+    expect(executedSql.at(-1)?.every(sql => sql.startsWith('DELETE FROM'))).toBe(true);
+    expect(executedSql.slice(0, -1).flat().some(sql => sql.startsWith('DELETE FROM courses'))).toBe(false);
   });
 
   it('includes subject-level stale cleanup in generated snapshot SQL', () => {

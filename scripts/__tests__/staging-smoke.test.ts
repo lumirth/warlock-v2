@@ -82,9 +82,12 @@ function makeFetcher(options: MockOptions = {}) {
       return auth === 'Bearer admin-token'
         ? json(200, options.syncStatusBody ?? {
           syncStates: [],
+          subjectSyncStates: [],
           termStates: [],
           unhealthySyncStates: [],
           runningSyncStates: [],
+          unhealthySubjectSyncStates: [],
+          runningSubjectSyncStates: [],
         })
         : json(401, { error: 'Unauthorized' });
     }

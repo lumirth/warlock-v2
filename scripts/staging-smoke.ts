@@ -125,9 +125,12 @@ function hasInstructorEvidence(body: JsonRecord | null): boolean {
 
 function hasSyncStatusBody(body: JsonRecord | null): boolean {
   return hasArray(body, 'syncStates')
+    && hasArray(body, 'subjectSyncStates')
     && hasArray(body, 'termStates')
     && hasArray(body, 'unhealthySyncStates')
-    && hasArray(body, 'runningSyncStates');
+    && hasArray(body, 'runningSyncStates')
+    && hasArray(body, 'unhealthySubjectSyncStates')
+    && hasArray(body, 'runningSubjectSyncStates');
 }
 
 export function formatReport(results: SmokeResult[]): string {

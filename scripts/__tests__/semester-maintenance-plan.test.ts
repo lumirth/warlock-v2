@@ -54,14 +54,16 @@ function syncStatus(): Record<string, unknown> {
     syncStates: [
       { id: 'gpa', last_sync: lastSync, last_status: 'complete' },
       { id: 'rmp', last_sync: lastSync, last_status: 'complete' },
-      { id: 'course-sync:2025-fall:CS', last_status: 'complete' },
-      { id: 'course-sync:2025-fall:MATH', last_status: 'complete' },
-      { id: 'course-sync:2026-spring:CS', last_status: 'complete' },
-      { id: 'course-sync:2026-spring:MATH', last_status: 'complete' },
-      { id: 'course-sync:2026-summer:CS', last_status: 'complete' },
-      { id: 'course-sync:2026-summer:MATH', last_status: 'complete' },
-      { id: 'course-sync:2026-fall:CS', last_status: 'complete' },
-      { id: 'course-sync:2026-fall:MATH', last_status: 'complete' },
+    ],
+    subjectSyncStates: [
+      { term_id: '2025-fall', subject: 'CS', status: 'complete' },
+      { term_id: '2025-fall', subject: 'MATH', status: 'complete' },
+      { term_id: '2026-spring', subject: 'CS', status: 'complete' },
+      { term_id: '2026-spring', subject: 'MATH', status: 'complete' },
+      { term_id: '2026-summer', subject: 'CS', status: 'complete' },
+      { term_id: '2026-summer', subject: 'MATH', status: 'complete' },
+      { term_id: '2026-fall', subject: 'CS', status: 'complete' },
+      { term_id: '2026-fall', subject: 'MATH', status: 'complete' },
     ],
     termStates: [
       {
@@ -242,10 +244,12 @@ describe('semester maintenance plan', () => {
           syncStates: [
             { id: 'gpa', last_sync: lastSync, last_status: 'complete' },
             { id: 'rmp', last_sync: lastSync, last_status: 'complete' },
-            { id: 'course-sync:2026-summer:CS', last_status: 'complete' },
-            { id: 'course-sync:2026-summer:MATH', last_status: 'complete' },
-            { id: 'course-sync:2026-fall:CS', last_status: 'complete' },
-            { id: 'course-sync:2026-fall:MATH', last_status: 'complete' },
+          ],
+          subjectSyncStates: [
+            { term_id: '2026-summer', subject: 'CS', status: 'complete' },
+            { term_id: '2026-summer', subject: 'MATH', status: 'complete' },
+            { term_id: '2026-fall', subject: 'CS', status: 'complete' },
+            { term_id: '2026-fall', subject: 'MATH', status: 'complete' },
           ],
           termStates: [
             {

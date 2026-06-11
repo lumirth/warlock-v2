@@ -1,6 +1,7 @@
 import type { TermStatus } from '@uiuc-course-search/query-types';
 
 export type TermStateStatus = TermStatus;
+export type SyncRunStatus = 'pending' | 'running' | 'complete' | 'failed';
 
 export interface Subject {
   id: string;
@@ -141,8 +142,18 @@ export interface TermState {
 export interface SyncState {
   id: string;
   last_sync: number | null;
-  last_status: string | null;
+  last_status: SyncRunStatus | null;
   items_synced: number | null;
   cursor: number | null;
   etag: string | null;
+}
+
+export interface SubjectSyncState {
+  term_id: string;
+  subject: string;
+  last_sync: number | null;
+  status: SyncRunStatus;
+  courses_synced: number;
+  sections_synced: number;
+  error: string | null;
 }

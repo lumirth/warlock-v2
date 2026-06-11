@@ -6,7 +6,7 @@ import type {
 } from '@uiuc-course-search/query-types';
 import { TERM_STATUS_VALUES } from '@uiuc-course-search/query-types';
 import { getTermsByStatus } from '../db/term-state-repository.js';
-import type { SyncState, TermState, TermStateStatus } from '../db/types.js';
+import type { SubjectSyncState, SyncState, TermState, TermStateStatus } from '../db/types.js';
 import {
   readSyncStatusSnapshot,
   type EnrichmentCoverageRow,
@@ -21,10 +21,13 @@ type SyncStatusEnvironment = {
 type SyncStatusResponse = {
   generatedAt: string;
   syncStates: SyncState[];
+  subjectSyncStates: SubjectSyncState[];
   termStates: TermState[];
   enrichmentCoverage: EnrichmentCoverageRow[];
   unhealthySyncStates: SyncState[];
   runningSyncStates: SyncState[];
+  unhealthySubjectSyncStates: SubjectSyncState[];
+  runningSubjectSyncStates: SubjectSyncState[];
   freshness: ReturnType<typeof buildFreshnessSummary>;
 };
 
@@ -57,12 +60,16 @@ export async function buildSyncStatusResponse(
   return {
     generatedAt: new Date(nowSeconds * 1000).toISOString(),
     syncStates: snapshot.syncStates,
+    subjectSyncStates: snapshot.subjectSyncStates,
     termStates: snapshot.termStates,
     enrichmentCoverage: snapshot.enrichmentCoverage,
     unhealthySyncStates: snapshot.syncStates.filter(state => state.last_status === 'failed'),
     runningSyncStates: snapshot.syncStates.filter(state => state.last_status === 'running'),
+    unhealthySubjectSyncStates: snapshot.subjectSyncStates.filter(state => state.status === 'failed'),
+    runningSubjectSyncStates: snapshot.subjectSyncStates.filter(state => state.status === 'running'),
     freshness: buildFreshnessSummary({
       syncStates: snapshot.syncStates,
+      subjectSyncStates: snapshot.subjectSyncStates,
       termStates: snapshot.termStates,
       nowSeconds,
       currentYear: parseInt(env.currentYear, 10),

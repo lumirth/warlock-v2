@@ -27,10 +27,17 @@ export async function writeSubjectSnapshotToD1(
 ): Promise<SubjectSnapshotWriteResult> {
   const plan = subjectSnapshotPersistencePlan(snapshot);
   const batchSize = options.batchSize ?? DEFAULT_D1_WRITE_BATCH_SIZE;
-  await executeD1Batch(
+  if (!Number.isInteger(batchSize) || batchSize < 1) {
+    throw new Error('Snapshot write batch size must be a positive integer');
+  }
+  await executeD1WriteBatches(
     db,
-    plan.operations.map(operation => prepareSnapshotOperation(db, operation)),
+    plan.writeOperations.map(operation => prepareSnapshotOperation(db, operation)),
     batchSize
+  );
+  await executeD1Finalization(
+    db,
+    plan.finalizeOperations.map(operation => prepareSnapshotOperation(db, operation))
   );
 
   return {
@@ -39,7 +46,7 @@ export async function writeSubjectSnapshotToD1(
   };
 }
 
-async function executeD1Batch(
+async function executeD1WriteBatches(
   db: D1Database,
   statements: D1PreparedStatement[],
   batchSize: number
@@ -50,10 +57,19 @@ async function executeD1Batch(
   }
 }
 
+async function executeD1Finalization(
+  db: D1Database,
+  statements: D1PreparedStatement[],
+): Promise<void> {
+  if (statements.length > 0) await db.batch(statements);
+}
+
 export function subjectSnapshotSqlStatements(snapshot: SubjectSnapshot): string[] {
-  return snapshotOperationsSqlStatements(
-    subjectSnapshotPersistencePlan(snapshot).operations
-  );
+  const plan = subjectSnapshotPersistencePlan(snapshot);
+  return [
+    ...snapshotOperationsSqlStatements(plan.writeOperations),
+    ...snapshotOperationsSqlStatements(plan.finalizeOperations),
+  ];
 }
 
 export function termStateSqlStatements(

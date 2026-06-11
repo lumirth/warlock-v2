@@ -46,25 +46,6 @@ function hashCsvLine(line: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
-async function ensureGpaSourceTable(db: D1Database): Promise<void> {
-  await db.prepare(`
-    CREATE TABLE IF NOT EXISTS gpa_source_rows (
-      row_key TEXT PRIMARY KEY,
-      subject TEXT NOT NULL,
-      number TEXT NOT NULL,
-      instructor TEXT,
-      avg_gpa REAL NOT NULL,
-      sample_size INTEGER NOT NULL,
-      last_updated INTEGER
-    )
-  `).run();
-
-  await db.prepare(`
-    CREATE INDEX IF NOT EXISTS idx_gpa_source_rows_course_instructor
-    ON gpa_source_rows(subject, number, instructor)
-  `).run();
-}
-
 /**
  * Resumes GPA sync using KV-cached dataset to allow reliable slicing.
  * Bypasses external HTTP Range/Compression issues.
@@ -104,7 +85,7 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
     await upsertSyncState(db, {
       id: 'gpa',
       last_sync: currentUnixSeconds(),
-      last_status: 'completed',
+      last_status: 'complete',
       items_synced: (state?.items_synced || 0),
       cursor: cursor, // Keep cursor at end
       etag: state?.etag || null
@@ -160,7 +141,7 @@ export async function resumeGpaSync(db: D1Database, kv: KVNamespace): Promise<Sy
   await upsertSyncState(db, {
     id: 'gpa',
     last_sync: currentUnixSeconds(),
-    last_status: 'in_progress',
+    last_status: 'running',
     items_synced: (state?.items_synced || 0) + inserted,
     cursor: nextCursor,
     etag: state?.etag || null
@@ -197,7 +178,7 @@ export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<str
   const currentEtag = state?.etag;
 
   // 3. Compare (only skip if we have a completed sync with matching ETag)
-  if (newEtag && currentEtag === newEtag && state?.last_status === 'completed') {
+  if (newEtag && currentEtag === newEtag && state?.last_status === 'complete') {
     logger.info('gpa.reset.skippedNoChanges');
     return 'skipped_no_changes';
   }
@@ -206,7 +187,6 @@ export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<str
 
   // 4. Reset
   await kv.delete(KV_KEY);
-  await ensureGpaSourceTable(db);
   await db.prepare('DELETE FROM gpa_source_rows').run();
   await db.prepare('DELETE FROM gpa_stats').run();
   await upsertSyncState(db, {
@@ -273,7 +253,6 @@ export async function processGpaBatch(db: D1Database, lines: string[]): Promise<
 
   // Batch insert into D1
   if (records.length === 0) return { inserted: 0 };
-  await ensureGpaSourceTable(db);
 
   // Use smaller chunks for D1 inserts to avoid parameter limits (100 params max)
   const chunks = chunkArray(records, D1_BATCH_SIZE);

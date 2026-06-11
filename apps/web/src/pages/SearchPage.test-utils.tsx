@@ -9,7 +9,6 @@ import { afterEach, expect, vi } from 'vitest'
 import type {
   CourseSummaryDto,
   MatchEvidence,
-  ResultExplanation,
   ResultWarning,
   SearchCourseResultDto,
   SearchRequestDto,
@@ -66,7 +65,6 @@ type SearchResultOverride = Omit<
   scheduleNotes?: Partial<CourseSummaryDto['scheduleNotes']>
   registration?: Partial<CourseSummaryDto['registration']>
   matchEvidence?: MatchEvidence[]
-  explanation?: ResultExplanation
   warnings?: ResultWarning[]
 }
 
@@ -109,7 +107,6 @@ export function course(overrides: SearchResultOverride = {}): SearchCourseResult
   return {
     course: summary,
     matchEvidence: overrides.matchEvidence,
-    explanation: overrides.explanation,
     warnings: overrides.warnings,
   }
 }

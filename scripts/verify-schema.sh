@@ -40,10 +40,12 @@ for object in \
   meetings \
   meeting_instructors \
   course_gened \
+  gpa_source_rows \
   gpa_stats \
   rmp_cache \
   instructor_course_links \
   sync_state \
+  subject_sync_state \
   term_state \
   feedback_events \
   courses_fts \
@@ -53,6 +55,10 @@ done
 
 for column in cursor etag; do
   expect_column sync_state "$column"
+done
+
+for column in term_id subject status courses_synced sections_synced error; do
+  expect_column subject_sync_state "$column"
 done
 
 for column in id term_id crn course_id; do

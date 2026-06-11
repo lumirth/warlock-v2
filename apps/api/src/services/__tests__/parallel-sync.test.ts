@@ -13,7 +13,7 @@ describe('syncSubjects', () => {
       prepare: vi.fn((sql: string) => ({
         bind: vi.fn(() => ({
           first: vi.fn(async () => sql.includes('SELECT last_sync')
-            ? { last_sync: Math.floor(Date.now() / 1000), last_status: 'running' }
+            ? { last_sync: Math.floor(Date.now() / 1000), status: 'running' }
             : null),
           run: vi.fn(async () => ({})),
         })),
@@ -47,7 +47,7 @@ describe('syncSubjects', () => {
       prepare: vi.fn((sql: string) => ({
         bind: vi.fn((...args: unknown[]) => ({
           first: vi.fn(async () => sql.includes('SELECT last_sync')
-            ? { last_sync: Math.floor(Date.now() / 1000), last_status: 'running' }
+            ? { last_sync: Math.floor(Date.now() / 1000), status: 'running' }
             : null),
           run: vi.fn(async () => {
             writes.push([sql.replace(/\s+/g, ' ').trim(), ...args]);
@@ -76,7 +76,7 @@ describe('syncSubjects', () => {
       }),
     ]);
     expect(result.subjectResults[0]).not.toHaveProperty('skipped');
-    expect(writes.some(write => String(write[0]).includes('INSERT INTO sync_state'))).toBe(true);
+    expect(writes.some(write => String(write[0]).includes('INSERT INTO subject_sync_state'))).toBe(true);
   });
 
 });

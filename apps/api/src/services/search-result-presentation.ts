@@ -7,7 +7,6 @@ import {
   type MatchEvidenceKind,
   type MatchEvidenceSource,
   type MatchEvidenceWeight,
-  type ResultExplanation,
   type ResultWarning,
   type SearchCourseResultDto,
 } from '@uiuc-course-search/query-types';
@@ -25,40 +24,16 @@ type SearchResultEvidenceContext = {
   hints?: Hint[];
 };
 
-type SearchResultPresentation = {
-  matchEvidence?: MatchEvidence[];
-  explanation?: ResultExplanation;
-  warnings: ResultWarning[];
-};
-
 export function presentSearchCourseResult(
   result: SearchResult,
   context?: SearchResultEvidenceContext,
 ): SearchCourseResultDto {
-  const presentation = buildSearchResultPresentation(result, context);
   return {
     course: toCourseDto(result.course, {
       requirements: result.requirements,
     }),
-    matchEvidence: presentation.matchEvidence,
-    explanation: presentation.explanation,
-    warnings: presentation.warnings,
-  };
-}
-
-function buildSearchResultPresentation(
-  result: SearchResult,
-  context?: SearchResultEvidenceContext,
-): SearchResultPresentation {
-  const warnings = buildResultWarnings(result);
-  const matchEvidence = context ? buildMatchEvidence(result, context) : undefined;
-
-  return {
-    warnings,
-    matchEvidence,
-    explanation: context && matchEvidence
-      ? buildResultExplanation(result, context, matchEvidence, warnings)
-      : undefined,
+    matchEvidence: context ? buildMatchEvidence(result, context) : undefined,
+    warnings: buildResultWarnings(result),
   };
 }
 
@@ -102,34 +77,6 @@ function resultRequirementCodes(
   result: SearchResult,
 ): string[] {
   return searchResultRequirementCodes(result);
-}
-
-function hasStructuredRequirementEvidence(
-  result: SearchResult,
-  plan: SearchPlan,
-): boolean {
-  const requested = plan.filters.requirement;
-  return Boolean(
-    requested
-    && matchingRequirementCodes(
-      resultRequirementCodes(result),
-      requested.codes,
-    ).length > 0,
-  );
-}
-
-function hasStructuredSectionEvidence(plan: SearchPlan): boolean {
-  const { filters } = plan;
-  return Boolean(
-    filters.online !== undefined
-    || filters.days
-    || filters.time
-    || filters.status
-    || filters.partOfTerm
-    || filters.compressedTerm
-    || filters.startAfterMinutes !== undefined
-    || filters.startBeforeMinutes !== undefined,
-  );
 }
 
 function buildMatchEvidence(
@@ -264,133 +211,4 @@ function buildResultWarnings(result: SearchResult): ResultWarning[] {
     warnings.push({ kind: 'historical', message: 'Historical term result' });
   }
   return warnings;
-}
-
-function buildResultExplanation(
-  result: SearchResult,
-  context: SearchResultEvidenceContext,
-  evidence: MatchEvidence[],
-  warnings: ResultWarning[],
-): ResultExplanation {
-  const intent = context.plan.intent;
-  const evidenceReasons = evidence
-    .slice(0, 7)
-    .map(item => item.value ? `${item.label}: ${item.value}` : item.label);
-  const rankingReasons = result.scoreComponents
-    ?.filter(component => component.value > 0 && component.name !== 'retrieval_fusion')
-    .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
-    .map(component => component.evidence?.length
-      ? `${component.reason}: ${component.evidence.slice(0, 2).join(', ')}`
-      : component.reason
-    ) ?? [];
-  const orderingReasons = result.scoreComponents
-    ?.filter(component => component.name === 'attribute_sort' || component.name === 'term_tie_breaker')
-    .map(component => component.evidence?.length
-      ? `${component.reason}: ${component.evidence.slice(0, 2).join(', ')}`
-      : component.reason
-    ) ?? [];
-  const whyMatched = Array.from(new Set([
-    ...evidenceReasons,
-    ...rankingReasons,
-    ...orderingReasons,
-  ])).slice(0, 7);
-
-  const watchOut = [
-    ...warnings.map(warning => warning.message),
-    ...(intent?.warnings.map(warning => warning.message) ?? []),
-    ...(result.scoreComponents
-      ?.filter(component => component.value < 0)
-      .map(component => component.reason) ?? []),
-  ];
-
-  if (
-    intent?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
-    && !hasVisibleSubjectiveEvidence(result)
-  ) {
-    watchOut.push('Subjective preferences are not fully backed by assignment-level evidence for this course.');
-  }
-
-  const confidenceScore = explanationConfidenceScore(result, context);
-  const confidenceLabel: ResultExplanation['confidence']['label'] =
-    confidenceScore >= 0.82 ? 'high'
-      : confidenceScore >= 0.62 ? 'medium'
-        : confidenceScore >= 0.42 ? 'low'
-          : 'uncertain';
-
-  return {
-    whyMatched,
-    watchOut: Array.from(new Set(watchOut)).slice(0, 6),
-    confidence: {
-      score: confidenceScore,
-      label: confidenceLabel,
-      reasons: explanationConfidenceReasons(result, context),
-    },
-  };
-}
-
-function explanationConfidenceScore(result: SearchResult, context: SearchResultEvidenceContext): number {
-  const { plan } = context;
-  let score = plan.intent?.confidence ?? 0.72;
-  if (result.laneMatches?.includes('exact')) score += 0.12;
-  if (hasStructuredRequirementEvidence(result, plan)) score += 0.08;
-  score -= missingRequirementEvidencePenalty(result, plan);
-  if (hasStructuredSectionEvidence(plan)) score += 0.05;
-  if (hasVisibleSubjectiveEvidence(result)) score += 0.08;
-  score -= incompleteEvidencePenalty(plan);
-  if (
-    plan.intent?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
-    && !hasVisibleSubjectiveEvidence(result)
-  ) {
-    score -= 0.22;
-  }
-  return Math.max(0.1, Math.min(0.98, Number(score.toFixed(2))));
-}
-
-function explanationConfidenceReasons(result: SearchResult, context: SearchResultEvidenceContext): string[] {
-  const { plan } = context;
-  const reasons: string[] = [];
-  if (result.laneMatches?.includes('exact')) reasons.push('Exact course lookup is structured.');
-  if (hasStructuredRequirementEvidence(result, plan)) reasons.push('GenEd evidence came from structured mappings.');
-  if (hasMissingRequirementEvidence(result, plan)) reasons.push('Requested requirement has no visible mapping for this course.');
-  if (hasStructuredSectionEvidence(plan)) reasons.push('Schedule or availability evidence came from section data.');
-  if (hasVisibleSubjectiveEvidence(result)) reasons.push('Visible workload, quality, or GPA data supports the explanation.');
-  if (plan.intent?.warnings.length) reasons.push('Some inferred preferences have incomplete evidence.');
-  if (
-    plan.intent?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
-    && !hasVisibleSubjectiveEvidence(result)
-  ) {
-    reasons.push('Subjective workload evidence is incomplete for this course.');
-  }
-  return reasons.length > 0 ? reasons : ['Matched by course text and structured filters.'];
-}
-
-function incompleteEvidencePenalty(plan: SearchPlan): number {
-  const warningCount = plan.intent?.warnings.length ?? 0;
-  return warningCount > 0
-    ? Math.min(0.4, 0.25 + (warningCount - 1) * 0.08)
-    : 0;
-}
-
-function missingRequirementEvidencePenalty(
-  result: SearchResult,
-  plan: SearchPlan,
-): number {
-  return hasMissingRequirementEvidence(result, plan) ? 0.18 : 0;
-}
-
-function hasMissingRequirementEvidence(
-  result: SearchResult,
-  plan: SearchPlan,
-): boolean {
-  const hasRequirementIntent = Boolean(
-    plan.filters.requirement
-    || plan.intent?.queryTypes.some(type => type === 'requirement' || type === 'degree_progress'),
-  );
-  return hasRequirementIntent && resultRequirementCodes(result).length === 0;
-}
-
-function hasVisibleSubjectiveEvidence(result: SearchResult): boolean {
-  return typeof result.course.quality_score === 'number'
-    || typeof result.course.difficulty_score === 'number'
-    || typeof result.course.avg_gpa === 'number';
 }

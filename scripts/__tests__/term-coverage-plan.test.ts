@@ -168,9 +168,9 @@ describe('term coverage plan', () => {
   it('keeps partially synced terms in the backfill plan', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring' }));
     const status = {
-      syncStates: [
-        { id: 'course-sync:2026-spring:CS', last_status: 'complete' },
-        { id: 'course-sync:2026-spring:MATH', last_status: 'running' },
+      subjectSyncStates: [
+        { term_id: '2026-spring', subject: 'CS', status: 'complete' },
+        { term_id: '2026-spring', subject: 'MATH', status: 'running' },
       ],
       termStates: [
         {
@@ -203,10 +203,10 @@ describe('term coverage plan', () => {
   it('keeps terms with impossible subject counts in the backfill plan', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring' }));
     const status = {
-      syncStates: [
-        { id: 'course-sync:2026-spring:CS', last_status: 'complete' },
-        { id: 'course-sync:2026-spring:MATH', last_status: 'complete' },
-        { id: 'course-sync:2026-spring:STAT', last_status: 'complete' },
+      subjectSyncStates: [
+        { term_id: '2026-spring', subject: 'CS', status: 'complete' },
+        { term_id: '2026-spring', subject: 'MATH', status: 'complete' },
+        { term_id: '2026-spring', subject: 'STAT', status: 'complete' },
       ],
       termStates: [
         {

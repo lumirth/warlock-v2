@@ -7,9 +7,12 @@ function createSetBasedDb() {
   const linkRebuildBinds: unknown[][] = [];
   const linkDeleteBinds: unknown[][] = [];
   const updateBinds: unknown[][] = [];
+  const preparedSql: string[] = [];
 
   const db = {
-    prepare: vi.fn((sql: string) => ({
+    prepare: vi.fn((sql: string) => {
+      preparedSql.push(sql);
+      return {
       first: vi.fn(async () => {
         return null;
       }),
@@ -67,16 +70,17 @@ function createSetBasedDb() {
           all: vi.fn(async () => ({ success: true, results: [] })),
         };
       }),
-    })),
+    };
+    }),
     batch: vi.fn(async () => []),
   };
 
-  return { db, stateWrites, linkRebuildBinds, linkDeleteBinds, updateBinds };
+  return { db, stateWrites, linkRebuildBinds, linkDeleteBinds, updateBinds, preparedSql };
 }
 
 describe('coordinateEnrichment', () => {
   it('rebuilds every registrable or active term in set-based passes and recomputes scores once', async () => {
-    const { db, stateWrites, linkRebuildBinds, linkDeleteBinds, updateBinds } = createSetBasedDb();
+    const { db, stateWrites, linkRebuildBinds, linkDeleteBinds, updateBinds, preparedSql } = createSetBasedDb();
     const selfBinding: { fetch: ReturnType<typeof vi.fn> } = {
       fetch: vi.fn(),
     };
@@ -102,12 +106,15 @@ describe('coordinateEnrichment', () => {
       ['2026-fall'],
       ['2026-summer'],
     ]);
+    expect(preparedSql.some(sql => sql.includes('JOIN meeting_instructors'))).toBe(true);
+    expect(preparedSql.some(sql => sql.includes('WITH RECURSIVE split'))).toBe(false);
+    expect(preparedSql.some(sql => sql.includes('confidence_score') || sql.includes('match_method'))).toBe(false);
     expect(updateBinds).toEqual([[85.3, 25, 4.5, 'CS-225-2026-spring']]);
     expect(stateWrites).toEqual([
-      ['enrichment:2026-fall', 'running', 0, 1, '2026-fall'],
-      ['enrichment:2026-fall', 'complete', 7734, 1, '2026-fall'],
-      ['enrichment:2026-summer', 'running', 0, 1, '2026-summer'],
-      ['enrichment:2026-summer', 'complete', 7734, 1, '2026-summer'],
+      ['enrichment:2026-fall', 'running', 0],
+      ['enrichment:2026-fall', 'complete', 7734],
+      ['enrichment:2026-summer', 'running', 0],
+      ['enrichment:2026-summer', 'complete', 7734],
     ]);
   });
 });

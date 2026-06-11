@@ -126,16 +126,6 @@ export type ResultWarning = {
   message: string;
 };
 
-export type ResultExplanation = {
-  whyMatched: string[];
-  watchOut: string[];
-  confidence: {
-    score: number;
-    label: "high" | "medium" | "low" | "uncertain";
-    reasons: string[];
-  };
-};
-
 export type CourseMetricsDto = {
   primaryInstructorRating: number | null;
   avgGpa: number | null;
@@ -189,7 +179,6 @@ export type CourseDetailDto = CourseSummaryDto & {
 export type SearchCourseResultDto = {
   course: CourseSummaryDto;
   matchEvidence?: MatchEvidence[];
-  explanation?: ResultExplanation;
   warnings?: ResultWarning[];
 };
 

@@ -68,7 +68,7 @@ function createGpaDb(syncState?: { cursor: number; items_synced: number; etag: s
         first: vi.fn(async () => {
           if (sql.includes('SELECT * FROM sync_state')) {
             return syncState
-              ? { id: 'gpa', last_sync: null, last_status: 'in_progress', ...syncState }
+              ? { id: 'gpa', last_sync: null, last_status: 'running', ...syncState }
               : null;
           }
           return null;
@@ -107,6 +107,7 @@ describe('gpa sync', () => {
       avgGpa: 3.5,
       sampleSize: 2,
     });
+    expect(db.prepare).not.toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE'));
   });
 
   it('writes GPA sync timestamps in Unix seconds', async () => {
@@ -121,5 +122,6 @@ describe('gpa sync', () => {
     await resumeGpaSync(db, kv);
 
     expect(syncStateWrites[0]?.[1]).toBe(1780488000);
+    expect(syncStateWrites[0]?.[2]).toBe('complete');
   });
 });

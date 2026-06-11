@@ -6,6 +6,7 @@ import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
 import { fromSubjectCascade } from '../transforms/course.js';
 import { errorFields, logger } from '../observability/logger.js';
+import type { SyncRunStatus } from '../db/types.js';
 
 const SUBJECT_SYNC_LOCK_TTL_SECONDS = 30 * 60;
 const SUBJECT_CASCADE_TIMEOUT_MS = 60_000;
@@ -269,17 +270,16 @@ async function acquireSubjectSyncLock(
   subject: string,
   lockMode: SubjectLockMode = 'respect-running'
 ): Promise<boolean> {
-  const id = subjectSyncStateId(termId, subject);
   const existing = await db.prepare(`
-    SELECT last_sync, last_status
-    FROM sync_state
-    WHERE id = ?
-  `).bind(id).first<{ last_sync: number | null; last_status: string | null }>();
+    SELECT last_sync, status
+    FROM subject_sync_state
+    WHERE term_id = ? AND subject = ?
+  `).bind(termId, subject).first<{ last_sync: number | null; status: SyncRunStatus | null }>();
 
   const now = Math.floor(Date.now() / 1000);
   if (
     lockMode !== 'force'
-    && existing?.last_status === 'running'
+    && existing?.status === 'running'
     && existing.last_sync
     && now - existing.last_sync < SUBJECT_SYNC_LOCK_TTL_SECONDS
   ) {
@@ -287,15 +287,17 @@ async function acquireSubjectSyncLock(
   }
 
   await db.prepare(`
-    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
-    VALUES (?, unixepoch(), 'running', 0, 0, NULL)
-    ON CONFLICT(id) DO UPDATE SET
+    INSERT INTO subject_sync_state (
+      term_id, subject, last_sync, status, courses_synced, sections_synced, error
+    )
+    VALUES (?, ?, unixepoch(), 'running', 0, 0, NULL)
+    ON CONFLICT(term_id, subject) DO UPDATE SET
       last_sync = excluded.last_sync,
-      last_status = excluded.last_status,
-      items_synced = excluded.items_synced,
-      cursor = excluded.cursor,
-      etag = excluded.etag
-  `).bind(id).run();
+      status = excluded.status,
+      courses_synced = excluded.courses_synced,
+      sections_synced = excluded.sections_synced,
+      error = excluded.error
+  `).bind(termId, subject).run();
 
   return true;
 }
@@ -304,25 +306,23 @@ async function updateSubjectSyncState(
   db: D1Database,
   termId: string,
   subject: string,
-  status: string,
+  status: SyncRunStatus,
   coursesCount: number,
   sectionsCount: number,
   error?: string
 ): Promise<void> {
   await db.prepare(`
-    INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
-    VALUES (?, unixepoch(), ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
+    INSERT INTO subject_sync_state (
+      term_id, subject, last_sync, status, courses_synced, sections_synced, error
+    )
+    VALUES (?, ?, unixepoch(), ?, ?, ?, ?)
+    ON CONFLICT(term_id, subject) DO UPDATE SET
       last_sync = excluded.last_sync,
-      last_status = excluded.last_status,
-      items_synced = excluded.items_synced,
-      cursor = excluded.cursor,
-      etag = excluded.etag
-  `).bind(subjectSyncStateId(termId, subject), status, coursesCount, sectionsCount, error ?? null).run();
-}
-
-function subjectSyncStateId(termId: string, subject: string): string {
-  return `course-sync:${termId}:${subject}`;
+      status = excluded.status,
+      courses_synced = excluded.courses_synced,
+      sections_synced = excluded.sections_synced,
+      error = excluded.error
+  `).bind(termId, subject, status, coursesCount, sectionsCount, error ?? null).run();
 }
 
 export async function syncTerm(

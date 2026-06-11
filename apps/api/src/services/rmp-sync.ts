@@ -1,5 +1,6 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 import { internalAuthHeaders } from '../middleware/auth.js';
+import type { SyncRunStatus } from '../db/types.js';
 
 const RMP_GRAPHQL_URL = 'https://www.ratemyprofessors.com/graphql';
 const UIUC_SCHOOL_ID = 'U2Nob29sLTExMTI='; // School-1112 (UIUC)
@@ -67,7 +68,7 @@ interface RmpResponse {
 
 interface RmpSyncState {
   last_sync: number | null;
-  last_status: string | null;
+  last_status: SyncRunStatus | null;
   items_synced: number | null;
   cursor: number | null;
   etag: string | null;
@@ -223,7 +224,7 @@ export async function coordinateRmpSync(
 
 async function updateRmpSyncState(
   db: D1Database,
-  state: { status: string; totalSynced: number; pageCount: number; cursor: string | null }
+  state: { status: SyncRunStatus; totalSynced: number; pageCount: number; cursor: string | null }
 ): Promise<void> {
   await db.prepare(`
     INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)

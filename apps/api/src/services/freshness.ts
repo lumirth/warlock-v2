@@ -1,4 +1,4 @@
-import type { SyncState, TermState } from '../db/types.js';
+import type { SubjectSyncState, SyncState, TermState } from '../db/types.js';
 
 const TERM_ORDER: Record<string, number> = {
   winter: 1,
@@ -25,11 +25,13 @@ type FreshnessSummary = {
   historicalTermCount: number;
   staleTermIds: string[];
   staleSyncStateIds: string[];
+  staleSubjectSyncIds: string[];
   thresholds: typeof FRESHNESS_THRESHOLDS;
 };
 
 export function buildFreshnessSummary(input: {
   syncStates: SyncState[];
+  subjectSyncStates: SubjectSyncState[];
   termStates: TermState[];
   nowSeconds: number;
   currentYear: number;
@@ -63,6 +65,9 @@ export function buildFreshnessSummary(input: {
     staleSyncStateIds: input.syncStates
       .filter(state => isStaleSyncState(state, input.nowSeconds))
       .map(state => state.id),
+    staleSubjectSyncIds: input.subjectSyncStates
+      .filter(state => state.status === 'failed')
+      .map(state => `${state.term_id}:${state.subject}`),
     thresholds: FRESHNESS_THRESHOLDS,
   };
 }

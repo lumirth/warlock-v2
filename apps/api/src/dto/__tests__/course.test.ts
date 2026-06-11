@@ -163,39 +163,6 @@ describe('search result DTO evidence', () => {
     expect(dto.course.links.courseExplorerUrl).toBe('https://courses.illinois.edu/schedule/2026/spring/CS/225');
   });
 
-  it('explains subjective decision matches with evidence and uncertainty', () => {
-    const dto = presentSearchCourseResult(searchResult({
-      requirements: courseRequirements,
-    }), {
-      rawQuery: 'easy online gen ed no essays',
-      hints: [],
-      plan: {
-        filters: { requirement: singleRequirementFilter('QR'), online: true, workload: 'easy' },
-        keywordQuery: '',
-        semanticQuery: '',
-        intent: {
-          queryTypes: ['requirement', 'schedule', 'subjective_vibe', 'avoidance'],
-          negativeTerms: ['writing_heavy', 'essays', 'papers'],
-          topicTerms: [],
-          expandedTerms: [],
-          warnings: [
-            { kind: 'writing_evidence_incomplete', message: 'Essay and writing workload evidence is incomplete for many courses.', confidence: 0.78 },
-          ],
-          confidence: 0.82,
-        },
-      },
-    });
-
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining([
-      expect.stringContaining('GenEd'),
-      expect.stringContaining('Easier workload fit'),
-    ]));
-    expect(dto.explanation?.watchOut).toEqual(expect.arrayContaining([
-      'Essay and writing workload evidence is incomplete for many courses.',
-    ]));
-    expect(dto.explanation?.confidence.label).toBe('medium');
-  });
-
   it('labels generic requirement filters as Any GenEd in result evidence', () => {
     const dto = presentSearchCourseResult(searchResult({
       course: { ...course },
@@ -219,13 +186,11 @@ describe('search result DTO evidence', () => {
       },
     });
 
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['Any GenEd: QR']));
     expect(dto.matchEvidence?.find(item => item.kind === 'requirement')).toMatchObject({
       label: 'Any GenEd',
       value: 'QR',
       weight: 'hard',
     });
-    expect(dto.explanation?.confidence.reasons).toContain('GenEd evidence came from structured mappings.');
   });
 
   it('explains Cultural Studies sub-attributes from full requirement DTOs', () => {
@@ -252,31 +217,6 @@ describe('search result DTO evidence', () => {
       value: 'US',
       weight: 'hard',
     });
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining(['GenEd US: US']));
-  });
-
-  it('includes explicit sort controls as ordering explanation without changing score evidence', () => {
-    const dto = presentSearchCourseResult(searchResult({
-      scoreComponents: [{
-        name: 'attribute_sort',
-        value: 0,
-        reason: 'Sorted by Avg GPA (descending); relevance breaks ties.',
-        evidence: ['Avg GPA: 3.50.'],
-      }],
-    }), {
-      rawQuery: 'easy gen ed',
-      hints: [],
-      plan: {
-        filters: {},
-        keywordQuery: '',
-        semanticQuery: '',
-      },
-    });
-
-    expect(dto.explanation?.whyMatched).toEqual(expect.arrayContaining([
-      'Sorted by Avg GPA (descending); relevance breaks ties.: Avg GPA: 3.50.',
-    ]));
-    expect(dto.explanation?.confidence.label).toBe('medium');
   });
 
   it('does not claim requirement evidence for unmapped courses', () => {
@@ -302,11 +242,6 @@ describe('search result DTO evidence', () => {
 
     expect(dto.matchEvidence?.map(item => item.label)).not.toContain('Requirement lane match');
     expect(dto.matchEvidence?.some(item => item.kind === 'requirement')).toBe(false);
-    expect(dto.explanation?.confidence.reasons).not.toContain('GenEd evidence came from structured mappings.');
-    expect(dto.explanation?.confidence.label).toBe('medium');
-    expect(dto.explanation?.confidence.reasons).toContain(
-      'Requested requirement has no visible mapping for this course.',
-    );
   });
 
   it('keeps warning construction narrow and non-secret', () => {

@@ -214,8 +214,6 @@ CREATE TABLE IF NOT EXISTS instructor_course_links (
     instructor_name TEXT NOT NULL,
     gpa_id INTEGER,
     rmp_id TEXT,
-    confidence_score REAL,
-    match_method TEXT,
     created_at INTEGER DEFAULT (unixepoch()),
 
     PRIMARY KEY (term_id, subject, number, instructor_name),
@@ -225,12 +223,23 @@ CREATE TABLE IF NOT EXISTS instructor_course_links (
 
 -- Sync state tracking
 CREATE TABLE IF NOT EXISTS sync_state (
-    id TEXT PRIMARY KEY,              -- "courses", "gpa", "rmp"
+    id TEXT PRIMARY KEY,              -- Global workflow identifier, such as "gpa" or "rmp"
     last_sync INTEGER,
-    last_status TEXT,
+    last_status TEXT CHECK (last_status IN ('pending', 'running', 'complete', 'failed')),
     items_synced INTEGER,
     cursor INTEGER DEFAULT 0,
     etag TEXT
+);
+
+CREATE TABLE IF NOT EXISTS subject_sync_state (
+    term_id TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    last_sync INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'complete', 'failed')),
+    courses_synced INTEGER NOT NULL DEFAULT 0,
+    sections_synced INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    PRIMARY KEY (term_id, subject)
 );
 
 -- Term state tracking

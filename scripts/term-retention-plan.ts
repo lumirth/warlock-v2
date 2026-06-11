@@ -173,10 +173,6 @@ export function generatePruneSql(rows: TermRetentionRow[]): string {
   }
 
   const droppedTermIds = dropped.map(row => sqlQuote(row.term_id)).join(', ');
-  const droppedSyncStateCondition = dropped
-    .map(row => `id LIKE ${sqlQuote(`course-sync:${row.term_id}:%`)}`)
-    .join(' OR ');
-
   return [
     '-- Term retention prune SQL',
     '-- Create and restore-verify a D1 Time Travel backup before executing this file remotely.',
@@ -211,7 +207,7 @@ export function generatePruneSql(rows: TermRetentionRow[]): string {
     '',
     `DELETE FROM courses WHERE ${termPairCondition(dropped)};`,
     '',
-    `DELETE FROM sync_state WHERE ${droppedSyncStateCondition};`,
+    `DELETE FROM subject_sync_state WHERE ${termIdInList(dropped, 'term_id')};`,
     '',
     `DELETE FROM term_state WHERE term_id IN (${droppedTermIds});`,
     '',
@@ -224,7 +220,7 @@ export function generatePruneSql(rows: TermRetentionRow[]): string {
     `SELECT 'dropped_courses', COUNT(*) FROM courses WHERE ${termPairCondition(dropped)};`,
     `SELECT 'dropped_sections', COUNT(*) FROM sections WHERE ${termIdInList(dropped, 'term_id')};`,
     `SELECT 'dropped_instructor_links', COUNT(*) FROM instructor_course_links WHERE ${termIdInList(dropped, 'term_id')};`,
-    `SELECT 'dropped_sync_state', COUNT(*) FROM sync_state WHERE ${droppedSyncStateCondition};`,
+    `SELECT 'dropped_subject_sync_state', COUNT(*) FROM subject_sync_state WHERE ${termIdInList(dropped, 'term_id')};`,
     "SELECT 'orphan_meetings', COUNT(*) FROM meetings m LEFT JOIN sections s ON s.id = m.section_id WHERE s.id IS NULL;",
     "SELECT 'orphan_meeting_instructors', COUNT(*) FROM meeting_instructors mi LEFT JOIN meetings m ON m.id = mi.meeting_id WHERE m.id IS NULL;",
     `SELECT 'retained_terms', COUNT(*) FROM term_state WHERE ${termIdInList(retained, 'term_id')};`,

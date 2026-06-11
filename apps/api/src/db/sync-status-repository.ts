@@ -1,5 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { SyncState, TermState, TermStateStatus } from './types.js';
+import type { SubjectSyncState, SyncState, TermState, TermStateStatus } from './types.js';
 
 export type EnrichmentCoverageRow = {
   term_id: string;
@@ -14,6 +14,7 @@ export type EnrichmentCoverageRow = {
 
 type SyncStatusSnapshot = {
   syncStates: SyncState[];
+  subjectSyncStates: SubjectSyncState[];
   termStates: TermState[];
   enrichmentCoverage: EnrichmentCoverageRow[];
 };
@@ -21,14 +22,16 @@ type SyncStatusSnapshot = {
 export async function readSyncStatusSnapshot(
   db: D1Database,
 ): Promise<SyncStatusSnapshot> {
-  const [syncStates, termStates, enrichmentCoverage] = await Promise.all([
+  const [syncStates, subjectSyncStates, termStates, enrichmentCoverage] = await Promise.all([
     listSyncStates(db),
+    listSubjectSyncStates(db),
     listTermStates(db),
     listEnrichmentCoverage(db),
   ]);
 
   return {
     syncStates,
+    subjectSyncStates,
     termStates,
     enrichmentCoverage,
   };
@@ -40,6 +43,15 @@ async function listSyncStates(db: D1Database): Promise<SyncState[]> {
     FROM sync_state
     ORDER BY id
   `).all<SyncState>();
+  return result.results;
+}
+
+async function listSubjectSyncStates(db: D1Database): Promise<SubjectSyncState[]> {
+  const result = await db.prepare(`
+    SELECT term_id, subject, last_sync, status, courses_synced, sections_synced, error
+    FROM subject_sync_state
+    ORDER BY term_id, subject
+  `).all<SubjectSyncState>();
   return result.results;
 }
 

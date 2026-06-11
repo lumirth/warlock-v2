@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SyncState, TermState } from '../../db/types.js';
+import type { SubjectSyncState, SyncState, TermState } from '../../db/types.js';
 import { buildFreshnessSummary, FRESHNESS_THRESHOLDS } from '../freshness.js';
 
 const nowSeconds = 1780360000;
@@ -34,6 +34,19 @@ function sync(overrides: Partial<SyncState>): SyncState {
   };
 }
 
+function subjectSync(overrides: Partial<SubjectSyncState>): SubjectSyncState {
+  return {
+    term_id: '2026-spring',
+    subject: 'CS',
+    last_sync: nowSeconds,
+    status: 'complete',
+    courses_synced: 1,
+    sections_synced: 2,
+    error: null,
+    ...overrides,
+  };
+}
+
 describe('buildFreshnessSummary', () => {
   it('classifies current, upcoming, historical, and stale data coverage', () => {
     const summary = buildFreshnessSummary({
@@ -43,8 +56,8 @@ describe('buildFreshnessSummary', () => {
       syncStates: [
         sync({ id: 'gpa', last_sync: nowSeconds - FRESHNESS_THRESHOLDS.gpaMaxAgeSeconds - 1 }),
         sync({ id: 'rmp', last_sync: nowSeconds }),
-        sync({ id: 'course-sync:2026-spring:CS', last_status: 'failed' }),
       ],
+      subjectSyncStates: [subjectSync({ status: 'failed' })],
       termStates: [
         term({ term_id: '2026-winter', year: 2026, term: 'winter', status: 'registrable' }),
         term({ term_id: '2026-spring', year: 2026, term: 'spring', status: 'registrable' }),
@@ -62,7 +75,8 @@ describe('buildFreshnessSummary', () => {
     expect(summary.upcomingTermIds).toEqual(['2026-summer', '2026-fall']);
     expect(summary.historicalTermCount).toBe(1);
     expect(summary.staleTermIds).toEqual(['2024-fall']);
-    expect(summary.staleSyncStateIds).toEqual(['gpa', 'course-sync:2026-spring:CS']);
+    expect(summary.staleSyncStateIds).toEqual(['gpa']);
+    expect(summary.staleSubjectSyncIds).toEqual(['2026-spring:CS']);
   });
 
   it('uses the newest registrable fall or spring term as current even when env fallback is stale', () => {
@@ -74,6 +88,7 @@ describe('buildFreshnessSummary', () => {
         sync({ id: 'gpa' }),
         sync({ id: 'rmp' }),
       ],
+      subjectSyncStates: [],
       termStates: [
         term({ term_id: '2026-spring', year: 2026, term: 'spring', status: 'historical' }),
         term({ term_id: '2026-summer', year: 2026, term: 'summer', status: 'registrable' }),
@@ -98,6 +113,7 @@ describe('buildFreshnessSummary', () => {
         sync({ id: 'gpa' }),
         sync({ id: 'rmp' }),
       ],
+      subjectSyncStates: [],
       termStates: [
         term({ term_id: '2026-fall', year: 2026, term: 'fall', status: 'registrable' }),
         term({ term_id: '2027-winter', year: 2027, term: 'winter', status: 'registrable' }),
@@ -120,6 +136,7 @@ describe('buildFreshnessSummary', () => {
         sync({ id: 'gpa', last_sync: nowSeconds - FRESHNESS_THRESHOLDS.gpaMaxAgeSeconds }),
         sync({ id: 'rmp', last_sync: nowSeconds - FRESHNESS_THRESHOLDS.rmpMaxAgeSeconds - 1 }),
       ],
+      subjectSyncStates: [],
       termStates: [
         term({
           term_id: '2030-fall',

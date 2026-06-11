@@ -305,7 +305,7 @@ describe('term retention plan', () => {
     expect(sql).toContain('DELETE FROM course_gened');
     expect(sql).toContain("DELETE FROM sections WHERE term_id IN ('2004-spring')");
     expect(sql).toContain("DELETE FROM courses WHERE (year = 2004 AND term = 'spring')");
-    expect(sql).toContain("DELETE FROM sync_state WHERE id LIKE 'course-sync:2004-spring:%'");
+    expect(sql).toContain("DELETE FROM subject_sync_state WHERE term_id IN ('2004-spring')");
     expect(sql).toContain("SELECT 'dropped_term_state'");
   });
 

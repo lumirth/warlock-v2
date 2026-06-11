@@ -1,4 +1,5 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
+import type { SyncRunStatus } from '../db/types.js';
 import { errorFields, logger } from '../observability/logger.js';
 import {
   COURSE_SCORE_POLICY,
@@ -8,6 +9,19 @@ import {
 } from './course-score-policy.js';
 
 const SCORE_UPDATE_BATCH_SIZE = 500;
+const INSTRUCTOR_COURSE_CONTEXTS_SQL = `
+  SELECT DISTINCT
+    ? AS term_id,
+    c.subject,
+    c.number,
+    i.display_name AS instructor_name
+  FROM courses c
+  JOIN sections s ON s.course_id = c.id
+  JOIN meetings m ON m.section_id = s.id
+  JOIN meeting_instructors mi ON mi.meeting_id = m.id
+  JOIN instructors i ON i.id = mi.instructor_id
+  WHERE c.year = ? AND c.term = ?
+`;
 
 type CourseScoreSource = {
   id: string;
@@ -120,7 +134,7 @@ export async function coordinateEnrichment(
   let taskCount = 0;
   let linkCount = 0;
   for (const term of termResult.results) {
-    await updateEnrichmentState(db, term.term_id, 'running', 0, 1);
+    await updateEnrichmentState(db, term.term_id, 'running', 0);
     const linkResult = await rebuildInstructorCourseLinks(db, {
       termId: term.term_id,
       year: term.year,
@@ -128,7 +142,7 @@ export async function coordinateEnrichment(
     });
     taskCount += linkResult.contextCount;
     linkCount += linkResult.linkCount;
-    await updateEnrichmentState(db, term.term_id, 'complete', linkResult.contextCount, 1);
+    await updateEnrichmentState(db, term.term_id, 'complete', linkResult.contextCount);
   }
 
   const scores = await enrichCoursesWithScores(db);
@@ -146,26 +160,9 @@ async function rebuildInstructorCourseLinks(
   options: { termId: string; year: number; term: string }
 ): Promise<{ contextCount: number; linkCount: number }> {
   const countResult = await db.prepare(`
-    WITH RECURSIVE split(term_id, subject, number, rest, instructor_name) AS (
-      SELECT ?, subject, number, primary_instructor || ';', ''
-      FROM courses
-      WHERE year = ? AND term = ? AND primary_instructor IS NOT NULL
-      UNION ALL
-      SELECT
-        term_id,
-        subject,
-        number,
-        substr(rest, instr(rest, ';') + 1),
-        trim(substr(rest, 1, instr(rest, ';') - 1))
-      FROM split
-      WHERE rest <> ''
-    )
+    WITH contexts AS (${INSTRUCTOR_COURSE_CONTEXTS_SQL})
     SELECT COUNT(*) AS context_count
-    FROM (
-      SELECT DISTINCT term_id, subject, number, instructor_name
-      FROM split
-      WHERE instructor_name <> ''
-    )
+    FROM contexts
   `).bind(options.termId, options.year, options.term).first<{ context_count: number }>();
 
   await db.prepare(`
@@ -174,25 +171,7 @@ async function rebuildInstructorCourseLinks(
   `).bind(options.termId).run();
 
   const insertResult = await db.prepare(`
-    WITH RECURSIVE split(term_id, subject, number, rest, instructor_name) AS (
-      SELECT ?, subject, number, primary_instructor || ';', ''
-      FROM courses
-      WHERE year = ? AND term = ? AND primary_instructor IS NOT NULL
-      UNION ALL
-      SELECT
-        term_id,
-        subject,
-        number,
-        substr(rest, instr(rest, ';') + 1),
-        trim(substr(rest, 1, instr(rest, ';') - 1))
-      FROM split
-      WHERE rest <> ''
-    ),
-    contexts AS (
-      SELECT DISTINCT term_id, subject, number, instructor_name
-      FROM split
-      WHERE instructor_name <> ''
-    ),
+    WITH contexts AS (${INSTRUCTOR_COURSE_CONTEXTS_SQL}),
     gpa_matches AS (
       SELECT
         c.term_id,
@@ -254,7 +233,7 @@ async function rebuildInstructorCourseLinks(
     )
     INSERT INTO instructor_course_links (
       term_id, subject, number, instructor_name,
-      gpa_id, rmp_id, confidence_score, match_method
+      gpa_id, rmp_id
     )
     SELECT
       term_id,
@@ -262,23 +241,12 @@ async function rebuildInstructorCourseLinks(
       number,
       instructor_name,
       gpa_id,
-      COALESCE(bridge_rmp_id, direct_rmp_id),
-      CASE
-        WHEN gpa_id IS NOT NULL OR COALESCE(bridge_rmp_id, direct_rmp_id) IS NOT NULL THEN 1.0
-        ELSE 0
-      END,
-      CASE
-        WHEN gpa_id IS NOT NULL THEN 'gpa_bridge'
-        WHEN COALESCE(bridge_rmp_id, direct_rmp_id) IS NOT NULL THEN 'direct_rmp'
-        ELSE 'failed'
-      END
+      COALESCE(bridge_rmp_id, direct_rmp_id)
     FROM resolved
     WHERE true
     ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
       gpa_id = excluded.gpa_id,
-      rmp_id = excluded.rmp_id,
-      confidence_score = excluded.confidence_score,
-      match_method = excluded.match_method
+      rmp_id = excluded.rmp_id
   `).bind(options.termId, options.year, options.term).run();
 
   const linkCount = insertResult.meta?.changes ?? 0;
@@ -292,20 +260,19 @@ async function rebuildInstructorCourseLinks(
 async function updateEnrichmentState(
   db: D1Database,
   termId: string,
-  status: string,
-  taskCount: number,
-  batchCount: number
+  status: SyncRunStatus,
+  taskCount: number
 ): Promise<void> {
   await db.prepare(`
     INSERT INTO sync_state (id, last_sync, last_status, items_synced, cursor, etag)
-    VALUES (?, unixepoch(), ?, ?, ?, ?)
+    VALUES (?, unixepoch(), ?, ?, NULL, NULL)
     ON CONFLICT(id) DO UPDATE SET
       last_sync = excluded.last_sync,
       last_status = excluded.last_status,
       items_synced = excluded.items_synced,
       cursor = excluded.cursor,
       etag = excluded.etag
-  `).bind(`enrichment:${termId}`, status, taskCount, batchCount, termId).run();
+  `).bind(`enrichment:${termId}`, status, taskCount).run();
 }
 
 /**

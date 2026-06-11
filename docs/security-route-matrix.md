@@ -16,7 +16,7 @@ The project is pre-alpha and has no compatibility obligations. Routes should sta
 | `POST /admin/reset-gpa-sync` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Resets GPA cursor after upstream data change. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `POST /admin/sync-gpa` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Processes next GPA chunk. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `POST /admin/embeddings/backfill` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Rebuilds a bounded batch of semantic-search embeddings. | `apps/api/src/routes/__tests__/embedding-backfill.test.ts` |
-| `GET /admin/sync/status` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | No | Reports `sync_state`/`term_state`, failed runs, and running runs. | `apps/api/src/routes/__tests__/sync-status.test.ts` |
+| `GET /admin/sync/status` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | No | Reports global workflow, per-subject, and term state plus failed and running runs. | `apps/api/src/routes/__tests__/sync-status.test.ts` |
 | `POST /admin/discover-terms` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Discovers active/historical terms. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `GET /admin/terms` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | No | Operational term state. | `apps/api/src/middleware/__tests__/auth.test.ts` |
 | `POST /admin/sync/:year/:term` | Admin | `Authorization: Bearer $ADMIN_TOKEN` | Yes | Bounded params; manual term sync. | `apps/api/src/routes/__tests__/sync-validation.test.ts` |

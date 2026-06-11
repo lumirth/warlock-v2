@@ -74,8 +74,8 @@ function statusTermStates(status: JsonRecord | null): JsonRecord[] {
   return recordsFromArray(status?.termStates);
 }
 
-function statusSyncStates(status: JsonRecord | null): JsonRecord[] {
-  return recordsFromArray(status?.syncStates);
+function statusSubjectSyncStates(status: JsonRecord | null): JsonRecord[] {
+  return recordsFromArray(status?.subjectSyncStates);
 }
 
 type RetentionScope = {
@@ -107,12 +107,10 @@ function staleTermIds(status: JsonRecord | null): Set<string> {
   return new Set(values.filter((item): item is string => typeof item === 'string'));
 }
 
-function completedSubjectSyncCount(syncStates: JsonRecord[], termIdValue: string): number {
-  const prefix = `course-sync:${termIdValue}:`;
-  return syncStates.filter(state =>
-    typeof state.id === 'string'
-    && state.id.startsWith(prefix)
-    && state.last_status === 'complete'
+function completedSubjectSyncCount(subjectSyncStates: JsonRecord[], termIdValue: string): number {
+  return subjectSyncStates.filter(state =>
+    state.term_id === termIdValue
+    && state.status === 'complete'
   ).length;
 }
 
@@ -301,7 +299,7 @@ export async function buildTermCoverageReport(
     : discovered.terms;
   const droppedDiscoveredTerms = discovered.terms.length - retainedDiscoveredTerms.length;
   const storedByTermId = new Map<string, JsonRecord>();
-  const syncStates = statusSyncStates(statusResult.status);
+  const subjectSyncStates = statusSubjectSyncStates(statusResult.status);
 
   for (const state of statusTermStates(statusResult.status)) {
     const id = parseTermStateId(state);
@@ -312,7 +310,7 @@ export async function buildTermCoverageReport(
   const terms = retainedDiscoveredTerms.map(term => buildRow(
     term,
     storedByTermId.get(term.term_id),
-    completedSubjectSyncCount(syncStates, term.term_id),
+    completedSubjectSyncCount(subjectSyncStates, term.term_id),
     stale,
     currentYear,
     currentTerm
