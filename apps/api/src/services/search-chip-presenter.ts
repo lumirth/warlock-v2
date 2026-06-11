@@ -38,8 +38,11 @@ export function buildSearchChips(
       value: formatResolvedHintValue(hint, plan, residual),
       removeRequest: removeSearchIntentRequest(
         request,
-        resolvedFilterFromHint(hint, plan, residual),
-        removeTextForHint(hint, residual),
+        {
+          kind: "filter_or_query_phrase",
+          filter: resolvedFilterFromHint(hint, plan, residual),
+          phrase: removeTextForHint(hint, residual),
+        },
       ),
     }));
 
@@ -51,7 +54,11 @@ export function buildSearchChips(
       type: "requirement",
       label: ANY_GENED_DISPLAY_LABEL,
       value: "any",
-      removeRequest: removeSearchIntentRequest(request, { requirement }, "gen ed"),
+      removeRequest: removeSearchIntentRequest(request, {
+        kind: "filter_or_query_phrase",
+        filter: { requirement },
+        phrase: "gen ed",
+      }),
     });
   }
 
@@ -61,7 +68,10 @@ export function buildSearchChips(
       type: "semantic",
       label: `Topic: ${residual}`,
       value: residual,
-      removeRequest: removeSearchIntentRequest(request, undefined, residual),
+      removeRequest: removeSearchIntentRequest(request, {
+        kind: "query_terms",
+        terms: residual,
+      }),
     });
   }
 

@@ -11,6 +11,26 @@ import {
 } from "@uiuc-course-search/query-types";
 import { meaningfulResidualQuery } from "./search-request-text.js";
 
+export type SearchIntentRemoval =
+  | {
+      kind: "filter";
+      filter: Partial<SearchRequestFiltersDto>;
+    }
+  | {
+      kind: "query_phrase";
+      phrase: string;
+      removedFilter?: Partial<SearchRequestFiltersDto>;
+    }
+  | {
+      kind: "query_terms";
+      terms: string;
+    }
+  | {
+      kind: "filter_or_query_phrase";
+      filter: Partial<SearchRequestFiltersDto>;
+      phrase: string;
+    };
+
 function publicSearchRequest(
   request: SearchRequestDto,
 ): SearchRequestDto {
@@ -25,21 +45,40 @@ function publicSearchRequest(
 
 export function removeSearchIntentRequest(
   request: NormalizedSearchRequestDto,
-  filter: Partial<SearchRequestFiltersDto> | undefined,
-  textToRemove: string | undefined,
+  removal: SearchIntentRemoval,
 ): SearchRequestDto {
-  const withoutFilter = requestWithoutMatchingFilter(request, filter);
-  if (withoutFilter) {
-    return publicSearchRequest(withoutFilter);
+  if (removal.kind === "filter" || removal.kind === "filter_or_query_phrase") {
+    const withoutFilter = requestWithoutMatchingFilter(request, removal.filter);
+    if (withoutFilter) {
+      return publicSearchRequest(withoutFilter);
+    }
   }
 
-  return publicSearchRequest({
+  if (removal.kind === "filter") {
+    throw new Error("Cannot remove a search filter that is not present");
+  }
+
+  const removedFilter = removal.kind === "query_phrase"
+    ? removal.removedFilter
+    : removal.kind === "filter_or_query_phrase"
+      ? removal.filter
+      : undefined;
+  const queryWithoutIntent = removal.kind === "query_terms"
+    ? removeQueryTerms(request.query, removal.terms)
+    : removeQueryPhrase(request.query, removal.phrase);
+  const query = cleanupQueryAfterIntentRemoval(
+    queryWithoutIntent,
+    removedFilter,
+  );
+  const nextRequest = publicSearchRequest({
     ...request,
-    query: cleanupQueryAfterIntentRemoval(
-      removeTextFromQuery(request.query, textToRemove ?? ""),
-      filter,
-    ),
+    query,
   });
+  if (nextRequest.query === request.query) {
+    const missing = removal.kind === "query_terms" ? removal.terms : removal.phrase;
+    throw new Error(`Cannot remove missing search text: ${missing}`);
+  }
+  return nextRequest;
 }
 
 export function ambiguitySearchRequest(
@@ -172,22 +211,16 @@ function isRequirementFilterValue(
   );
 }
 
-function removeTextFromQuery(source: string, textToRemove: string): string {
+function removeQueryPhrase(source: string, phrase: string): string {
   const normalizedSource = source.trim();
-  const normalizedRemove = textToRemove.trim();
-  if (!normalizedRemove) return normalizedSource;
+  const normalizedPhrase = phrase.trim();
+  if (!normalizedPhrase) return normalizedSource;
+  return removePhraseFromQuery(normalizedSource, normalizedPhrase);
+}
 
-  const index = normalizedSource
-    .toLowerCase()
-    .indexOf(normalizedRemove.toLowerCase());
-
-  if (index < 0) {
-    return normalizedSource;
-  }
-
-  return `${normalizedSource.slice(0, index)} ${normalizedSource.slice(index + normalizedRemove.length)}`
-    .replace(/\s+/g, " ")
-    .trim();
+function removeQueryTerms(source: string, terms: string): string {
+  const tokens = terms.match(/[a-z0-9+#]+/gi) ?? [];
+  return tokens.reduce(removePhraseFromQuery, source.trim());
 }
 
 function cleanupQueryAfterIntentRemoval(
@@ -214,7 +247,7 @@ function cleanupQueryAfterRequirementRemoval(
   const removedCodeSet = new Set(canonicalRequirementCodes(removedCodes));
   const withoutRemovedRequirementTerms = cleanupDanglingConnectors(
     cleanupRequirementCueConnectors(
-      removeRequirementTermsForCodes(query, removedCodeSet),
+      query,
     ),
   );
 
@@ -241,17 +274,6 @@ function cleanupRequirementCueConnectors(query: string): string {
     .trim();
 }
 
-function removeRequirementTermsForCodes(
-  query: string,
-  removedCodes: ReadonlySet<string>,
-): string {
-  let nextQuery = query;
-  for (const term of requirementTermsForCodes(removedCodes)) {
-    nextQuery = removeRequirementPhraseFromQuery(nextQuery, term);
-  }
-  return nextQuery;
-}
-
 function containsConcreteRequirementTerm(
   query: string,
   ignoredCodes: ReadonlySet<string>,
@@ -264,18 +286,6 @@ function containsConcreteRequirementTerm(
     }
   }
   return false;
-}
-
-function requirementTermsForCodes(removedCodes: ReadonlySet<string>): string[] {
-  const terms = new Set<string>();
-  for (const option of GENED_REQUIREMENT_OPTIONS) {
-    const code = canonicalRequirementCode(option.code);
-    if (!code || !removedCodes.has(code)) continue;
-    for (const term of requirementOptionTerms(option)) {
-      terms.add(term);
-    }
-  }
-  return Array.from(terms).sort((left, right) => right.length - left.length);
 }
 
 function requirementOptionTerms(
@@ -296,11 +306,11 @@ function queryContainsPhrase(query: string, phrase: string): boolean {
     .test(normalizedQuery);
 }
 
-function removeRequirementPhraseFromQuery(query: string, phrase: string): string {
+function removePhraseFromQuery(query: string, phrase: string): string {
   const tokens = phrase.toLowerCase().match(/[a-z0-9+#]+/g);
   if (!tokens?.length) return query;
 
-  const body = tokens.map(escapeRegex).join("[\\s/_&-]+");
+  const body = tokens.map(escapeRegex).join("[^a-z0-9+#]+");
   return query
     .replace(new RegExp(`(^|[^a-z0-9+#])${body}(?=$|[^a-z0-9+#])`, "gi"), " ")
     .replace(/\s+/g, " ")

@@ -254,6 +254,25 @@ describe('buildSearchUiPlan', () => {
     expectRemovableChipActionsChangeRequest(plan, executableRequest);
   });
 
+  it('removes a normalized topic without removing structured intent between its terms', () => {
+    const executableRequest = request('data online structures');
+    const plan = buildUiPlan([{
+      type: 'online',
+      value: true,
+      metadata: { source: 'alias', confidence: 0.9, raw: 'online' },
+    }], {
+      filters: { online: true },
+      keywordQuery: 'data structures',
+      semanticQuery: 'data structures',
+    }, 'data structures', executableRequest);
+
+    expect(plan.chips.map(chip => chip.label)).toEqual([
+      'Online',
+      'Topic: data structures',
+    ]);
+    expect(plan.chips[1].removeRequest.query).toBe('online');
+  });
+
   it('shows only directly actionable intent in the chip row', () => {
     const plan = buildUiPlan([{
       type: 'online',

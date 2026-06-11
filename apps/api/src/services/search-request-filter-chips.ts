@@ -149,7 +149,10 @@ function filterChip(
     type,
     label,
     value,
-    removeRequest: removeSearchIntentRequest(request, filter, undefined),
+    removeRequest: removeSearchIntentRequest(request, {
+      kind: "filter",
+      filter,
+    }),
   };
 }
 

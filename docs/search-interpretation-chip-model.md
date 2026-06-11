@@ -72,6 +72,13 @@ changes the represented intent. Ambiguity choices carry their executable
 the public chip contract because the UI does not use them and a request cannot
 reliably distinguish URL parameters from advanced controls.
 
+The server authors chip removals from explicit operations: remove an exact
+public filter, remove one extracted query phrase, or remove the normalized
+residual topic terms. Query-text removals use token boundaries; a short code
+such as `IS` or `US` must never be removed from inside words such as `history`
+or `business`. If an operation cannot change the request, action construction
+fails instead of publishing a removable no-op chip.
+
 ## Generic GenEd Intent
 
 When the query literally says `gened`, `gen ed`, or `gen-ed` and no specific
