@@ -51,7 +51,7 @@ The canonical baseline migration in `apps/api/migrations/0001_initial_schema.sql
 - **Scheduled workflow policy** (`services/scheduled-workflows.ts`): maps cron strings to named workflows and dispatches them via `waitUntil`.
 - **Auto-discovery** (`services/term-discovery.ts`): twice-daily cron (`0 10,22 * * *`) discovers terms and classifies them as `registrable`, `active`, or `historical`.
 - **Fan-out course sync** (`services/sync-coordinator.ts`, `services/parallel-sync.ts`, `routes/sync-course-routes.ts`): every 5 minutes (`*/5 * * * *`), active and registrable terms are split into subject batches and dispatched through the `SELF` service binding.
-- **Snapshot persistence** (`transforms/course.ts`, `services/snapshot-persistence-operations.ts`, `services/snapshot-persistence-sql.ts`, `services/course-snapshot-writer.ts`): CISAPI data flows through a canonical `CourseSnapshot`; operation planning is separate from D1/raw-SQL rendering.
+- **Snapshot persistence** (`transforms/course.ts`, `services/snapshot-persistence-operations.ts`, `services/snapshot-persistence-sql.ts`, `services/course-snapshot-writer.ts`): CISAPI data flows through a canonical `CourseSnapshot`; operation planning is separate from prepared D1 execution.
 
 ### Search Pipeline
 Search is intentionally split between interpretation, execution, and presentation. Each stage owns one product concept; routes and public DTOs do not reinterpret internal search state.

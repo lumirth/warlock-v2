@@ -70,6 +70,25 @@ The `--from-year 2004` examples below are discovery horizons for databases that 
 
 Staging D1 currently uses `--target-size-mb 250 --max-retained-terms 18`. Keep that cap until the retention estimator includes measured D1 file, FTS, and index overhead; the raw row-byte estimate is useful for ordering but was optimistic for the actual Cloudflare D1 size limit. Increase the cap only after a read-only preflight and measured post-prune size evidence show the larger retained window fits.
 
+## New Environment Corpus Bootstrap
+
+Course-history SQL dumps are not a supported bootstrap path. They bypass subject sync state,
+embedding freshness, enrichment, and retained-corpus evidence. To populate a new empty
+environment:
+
+1. Apply the canonical schema, deploy the Worker, and create the Vectorize metadata indexes.
+2. Run `/admin/discover-terms`, then capture `/admin/sync/status`.
+3. Run `npm run data:semester:plan` with the intended retention limits. A non-zero exit is
+   expected while the empty corpus needs backfill; keep the generated retention and coverage
+   artifacts.
+4. Create and restore-verify a D1 Time Travel backup, then run
+   `npm run data:backfill:coverage` with the generated coverage plan.
+5. Run enrichment and embedding backfill, then repeat the semester plan until its coverage and
+   freshness gates pass.
+
+This uses the same prepared D1 write path, sync-state evidence, stale pruning, and optional
+embedding updates as normal operation.
+
 Generate a retention plan before broad backfill or prune work:
 
 ```bash

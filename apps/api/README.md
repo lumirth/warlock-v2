@@ -14,14 +14,14 @@ To stay within Cloudflare Worker resource limits (subrequests, memory, and CPU t
 3.  **Coordinator:** `services/sync-coordinator.ts` discovers active terms and splits subject work into batches capped by `services/sync-batch-contract.ts`.
 4.  **Parallel execution:** `routes/sync-course-routes.ts` handles internal service-binding batch endpoints.
 5.  **Subject cascade:** `services/parallel-sync.ts` fetches and parses CISAPI cascade XML.
-6.  **Snapshot persistence:** `transforms/course.ts`, `services/snapshot-persistence-operations.ts`, `services/snapshot-persistence-sql.ts`, and `services/course-snapshot-writer.ts` transform parsed data into `CourseSnapshot`, plan writes once, and render D1 or raw-SQL output from the same operations.
+6.  **Snapshot persistence:** `transforms/course.ts`, `services/snapshot-persistence-operations.ts`, `services/snapshot-persistence-sql.ts`, and `services/course-snapshot-writer.ts` transform parsed data into `CourseSnapshot` and write it through prepared D1 statements.
 
 ### Auto-Discovery Mechanism
 The system automatically discovers new academic terms to sync:
 
 *   **Twice-Daily Discovery:** A cron job runs daily at 10:00 and 22:00 UTC.
 *   **Term Classification:** New terms are probed for `enrollmentStatus`. Open-like sections make a term `registrable`; other real statuses make it `active`; terms without real enrollment status are `historical`.
-*   **Historical Archive:** Historical terms remain available for reference but are synced less frequently.
+*   **Rolling Historical Corpus:** Retained historical terms remain fully detailed and searchable. Old terms outside the retention budget are intentionally absent.
 
 ## Key Boundaries
 

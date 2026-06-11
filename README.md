@@ -61,9 +61,11 @@ npm run cloudflare:preflight
 
 This command is expected to fail until real Cloudflare auth and staging evidence are present. The final report must use concrete evidence labels such as `Staging API URL`, `Staging Web URL`, `Pages Project`, `Pages Branch`, `WAF Rule ID` or `Rate-Limit Rule ID`, `Abuse Control Routes`, `Abuse Control Action`, `Abuse Control Thresholds`, `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified`.
 
-## Data Artifacts
+## Corpus Bootstrap
 
-Normal clone/build/test should not depend on large generated historical SQL artifacts. Generated historical chunks are ignored and local-only; a verified whole-project backup was created before removing them from git tracking.
+Generated course-history SQL is not a source artifact or a supported bootstrap path. Bootstrap
+the schema, deploy the Worker, then build the rolling full-detail corpus through the
+backup-gated retention and coverage workflow in `docs/data-refresh-runbook.md`.
 
 ## Active Docs
 

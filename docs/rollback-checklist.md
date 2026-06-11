@@ -42,6 +42,6 @@ npm run d1:preflight -- --database <db-name> --backup-ref <YYYYMMDDTHHMMSSZ> --e
 
 For schema/data rollback, use the current Cloudflare-supported D1 backup mechanism. This FTS-backed schema uses D1 Time Travel because SQL export refuses databases with virtual tables. The evidence file must name `D1 Backup Ref`, `D1 Backup Mechanism`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified: yes`.
 
-## Generated Artifacts
+## Corpus Recovery
 
-Large generated history artifacts are local-only. Restore them from the release's verified backup evidence. Rebuild retained terms through the backup-gated term and coverage backfill commands in `docs/data-refresh-runbook.md`; do not recommit generated payloads.
+Do not rely on generated course-history SQL artifacts. Restore the release's verified D1 backup when possible, or rebuild retained terms through the backup-gated term and coverage backfill commands in `docs/data-refresh-runbook.md`.

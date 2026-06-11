@@ -9,7 +9,7 @@ artifacts/
 # OS files
 .DS_Store
 
-# Sync artifacts (large SQL dumps, logs, checkpoints)
+# Local data archives and generated sync artifacts
 history_chunks/
 *.sql
 !apps/api/migrations/*.sql
