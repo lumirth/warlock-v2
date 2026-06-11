@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { expandTopics, TOPIC_GROUPS, TOPIC_MAP } from '../topic-registry.js';
+import { expandTopics } from '../topic-registry.js';
 
 describe('topic-registry', () => {
   describe('expandTopics', () => {
@@ -54,25 +54,6 @@ describe('topic-registry', () => {
 
     it('handles empty query', () => {
       expect(expandTopics('')).toHaveLength(0);
-    });
-  });
-
-  describe('TOPIC_MAP', () => {
-    it('contains expected mappings', () => {
-      expect(TOPIC_MAP['ai']).toBe('artificial intelligence');
-      expect(TOPIC_MAP['ml']).toBe('machine learning');
-      expect(TOPIC_MAP['os']).toBe('operating systems');
-      expect(TOPIC_MAP['cyber security']).toBe('cybersecurity');
-      expect(TOPIC_MAP['compilers']).toBe('compiler design programming languages');
-    });
-
-    it('contains grouped topic entries for maintainable corpus expansion', () => {
-      expect(TOPIC_GROUPS).toContainEqual(
-        expect.objectContaining({
-          expansion: 'artificial intelligence',
-          aliases: expect.arrayContaining(['ai', 'artificial intelligence']),
-        })
-      );
     });
   });
 });

@@ -10,6 +10,7 @@ import {
   type SearchRequestFiltersDto,
 } from "@uiuc-course-search/query-types";
 import { meaningfulResidualQuery } from "./search-request-text.js";
+import { escapeRegex } from "./search-text.js";
 
 export type SearchIntentRemoval =
   | {
@@ -333,8 +334,4 @@ function cleanupDanglingConnectors(query: string): string {
     .replace(/\s*(?:and|or|,)+\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

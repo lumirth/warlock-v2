@@ -14,8 +14,8 @@ import { toCourseDto } from '../dto/course.js';
 import type { Hint, SearchPlan } from './search-planner-types.js';
 import type { SearchResult } from './search-types.js';
 import {
+  courseRequirementDtoCodes,
   matchingRequirementCodes,
-  searchResultRequirementCodes,
 } from './search-requirements.js';
 
 type SearchResultEvidenceContext = {
@@ -73,12 +73,6 @@ function hasHint(hints: Hint[] | undefined, type: Hint['type']): boolean {
   return hints?.some(hint => hint.type === type) ?? false;
 }
 
-function resultRequirementCodes(
-  result: SearchResult,
-): string[] {
-  return searchResultRequirementCodes(result);
-}
-
 function buildMatchEvidence(
   result: SearchResult,
   context: SearchResultEvidenceContext,
@@ -118,7 +112,7 @@ function buildMatchEvidence(
 
   const requirement = filters.requirement;
   const requirementFilters = requirement?.codes ?? [];
-  const courseRequirementCodes = resultRequirementCodes(result);
+  const courseRequirementCodes = courseRequirementDtoCodes(result.requirements);
   if (requirementFilters.length > 0) {
     const isGenericRequirement = requirement?.mode === 'any' && isGenericAnyRequirementFilter(requirement.codes);
     const matchedCodes = matchingRequirementCodes(courseRequirementCodes, requirementFilters);

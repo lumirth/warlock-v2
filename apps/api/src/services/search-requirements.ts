@@ -3,8 +3,6 @@ import {
   normalizeRequirementCodes,
   type CourseRequirementDto,
 } from "@uiuc-course-search/query-types";
-import type { SearchResult } from "./search-types.js";
-
 export function courseRequirementDtoCodes(requirementCodes: readonly CourseRequirementDto[] | undefined): string[] {
   return normalizeCanonicalRequirementCodes(
     (requirementCodes ?? []).flatMap(requirement => [
@@ -12,12 +10,6 @@ export function courseRequirementDtoCodes(requirementCodes: readonly CourseRequi
       requirement.attributeCode ?? "",
     ]),
   );
-}
-
-export function searchResultRequirementCodes(
-  result: SearchResult,
-): string[] {
-  return courseRequirementDtoCodes(result.requirements);
 }
 
 export function matchingRequirementCodes(

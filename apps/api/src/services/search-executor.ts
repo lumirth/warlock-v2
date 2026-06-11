@@ -4,13 +4,13 @@ import {
   buildSearchCandidateBudget,
   type SearchCandidateBudget,
 } from "./search-budget.js";
-import { applySearchControls, type AppliedSearchControls } from "./search-controls.js";
+import type { AppliedSearchControls } from "./search-controls.js";
 import {
   buildRetrievalPlan,
   type RetrievalPlan,
 } from "./search-retrieval-plan.js";
 import { hybridSearch } from "./search-hybrid.js";
-import { applyTermRankingPolicy } from "./ranking/index.js";
+import { applyFinalOrderingControls, applyTermRankingPolicy } from "./ranking/index.js";
 import type { SearchResult } from "./search-types.js";
 import { getCurrentTermStates } from "./term-state.js";
 import {
@@ -52,7 +52,7 @@ export async function executeSearchPlan(
     limit: budget.browseableResultLimit,
   });
 
-  const controlledResults = applySearchControls(results, controls, {
+  const controlledResults = applyFinalOrderingControls(results, controls, {
     hasExplicitTermFilter: Boolean(plan.filters.term || plan.filters.year),
   }).slice(0, budget.browseableResultLimit);
 

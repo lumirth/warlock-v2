@@ -1,9 +1,11 @@
+import { escapeRegex } from './search-text.js';
+
 interface TopicGroup {
   expansion: string;
   aliases: string[];
 }
 
-export const TOPIC_GROUPS: TopicGroup[] = [
+const TOPIC_GROUPS: TopicGroup[] = [
   {
     expansion: 'artificial intelligence',
     aliases: ['ai', 'a i', 'artificial intelligence', 'artifical intelligence'],
@@ -89,10 +91,6 @@ export const TOPIC_GROUPS: TopicGroup[] = [
     aliases: ['ui', 'user interface'],
   },
 ];
-
-export const TOPIC_MAP: Record<string, string> = Object.fromEntries(
-  TOPIC_GROUPS.flatMap(group => group.aliases.map(alias => [alias, group.expansion]))
-);
 
 export function expandTopics(query: string): string[] {
   const expansions = new Set<string>();
@@ -193,8 +191,4 @@ function boundedLevenshtein(left: string, right: string, maxDistance: number): n
   }
 
   return previous[right.length];
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

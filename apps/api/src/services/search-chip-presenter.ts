@@ -11,10 +11,7 @@ import type {
   SearchPlan,
 } from "./search-planner-types.js";
 import {
-  formatResolvedHintLabel,
-  formatResolvedHintValue,
-  removeTextForHint,
-  resolvedFilterFromHint,
+  presentResolvedHint,
 } from "./search-hint-labels.js";
 import {
   buildRequestFilterChips,
@@ -31,20 +28,20 @@ export function buildSearchChips(
   const chips = hints
     .filter((hint) => !shouldHideHintChip(hint, plan))
     .filter((hint) => !requestFilterCoversHint(request.filters, hint.type))
-    .map((hint, index): SearchChipDto => ({
-      id: `${hint.type}-${index}`,
-      type: hint.type,
-      label: formatResolvedHintLabel(hint, plan, residual),
-      value: formatResolvedHintValue(hint, plan, residual),
-      removeRequest: removeSearchIntentRequest(
-        request,
-        {
+    .map((hint, index): SearchChipDto => {
+      const presentation = presentResolvedHint(hint, plan, residual);
+      return {
+        id: `${hint.type}-${index}`,
+        type: hint.type,
+        label: presentation.label,
+        value: presentation.value,
+        removeRequest: removeSearchIntentRequest(request, {
           kind: "filter_or_query_phrase",
-          filter: resolvedFilterFromHint(hint, plan, residual),
-          phrase: removeTextForHint(hint, residual),
-        },
-      ),
-    }));
+          filter: presentation.filter,
+          phrase: presentation.removeText,
+        }),
+      };
+    });
 
   chips.push(...buildRequestFilterChips(request));
 

@@ -11,7 +11,6 @@ import {
 import type { D1Database, VectorizeIndex, Ai } from "@cloudflare/workers-types";
 import * as extractor from "../extractor.js";
 import * as queryResolver from "../query-resolver.js";
-import * as searchText from "../search-text.js";
 import * as searchExecutor from "../search-executor.js";
 import * as topicRegistry from "../topic-registry.js";
 import type { Course } from "../../db/types.js";
@@ -21,7 +20,6 @@ import type { SearchPlan } from "../search-planner-types.js";
 
 vi.mock("../extractor.js");
 vi.mock("../query-resolver.js");
-vi.mock("../search-text.js");
 vi.mock("../search-executor.js");
 vi.mock("../topic-registry.js");
 
@@ -109,7 +107,6 @@ describe("SearchPipeline", () => {
     pipeline = new SearchPipeline(db, vectorize, ai);
     vi.clearAllMocks();
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation((queryText) => queryText);
   });
 
   it("Tier 1: should return results immediately for navigational queries", async () => {
@@ -222,9 +219,6 @@ describe("SearchPipeline", () => {
 
     vi.mocked(extractor.extract).mockReturnValue(mockExtracted);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
-      (queryText) => queryText,
-    );
     mockExecution(mockResults);
 
     const result = await pipeline.search(request(query));
@@ -257,9 +251,6 @@ describe("SearchPipeline", () => {
       semanticQuery: "highest gpa",
       keywordQuery: "highest gpa",
     });
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
-      (queryText) => queryText,
-    );
     mockExecution([
       { course: mockCourse({ id: "HIGH", avg_gpa: 3.9 }), score: 1 },
       { course: mockCourse({ id: "LOW", avg_gpa: 3.1 }), score: 2 },
@@ -292,9 +283,6 @@ describe("SearchPipeline", () => {
       semanticQuery: "sort by difficulty",
       keywordQuery: "sort by difficulty",
     });
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
-      (queryText) => queryText,
-    );
     mockExecution([
       { course: mockCourse({ id: "EASY", difficulty_score: 12 }), score: 1 },
       { course: mockCourse({ id: "HARD", difficulty_score: 82 }), score: 2 },
@@ -327,9 +315,6 @@ describe("SearchPipeline", () => {
 
     vi.mocked(extractor.extract).mockReturnValue(mockExtracted);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
-      (queryText) => queryText,
-    );
     vi.mocked(topicRegistry.expandTopics).mockReturnValue(["machine learning"]);
 
     mockExecution([
@@ -367,7 +352,6 @@ describe("SearchPipeline", () => {
       term: "spring",
       year: 2026,
     });
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation((query) => query);
     mockExecution([]);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
@@ -403,18 +387,15 @@ describe("SearchPipeline", () => {
       semanticQuery: "algorithms -calculus",
       keywordQuery: "algorithms -calculus",
     });
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
-      (queryText) => queryText,
-    );
     mockExecution([]);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
     await pipeline.search(request(query));
 
     expect(planFromFirstSearchCall()).toMatchObject({
-        semanticQuery: "algorithms -calculus",
-        keywordQuery: "algorithms -calculus",
-        filters: {},
+      semanticQuery: "algorithms calculus",
+      keywordQuery: "algorithms calculus",
+      filters: {},
     });
   });
 
@@ -529,9 +510,6 @@ describe("SearchPipeline", () => {
       semanticQuery: "",
       keywordQuery: "",
     });
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
-      (queryText) => queryText,
-    );
     mockExecution([]);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 

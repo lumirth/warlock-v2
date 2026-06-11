@@ -1,43 +1,39 @@
 import {
   formatGenEdDisplayLabel,
-  isSearchLevelFilter,
-  isSearchStatusFilter,
-  isSearchTermFilter,
-  isSearchTimeFilter,
-  isSearchWorkloadFilter,
   singleRequirementFilter,
   type SearchRequestFiltersDto,
 } from "@uiuc-course-search/query-types";
 import type {
-  CourseCodeValue,
   Hint,
-  NegationValue,
   SearchPlan,
-  TermValue,
 } from "./search-planner-types.js";
 
-export function formatResolvedHintLabel(
+export function presentResolvedHint(
   hint: Hint,
   plan: SearchPlan,
   residual = "",
-): string {
-  if (isSubjectHintResolvedAsRequirement(hint, plan)) {
-    return formatGenEdDisplayLabel(formatHintValue(hint.value));
-  }
-
-  return formatHintLabel(hint, residual);
-}
-
-export function formatResolvedHintValue(
-  hint: Hint,
-  plan: SearchPlan,
-  residual: string,
-): string {
-  if (isSubjectHintResolvedAsRequirement(hint, plan)) {
-    return formatHintValue(hint.value).toUpperCase();
-  }
-
-  return formatDisplayHintValue(hint, residual);
+): {
+  label: string;
+  value: string;
+  filter: Partial<SearchRequestFiltersDto>;
+  removeText: string;
+} {
+  const resolvedAsRequirement = isSubjectHintResolvedAsRequirement(hint, plan);
+  const rawValue = formatHintValue(hint.value);
+  return {
+    label: resolvedAsRequirement
+      ? formatGenEdDisplayLabel(rawValue)
+      : formatHintLabel(hint, residual),
+    value: resolvedAsRequirement
+      ? rawValue.toUpperCase()
+      : formatDisplayHintValue(hint, residual),
+    filter: resolvedAsRequirement
+      ? { requirement: singleRequirementFilter(rawValue) }
+      : filterFromHint(hint, residual),
+    removeText: hint.type === "instructor"
+      ? trimTrailingResidual(hint.metadata.raw, residual) ?? hint.metadata.raw
+      : hint.metadata.raw,
+  };
 }
 
 export function formatDisplayHintValue(hint: Hint, residual: string): string {
@@ -49,32 +45,10 @@ export function formatDisplayHintValue(hint: Hint, residual: string): string {
   return trimTrailingResidual(value, residual) ?? value;
 }
 
-export function removeTextForHint(hint: Hint, residual: string): string {
-  if (hint.type !== "instructor") {
-    return hint.metadata.raw;
-  }
-
-  return trimTrailingResidual(hint.metadata.raw, residual) ?? hint.metadata.raw;
-}
-
-export function resolvedFilterFromHint(
-  hint: Hint,
-  plan: SearchPlan,
-  residual: string,
-): Partial<SearchRequestFiltersDto> {
-  if (isSubjectHintResolvedAsRequirement(hint, plan)) {
-    return { requirement: singleRequirementFilter(formatHintValue(hint.value)) };
-  }
-
-  return filterFromHint(hint, residual);
-}
-
 function formatHintLabel(hint: Hint, residual = ""): string {
   switch (hint.type) {
-    case "courseCode": {
-      const value = hint.value as CourseCodeValue;
-      return `Course ${value.subject} ${value.number}`.trim();
-    }
+    case "courseCode":
+      return `Course ${hint.value.subject} ${hint.value.number}`.trim();
     case "crn":
       return `CRN ${formatHintValue(hint.value)}`;
     case "subject":
@@ -102,16 +76,12 @@ function formatHintLabel(hint: Hint, residual = ""): string {
       return `${capitalize(formatHintValue(hint.value))} workload`;
     case "requirement":
       return formatGenEdDisplayLabel(formatHintValue(hint.value));
-    case "term": {
-      const term = hint.value as TermValue;
-      return `${capitalize(term.term)} ${term.year}`;
-    }
+    case "term":
+      return `${capitalize(hint.value.term)} ${hint.value.year}`;
     case "partOfTerm":
       return `Part of term ${formatHintValue(hint.value)}`;
-    case "negation": {
-      const negation = hint.value as NegationValue;
-      return `No ${negation.value}`;
-    }
+    case "negation":
+      return `No ${hint.value.value}`;
   }
 }
 
@@ -120,13 +90,11 @@ function filterFromHint(
   residual: string,
 ): Partial<SearchRequestFiltersDto> {
   switch (hint.type) {
-    case "courseCode": {
-      const value = hint.value as CourseCodeValue;
+    case "courseCode":
       return {
-        subject: value.subject || undefined,
-        number: value.number,
+        subject: hint.value.subject || undefined,
+        number: hint.value.number,
       };
-    }
     case "subject":
       return { subject: formatHintValue(hint.value).toUpperCase() };
     case "instructor":
@@ -134,38 +102,28 @@ function filterFromHint(
     case "crn":
       return {};
     case "days":
-      return { days: formatHintValue(hint.value) };
-    case "time": {
-      const time = formatHintValue(hint.value);
-      return isSearchTimeFilter(time) ? { time } : {};
-    }
+      return { days: hint.value };
+    case "time":
+      return { time: hint.value };
     case "credits":
-      return { credits: Number(hint.value) };
-    case "level": {
-      const level = Number(hint.value);
-      return isSearchLevelFilter(level) ? { level } : {};
-    }
+      return { credits: hint.value };
+    case "level":
+      return { level: hint.value };
     case "online":
-      return { online: Boolean(hint.value) };
-    case "status": {
-      const status = formatHintValue(hint.value);
-      return isSearchStatusFilter(status) ? { status } : {};
-    }
+      return { online: hint.value };
+    case "status":
+      return { status: hint.value };
     case "workload":
-      return isSearchWorkloadFilter(hint.value)
-        ? { workload: hint.value }
-        : {};
+      return { workload: hint.value };
     case "requirement":
       return { requirement: singleRequirementFilter(formatHintValue(hint.value)) };
-    case "term": {
-      const value = hint.value as TermValue;
+    case "term":
       return {
-        ...(isSearchTermFilter(value.term) ? { term: value.term } : {}),
-        year: value.year,
+        term: hint.value.term,
+        year: hint.value.year,
       };
-    }
     case "partOfTerm":
-      return { partOfTerm: formatHintValue(hint.value) };
+      return { partOfTerm: hint.value };
     default:
       return {};
   }

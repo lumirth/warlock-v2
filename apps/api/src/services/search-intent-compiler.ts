@@ -10,6 +10,7 @@ import {
   requirementFilter,
 } from '@uiuc-course-search/query-types';
 import { withSearchPlanUpdates } from './search-plan-model.js';
+import { escapeRegex } from './search-text.js';
 import {
   ASYNC_PATTERNS,
   COMPARISON_PATTERNS,
@@ -293,8 +294,4 @@ function extractTimePreference(rawQuery: string): TimePreference | null {
     value: (normalizedHour * 60) + minute,
     raw: match[0],
   };
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

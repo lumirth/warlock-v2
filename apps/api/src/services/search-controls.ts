@@ -6,8 +6,6 @@ import {
   type SearchSort,
 } from "@uiuc-course-search/query-types";
 import type { SearchPlan } from "./search-planner-types.js";
-import { applyFinalOrderingControls, isSearchSort } from "./ranking/index.js";
-import type { SearchResult } from "./search-types.js";
 
 interface SearchControls {
   sort?: Partial<SearchSort>;
@@ -39,15 +37,6 @@ export function normalizeSearchControls(
   };
 }
 
-export function applySearchControls(
-  results: SearchResult[],
-  controls: SearchControls = DEFAULT_SEARCH_CONTROLS,
-  context: { hasExplicitTermFilter?: boolean } = {},
-): SearchResult[] {
-  const applied = normalizeSearchControls(controls);
-  return applyFinalOrderingControls(results, applied, context);
-}
-
 export function controlsWithPlanInferredSort(
   controls: AppliedSearchControls,
   plan: SearchPlan,
@@ -57,7 +46,7 @@ export function controlsWithPlanInferredSort(
   }
 
   const inferred = plan.softPreferences?.inferredSort;
-  if (!isSearchSort(inferred)) {
+  if (!inferred) {
     return controls;
   }
 

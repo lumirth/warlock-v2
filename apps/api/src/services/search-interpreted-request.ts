@@ -1,10 +1,5 @@
 import {
-  isSearchLevelFilter,
-  isSearchStatusFilter,
-  isSearchTermFilter,
-  isSearchTimeFilter,
   type NormalizedSearchRequestDto,
-  type RequirementFilter,
   type SearchRequestDto,
   type SearchRequestFiltersDto,
 } from "@uiuc-course-search/query-types";
@@ -49,16 +44,16 @@ function publicFiltersFromPlan(
     number: filters.number,
     instructor: requestFilters.instructor
       ?? (instructorHint ? formatDisplayHintValue(instructorHint, residual) : undefined),
-    term: publicTerm(filters.term),
+    term: filters.term,
     year: filters.year,
-    requirement: publicRequirementFilter(filters),
+    requirement: filters.requirement,
     credits: filters.credits,
     days: filters.days,
-    time: publicTime(filters.time),
+    time: filters.time,
     online: filters.online,
-    status: publicStatus(filters.status),
+    status: filters.status,
     workload: filters.workload,
-    level: publicLevel(filters.level),
+    level: filters.level,
     partOfTerm: filters.partOfTerm,
   });
 }
@@ -67,26 +62,4 @@ function compactPublicFilters(filters: SearchRequestFiltersDto): SearchRequestFi
   return Object.fromEntries(
     Object.entries(filters).filter(([, value]) => value !== undefined),
   ) as SearchRequestFiltersDto;
-}
-
-function publicRequirementFilter(filters: SearchFilters): RequirementFilter | undefined {
-  const requirement = filters.requirement;
-  if (!requirement) return undefined;
-  return requirement;
-}
-
-function publicTerm(value: string | undefined): SearchRequestFiltersDto["term"] {
-  return isSearchTermFilter(value) ? value : undefined;
-}
-
-function publicTime(value: string | undefined): SearchRequestFiltersDto["time"] {
-  return isSearchTimeFilter(value) ? value : undefined;
-}
-
-function publicStatus(value: string | undefined): SearchRequestFiltersDto["status"] {
-  return isSearchStatusFilter(value) ? value : undefined;
-}
-
-function publicLevel(value: number | undefined): SearchRequestFiltersDto["level"] {
-  return isSearchLevelFilter(value) ? value : undefined;
 }

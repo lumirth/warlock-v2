@@ -9,9 +9,6 @@ export {
   type RankingTermInfo,
 } from "./term-ordering.js";
 export {
-  isSearchSort,
-} from "./sort-policy.js";
-export {
   applyFinalOrderingControls,
 } from "./final-ordering.js";
 

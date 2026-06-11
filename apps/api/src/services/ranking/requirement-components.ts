@@ -4,8 +4,8 @@ import {
 } from "@uiuc-course-search/query-types";
 import type { SearchFilters, SearchPlan } from "../search-planner-types.js";
 import {
+  courseRequirementDtoCodes,
   matchingRequirementCodes,
-  searchResultRequirementCodes,
 } from "../search-requirements.js";
 import type { RankingScoreComponent, SearchResult } from "../search-types.js";
 import { RANKING_POLICY } from "./ranking-policy.js";
@@ -15,7 +15,7 @@ export function requirementComponent(
   result: SearchResult,
   plan: SearchPlan,
 ): RankingScoreComponent | null {
-  const courseCodes = searchResultRequirementCodes(result);
+  const courseCodes = courseRequirementDtoCodes(result.requirements);
   const matchedCodes = matchingRequestedRequirementCodes(courseCodes, plan.filters);
   if (matchedCodes.length > 0) {
     const policy = RANKING_POLICY.components.requirementIntent.exactMatch;

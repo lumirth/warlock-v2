@@ -7,10 +7,10 @@ import {
 } from '../student-language-lexicon.js';
 import {
   createMetadata,
-  escapeRegExp,
   maskMatches,
   type TextMatch,
 } from './text.js';
+import { escapeRegex } from '../search-text.js';
 
 export function extractPositiveNoNotAliases(text: string, hints: Hint[]): string {
   let residual = text;
@@ -158,7 +158,7 @@ function classifyNegationTarget(raw: string): {
 
 function matchLeadingRawTarget(raw: string, terms: string[]): { value: string; length: number } | null {
   for (const term of terms) {
-    const source = escapeRegExp(term).replace(/\\ /g, '\\s+').replace(/\\-/g, '[-\\s]+');
+    const source = escapeRegex(term).replace(/\\ /g, '\\s+').replace(/\\-/g, '[-\\s]+');
     const pattern = new RegExp(`^\\s*(${source})(?=\\b|\\s|$)`, 'i');
     const match = pattern.exec(raw);
     if (match) {

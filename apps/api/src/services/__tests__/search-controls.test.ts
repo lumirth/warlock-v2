@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Course } from '../../db/types.js';
 import type { SearchResult } from '../search-types.js';
-import {
-  applySearchControls,
-  normalizeSearchControls,
-} from '../search-controls.js';
+import { normalizeSearchControls } from '../search-controls.js';
+import { applyFinalOrderingControls } from '../ranking/final-ordering.js';
 
 const course = (overrides: Partial<Course>): Course => ({
   id: 'COURSE-1',
@@ -45,21 +43,21 @@ const result = (
   scoreComponents: searchOverrides.scoreComponents,
 });
 
-describe('applySearchControls', () => {
+describe('applyFinalOrderingControls', () => {
   it('keeps relevance order as the default sort', () => {
     const results = [
       result('first', { avg_gpa: 2.9 }),
       result('second', { avg_gpa: 4.0 }),
     ];
 
-    expect(applySearchControls(results).map((item) => item.course.id)).toEqual([
-      'first',
-      'second',
-    ]);
+    expect(
+      applyFinalOrderingControls(results, normalizeSearchControls())
+        .map((item) => item.course.id),
+    ).toEqual(['first', 'second']);
   });
 
   it('sorts precise numeric attributes server-side with nulls last', () => {
-    const sorted = applySearchControls(
+    const sorted = applyFinalOrderingControls(
       [
         result('middle', { avg_gpa: 3.4 }),
         result('missing', { avg_gpa: null }),
@@ -92,7 +90,7 @@ describe('applySearchControls', () => {
   });
 
   it('uses relevance order as the tiebreaker for equal sort values', () => {
-    const sorted = applySearchControls(
+    const sorted = applyFinalOrderingControls(
       [
         result('relevance-first', { primary_instructor_rmp: 4.7 }),
         result('relevance-second', { primary_instructor_rmp: 4.7 }),
@@ -114,7 +112,7 @@ describe('applySearchControls', () => {
   });
 
   it('sorts quality by displayed tier, not raw composite score', () => {
-    const sorted = applySearchControls(
+    const sorted = applyFinalOrderingControls(
       [
         result('excellent-relevance-first', { quality_score: 86 }),
         result('excellent-higher-raw-score', { quality_score: 99 }),
@@ -131,7 +129,7 @@ describe('applySearchControls', () => {
   });
 
   it('sorts workload by displayed tier, not raw difficulty score', () => {
-    const sorted = applySearchControls(
+    const sorted = applyFinalOrderingControls(
       [
         result('easy-relevance-first', { difficulty_score: 20 }),
         result('hard', { difficulty_score: 90 }),
@@ -150,24 +148,24 @@ describe('applySearchControls', () => {
   });
 
   it('filters historical results out of active scope', () => {
-    const scoped = applySearchControls(
+    const scoped = applyFinalOrderingControls(
       [
         result('active', {}, { historical: false }),
         result('historical', {}, { historical: true }),
       ],
-      { scope: 'active' },
+      normalizeSearchControls({ scope: 'active' }),
     );
 
     expect(scoped.map((item) => item.course.id)).toEqual(['active']);
   });
 
   it('keeps explicitly requested historical terms even under the default active scope', () => {
-    const scoped = applySearchControls(
+    const scoped = applyFinalOrderingControls(
       [
         result('active', {}, { historical: false }),
         result('requested-spring', {}, { historical: true }),
       ],
-      { scope: 'active' },
+      normalizeSearchControls({ scope: 'active' }),
       { hasExplicitTermFilter: true },
     );
 
@@ -178,7 +176,7 @@ describe('applySearchControls', () => {
   });
 
   it('orders level by numeric course number', () => {
-    const sorted = applySearchControls(
+    const sorted = applyFinalOrderingControls(
       [
         result('senior', { number: '498' }),
         result('gateway', { number: '124' }),
@@ -195,11 +193,11 @@ describe('applySearchControls', () => {
   });
 
   it('replaces stale sort trace components when controls are reapplied', () => {
-    const firstPass = applySearchControls(
+    const firstPass = applyFinalOrderingControls(
       [result('course', { avg_gpa: 3.9, credit_hours: 4 })],
       { sort: { field: 'gpa', direction: 'desc' }, scope: 'all' },
     );
-    const secondPass = applySearchControls(
+    const secondPass = applyFinalOrderingControls(
       firstPass,
       { sort: { field: 'credits', direction: 'asc' }, scope: 'all' },
     );

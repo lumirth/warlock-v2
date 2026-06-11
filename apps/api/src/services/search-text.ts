@@ -10,7 +10,7 @@ const SPECIAL_TOKEN_REGEX = new RegExp(
   Object.keys(SPECIAL_TOKENS)
     .sort((a, b) => b.length - a.length)
     .map(token => {
-      const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escaped = escapeRegex(token);
       return `(?<![a-zA-Z0-9])${escaped}(?![a-zA-Z0-9])`;
     })
     .join("|"),
@@ -83,6 +83,10 @@ export function sanitizeFtsQuery(query: string): string {
 
 export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, match => `\\${match}`);
+}
+
+export function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function titleLaneQuery(

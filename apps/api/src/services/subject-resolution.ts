@@ -5,6 +5,7 @@ import {
   singleRequirementFilter,
 } from '@uiuc-course-search/query-types';
 import type { Hint, SearchPlan } from './search-planner-types.js';
+import { escapeLike, escapeRegex } from './search-text.js';
 import {
   FUZZY_SUBJECT_NAME_BLOCKLIST,
   SUBJECT_REQUIREMENT_CONFLICTS,
@@ -90,11 +91,11 @@ export async function validateSubject(
   const fuzzyParams: string[] = [];
   if (isFuzzySubjectNameCandidate(normalized)) {
     fuzzyClauses.push("LOWER(name) LIKE ? ESCAPE '\\'");
-    fuzzyParams.push(`%${escapeLikePattern(normalized)}%`);
+    fuzzyParams.push(`%${escapeLike(normalized)}%`);
   }
   if (isFuzzySubjectCodeCandidate(normalized)) {
     fuzzyClauses.push("id LIKE ? ESCAPE '\\'");
-    fuzzyParams.push(`%${escapeLikePattern(upper)}%`);
+    fuzzyParams.push(`%${escapeLike(upper)}%`);
   }
 
   if (fuzzyClauses.length > 0) {
@@ -242,14 +243,6 @@ function isFuzzySubjectNameCandidate(normalized: string): boolean {
 
 function isFuzzySubjectCodeCandidate(normalized: string): boolean {
   return /^[a-z]{2,8}$/.test(normalized);
-}
-
-function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, match => `\\${match}`);
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function getSubjectName(db: D1Database, code: string): Promise<string> {

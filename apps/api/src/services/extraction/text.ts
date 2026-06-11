@@ -17,10 +17,6 @@ export function maskMatches(text: string, matches: readonly TextMatch[]): string
   return residual;
 }
 
-export function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 export function createMetadata(
   source: 'regex' | 'alias' | 'nlp',
   raw: string,

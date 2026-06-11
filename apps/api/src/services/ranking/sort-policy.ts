@@ -1,5 +1,4 @@
 import {
-  SEARCH_SORT_FIELDS,
   getQualityTierRank,
   getWorkloadTierRank,
   type SearchSort,
@@ -33,13 +32,4 @@ export function sortValueForResult(
     case "relevance":
       return null;
   }
-}
-
-export function isSearchSort(value: unknown): value is SearchSort {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as SearchSort;
-  return (
-    SEARCH_SORT_FIELDS.includes(candidate.field) &&
-    (candidate.direction === "asc" || candidate.direction === "desc")
-  );
 }

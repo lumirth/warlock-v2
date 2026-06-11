@@ -129,16 +129,13 @@ export function searchControllerReducer(
         activeRequest:
           action.mode === 'append'
             ? state.session.activeRequest
-            : activeRequestFromResponse(
-                action.response,
-                state.session.activeRequest
-              ),
+            : activeRequestFromResponse(action.response),
         results:
           action.mode === 'append'
-            ? [...state.session.results, ...(action.response.results || [])]
-            : action.response.results || [],
-        meta: action.response.meta || null,
-        pagination: action.response.pagination ?? null,
+            ? [...state.session.results, ...action.response.results]
+            : action.response.results,
+        meta: action.response.meta,
+        pagination: action.response.pagination,
         sort:
           action.mode === 'append'
             ? state.session.sort
@@ -229,14 +226,10 @@ function withoutPaginationOffset(request: SearchRequestDto): SearchRequestDto {
 }
 
 function activeRequestFromResponse(
-  response: SearchResponseDto,
-  previousRequest: SearchRequestDto | null
-): SearchRequestDto | null {
-  const nextRequest = response.meta?.nextRequest
-  if (!nextRequest) return previousRequest
-
+  response: SearchResponseDto
+): SearchRequestDto {
   return {
-    ...nextRequest,
+    ...response.meta.nextRequest,
     pagination: {
       limit: response.pagination.limit,
       offset: 0,
