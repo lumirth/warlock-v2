@@ -91,7 +91,7 @@ export async function fetchWithRateLimitRetry(
   }
 }
 
-export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
+async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
   console.log(`Running evaluation against ${baseUrl}...`);
   console.log(`Total queries: ${GOLDEN_QUERIES.length}\n`);
 
@@ -136,13 +136,11 @@ export async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
       evalResults.push({
         query,
         actualFilters: {},
-        actualResidual: '',
         results: [],
         reciprocalRank: 0,
         violations: [`Fetch error: ${error}`],
         parseViolations: [`Fetch error: ${error}`],
         resultViolations: [],
-        tierReached: null
       });
     }
 

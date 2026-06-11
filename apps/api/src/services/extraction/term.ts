@@ -1,4 +1,5 @@
 import type { Hint } from '../search-planner-types.js';
+import { isSearchTermFilter } from '@uiuc-course-search/query-types';
 import { createMetadata, maskMatches, type TextMatch } from './text.js';
 
 export function extractQuestionScaffolding(text: string): string {
@@ -24,9 +25,11 @@ export function extractTerms(text: string, hints: Hint[]): string {
 
   let match;
   while ((match = termRegex.exec(text)) !== null) {
+    const term = match[1].toLowerCase();
+    if (!isSearchTermFilter(term)) continue;
     hints.push({
       type: 'term',
-      value: { term: match[1].toLowerCase(), year: parseInt(match[2]) },
+      value: { term, year: parseInt(match[2]) },
       metadata: createMetadata('regex', match[0], 0.95),
     });
     matches.push({ index: match.index, length: match[0].length });

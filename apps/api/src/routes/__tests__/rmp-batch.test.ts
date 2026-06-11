@@ -18,7 +18,6 @@ vi.mock('../../services/rmp-sync.js', () => ({
 
 const teacher: RmpTeacherNode = {
   id: 'Teacher-1',
-  legacyId: 1,
   firstName: 'Ada',
   lastName: 'Lovelace',
   avgRating: 5,

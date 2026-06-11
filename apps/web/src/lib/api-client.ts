@@ -1,19 +1,18 @@
-import type {
-  CourseDetailResponseDto,
-  FeedbackResponseDto,
-  FeedbackSubmitDto,
-  SearchRequestDto,
-  SearchResponseDto,
-  SearchTermOptionsDto,
+import {
+  searchRequestToQueryEntries,
+  type CourseDetailResponseDto,
+  type FeedbackResponseDto,
+  type FeedbackSubmitDto,
+  type SearchRequestDto,
+  type SearchResponseDto,
+  type SearchTermOptionsDto,
 } from '@uiuc-course-search/query-types'
-import { searchRequestToQueryParams } from './search-request-query'
 
-// Allow base URL configuration via env var
 const DEFAULT_API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.PROD ? 'https://uiuc-course-search.lumirth.workers.dev' : '')
 
-export type ApiRequestOptions = {
+type ApiRequestOptions = {
   signal?: AbortSignal
 }
 
@@ -25,7 +24,6 @@ export class ApiClient {
   }
 
   private async fetch<T>(path: string, init?: RequestInit): Promise<T> {
-    // Ensure no double slashes by stripping trailing slash from base and leading slash from path
     const cleanBase = this.baseUrl.replace(/\/$/, '')
     const cleanPath = path.replace(/^\//, '')
     const url = `${cleanBase}/${cleanPath}`
@@ -33,7 +31,6 @@ export class ApiClient {
     const res = await fetch(url, init)
 
     if (!res.ok) {
-      // Try to parse JSON error message
       let apiError: string | null = null
       try {
         const errorBody = (await res.json()) as { error?: string }
@@ -41,7 +38,7 @@ export class ApiClient {
           apiError = errorBody.error
         }
       } catch {
-        // Ignore JSON parse error, fall through to status text
+        // Fall through to the status text when the response is not JSON.
       }
       if (apiError) {
         throw new Error(apiError)
@@ -56,7 +53,7 @@ export class ApiClient {
     request: SearchRequestDto,
     options: ApiRequestOptions = {}
   ): Promise<SearchResponseDto> {
-    const params = searchRequestToQueryParams(request)
+    const params = new URLSearchParams(searchRequestToQueryEntries(request))
 
     return this.fetch<SearchResponseDto>(`api/search?${params.toString()}`, {
       signal: options.signal,
@@ -76,7 +73,7 @@ export class ApiClient {
     const queryString = params.toString() ? `?${params.toString()}` : ''
 
     return this.fetch<CourseDetailResponseDto>(
-      `api/course/${subject}/${number}${queryString}`,
+      `api/course/${encodeURIComponent(subject)}/${encodeURIComponent(number)}${queryString}`,
       { signal }
     )
   }

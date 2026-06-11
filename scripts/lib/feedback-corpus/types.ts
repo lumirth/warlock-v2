@@ -45,7 +45,6 @@ export type SuggestedGoldQuery = {
   query: string;
   expected_filters: Record<string, unknown>;
   expected_filter_keys?: string[];
-  expected_residual: string;
   category: 'navigational' | 'structured' | 'semantic' | 'instructor' | 'score' | 'schedule';
   notes: string;
 };

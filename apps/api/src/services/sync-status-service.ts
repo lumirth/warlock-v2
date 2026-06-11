@@ -2,8 +2,9 @@ import type { D1Database } from '@cloudflare/workers-types';
 import type {
   SearchTermFilter,
   SearchTermOptionsDto,
-  TermOptionStatus,
+  TermStatus,
 } from '@uiuc-course-search/query-types';
+import { TERM_STATUS_VALUES } from '@uiuc-course-search/query-types';
 import { getTermsByStatus } from '../db/term-state-repository.js';
 import type { SyncState, TermState, TermStateStatus } from '../db/types.js';
 import {
@@ -12,12 +13,12 @@ import {
 } from '../db/sync-status-repository.js';
 import { buildFreshnessSummary } from './freshness.js';
 
-export type SyncStatusEnvironment = {
+type SyncStatusEnvironment = {
   currentYear: string;
   currentTerm: string;
 };
 
-export type SyncStatusResponse = {
+type SyncStatusResponse = {
   generatedAt: string;
   syncStates: SyncState[];
   termStates: TermState[];
@@ -31,7 +32,7 @@ type PublicTermRow = {
   term_id: string;
   year: number;
   term: SearchTermFilter;
-  status: TermOptionStatus;
+  status: TermStatus;
 };
 
 type CourseTermRow = {
@@ -100,7 +101,7 @@ export async function listPublicTermOptions(
   const termStateRows = await db.prepare(`
     SELECT term_id, year, term, status
     FROM term_state
-    WHERE status IN ('registrable', 'active', 'historical')
+    WHERE status IN (?, ?, ?)
     ORDER BY year DESC,
       CASE term
         WHEN 'fall' THEN 4
@@ -109,7 +110,7 @@ export async function listPublicTermOptions(
         WHEN 'winter' THEN 1
         ELSE 0
       END DESC
-  `).all<PublicTermRow>();
+  `).bind(...TERM_STATUS_VALUES).all<PublicTermRow>();
 
   const termStateTerms = (termStateRows.results ?? []).map((row) => ({
     termId: row.term_id,

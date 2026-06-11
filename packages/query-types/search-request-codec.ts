@@ -15,7 +15,8 @@ import {
   isSearchLevelFilter,
   isSearchScope,
   isSearchSortField,
-  coerceSearchRequestDto,
+  normalizeSearchPaginationDto,
+  normalizeSearchRequestDto,
   searchRequestHasFilters,
   type NormalizedSearchRequestDto,
   type SearchPaginationDto,
@@ -53,7 +54,7 @@ type ParseResult<T> =
 export function searchRequestToQueryEntries(
   request: SearchRequestDto,
 ): Array<[string, string]> {
-  const normalized = coerceSearchRequestDto(request);
+  const normalized = normalizeSearchRequestDto(request);
   const entries: Array<[string, string]> = [["q", normalized.query]];
 
   for (const [key, value] of searchPaginationToQueryEntries(request.pagination)) {
@@ -242,7 +243,7 @@ export function decodeSearchRequestQuery(
     requestInput.filters!.level = level.value;
   }
 
-  const request = coerceSearchRequestDto(requestInput);
+  const request = normalizeSearchRequestDto(requestInput);
   if (!request.query.trim() && !searchRequestHasFilters(request)) {
     return { ok: false, error: "Missing query parameter q" };
   }
@@ -262,12 +263,15 @@ export function decodeSearchRequestQuery(
 function searchPaginationToQueryEntries(
   pagination: SearchPaginationDto | undefined,
 ): Array<[string, string]> {
+  if (!pagination) return [];
+
+  const normalized = normalizeSearchPaginationDto(pagination);
   const entries: Array<[string, string]> = [];
   if (pagination?.limit !== undefined) {
-    entries.push(["limit", String(pagination.limit)]);
+    entries.push(["limit", String(normalized.limit)]);
   }
   if (pagination?.offset !== undefined) {
-    entries.push(["offset", String(pagination.offset)]);
+    entries.push(["offset", String(normalized.offset)]);
   }
   return entries;
 }
@@ -370,7 +374,7 @@ function parseSearchRequirementParam(
   const mode: RequirementFilterMode = normalizedMode && isRequirementFilterMode(normalizedMode)
     ? normalizedMode
     : codes.length > 1
-      ? "any"
+      ? "all"
       : "single";
   if (mode === "single" && codes.length > 1) {
     return {

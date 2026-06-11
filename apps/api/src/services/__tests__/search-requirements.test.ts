@@ -2,14 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   courseRequirementDtoCodes,
   matchingRequirementCodes,
-  structuredRequirementCodes,
 } from '../search-requirements.js';
 
 describe('search requirement code model', () => {
-  it('normalizes structured requirement codes into one deduped set', () => {
-    expect(structuredRequirementCodes(['1US', 'CS', ''])).toEqual(['US', 'CS']);
-  });
-
   it('extracts category and sub-attribute codes from requirement DTOs', () => {
     expect(
       courseRequirementDtoCodes([

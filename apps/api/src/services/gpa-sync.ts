@@ -26,7 +26,7 @@ interface GpaRecord {
   sampleSize: number;
 }
 
-export interface SyncResult {
+interface SyncResult {
   success: boolean;
   rowsProcessed: number;
   message: string;

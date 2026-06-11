@@ -19,6 +19,15 @@ type TermStateRow = {
   status: TermStateStatus;
 };
 
+export async function getCurrentTermStates(db: D1Database): Promise<TermStateRow[]> {
+  const result = await db.prepare(`
+    SELECT term_id, year, term, status
+    FROM term_state
+    WHERE status IN ('active', 'registrable')
+  `).all<TermStateRow>();
+  return result.results;
+}
+
 export async function resolveTermContext(
   db: D1Database,
   options: {

@@ -5,7 +5,7 @@ import {
   VALID_SUBJECTS,
 } from './data/valid-subjects.js';
 
-export type SubjectAliasEntry = {
+type SubjectAliasEntry = {
   subject: string;
   aliases: string[];
 };

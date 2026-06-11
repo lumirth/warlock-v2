@@ -1,10 +1,10 @@
-export interface UpstreamBackoffConfig {
+interface UpstreamBackoffConfig {
   backoffBaseMs: number;
   backoffMaxMs: number;
   maxRetries: number;
 }
 
-export interface UpstreamBackoffState {
+interface UpstreamBackoffState {
   isBackingOff: boolean;
   backoffUntil: number | null;
   consecutiveFailures: number;

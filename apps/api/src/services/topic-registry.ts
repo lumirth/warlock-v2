@@ -1,4 +1,4 @@
-export interface TopicGroup {
+interface TopicGroup {
   expansion: string;
   aliases: string[];
 }

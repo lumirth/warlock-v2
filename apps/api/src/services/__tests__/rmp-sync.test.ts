@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { coordinateRmpSync } from '../rmp-sync.js';
+import { coordinateRmpSync, processRmpBatch, type RmpTeacherNode } from '../rmp-sync.js';
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 
 type SyncStateRow = {
@@ -37,7 +37,6 @@ function mockRmpResponse(endCursor: string | null, hasNextPage = false) {
             cursor: endCursor ?? 'cursor-final',
             node: {
               id: 'Teacher-1',
-              legacyId: 1,
               firstName: 'Ada',
               lastName: 'Lovelace',
               avgRating: 5,
@@ -162,5 +161,55 @@ describe('coordinateRmpSync', () => {
     const fetchBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
     expect(fetchBody.variables.cursor).toBe('stored-cursor');
     expect(stateWrites.at(-1)).toEqual(['rmp', 'complete', 101, 4, 'new-cursor']);
+  });
+});
+
+describe('processRmpBatch', () => {
+  it('propagates ratings only to instructors in the processed batch', async () => {
+    const updates: Array<{ sql: string; args: unknown[] }> = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn((...args: unknown[]) => {
+          if (sql.includes('UPDATE instructors') || sql.includes('UPDATE courses')) {
+            updates.push({ sql, args });
+          }
+          return { run: vi.fn(async () => ({})) };
+        }),
+      })),
+      batch: vi.fn(async () => []),
+    };
+    const teachers: RmpTeacherNode[] = [
+      {
+        id: 'Teacher-1',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        avgRating: 5,
+        numRatings: 10,
+        avgDifficulty: 2,
+        department: 'Computer Science',
+        wouldTakeAgainPercent: 100,
+        teacherRatingTags: [],
+      },
+      {
+        id: 'Teacher-2',
+        firstName: 'Grace',
+        lastName: 'Hopper',
+        avgRating: 4.8,
+        numRatings: 20,
+        avgDifficulty: 2.2,
+        department: 'Computer Science',
+        wouldTakeAgainPercent: 98,
+        teacherRatingTags: [],
+      },
+    ];
+
+    await processRmpBatch(db as unknown as D1Database, teachers);
+
+    expect(updates).toHaveLength(2);
+    expect(updates.map(update => update.args)).toEqual([
+      ['Lovelace, A', 'Hopper, G'],
+      ['Lovelace, A', 'Hopper, G'],
+    ]);
+    expect(updates.every(update => !update.sql.includes('fetched_at'))).toBe(true);
   });
 });

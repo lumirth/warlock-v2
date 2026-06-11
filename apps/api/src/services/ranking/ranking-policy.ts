@@ -1,4 +1,4 @@
-import type { RetrievalLane } from "../search-planner-types.js";
+import type { RetrievalLane } from "../search-types.js";
 
 export const RANKING_POLICY = {
   retrievalFusion: {
@@ -6,23 +6,14 @@ export const RANKING_POLICY = {
     laneWeights: {
       exact: 9,
       official_text: 1.8,
-      requirement: 2.4,
+      structured_course: 1.8,
       section_text: 1.6,
-      structured_section: 2,
-      student_language_alias: 2.1,
       topic_semantic: 1.4,
-      workload_evidence: 2.2,
-      help_path: 1,
     } satisfies Record<RetrievalLane, number>,
   },
   components: {
     exactness: 6,
     qualityTierWeight: 0.08,
-    laneMatch: {
-      structuredSection: 0.35,
-      studentLanguageAlias: 0.25,
-      workloadEvidence: 0.45,
-    },
     eligibility: {
       noListedPrereq: 0.35,
       prerequisiteRisk: -0.35,
@@ -50,7 +41,6 @@ export const RANKING_POLICY = {
         qualityTier: 0.25,
         workloadTier: 0.3,
         averageGpa: 0.2,
-        workloadEvidence: 0.3,
       },
       level: {
         level100: 0.55,
@@ -192,5 +182,3 @@ export const RANKING_POLICY = {
 } as const;
 
 export const WORKLOAD_FILTER_THRESHOLDS = RANKING_POLICY.filters.workload;
-
-export type RankingPolicy = typeof RANKING_POLICY;

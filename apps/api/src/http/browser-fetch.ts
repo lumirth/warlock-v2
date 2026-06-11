@@ -8,7 +8,7 @@ import { errorFields, logger } from '../observability/logger.js';
  * By mimicking a real browser's headers, we avoid the challenge.
  */
 
-export const BROWSER_HEADERS: Record<string, string> = {
+const BROWSER_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
@@ -23,7 +23,7 @@ export const BROWSER_HEADERS: Record<string, string> = {
   'Cache-Control': 'no-cache'
 };
 
-export interface BrowserFetchOptions extends RequestInit {
+interface BrowserFetchOptions extends RequestInit {
   retries?: number;
   retryDelay?: number;
   timeoutMs?: number;
@@ -82,7 +82,7 @@ export async function browserFetch(
 /**
  * Check if a response indicates a WAF challenge.
  */
-export function isWafChallenge(response: Response): boolean {
+function isWafChallenge(response: Response): boolean {
   const wafAction = response.headers.get('x-amzn-waf-action');
   return wafAction === 'challenge' || wafAction === 'captcha';
 }

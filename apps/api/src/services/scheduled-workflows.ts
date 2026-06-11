@@ -6,7 +6,7 @@ import { coordinateCourseSync, type CourseSyncTrigger } from './sync-coordinator
 import { discoverAndClassifyTerms } from './term-discovery.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 
-export type ScheduledWorkflowEnv = {
+type ScheduledWorkflowEnv = {
   DB: D1Database;
   SELF: Fetcher;
   GPA_CACHE: KVNamespace;
@@ -17,19 +17,19 @@ export type ScheduledWorkflowEnv = {
   RMP_AUTH_TOKEN?: string;
 };
 
-export type ScheduledWorkflow =
+type ScheduledWorkflow =
   | { name: 'term_discovery'; trigger: 'daily_term_discovery' }
   | { name: 'weekly_gpa_reset'; trigger: 'weekly_maintenance' }
   | { name: 'weekly_rmp_enrichment'; trigger: 'weekly_maintenance' }
   | { name: 'gpa_resume'; trigger: 'gpa_resume_cron' }
   | { name: 'course_sync'; trigger: CourseSyncTrigger };
 
-export type ScheduledWorkflowPlan = {
+type ScheduledWorkflowPlan = {
   cron: string;
   workflows: ScheduledWorkflow[];
 };
 
-export type ScheduledWorkflowDispatch = {
+type ScheduledWorkflowDispatch = {
   cron: string;
   env: ScheduledWorkflowEnv;
   waitUntil: (workflow: Promise<void>) => void;

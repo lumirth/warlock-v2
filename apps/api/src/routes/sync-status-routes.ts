@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import { TERM_STATUSES } from '../db/types.js';
+import { TERM_STATUS_VALUES } from '@uiuc-course-search/query-types';
 import { parseEnumParam } from '../http/params.js';
+import { errorFields, logger } from '../observability/logger.js';
 import {
   buildSyncStatusResponse,
   listPublicTermOptions,
@@ -14,7 +15,8 @@ syncStatusRoutes.get('/api/terms', async (c) => {
   try {
     return c.json(await listPublicTermOptions(c.env.DB));
   } catch (error) {
-    return c.json({ error: String(error) }, 500);
+    logger.error('route.terms.failed', { ...errorFields(error) });
+    return c.json({ error: 'Term options could not be loaded' }, 500);
   }
 });
 
@@ -30,7 +32,7 @@ syncStatusRoutes.get('/admin/terms', async (c) => {
 
   try {
     if (statusRaw) {
-      const status = parseEnumParam(statusRaw, 'status', TERM_STATUSES);
+      const status = parseEnumParam(statusRaw, 'status', TERM_STATUS_VALUES);
       if (!status.ok) return c.json({ error: status.error }, 400);
       return c.json(await listTermsForAdmin(c.env.DB, status.value));
     }

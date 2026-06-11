@@ -42,7 +42,8 @@ describe('sql to csv', () => {
 
   it('exits nonzero when the input SQL file cannot be read', () => {
     const outputDir = tempPath('csv');
-    const result = spawnSync('npx', [
+    const result = spawnSync(process.execPath, [
+      '--import',
       'tsx',
       'scripts/sql-to-csv.ts',
       tempPath('missing.sql'),

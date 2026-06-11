@@ -1,28 +1,27 @@
 import type { D1Database } from "@cloudflare/workers-types";
+import type { SearchScope } from "@uiuc-course-search/query-types";
 import type { SearchFilters } from "./search-planner-types.js";
 import {
   buildFilteredCourseQuery,
   hasFilteredCourseConstraints,
-  RETRIEVAL_LANE_SPECS,
 } from "./search-lane-query-builder.js";
 import { chunkValues } from "./search-loaders.js";
-import {
-  rankedLaneRow,
-  type RankedLaneRow,
-} from "./search-retrieval-lane-result.js";
+import { rankedLaneRow } from "./search-retrieval-lane-result.js";
 import { sanitizeFtsQuery } from "./search-text.js";
+import type { RetrievalLaneResult } from "./search-types.js";
 
 export async function sectionKeywordSearch(
   db: D1Database,
   keywordQuery: string,
   filters: SearchFilters,
   limit: number = 50,
-): Promise<RankedLaneRow[]> {
+  scope: SearchScope = "all",
+): Promise<RetrievalLaneResult[]> {
   if (!keywordQuery || !keywordQuery.trim()) {
     return [];
   }
 
-  const filtered = buildFilteredCourseQuery(filters);
+  const filtered = buildFilteredCourseQuery(filters, scope);
   const joinClause = filtered.joinSqlExcluding(["sections"]);
 
   const sql = `
@@ -50,42 +49,11 @@ export async function sectionKeywordSearch(
   ));
 }
 
-export async function structuredSectionLaneSearch(
-  db: D1Database,
-  filters: SearchFilters,
-  limit: number = 50,
-): Promise<RankedLaneRow[]> {
-  const filtered = buildFilteredCourseQuery(filters);
-  if (!hasFilteredCourseConstraints(filtered)) {
-    return [];
-  }
-
-  const sql = `
-    SELECT DISTINCT c.id
-    FROM courses c
-    ${filtered.joinSql}
-    ${filtered.whereSql()}
-    ${filtered.groupBySql()}
-    ORDER BY c.year DESC, c.subject, c.number
-    LIMIT ?
-  `;
-
-  const result = await db.prepare(sql)
-    .bind(...filtered.bindParams([limit]))
-    .all<{ id: string }>();
-
-  return result.results.map((row, index) => rankedLaneRow(
-    "structured_section",
-    row.id,
-    index,
-    RETRIEVAL_LANE_SPECS.structured_section.resultReason,
-  ));
-}
-
 export async function postFilterSemanticResults(
   db: D1Database,
   semanticResults: { id: string; score: number }[],
   filters: SearchFilters,
+  scope: SearchScope = "all",
 ): Promise<{ id: string; score: number }[]> {
   if (semanticResults.length === 0) return [];
 
@@ -93,9 +61,9 @@ export async function postFilterSemanticResults(
     if (value === undefined || value === null) return false;
     return Array.isArray(value) ? value.length > 0 : true;
   });
-  if (!hasActiveFilters) return semanticResults;
+  if (!hasActiveFilters && scope === "all") return semanticResults;
 
-  const filtered = buildFilteredCourseQuery(filters);
+  const filtered = buildFilteredCourseQuery(filters, scope);
 
   if (!hasFilteredCourseConstraints(filtered)) return semanticResults;
 
@@ -110,7 +78,6 @@ export async function postFilterSemanticResults(
       FROM courses c
       ${filtered.joinSql}
       ${filtered.whereSql([`c.id IN (${placeholders})`])}
-      ${filtered.groupBySql()}
     `;
 
     const finalParams = filtered.bindParams(batch);

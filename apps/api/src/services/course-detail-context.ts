@@ -16,16 +16,16 @@ export async function createCourseDetailContext(
     fallbackYear: env.CURRENT_YEAR,
     fallbackTerm: env.CURRENT_TERM,
   });
-  const term = resolvedTerm.term;
-
   return {
     subject: request.subject,
     number: request.number,
     resolvedTerm,
-    year: String(resolvedTerm.year),
-    term,
-    termId: resolvedTerm.termId,
-    courseId: makeCourseId(request.subject, request.number, resolvedTerm.year, term),
+    courseId: makeCourseId(
+      request.subject,
+      request.number,
+      resolvedTerm.year,
+      resolvedTerm.term,
+    ),
     cacheTtlMs: parseInt(env.CLIENT_CACHE_TTL_MS, 10) || 30000,
   };
 }

@@ -45,7 +45,7 @@ export function applyStructuredNegation(
   }
 }
 
-export function applyNegativeSoftPreference(value: string, plan: SearchPlan): void {
+function applyNegativeSoftPreference(value: string, plan: SearchPlan): void {
   const normalized = value.toLowerCase();
   const softPreferences = { ...(plan.softPreferences ?? {}) };
 

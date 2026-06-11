@@ -17,7 +17,7 @@ type CourseScoreSource = {
   linked_rmp_difficulty: number | null;
 };
 
-export type CourseScoreResult = {
+type CourseScoreResult = {
   qualityScore: number | null;
   difficultyScore: number | null;
   primaryInstructorRmp: number | null;
@@ -141,7 +141,7 @@ export async function coordinateEnrichment(
   };
 }
 
-export async function rebuildInstructorCourseLinks(
+async function rebuildInstructorCourseLinks(
   db: D1Database,
   options: { termId: string; year: number; term: string }
 ): Promise<{ contextCount: number; linkCount: number }> {

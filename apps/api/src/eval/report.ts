@@ -23,21 +23,3 @@ export function generateReport(metrics: EvalMetrics, label: string = 'Current'):
 
   return lines.join('\n');
 }
-
-export function compareReports(before: EvalMetrics, after: EvalMetrics): string {
-  const lines: string[] = [];
-
-  const delta = (a: number, b: number) => {
-    const diff = b - a;
-    const sign = diff >= 0 ? '+' : '';
-    return `${sign}${(diff * 100).toFixed(1)}%`;
-  };
-
-  lines.push(`\n=== Before/After Comparison ===\n`);
-  lines.push(`MRR@10: ${(before.mrr10 * 100).toFixed(1)}% → ${(after.mrr10 * 100).toFixed(1)}% (${delta(before.mrr10, after.mrr10)})`);
-  lines.push(`Top-1 Accuracy: ${(before.top1Accuracy * 100).toFixed(1)}% → ${(after.top1Accuracy * 100).toFixed(1)}% (${delta(before.top1Accuracy, after.top1Accuracy)})`);
-  lines.push(`Violations: ${(before.constraintViolationRate * 100).toFixed(1)}% → ${(after.constraintViolationRate * 100).toFixed(1)}% (${delta(before.constraintViolationRate, after.constraintViolationRate)})`);
-  lines.push(`Zero Results: ${(before.zeroResultRate * 100).toFixed(1)}% → ${(after.zeroResultRate * 100).toFixed(1)}% (${delta(before.zeroResultRate, after.zeroResultRate)})`);
-
-  return lines.join('\n');
-}

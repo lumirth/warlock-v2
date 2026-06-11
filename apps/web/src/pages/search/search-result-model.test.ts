@@ -37,13 +37,11 @@ describe('getChipClass', () => {
     type: 'subject',
     label: 'Subject CS',
     value: 'CS',
-    source: 'natural_language',
-    removable: true,
-    editable: true,
+    removeRequest: { query: '' },
     ...overrides,
   })
 
-  it('uses neutral styling for removable search chips instead of unexplained action orange', () => {
+  it('uses neutral styling for actionable search chips instead of unexplained action orange', () => {
     expect(getChipClass(chip({ type: 'subject' }))).not.toContain('primary')
     expect(getChipClass(chip({ type: 'instructor' }))).not.toContain('primary')
     expect(getChipClass(chip({ type: 'courseCode' }))).not.toContain('primary')

@@ -4,7 +4,7 @@ import {
   type SearchRequestFiltersDto,
   singleRequirementFilter,
 } from "@uiuc-course-search/query-types";
-import { ambiguitySearchAction } from "../dto/search-actions.js";
+import { ambiguitySearchRequest } from "./search-refinement-requests.js";
 import type { Ambiguity } from "./search-planner-types.js";
 
 export function buildAmbiguityActions(
@@ -21,7 +21,7 @@ export function buildAmbiguityActions(
         id: `${ambiguityIndex}-${alternativeIndex}-${alternative.type}-${alternative.value}`,
         term: ambiguity.term,
         label: alternative.label,
-        action: ambiguitySearchAction(request, baseFilters, filter, residual),
+        nextRequest: ambiguitySearchRequest(request, baseFilters, filter, residual),
       };
     }),
   );

@@ -5,101 +5,124 @@ describe('parseQuery', () => {
   describe('basic queries', () => {
     it('returns residual for plain text', () => {
       const result = parseQuery('data structures');
-      expect(result.clauses).toHaveLength(1);
-      expect(result.clauses[0].residual).toBe('data structures');
-      expect(result.clauses[0].filters).toEqual([]);
-      expect(result.clauses[0].negations).toEqual([]);
-      expect(result.clauses[0].phrases).toEqual([]);
+      expect(result.residual).toBe('data structures');
+      expect(result.filters).toEqual([]);
+      expect(result.negations).toEqual([]);
+      expect(result.phrases).toEqual([]);
     });
   });
 
   describe('field:value syntax', () => {
     it('extracts gened:HUM as requirement syntax', () => {
       const result = parseQuery('easy gened:HUM');
-      expect(result.clauses[0].filters).toContainEqual({
+      expect(result.filters).toContainEqual({
         field: 'requirement',
         value: 'HUM',
       });
-      expect(result.clauses[0].residual).toBe('easy');
+      expect(result.residual).toBe('easy');
     });
 
     it('extracts subject:CS', () => {
       const result = parseQuery('subject:CS algorithms');
-      expect(result.clauses[0].filters).toContainEqual({
+      expect(result.filters).toContainEqual({
         field: 'subject',
         value: 'CS',
       });
-      expect(result.clauses[0].residual).toBe('algorithms');
+      expect(result.residual).toBe('algorithms');
     });
 
     it('extracts multiple field:value pairs', () => {
       const result = parseQuery('gened:HUM difficulty:easy');
-      expect(result.clauses[0].filters).toHaveLength(2);
+      expect(result.filters).toHaveLength(2);
     });
 
     it('extracts supported schedule and term fields', () => {
       const result = parseQuery('status:open online:true days:MWF time:morning term:spring-2026 algorithms');
-      expect(result.clauses[0].filters).toEqual([
+      expect(result.filters).toEqual([
         { field: 'status', value: 'open' },
         { field: 'online', value: 'true' },
         { field: 'days', value: 'MWF' },
         { field: 'time', value: 'morning' },
         { field: 'term', value: 'spring-2026' },
       ]);
-      expect(result.clauses[0].residual).toBe('algorithms');
+      expect(result.residual).toBe('algorithms');
+    });
+
+    it('normalizes forgiving part-of-term aliases at the parser boundary', () => {
+      const result = parseQuery('pot:A part_of_term:B');
+
+      expect(result.filters).toEqual([
+        { field: 'partofterm', value: 'A' },
+        { field: 'partofterm', value: 'B' },
+      ]);
+      expect(result.residual).toBe('');
     });
 
     it('leaves unsupported fields in residual text', () => {
       const result = parseQuery('unknown:thing algorithms');
-      expect(result.clauses[0].filters).toEqual([]);
-      expect(result.clauses[0].residual).toBe('unknown:thing algorithms');
+      expect(result.filters).toEqual([]);
+      expect(result.residual).toBe('unknown:thing algorithms');
+    });
+
+    it('leaves malformed supported fields in residual text', () => {
+      const result = parseQuery('level:999 status:maybe subject:computer algorithms');
+      expect(result.filters).toEqual([]);
+      expect(result.residual).toBe(
+        'level:999 status:maybe subject:computer algorithms',
+      );
     });
   });
 
   describe('gened:any/all syntax', () => {
     it('extracts gened:any(HUM,US)', () => {
       const result = parseQuery('gened:any(HUM,US) easy');
-      expect(result.clauses[0].requirementMode?.any).toEqual(['HUM', 'US']);
-      expect(result.clauses[0].residual).toBe('easy');
+      expect(result.requirementMode?.any).toEqual(['HUM', 'US']);
+      expect(result.residual).toBe('easy');
     });
 
     it('extracts gened:all(NW,US)', () => {
       const result = parseQuery('gened:all(NW,US)');
-      expect(result.clauses[0].requirementMode?.all).toEqual(['NW', 'US']);
+      expect(result.requirementMode?.all).toEqual(['NW', 'US']);
+    });
+
+    it('keeps invalid requirement modes visible in residual text', () => {
+      const result = parseQuery('gened:any(HUM,NOPE) easy');
+      expect(result.requirementMode).toBeUndefined();
+      expect(result.residual).toBe('gened:any(HUM,NOPE) easy');
     });
   });
 
   describe('negation syntax', () => {
     it('leaves unsupported dash negation in residual text', () => {
       const result = parseQuery('algorithms -calculus');
-      expect(result.clauses[0].negations).toEqual([]);
-      expect(result.clauses[0].residual).toBe('algorithms -calculus');
+      expect(result.negations).toEqual([]);
+      expect(result.residual).toBe('algorithms -calculus');
     });
 
     it('extracts multiple negations', () => {
       const result = parseQuery('-morning -evening');
-      expect(result.clauses[0].negations).toContain('morning');
-      expect(result.clauses[0].negations).toContain('evening');
+      expect(result.negations).toContain('morning');
+      expect(result.negations).toContain('evening');
     });
 
     it('extracts -online as an in-person constraint token', () => {
       const result = parseQuery('cs -online');
-      expect(result.clauses[0].negations).toContain('online');
-      expect(result.clauses[0].residual).toBe('cs');
+      expect(result.negations).toContain('online');
+      expect(result.residual).toBe('cs');
     });
   });
 
   describe('phrase syntax', () => {
     it('extracts "quoted phrase"', () => {
       const result = parseQuery('"data structures" algorithms');
-      expect(result.clauses[0].phrases).toContain('data structures');
-      expect(result.clauses[0].residual).toBe('algorithms');
+      expect(result.phrases).toContain('data structures');
+      expect(result.residual).toBe('algorithms');
     });
 
     it('extracts multiple phrases', () => {
       const result = parseQuery('"intro to" "computer science"');
-      expect(result.clauses[0].phrases).toContain('intro to');
-      expect(result.clauses[0].phrases).toContain('computer science');
+      expect(result.phrases).toContain('intro to');
+      expect(result.phrases).toContain('computer science');
     });
   });
 });

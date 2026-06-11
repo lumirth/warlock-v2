@@ -1,9 +1,17 @@
-import type { CourseRequirementDto } from '@uiuc-course-search/query-types';
-import { normalizeRequirementCodes } from '@uiuc-course-search/query-types';
+import {
+  canonicalRequirementCode,
+  normalizeRequirementCodes,
+  type CourseRequirementDto,
+} from '@uiuc-course-search/query-types';
+import type { CourseGened } from '../db/types.js';
 import type { CourseSnapshot } from './course.js';
-import { canonicalRequirementCode } from '../services/requirement-codes.js';
 
-export type CourseRequirementEvidence = {
+export type CourseRequirementSourceRow = Pick<
+  CourseGened,
+  'category_id' | 'category_name' | 'attribute_code' | 'attribute_name'
+>;
+
+type CourseRequirementEvidence = {
   requirements: CourseRequirementDto[];
   codes: string[];
   labels: string[];
@@ -11,12 +19,14 @@ export type CourseRequirementEvidence = {
 };
 
 export function courseSnapshotRequirementEvidence(snapshot: CourseSnapshot): CourseRequirementEvidence {
-  const requirements = snapshot.genEdCategories.map(category => ({
-    categoryId: category.categoryId,
-    categoryName: category.categoryName,
-    attributeCode: canonicalRequirementCode(category.attributeCode),
-    attributeName: category.attributeName,
-  }));
+  const requirements = courseRequirementRowsToDto(
+    snapshot.genEdCategories.map(category => ({
+      category_id: category.categoryId,
+      category_name: category.categoryName,
+      attribute_code: category.attributeCode,
+      attribute_name: category.attributeName,
+    })),
+  );
 
   const richCodes = normalizeRequirementCodes(
     snapshot.genEdCategories.flatMap(category => [
@@ -35,6 +45,23 @@ export function courseSnapshotRequirementEvidence(snapshot: CourseSnapshot): Cou
     codes,
     labels,
     summaryCode: codes[0] ?? null,
+  };
+}
+
+export function courseRequirementRowsToDto(
+  rows: readonly CourseRequirementSourceRow[],
+): CourseRequirementDto[] {
+  return rows.map(courseRequirementRowToDto);
+}
+
+export function courseRequirementRowToDto(
+  row: CourseRequirementSourceRow,
+): CourseRequirementDto {
+  return {
+    categoryId: canonicalRequirementCode(row.category_id) ?? row.category_id,
+    categoryName: row.category_name,
+    attributeCode: canonicalRequirementCode(row.attribute_code),
+    attributeName: row.attribute_name,
   };
 }
 

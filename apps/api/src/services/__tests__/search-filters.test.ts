@@ -1,18 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
 import { requirementFilter } from '@uiuc-course-search/query-types';
 import { buildFilterClauses, TIME_RANGES } from '../search-filters.js';
-import { requirementLaneSearch } from '../search-retrieval-requirement-lanes.js';
+import { buildFilteredCourseQuery } from '../search-lane-query-builder.js';
 import { WORKLOAD_FILTER_THRESHOLDS } from '../ranking/ranking-policy.js';
-import type { SearchFilters, SearchPlan } from '../search-planner-types.js';
+import type { SearchFilters } from '../search-planner-types.js';
 
 describe('buildFilterClauses', () => {
   describe('days filter', () => {
     it('generates SQL for days filter', () => {
       const filters: SearchFilters = { days: 'MWF' };
       const result = buildFilterClauses(filters);
-      expect(result.where).toContain('m.days = ?');
-      expect(result.params).toContain('MWF');
+      expect(result.where).toEqual(expect.arrayContaining([
+        'm.days LIKE ?',
+        'm.days LIKE ?',
+        'm.days LIKE ?',
+      ]));
+      expect(result.params).toEqual(expect.arrayContaining(['%M%', '%W%', '%F%']));
       expect(result.joinKeys).toEqual(['sections', 'meetings']);
       expect(result.joins).toContain('JOIN sections s ON s.course_id = c.id');
       expect(result.joins).toContain('JOIN meetings m ON m.section_id = s.id');
@@ -93,29 +96,53 @@ describe('buildFilterClauses', () => {
   });
 
   describe('online filter', () => {
-    it('generates SQL for online=true', () => {
+    it('requires explicit online delivery evidence', () => {
       const filters: SearchFilters = { online: true };
       const result = buildFilterClauses(filters);
-      expect(result.where.some(w => w.includes('online') || w.includes("building_name = ''"))).toBe(true);
+      expect(result.where).toHaveLength(1);
+      expect(result.where[0]).toContain("m.type_name");
+      expect(result.where[0]).toContain("LIKE '%online%'");
+      expect(result.where[0]).not.toContain("m.building_name = ''");
     });
 
-    it('generates SQL for online=false (in-person)', () => {
+    it('requires physical-location evidence for in-person delivery', () => {
       const filters: SearchFilters = { online: false };
       const result = buildFilterClauses(filters);
-      expect(result.where.some(w => w.includes("building_name != ''"))).toBe(true);
+      expect(result.where).toHaveLength(1);
+      expect(result.where[0]).toContain("NOT (LOWER");
+      expect(result.where[0]).toContain("NULLIF(TRIM");
     });
   });
 
   describe('status filter', () => {
-    it('generates SQL for status=open', () => {
-      const filters: SearchFilters = { status: 'open' };
+    it('uses the canonical availability policy for search status filters', () => {
+      const filters: SearchFilters = { status: 'available' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('s.status'))).toBe(true);
+      expect(result.params).toEqual(['Open', 'Restricted']);
     });
   });
 
-  describe('difficulty filter', () => {
-    it('generates workload-only SQL for difficulty=easy', () => {
+  describe('structured schedule filters', () => {
+    it('filters to compressed sections and exact start-time bounds', () => {
+      const result = buildFilterClauses({
+        compressedTerm: true,
+        startAfterMinutes: 14 * 60,
+        startBeforeMinutes: 17 * 60,
+      });
+
+      expect(result.where).toContain(
+        "s.part_of_term IS NOT NULL AND s.part_of_term != '' AND s.part_of_term != '1'",
+      );
+      expect(result.where).toContain("m.start_time >= ?");
+      expect(result.where).toContain("m.start_time < ?");
+      expect(result.params).toContain("14:00");
+      expect(result.params).toContain("17:00");
+    });
+  });
+
+  describe('workload filter', () => {
+    it('generates workload-only SQL for workload=easy', () => {
       const filters: SearchFilters = { workload: 'easy' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
@@ -123,7 +150,7 @@ describe('buildFilterClauses', () => {
       expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive);
     });
 
-    it('generates workload-only SQL for difficulty=hard', () => {
+    it('generates workload-only SQL for workload=hard', () => {
       const filters: SearchFilters = { workload: 'hard' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
@@ -160,6 +187,16 @@ describe('buildFilterClauses', () => {
       const result = buildFilterClauses(filters);
       const sectionJoins = result.joins.filter(j => j.includes('sections s'));
       expect(sectionJoins.length).toBe(1);
+    });
+  });
+
+  describe('resolved instructor filters', () => {
+    it('makes an unresolved explicit instructor filter impossible to match', () => {
+      const result = buildFilterClauses({ instructor_ids: [] });
+
+      expect(result.where).toContain('0');
+      expect(result.joins).toEqual([]);
+      expect(result.params).toEqual([]);
     });
   });
 
@@ -202,6 +239,22 @@ describe('buildFilterClauses', () => {
   });
 });
 
+describe('buildFilteredCourseQuery', () => {
+  it('pushes active scope into candidate retrieval', () => {
+    const query = buildFilteredCourseQuery({}, 'active');
+
+    expect(query.whereSql()).toContain("search_scope_term.status IN ('active', 'registrable')");
+  });
+
+  it('does not override an explicit historical term filter', () => {
+    const query = buildFilteredCourseQuery({ year: 2025, term: 'fall' }, 'active');
+
+    expect(query.whereSql()).not.toContain('search_scope_term');
+    expect(query.whereSql()).toContain('c.year = ?');
+    expect(query.whereSql()).toContain('c.term = ?');
+  });
+});
+
 describe('TIME_RANGES', () => {
   it('has correct range for early', () => {
     expect(TIME_RANGES.early).toEqual({ end: '09:00' });
@@ -221,43 +274,5 @@ describe('TIME_RANGES', () => {
 
   it('has correct range for evening', () => {
     expect(TIME_RANGES.evening).toEqual({ start: '17:00' });
-  });
-});
-
-describe('requirementLaneSearch', () => {
-  it('requires a GenEd mapping for generic requirement intent instead of relabeling other filters', async () => {
-    let capturedSql = '';
-    const db = {
-      prepare(sql: string): D1PreparedStatement {
-        capturedSql = sql;
-        return {
-          bind: () => ({
-            all: async () => ({ results: [] }),
-          }),
-        } as unknown as D1PreparedStatement;
-      },
-    } as unknown as D1Database;
-    const plan: SearchPlan = {
-      filters: { subject: 'CS', workload: 'easy' },
-      keywordQuery: '',
-      semanticQuery: '',
-      rescue: {
-        queryTypes: ['requirement', 'subjective_vibe'],
-        negativeTerms: [],
-        topicTerms: [],
-        expandedTerms: [],
-        assumptions: [],
-        warnings: [],
-        interpretedLanes: ['requirement'],
-        relaxationPlan: [],
-        needsStudentProfile: false,
-        confidence: 0.74,
-      },
-    };
-
-    const rows = await requirementLaneSearch(db, plan.filters);
-
-    expect(rows).toEqual([]);
-    expect(capturedSql).toBe('');
   });
 });

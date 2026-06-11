@@ -20,11 +20,12 @@ export function extractPositiveNoNotAliases(text: string, hints: Hint[]): string
     const pattern = new RegExp(alias.pattern.source, alias.pattern.flags);
     let match;
     while ((match = pattern.exec(residual)) !== null) {
-      hints.push({
-        type: alias.type,
-        value: alias.value,
-        metadata: createMetadata('alias', match[0], 0.88),
-      });
+      const metadata = createMetadata('alias', match[0], 0.88);
+      if (alias.type === 'workload') {
+        hints.push({ type: 'workload', value: alias.value, metadata });
+      } else {
+        hints.push({ type: 'status', value: alias.value, metadata });
+      }
       matches.push({ index: match.index, length: match[0].length });
     }
 

@@ -17,8 +17,6 @@ import type {
 import type { UpstreamBackoff } from './upstream-backoff.js';
 
 export type {
-  CourseDetailRequest,
-  CourseDetailResponse,
   CourseDetailServiceEnv,
 } from './course-detail-types.js';
 
@@ -68,7 +66,7 @@ export class CourseDetailService {
       logger.error('service.courseDetail.failed', {
         subject: context?.subject ?? request.subject,
         number: context?.number ?? request.number,
-        termId: context?.termId,
+        termId: context?.resolvedTerm.termId,
         ...errorFields(error),
       });
       return { status: 500, body: { error: 'Internal server error' } };
@@ -98,14 +96,14 @@ export class CourseDetailService {
 
     switch (liveResult.state) {
       case 'snapshot': {
-        const [linksMap, existingMetadata, medianGpa] = await Promise.all([
-          this.repository.loadInstructorLinks(context),
+        const [instructorLinkRows, existingMetadata, medianGpa] = await Promise.all([
+          this.repository.loadInstructorLinkRows(context),
           this.repository.loadExistingCourseMetadata(context.courseId),
           this.repository.loadCourseMedianGpa(context.subject, context.number),
         ]);
 
         return buildLiveCourseDetailResponse(context, liveResult.value, {
-          linksMap,
+          instructorLinkRows,
           existingMetadata,
           medianGpa,
         });

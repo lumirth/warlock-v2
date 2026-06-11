@@ -1,18 +1,18 @@
 import type { SearchTermFilter } from "./search-contract.js";
 
-export const TERM_OPTION_STATUS_VALUES = [
+export const TERM_STATUS_VALUES = [
   "registrable",
   "active",
   "historical",
 ] as const;
 
-export type TermOptionStatus = (typeof TERM_OPTION_STATUS_VALUES)[number];
+export type TermStatus = (typeof TERM_STATUS_VALUES)[number];
 
 export type SearchTermOptionDto = {
   termId: string;
   term: SearchTermFilter;
   year: number;
-  status: TermOptionStatus;
+  status: TermStatus;
   label: string;
 };
 

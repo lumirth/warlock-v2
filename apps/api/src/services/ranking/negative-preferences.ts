@@ -57,7 +57,7 @@ export function negativePreferenceComponent(
 function negativePreferenceContext(plan: SearchPlan): NegativePreferenceContext {
   return {
     negativeTerms: new Set([
-      ...(plan.rescue?.negativeTerms ?? []),
+      ...(plan.intent?.negativeTerms ?? []),
       ...(plan.filters.not?.keywords ?? []),
     ]),
     excludedSubjects: new Set(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SyncState, TermState } from '../../db/index.js';
+import type { SyncState, TermState } from '../../db/types.js';
 import { buildFreshnessSummary, FRESHNESS_THRESHOLDS } from '../freshness.js';
 
 const nowSeconds = 1780360000;

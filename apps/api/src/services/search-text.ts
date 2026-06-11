@@ -1,5 +1,3 @@
-import type { SearchPlan } from "./search-planner-types.js";
-
 const SPECIAL_TOKENS: Record<string, string> = {
   "c/c++": "c cplusplus",
   "c++": "cplusplus",
@@ -88,15 +86,9 @@ export function escapeLike(value: string): string {
 }
 
 export function titleLaneQuery(
-  plan: SearchPlan,
   cleanKeywordQuery: string,
 ): string {
-  const rawCandidate = sanitizeFtsQuery(plan.rawQuery ?? "")
-    .replace(/"/g, "")
-    .toLowerCase()
-    .trim();
-  const candidate = rawCandidate
-    || cleanKeywordQuery.replace(/"/g, "").toLowerCase().trim();
+  const candidate = cleanKeywordQuery.replace(/"/g, "").toLowerCase().trim();
   if (!candidate || candidate.length > 80) return "";
 
   const tokens = candidate.split(/\s+/).filter(Boolean);

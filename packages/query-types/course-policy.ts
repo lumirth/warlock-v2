@@ -1,25 +1,5 @@
 import { canonicalRequirementCodes } from "./requirement-options.js";
 
-export type NormalizedQualityScore = number & {
-  readonly __scoreKind: "NormalizedQualityScore";
-};
-
-export type NormalizedWorkloadScore = number & {
-  readonly __scoreKind: "NormalizedWorkloadScore";
-};
-
-export function toNormalizedQualityScore(
-  score: number | null | undefined,
-): NormalizedQualityScore | null {
-  return toNormalizedScore(score) as NormalizedQualityScore | null;
-}
-
-export function toNormalizedWorkloadScore(
-  score: number | null | undefined,
-): NormalizedWorkloadScore | null {
-  return toNormalizedScore(score) as NormalizedWorkloadScore | null;
-}
-
 function toNormalizedScore(score: number | null | undefined): number | null {
   if (typeof score !== "number" || !Number.isFinite(score)) return null;
   return Math.min(100, Math.max(0, score));
@@ -36,7 +16,7 @@ export type QualityTierLabel = "Excellent" | "Good" | "Fair" | "Low";
 export function getQualityTierLabel(
   score: number | null | undefined,
 ): QualityTierLabel | null {
-  const normalized = toNormalizedQualityScore(score);
+  const normalized = toNormalizedScore(score);
   if (normalized === null) return null;
   if (normalized >= QUALITY_TIER_THRESHOLDS.EXCELLENT) return "Excellent";
   if (normalized >= QUALITY_TIER_THRESHOLDS.GOOD) return "Good";
@@ -65,7 +45,7 @@ export type WorkloadTierLabel = "Easy" | "Moderate" | "Hard";
 export function getWorkloadTierLabel(
   score: number | null | undefined,
 ): WorkloadTierLabel | null {
-  const normalized = toNormalizedWorkloadScore(score);
+  const normalized = toNormalizedScore(score);
   if (normalized === null) return null;
   if (normalized > WORKLOAD_TIER_THRESHOLDS.HARD) return "Hard";
   if (normalized > WORKLOAD_TIER_THRESHOLDS.MODERATE) return "Moderate";
@@ -118,16 +98,10 @@ export function singleRequirementFilter(
   return code ? requirementFilter("single", [code]) : undefined;
 }
 
-export function effectiveRequirementFilter(
-  filters: { requirement?: RequirementFilter },
-): RequirementFilter | undefined {
-  return filters.requirement;
-}
-
 export function requirementFilterCodes(
   filters: { requirement?: RequirementFilter },
 ): string[] {
-  return effectiveRequirementFilter(filters)?.codes ?? [];
+  return filters.requirement?.codes ?? [];
 }
 
 export function hasRequirementFilter(

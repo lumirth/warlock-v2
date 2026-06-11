@@ -4,10 +4,7 @@ import type {
   CourseSectionDto,
   CourseSummaryDto,
   MatchEvidence,
-  SearchActionDto,
   SearchCourseResultDto,
-  SearchCourseMetadataDto,
-  SearchRequestDto,
   SearchResponseDto,
   SearchTermOptionsDto,
   SearchUiPlanDto,
@@ -17,7 +14,6 @@ import { singleRequirementFilter } from '@uiuc-course-search/query-types';
 const PORT = Number(process.env.QA_MOCK_API_PORT ?? 8787);
 
 type CourseVariantOverride = Partial<CourseSummaryDto> & {
-  search?: SearchCourseMetadataDto;
   matchEvidence?: MatchEvidence[];
   warnings?: SearchCourseResultDto['warnings'];
 };
@@ -84,11 +80,6 @@ const baseCourse: CourseSummaryDto = {
 
 const course: SearchCourseResultDto = {
   course: baseCourse,
-  search: {
-    score: 1,
-    keywordRank: 1,
-    historical: false,
-  },
   matchEvidence: [
     { kind: 'course_code', label: 'Course CS 225', source: 'filter', weight: 'hard', value: 'CS 225' },
     { kind: 'requirement', label: 'GenEd QR', source: 'filter', weight: 'hard', value: 'QR' },
@@ -242,14 +233,9 @@ function courseVariant(overrides: CourseVariantOverride = {}): SearchCourseResul
           course.course.links.courseExplorerUrl,
       },
     },
-    search: overrides.search ?? course.search,
     matchEvidence: overrides.matchEvidence ?? course.matchEvidence,
     warnings: overrides.warnings ?? course.warnings,
   };
-}
-
-function searchAction(nextRequest: SearchRequestDto): SearchActionDto {
-  return { kind: 'run_search', nextRequest };
 }
 
 function searchUi(query: string): SearchUiPlanDto {
@@ -263,10 +249,7 @@ function searchUi(query: string): SearchUiPlanDto {
       type: 'courseCode',
       label: 'Course CS 225',
       value: 'CS 225',
-      source: 'natural_language',
-      removable: true,
-      editable: true,
-      action: searchAction({ query: query.replace(/cs\s*225/i, '').trim() }),
+      removeRequest: { query: query.replace(/cs\s*225/i, '').trim() },
     });
   }
 
@@ -276,15 +259,12 @@ function searchUi(query: string): SearchUiPlanDto {
       type: 'instructor',
       label: 'Instructor fagen',
       value: 'fagen',
-      source: 'natural_language',
-      removable: true,
-      editable: true,
-      action: searchAction({
+      removeRequest: {
         query: query
           .replace(/professor\s+fagen/i, '')
           .replace(/fagen/i, '')
           .trim(),
-      }),
+      },
     });
   }
 
@@ -294,18 +274,15 @@ function searchUi(query: string): SearchUiPlanDto {
       type: 'requirement',
       label: 'Requirement Cultural Studies',
       value: 'CS',
-      source: 'natural_language',
-      removable: true,
-      editable: true,
-      action: searchAction({
+      removeRequest: {
         query: query.replace(/\bgened\b/i, '').trim(),
-      }),
+      },
     });
     ambiguityActions.push({
       id: 'requirement-CS-alternative',
       term: 'CS',
       label: 'Cultural Studies',
-      action: searchAction({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+      nextRequest: { query: '', filters: { requirement: singleRequirementFilter('CS') } },
     });
   }
 
@@ -315,25 +292,19 @@ function searchUi(query: string): SearchUiPlanDto {
       type: 'levelBoost',
       label: 'Introductory courses',
       value: '100',
-      source: 'natural_language',
-      removable: true,
-      editable: true,
-      action: searchAction({ query: query.replace(/\bintro\b/i, '').trim() }),
+      removeRequest: { query: query.replace(/\bintro\b/i, '').trim() },
     });
     chips.push({
       id: 'subject-CS',
       type: 'subject',
       label: 'Subject CS',
       value: 'CS',
-      source: 'natural_language',
-      removable: true,
-      editable: true,
-      action: searchAction({
+      removeRequest: {
         query: query
           .replace(/comp\s+sci/i, '')
           .replace(/\bcs\b/i, '')
           .trim(),
-      }),
+      },
     });
   }
 
@@ -348,7 +319,6 @@ function introResults(): SearchCourseResultDto[] {
       title: 'Introduction to Computer Science I',
       description: 'A first programming and computer science course for students beginning the CS sequence.',
       creditHours: 3,
-      search: { score: 0.98 },
       matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
@@ -360,7 +330,6 @@ function introResults(): SearchCourseResultDto[] {
       title: 'Freshman Orientation',
       description: 'Orientation to computer science study, department resources, and first-year planning.',
       creditHours: 1,
-      search: { score: 0.92 },
       matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
@@ -372,7 +341,6 @@ function introResults(): SearchCourseResultDto[] {
       title: 'Introduction to Computing',
       description: 'Computing concepts and programming for students from a broad range of majors.',
       creditHours: 3,
-      search: { score: 0.88 },
       matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'term', label: 'Introductory course', source: 'metadata', weight: 'soft', value: '100' },
@@ -388,7 +356,6 @@ function introResults(): SearchCourseResultDto[] {
       title: `Introductory CS Topic ${index + 1}`,
       description: 'Additional introductory CS result used to exercise paginated exploration in Browser QA.',
       creditHours: 3,
-      search: { score: 0.75 - index / 100 },
       matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
       ],
@@ -406,7 +373,6 @@ function defaultResults(query: string): SearchCourseResultDto[] {
       description: 'Discrete mathematical structures frequently encountered in computer science.',
       creditHours: 3,
       primaryInstructor: null,
-      search: { score: 0.82 },
       matchEvidence: [
         { kind: 'subject', label: 'Subject CS', source: 'filter', weight: 'hard', value: 'CS' },
         { kind: 'keyword', label: 'Keyword match', source: 'keyword', weight: 'rank', value: '2' },
@@ -425,31 +391,17 @@ function searchResponse(query: string, limit: number, offset: number): SearchRes
   return {
     results: pageResults,
     meta: {
-      query: { raw: query, residual: query.toLowerCase().includes('cs 225') || isIntroCs ? '' : query },
       nextRequest: {
         query,
       },
-      interpretation: {
-        queryTypes: isIntroCs ? ['topic'] : query.toLowerCase().includes('cs 225') ? ['exact_course'] : ['topic'],
-        negativeTerms: [],
-        topicTerms: isIntroCs ? ['computer science'] : [],
-        expandedTerms: [],
-        assumptions: isIntroCs
-          ? [{ kind: 'introductory_gateway', label: 'Introductory courses', confidence: 0.72, source: 'rule' }]
-          : [],
-        warnings: [],
-        evidenceLanes: ['official_text'],
-        relaxationPlan: [],
-        needsStudentProfile: false,
-        confidence: 0.78,
+      interpretedRequest: {
+        query,
       },
-      timing: { extraction_ms: 2, search_ms: 6, total_ms: 8 },
-      fallback: { tierReached: 1, constraintsRelaxed: [], originalResultCount: allResults.length },
-      term: { activeTermId: '2026-spring', registrableTermId: '2026-spring' },
       ui: searchUi(query),
     },
     pagination: {
       totalResults: allResults.length,
+      browseableResults: allResults.length,
       limit,
       offset,
       hasMore,

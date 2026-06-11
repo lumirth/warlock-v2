@@ -15,8 +15,6 @@ type Bindings = {
   VECTORIZE: VectorizeIndex;
   AI: Ai;
   SEARCH_CACHE?: KVNamespace;
-  CURRENT_YEAR: string;
-  CURRENT_TERM: string;
 };
 
 export const searchRoutes = new Hono<{ Bindings: Bindings }>();
@@ -39,11 +37,9 @@ searchRoutes.get("/api/search", async (c) => {
     );
     const result = await pipeline.search(
       request,
-      pagination,
       c.executionCtx.waitUntil.bind(c.executionCtx),
     );
-    const response = await presentSearchResponse({
-      db: c.env.DB,
+    const response = presentSearchResponse({
       request,
       pagination,
       result,

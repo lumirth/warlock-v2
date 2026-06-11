@@ -4,10 +4,9 @@ import { pathToFileURL } from 'node:url';
 import { numericOrNull, positiveOrFallback, recordsFromArray, type JsonRecord } from './lib/json-shape.ts';
 import {
   TERM_ORDER,
-  compareTerms,
   currentTermFromStatus,
+  expectedTermStatus,
   inferCurrentTerm,
-  normalizeStatus,
   normalizeTerm,
   parseTermStateId,
   type Term,
@@ -96,11 +95,6 @@ export type TermRetentionReport = {
 
 function statusTermStates(status: JsonRecord | null): JsonRecord[] {
   return recordsFromArray(status?.termStates);
-}
-
-function expectedStatus(row: AvailableTerm, stored: JsonRecord | undefined, currentYear: number, currentTerm: Term): TermStatus {
-  return normalizeStatus(stored?.status)
-    ?? (compareTerms(row.year, row.term, currentYear, currentTerm) < 0 ? 'historical' : 'active');
 }
 
 function regularTermRank(term: Term): number {
@@ -336,7 +330,7 @@ export async function buildTermRetentionReport(
   const targetSizeBytes = Math.round(args.targetSizeMb * BYTES_PER_MEGABYTE);
   const baseRows = discovered.terms.map((term): TermRetentionRow => {
     const stored = storedByTermId.get(term.term_id);
-    const status = expectedStatus(term, stored, currentYear, currentTerm);
+    const status = expectedTermStatus(stored?.status, term.year, term.term, currentYear, currentTerm);
     return {
       ...term,
       expected_status: status,

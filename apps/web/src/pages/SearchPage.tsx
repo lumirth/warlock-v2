@@ -13,15 +13,19 @@ import { useSearchController } from './search/useSearchController'
 export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
   const { state, derived, actions } = useSearchController()
   const [termOptions, setTermOptions] = useState<SearchTermOptionsDto | null>(null)
+  const [termOptionsError, setTermOptionsError] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
 
     api.getTermOptions(controller.signal)
-      .then(setTermOptions)
+      .then((options) => {
+        setTermOptions(options)
+        setTermOptionsError(false)
+      })
       .catch((error: unknown) => {
         if ((error as Error)?.name !== 'AbortError') {
-          setTermOptions({ terms: [], years: [] })
+          setTermOptionsError(true)
         }
       })
 
@@ -52,6 +56,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
           meta={state.session.meta}
           resultCountLabel={derived.resultCountLabel}
           availableYears={termOptions?.years}
+          availableYearsError={termOptionsError}
           advancedOpen={state.draft.advancedOpen}
           advancedDraft={state.draft.advancedDraft}
           hasAdvancedDraftChanges={derived.hasAdvancedDraftChanges}
@@ -76,7 +81,6 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
           isRefreshingResults={derived.isRefreshingResults}
           resultsHeadingLabel={derived.resultsHeadingLabel}
           showingResultsLabel={derived.showingResultsLabel}
-          recoveryGroups={derived.recoveryGroups}
           feedbackAction={
             state.session.meta ? (
               <FeedbackButton
@@ -86,7 +90,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                 issue="expected_different_results"
                 buttonVariant="outline"
                 context={{
-                  query: state.session.meta.query.raw,
+                  query: state.session.meta.nextRequest.query,
                   metadata: {
                     resultCount: state.session.pagination?.totalResults ?? state.session.results.length,
                     hasMore: state.session.pagination?.hasMore === true,
@@ -102,7 +106,6 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
           onViewChange={actions.setResultViewMode}
           onTableSort={actions.handleTableSort}
           onRemoveChip={actions.removeChip}
-          onApplyRecoveryGroup={actions.applyRecoveryGroup}
           onLoadMore={actions.loadMoreResults}
         />
       </div>

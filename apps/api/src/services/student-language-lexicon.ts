@@ -1,46 +1,47 @@
 import {
-  GENED_REQUIREMENT_LABELS,
-  canonicalRequirementCode,
+  GENED_REQUIREMENT_OPTIONS,
+  type SearchLevelFilter,
 } from "@uiuc-course-search/query-types";
 import type {
-  DecisionQueryType,
-  HintType,
-  SearchPlanAssumption,
+  SearchIntentKind,
   SearchPlanWarning,
   SearchPlanWarningKind,
   SearchSoftPreferences,
 } from "./search-planner-types.js";
 
-export type StudentLanguageRescueRule = {
-  queryTypes: DecisionQueryType[];
+type StudentLanguageIntentRule = {
+  queryTypes: SearchIntentKind[];
   patterns: RegExp[];
   removePatterns?: RegExp[];
   negativeTerms?: string[];
   softPreferences?: Partial<SearchSoftPreferences>;
-  assumptions?: SearchPlanAssumption[];
   warnings?: SearchPlanWarning[];
 };
 
-export type StudentShorthandRule = {
+type StudentShorthandRule = {
   pattern: RegExp;
   subject: string;
   expansion: string;
   confidence: number;
 };
 
-export type ContextualRequirementRule = {
+type ContextualRequirementRule = {
   code: string;
   pattern: RegExp;
   confidence: number;
 };
 
-export type PositiveNoNotAlias = {
+type PositiveNoNotAlias = {
   pattern: RegExp;
-  type: Extract<HintType, "workload" | "status">;
-  value: "easy" | "open";
+  type: "workload";
+  value: "easy";
+} | {
+  pattern: RegExp;
+  type: "status";
+  value: "open";
 };
 
-export type StudentLanguageAliasKind =
+type StudentLanguageAliasKind =
   | "requirement"
   | "delivery"
   | "status"
@@ -48,7 +49,7 @@ export type StudentLanguageAliasKind =
   | "days"
   | "time";
 
-export type StudentLanguageAliasEntry = {
+type StudentLanguageAliasEntry = {
   kind: StudentLanguageAliasKind;
   canonical: string;
   aliases: string[];
@@ -63,7 +64,7 @@ export const REQUIREMENT_CUES = [
   "category",
 ];
 
-export const STUDENT_LANGUAGE_ALIAS_ENTRIES: StudentLanguageAliasEntry[] = [
+const NON_REQUIREMENT_ALIAS_ENTRIES: StudentLanguageAliasEntry[] = [
   { kind: "time", canonical: "early", aliases: ["early morning", "early"] },
   { kind: "time", canonical: "morning", aliases: ["morning", "before noon", "before lunch"] },
   { kind: "time", canonical: "midday", aliases: ["midday", "mid day", "around noon"] },
@@ -79,64 +80,33 @@ export const STUDENT_LANGUAGE_ALIAS_ENTRIES: StudentLanguageAliasEntry[] = [
   { kind: "days", canonical: "TR", aliases: ["tr", "tuesday thursday", "tue thu", "tue thur", "t r", "tuth"] },
   { kind: "days", canonical: "MW", aliases: ["mw", "monday wednesday", "mon wed"] },
   { kind: "days", canonical: "WF", aliases: ["wf", "wednesday friday", "wed fri"] },
-  { kind: "requirement", canonical: "HUM", aliases: ["humanities", "humanities and the arts", "arts"], requiresCue: true },
-  { kind: "requirement", canonical: "NAT", aliases: ["natural sciences", "nat sci", "science"], requiresCue: true },
-  { kind: "requirement", canonical: "PS", aliases: ["physical sciences", "physical"], requiresCue: true },
-  { kind: "requirement", canonical: "SBS", aliases: ["social sciences", "behavioral sciences", "social and behavioral"], requiresCue: true },
-  { kind: "requirement", canonical: "CS", aliases: ["cultural studies"], requiresCue: true },
-  { kind: "requirement", canonical: "QR", aliases: ["quantitative reasoning", "quantitative", "quant"], requiresCue: true },
-  { kind: "requirement", canonical: "NW", aliases: ["non western", "non-western", "nonwestern"], requiresCue: true },
-  { kind: "requirement", canonical: "US", aliases: ["us minority", "minority cultures"], requiresCue: true },
-  { kind: "requirement", canonical: "WCC", aliases: ["western comparative", "western"], requiresCue: true },
-  { kind: "requirement", canonical: "ACP", aliases: ["advanced composition", "adv comp", "writing intensive"], requiresCue: true },
-  { kind: "requirement", canonical: "HUM", aliases: ["hum", "humanities", "humanities and the arts"] },
-  { kind: "requirement", canonical: "NAT", aliases: ["nat", "nat sci", "natural sciences"] },
-  { kind: "requirement", canonical: "PS", aliases: ["ps requirement", "ps gen ed", "ps gened", "physical sciences"] },
-  { kind: "requirement", canonical: "SBS", aliases: ["sbs", "social sciences", "behavioral sciences", "social and behavioral"] },
-  { kind: "requirement", canonical: "CS", aliases: ["cs requirement", "cs gen ed", "cs gened", "cultural studies"] },
-  { kind: "requirement", canonical: "QR", aliases: ["qr", "quantitative reasoning"] },
-  { kind: "requirement", canonical: "QR1", aliases: ["qr1", "qr 1"] },
-  { kind: "requirement", canonical: "QR2", aliases: ["qr2", "qr 2"] },
-  { kind: "requirement", canonical: "NW", aliases: ["nw", "non western", "non-western"] },
-  { kind: "requirement", canonical: "US", aliases: ["us minority", "minority cultures"] },
-  { kind: "requirement", canonical: "WCC", aliases: ["wcc", "western comparative"] },
-  { kind: "requirement", canonical: "ACP", aliases: ["acp", "advanced composition", "writing intensive"] },
 ];
 
-export const REQUIREMENT_SYNONYMS: Record<string, string[]> = {
-  CMP: ["comp 1", "composition", "writing", "rhet 105", "freshman comp", "comp1"],
-  ACP: ["adv comp", "advanced composition", "advanced comp", "writing intensive", "cll"],
-  HUM: ["humanities", "humanities and the arts", "arts"],
-  HP: ["historical", "philosophical", "history", "philosophy", "historical perspectives"],
-  LA: ["literature", "lit", "literature and the arts"],
-  NAT: ["nat sci", "natural sciences", "science", "natural sciences and technology"],
-  PS: ["physical sciences", "physical"],
-  LS: ["life sciences", "life sci", "bio", "biology"],
-  SBS: ["social science", "behavioral science", "social and behavioral", "social", "behavioral"],
-  SS: ["soc sci"],
-  BSC: ["psych", "psychology"],
-  CS: ["cultural studies", "cultural"],
-  NW: ["non-western", "non western", "nonwestern"],
-  US: ["us minority", "minority cultures", "us minority cultures"],
-  WCC: ["western", "comparative", "western comparative"],
-  QR: ["quantitative", "quant", "quantitative reasoning"],
-  QR1: ["qr1", "qr 1", "quant 1", "quantitative reasoning 1", "qri"],
-  QR2: ["qr2", "qr 2", "quant 2", "quantitative reasoning 2", "qrii"],
+const DIRECT_REQUIREMENT_ALIAS_CODES = new Set([
+  "HUM",
+  "NAT",
+  "SBS",
+  "QR",
+  "QR1",
+  "QR2",
+  "NW",
+  "US",
+  "WCC",
+  "ACP",
+]);
+
+const DIRECT_REQUIREMENT_CODE_ONLY = new Set(["COMP1"]);
+
+const EXPLICIT_AMBIGUOUS_REQUIREMENT_CODES = new Set(["CS", "PS"]);
+
+const CUE_ONLY_REQUIREMENT_ALIASES: Readonly<Record<string, ReadonlySet<string>>> = {
+  NAT: new Set(["science"]),
 };
 
-export const REQUIREMENT_LOOKUP: Record<string, string> = Object.entries(
-  REQUIREMENT_SYNONYMS,
-).reduce<Record<string, string>>((lookup, [code, synonyms]) => {
-  const canonicalCode = canonicalRequirementCode(code) ?? code;
-  lookup[code.toLowerCase()] = canonicalCode;
-  lookup[canonicalCode.toLowerCase()] = canonicalCode;
-  for (const synonym of synonyms) {
-    lookup[synonym.toLowerCase()] = canonicalCode;
-  }
-  return lookup;
-}, {});
-
-export const REQUIREMENT_LABELS: Record<string, string> = GENED_REQUIREMENT_LABELS;
+export const STUDENT_LANGUAGE_ALIAS_ENTRIES: StudentLanguageAliasEntry[] = [
+  ...NON_REQUIREMENT_ALIAS_ENTRIES,
+  ...buildRequirementAliasEntries(),
+];
 
 export const SUBJECT_REQUIREMENT_CONFLICTS = new Set(["CS", "PS"]);
 
@@ -157,14 +127,14 @@ export const FUZZY_SUBJECT_NAME_BLOCKLIST = new Set([
   "ethnicity",
 ]);
 
-export const LEVEL_KEYWORDS_HARD: Record<string, number> = {
+export const LEVEL_KEYWORDS_HARD: Record<string, SearchLevelFilter> = {
   advanced: 400,
   upper: 400,
   graduate: 500,
   grad: 500,
 };
 
-export const LEVEL_KEYWORDS_SOFT: Record<string, number> = {
+export const LEVEL_KEYWORDS_SOFT: Record<string, SearchLevelFilter> = {
   intro: 100,
   introductory: 100,
   beginner: 100,
@@ -172,17 +142,56 @@ export const LEVEL_KEYWORDS_SOFT: Record<string, number> = {
   "first year": 100,
 };
 
+function buildRequirementAliasEntries(): StudentLanguageAliasEntry[] {
+  return GENED_REQUIREMENT_OPTIONS.flatMap((option) => {
+    const code = option.code.toLowerCase();
+    const canonicalAliases = unique([code, option.label.toLowerCase(), ...option.aliases]);
+    const entries: StudentLanguageAliasEntry[] = [{
+      kind: "requirement",
+      canonical: option.code,
+      aliases: canonicalAliases,
+      requiresCue: true,
+    }];
+
+    if (DIRECT_REQUIREMENT_ALIAS_CODES.has(option.code)) {
+      entries.push({
+        kind: "requirement",
+        canonical: option.code,
+        aliases: canonicalAliases.filter(
+          (alias) => !CUE_ONLY_REQUIREMENT_ALIASES[option.code]?.has(alias),
+        ),
+      });
+    } else if (DIRECT_REQUIREMENT_CODE_ONLY.has(option.code)) {
+      entries.push({
+        kind: "requirement",
+        canonical: option.code,
+        aliases: [code],
+      });
+    } else if (EXPLICIT_AMBIGUOUS_REQUIREMENT_CODES.has(option.code)) {
+      entries.push({
+        kind: "requirement",
+        canonical: option.code,
+        aliases: [
+          `${code} requirement`,
+          `${code} gen ed`,
+          `${code} gened`,
+        ],
+      });
+    }
+
+    return entries;
+  });
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
+}
+
 export const STOP_PHRASES = [
   "gen ed",
   "gened",
   "requirement",
   "gen-ed",
-  "section",
-  "sections",
-  "class",
-  "classes",
-  "course",
-  "courses",
   "only",
   "booster",
   "count",
@@ -340,7 +349,7 @@ export const POSITIVE_NO_NOT_ALIASES: PositiveNoNotAlias[] = [
   { pattern: /\bno\s+waitlist\b/gi, type: "status", value: "open" },
 ];
 
-export const GENERIC_DECISION_PATTERNS = [
+export const GENERIC_INTENT_PATTERNS = [
   /\bi\s+(?:need|want|am looking for|m looking for)\b/gi,
   /\b(?:need|want|looking for)\b/gi,
   /\b(?:a|an|the)\b/gi,
@@ -378,13 +387,6 @@ export const STUDENT_PROFILE_PATTERNS = [
   /\bdegree\s+(?:audit|progress|requirements?)\b/i,
 ];
 
-export const HELP_PATTERNS = [
-  /\bhow\s+do\s+i\b/i,
-  /\bwhat\s+should\s+i\s+take\b/i,
-  /\bhow\s+to\b/i,
-  /\bhelp\b/i,
-];
-
 export const COMPARISON_PATTERNS = [
   /\blike\s+[A-Z]{2,4}\s*\d{3}\b/i,
   /\bsimilar\s+to\b/i,
@@ -408,13 +410,12 @@ export const ASYNC_PATTERNS = [
   /\bself[-\s]?paced\b/i,
 ];
 
-export const STUDENT_LANGUAGE_RESCUE_RULES: StudentLanguageRescueRule[] = [
+export const STUDENT_LANGUAGE_INTENT_RULES: StudentLanguageIntentRule[] = [
   {
     queryTypes: ["avoidance", "subjective_vibe"],
     patterns: [/\bno\s+(?:essays?|papers?|writing)\b/i, /\bnot\s+writing\s+heavy\b/i, /\b(?:low|light|writing[-\s]+light)\s+writing\b/i, /\bwriting[-\s]+light\b/i],
     negativeTerms: ["writing_heavy", "essays", "papers"],
     softPreferences: { lowWriting: 0.9 },
-    assumptions: [assumption("low_writing", "Low writing preferred", 0.82)],
     warnings: [warning("writing_evidence_incomplete", "Essay and writing workload evidence is incomplete for many courses.", 0.78)],
   },
   {
@@ -422,7 +423,6 @@ export const STUDENT_LANGUAGE_RESCUE_RULES: StudentLanguageRescueRule[] = [
     patterns: [/\bno\s+(?:exams?|tests?|midterms?|finals?)\b/i, /\blow\s+exam\b/i],
     negativeTerms: ["exam_heavy", "tests", "exams"],
     softPreferences: { lowExams: 0.88 },
-    assumptions: [assumption("low_exams", "Low exam load preferred", 0.78)],
     warnings: [warning("exam_evidence_incomplete", "Exam workload evidence usually comes from syllabi or student reports, not catalog text.", 0.74)],
   },
   {
@@ -430,7 +430,6 @@ export const STUDENT_LANGUAGE_RESCUE_RULES: StudentLanguageRescueRule[] = [
     patterns: [/\bnot\s+math(?:[-\s]+heavy)?\b/i, /\bno\s+math\b/i, /\bi\s+hate\s+math\b/i, /\blow\s+math\b/i],
     negativeTerms: ["math_heavy", "calculus", "statistics", "formal_logic", "quantitative"],
     softPreferences: { lowMath: 0.86 },
-    assumptions: [assumption("low_math", "Avoid math-heavy courses", 0.78)],
     warnings: [warning("math_risk_inferred", "Math-heavy risk is inferred from course language and requirements until syllabus evidence is available.", 0.72)],
   },
   {
@@ -438,35 +437,28 @@ export const STUDENT_LANGUAGE_RESCUE_RULES: StudentLanguageRescueRule[] = [
     patterns: [/\bno\s+(?:listed\s+)?prereq(?:uisite)?s?\b/i, /\bwithout\s+prereq(?:uisite)?s?\b/i],
     negativeTerms: ["prerequisites", "restricted_access"],
     softPreferences: { noListedPrereq: true },
-    assumptions: [assumption("no_listed_prereq", "No listed prerequisite preferred", 0.82)],
     warnings: [warning("prereq_evidence_incomplete", "Prerequisite and restriction text can be incomplete or term-specific.", 0.7)],
   },
   {
     queryTypes: ["subjective_vibe"],
     patterns: [/\b(?:easy|chill|gpa\s+booster|grade\s+booster|easy\s+a|low\s+workload)\b/i],
     softPreferences: { lowWorkload: 0.84 },
-    assumptions: [assumption("low_workload", "Low workload preferred", 0.82)],
     warnings: [warning("workload_evidence_incomplete", "Workload is estimated from scores and available evidence, not guaranteed.", 0.72)],
   },
   {
     queryTypes: ["subjective_vibe"],
     patterns: [/\b(?:fun|interesting|cool)\b/i],
     softPreferences: { fun: 0.55 },
-    assumptions: [assumption("fun_or_interesting", "Fun or interesting topic preferred", 0.52)],
   },
   {
     queryTypes: ["avoidance"],
     patterns: [/\bless\s+bio(?:logy)?\b/i, /\bnot\s+bio(?:logy)?(?:[-\s]+heavy)?\b/i, /\bno\s+bio(?:logy)?\b/i],
     negativeTerms: ["biology_heavy", "bio"],
-    softPreferences: { lowBiology: 0.72 },
-    assumptions: [assumption("low_biology", "Avoid biology-heavy courses", 0.68)],
   },
   {
     queryTypes: ["avoidance"],
     patterns: [/\bno\s+group\s+projects?\b/i, /\bavoid\s+group\s+projects?\b/i],
     negativeTerms: ["group_projects"],
-    softPreferences: { lowGroupWork: 0.8 },
-    assumptions: [assumption("avoid_group_projects", "Avoid group projects", 0.76)],
     warnings: [warning("workload_evidence_incomplete", "Group-project evidence usually requires syllabi or student reports.", 0.68)],
   },
   {
@@ -474,14 +466,9 @@ export const STUDENT_LANGUAGE_RESCUE_RULES: StudentLanguageRescueRule[] = [
     patterns: [/\blow\s+reading\b/i, /\bminimal\s+reading\b/i],
     negativeTerms: ["reading_heavy"],
     softPreferences: { lowReading: 0.78 },
-    assumptions: [assumption("low_reading", "Low reading load preferred", 0.72)],
     warnings: [warning("workload_evidence_incomplete", "Reading workload evidence is incomplete for many courses.", 0.68)],
   },
 ];
-
-function assumption(kind: string, label: string, confidence: number): SearchPlanAssumption {
-  return { kind, label, confidence, source: "rule" };
-}
 
 function warning(
   kind: SearchPlanWarningKind,

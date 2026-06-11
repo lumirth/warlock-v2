@@ -3,7 +3,11 @@ import { singleRequirementFilter } from "@uiuc-course-search/query-types";
 import type { SearchPlan } from "../search-planner-types.js";
 import { buildSearchCandidateBudget } from "../search-budget.js";
 import { normalizeSearchControls } from "../search-controls.js";
-import { buildRetrievalPlan, laneEnabled } from "../search-retrieval-plan.js";
+import { buildRetrievalPlan, type RetrievalPlan } from "../search-retrieval-plan.js";
+
+function hasLane(plan: RetrievalPlan, lane: RetrievalPlan["lanes"][number]["lane"]): boolean {
+  return plan.lanes.some((candidate) => candidate.lane === lane);
+}
 
 function plan(overrides: Partial<SearchPlan> = {}): SearchPlan {
   return {
@@ -14,14 +18,13 @@ function plan(overrides: Partial<SearchPlan> = {}): SearchPlan {
   };
 }
 
-function retrievalPlan(searchPlan: SearchPlan) {
-  const controls = normalizeSearchControls();
-  const budget = buildSearchCandidateBudget(
-    searchPlan,
-    { limit: 10, offset: 0 },
-    controls,
-  );
-  return buildRetrievalPlan(searchPlan, controls, budget);
+function retrievalPlan(
+  searchPlan: SearchPlan,
+  controls = normalizeSearchControls(),
+  currentTermIds: string[] = [],
+) {
+  const budget = buildSearchCandidateBudget();
+  return buildRetrievalPlan(searchPlan, controls, budget, currentTermIds);
 }
 
 describe("buildRetrievalPlan", () => {
@@ -32,13 +35,13 @@ describe("buildRetrievalPlan", () => {
       }),
     );
 
-    expect(laneEnabled(result, "exact")).toBe(true);
-    expect(laneEnabled(result, "official_text")).toBe(false);
-    expect(laneEnabled(result, "topic_semantic")).toBe(false);
-    expect(result.isNavigational).toBe(true);
+    expect(hasLane(result, "exact")).toBe(true);
+    expect(hasLane(result, "official_text")).toBe(false);
+    expect(hasLane(result, "structured_course")).toBe(false);
+    expect(hasLane(result, "topic_semantic")).toBe(false);
   });
 
-  it("keeps section text search distinct from structured section constraints", () => {
+  it("keeps section text search distinct from filter-only structured recall", () => {
     const result = retrievalPlan(
       plan({
         keywordQuery: "movies",
@@ -46,100 +49,117 @@ describe("buildRetrievalPlan", () => {
       }),
     );
 
-    expect(laneEnabled(result, "official_text")).toBe(true);
-    expect(laneEnabled(result, "section_text")).toBe(true);
-    expect(laneEnabled(result, "structured_section")).toBe(false);
-    expect(laneEnabled(result, "topic_semantic")).toBe(true);
+    expect(hasLane(result, "official_text")).toBe(true);
+    expect(hasLane(result, "section_text")).toBe(true);
+    expect(hasLane(result, "topic_semantic")).toBe(true);
   });
 
-  it("enables structured section retrieval only for structured section filters or preferences", () => {
+  it("uses one structured recall lane for hard section filters", () => {
     const result = retrievalPlan(
       plan({
         filters: { online: true },
       }),
     );
 
-    expect(laneEnabled(result, "section_text")).toBe(false);
-    expect(laneEnabled(result, "structured_section")).toBe(true);
+    expect(hasLane(result, "section_text")).toBe(false);
+    expect(hasLane(result, "structured_course")).toBe(true);
   });
 
-  it("does not execute the requirement lane for requirement-like intent without a concrete requirement filter", () => {
+  it("uses structured course recall instead of pretending filter-only search is official text", () => {
+    const result = retrievalPlan(plan({ filters: { subject: "CS" } }));
+
+    expect(hasLane(result, "structured_course")).toBe(true);
+    expect(hasLane(result, "official_text")).toBe(false);
+  });
+
+  it("pushes active scope into executable retrieval unless the request names a term", () => {
+    const active = retrievalPlan(plan({ filters: { subject: "CS" } }));
+    const explicitTerm = retrievalPlan(
+      plan({ filters: { subject: "CS", year: 2025, term: "fall" } }),
+    );
+
+    expect(active.inputs.scope).toBe("active");
+    expect(explicitTerm.inputs.scope).toBe("all");
+  });
+
+  it("keeps all-scope retrieval exhaustive across historical terms", () => {
+    const result = retrievalPlan(
+      plan({ filters: { subject: "CS" } }),
+      normalizeSearchControls({ scope: "all" }),
+    );
+
+    expect(result.inputs.scope).toBe("all");
+    expect(result.inputs.semanticTermIds).toEqual([]);
+  });
+
+  it("pre-filters semantic recall to current or explicitly requested terms", () => {
+    const active = retrievalPlan(
+      plan({ semanticQuery: "machine learning" }),
+      normalizeSearchControls(),
+      ["2026-fall", "2027-spring"],
+    );
+    const explicit = retrievalPlan(
+      plan({
+        semanticQuery: "machine learning",
+        filters: { year: 2025, term: "fall" },
+      }),
+      normalizeSearchControls(),
+      ["2026-fall"],
+    );
+
+    expect(active.inputs.semanticTermIds).toEqual(["2026-fall", "2027-spring"]);
+    expect(explicit.inputs.semanticTermIds).toEqual(["2025-fall"]);
+  });
+
+  it("executes structured recall for explicit compressed-term and time constraints", () => {
+    const result = retrievalPlan(
+      plan({
+        filters: {
+          compressedTerm: true,
+          startAfterMinutes: 600,
+        },
+      }),
+    );
+
+    expect(result.lanes.map((lane) => lane.lane)).toEqual(["structured_course"]);
+  });
+
+  it("does not create duplicate recall lanes for requirement-like intent", () => {
     const result = retrievalPlan(
       plan({
         filters: { subject: "CS" },
-        rescue: {
+        intent: {
           queryTypes: ["requirement"],
           negativeTerms: [],
           topicTerms: [],
           expandedTerms: [],
-          assumptions: [],
           warnings: [],
-          interpretedLanes: ["requirement"],
-          relaxationPlan: [],
-          needsStudentProfile: false,
           confidence: 0.72,
         },
       }),
     );
 
-    expect(laneEnabled(result, "requirement")).toBe(false);
+    expect(result.lanes.map((lane) => lane.lane)).toEqual(["structured_course"]);
   });
 
-  it("executes the requirement lane when the plan has a concrete requirement filter", () => {
+  it("treats a concrete requirement as a hard constraint on structured recall", () => {
     const result = retrievalPlan(
       plan({
         filters: { requirement: singleRequirementFilter("HUM") },
       }),
     );
 
-    expect(laneEnabled(result, "requirement")).toBe(true);
+    expect(result.lanes.map((lane) => lane.lane)).toEqual(["structured_course"]);
   });
 
-  it("keeps help_path as planned metadata until a help corpus exists", () => {
-    const result = retrievalPlan(
-      plan({
-        rescue: {
-          queryTypes: ["help_or_how_to"],
-          negativeTerms: [],
-          topicTerms: [],
-          expandedTerms: [],
-          assumptions: [],
-          warnings: [],
-          interpretedLanes: ["help_path"],
-          relaxationPlan: [],
-          needsStudentProfile: false,
-          confidence: 0.72,
-        },
-      }),
-    );
-
-    expect(result.lanes.find((laneInfo) => laneInfo.lane === "help_path")).toEqual(
-      {
-        lane: "help_path",
-        enabled: false,
-        limit: result.budget.laneCandidateLimit,
-        reason:
-          "planned FAQ/degree-audit sidecar; no executable help corpus configured",
-      },
-    );
-  });
-
-  it("records workload evidence signal types as part of executable retrieval configuration", () => {
+  it("does not invent an executable lane for soft preferences without backing data", () => {
     const result = retrievalPlan(
       plan({
         softPreferences: { lowWriting: 0.8, lowMath: 0.7 },
       }),
     );
 
-    expect(laneEnabled(result, "workload_evidence")).toBe(true);
-    expect(result.inputs.workloadSignalTypes).toEqual([
-      "low_writing",
-      "writing_light",
-      "few_papers",
-      "low_math",
-      "non_quantitative",
-      "non_major_friendly",
-    ]);
+    expect(result.lanes.map((lane) => lane.lane)).toEqual(["structured_course"]);
   });
 
   it("consumes the compiled plan without resolving bare keyword text into new filters", () => {

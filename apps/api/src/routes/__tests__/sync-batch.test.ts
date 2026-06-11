@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Ai, D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
-import type { TermState } from '../../db/index.js';
+import type { TermState } from '../../db/types.js';
 import { syncSubjects, syncTerm } from '../../services/parallel-sync.js';
 import { syncRoutes } from '../sync.js';
 

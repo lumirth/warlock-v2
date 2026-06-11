@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   Ai,
   D1Database,
@@ -9,13 +9,7 @@ import type {
   VectorizeIndex,
 } from '@cloudflare/workers-types';
 import worker from '../../index.js';
-import { SearchPipeline } from '../search-pipeline.js';
-import type { Course, Section } from '../../db/index.js';
-import type { SearchResult } from '../search-types.js';
-
-vi.mock('../search-pipeline.js', () => ({
-  SearchPipeline: vi.fn(),
-}));
+import type { Course, Section } from '../../db/types.js';
 
 type D1Row = Record<string, unknown>;
 
@@ -108,7 +102,21 @@ class TestD1Statement {
   }
 
   async first<T = D1Row>(): Promise<T | null> {
-    if (this.sql.includes('FROM term_state')) {
+    if (this.sql.includes('COUNT(DISTINCT id) AS total')) {
+      return { total: 1 } as T;
+    }
+
+    if (this.sql.includes('SELECT id FROM subjects WHERE id = ?')) {
+      return String(this.params[0] ?? '').toUpperCase() === 'CS'
+        ? { id: 'CS' } as T
+        : null;
+    }
+
+    if (this.sql.includes('SELECT name FROM subjects WHERE id = ?')) {
+      return { name: 'Computer Science' } as T;
+    }
+
+    if (this.sql.includes('SELECT term_id') && this.sql.includes('FROM term_state')) {
       return {
         term_id: '2026-spring',
         year: 2026,
@@ -127,10 +135,16 @@ class TestD1Statement {
   async all<T = D1Row>(): Promise<D1Result<T>> {
     let results: D1Row[] = [];
 
-    if (this.sql.includes('FROM term_state')) {
+    if (this.sql.includes('SELECT term_id') && this.sql.includes('FROM term_state')) {
       results = [
-        { term_id: '2026-spring', status: 'active' },
+        { term_id: '2026-spring', year: 2026, term: 'spring', status: 'active' },
       ];
+    } else if (this.sql.includes('SELECT DISTINCT c.id') && this.sql.includes('FROM courses c')) {
+      results = [{ id: courseRow.id }];
+    } else if (this.sql.includes('FROM courses c') && this.sql.includes('LEFT JOIN gpa_stats')) {
+      results = [courseRow as unknown as D1Row];
+    } else if (this.sql.includes('FROM course_gened')) {
+      results = [];
     } else if (this.sql.includes('FROM sections WHERE course_id = ?') && this.params[0] === courseRow.id) {
       results = [sectionRow as unknown as D1Row];
     } else if (this.sql.includes('FROM instructor_course_links')) {
@@ -190,35 +204,7 @@ function createExecutionContext(): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function mockSearchResult(): SearchResult {
-  return {
-    course: courseRow,
-    score: 1,
-    semanticRank: undefined,
-    keywordRank: 1,
-    termPriority: 0,
-    historical: false,
-  };
-}
-
 describe('Worker API integration', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(SearchPipeline).mockImplementation(function () {
-      return {
-        search: vi.fn().mockResolvedValue({
-          results: [mockSearchResult()],
-          meta: {
-            query: { raw: 'CS 225', residual: '' },
-            extraction: { hints: [] },
-            plan: { filters: { subject: 'CS', number: '225' }, semanticQuery: '', keywordQuery: '' },
-            timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
-          },
-        }),
-      } as unknown as SearchPipeline;
-    });
-  });
-
   it('serves search through the Worker fetch handler without a live server', async () => {
     const response = await worker.fetch(
       new Request('http://local.test/api/search?q=CS%20225'),
@@ -261,7 +247,6 @@ describe('Worker API integration', () => {
 
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toEqual({ error: 'rate limit exceeded' });
-    expect(SearchPipeline).not.toHaveBeenCalled();
   });
 
   it('rate limits public course detail requests', async () => {

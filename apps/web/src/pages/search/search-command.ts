@@ -1,5 +1,5 @@
 import {
-  coerceSearchRequestDto,
+  normalizeSearchRequestDto,
   searchRequestHasFilters,
   splitAdvancedSearchState,
   type AdvancedSearchStateDto,
@@ -18,14 +18,11 @@ import type { SearchExecutionMode } from './search-controller-state'
 type BaseSearchCommand = {
   query: string
   filters?: AdvancedSearchStateDto
-  sort?: SearchSort
 }
 
 export type SearchCommand =
   | ({ type: 'submit' } & BaseSearchCommand)
   | ({ type: 'refine' } & BaseSearchCommand)
-  | ({ type: 'refresh' } & BaseSearchCommand)
-  | ({ type: 'append'; offset: number } & BaseSearchCommand)
   | {
       type: 'request'
       mode: SearchExecutionMode
@@ -34,10 +31,8 @@ export type SearchCommand =
       offset?: number
     }
 
-export type ResolvedSearchCommand = {
+type ResolvedSearchCommand = {
   mode: SearchExecutionMode
-  query: string
-  filters: AdvancedSearchStateDto
   sort: SearchSort
   request: SearchRequestDto
 }
@@ -47,7 +42,7 @@ export function resolveSearchCommand(
   currentSort: SearchSort,
 ): ResolvedSearchCommand | null {
   if (command.type === 'request') {
-    return resolveRequestCommand(command, currentSort)
+    return resolveRequestCommand(command)
   }
 
   const normalizedQuery = command.query.trim()
@@ -57,9 +52,7 @@ export function resolveSearchCommand(
   const hasRequestFilters = hasAdvancedFilterValue(requestState)
   if (!normalizedQuery && !hasRequestFilters) return null
 
-  const sort = normalizeSearchSort(command.sort ?? currentSort)
-  const mode = executionModeForCommand(command)
-  const offset = command.type === 'append' ? command.offset : 0
+  const sort = normalizeSearchSort(currentSort)
   const request: SearchRequestDto = {
     query: normalizedQuery,
     filters: searchRequestHasFilters({ filters: requestFilters })
@@ -69,25 +62,22 @@ export function resolveSearchCommand(
     sort,
     pagination: {
       limit: SEARCH_PAGE_SIZE,
-      offset,
+      offset: 0,
     },
   }
 
   return {
-    mode,
-    query: normalizedQuery,
-    filters: requestState,
+    mode: command.type === 'submit' ? 'replace' : 'refine',
     sort,
     request,
   }
 }
 
 function resolveRequestCommand(
-  command: Extract<SearchCommand, { type: 'request' }>,
-  currentSort: SearchSort
+  command: Extract<SearchCommand, { type: 'request' }>
 ): ResolvedSearchCommand | null {
-  const normalizedRequest = coerceSearchRequestDto(command.request)
-  const sort = normalizeSearchSort(command.sort ?? normalizedRequest.sort ?? currentSort)
+  const normalizedRequest = normalizeSearchRequestDto(command.request)
+  const sort = normalizeSearchSort(command.sort ?? normalizedRequest.sort)
   const offset =
     command.mode === 'append'
       ? command.offset ?? command.request.pagination?.offset ?? 0
@@ -106,25 +96,7 @@ function resolveRequestCommand(
 
   return {
     mode: command.mode,
-    query: request.query,
-    filters,
     sort,
     request,
-  }
-}
-
-
-function executionModeForCommand(command: SearchCommand): SearchExecutionMode {
-  switch (command.type) {
-    case 'append':
-      return 'append'
-    case 'refresh':
-      return 'refresh'
-    case 'refine':
-      return 'refine'
-    case 'submit':
-      return 'replace'
-    case 'request':
-      return command.mode
   }
 }

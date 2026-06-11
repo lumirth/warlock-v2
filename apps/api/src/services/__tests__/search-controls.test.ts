@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Course } from '../../db/index.js';
+import type { Course } from '../../db/types.js';
 import type { SearchResult } from '../search-types.js';
 import {
   applySearchControls,

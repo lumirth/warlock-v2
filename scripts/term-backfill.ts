@@ -2,7 +2,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateD1BackupEvidence, type D1BackupEvidenceArgs } from './lib/d1-backup-evidence.ts';
-import { STATUSES, TERMS, type Term, type TermStatus } from './lib/term-model.ts';
+import { TERM_STATUS_VALUES } from '@uiuc-course-search/query-types';
+import { TERMS, type Term, type TermStatus } from './lib/term-model.ts';
 import { endpoint, parseEnumArg, parseNonNegativeInt } from './lib/script-args.ts';
 
 const DEFAULT_PAGE_SIZE = 5;
@@ -161,7 +162,7 @@ export function parseBackfillArgs(argv: string[]): BackfillArgs {
       args.term = parseEnumArg(next.toLowerCase(), '--term', TERMS);
       i += 1;
     } else if (arg === '--status') {
-      args.status = parseEnumArg(next.toLowerCase(), '--status', STATUSES);
+      args.status = parseEnumArg(next.toLowerCase(), '--status', TERM_STATUS_VALUES);
       i += 1;
     } else if (arg === '--page-size') {
       args.pageSize = parseNonNegativeInt(next, '--page-size');

@@ -109,17 +109,17 @@ describe('parseSubjectCascadeXml', () => {
     const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
 
     expect(result?.courses).toHaveLength(2);
-    expect(result?.courses[0].id).toBe('225');
-    expect(result?.courses[0].title).toBe('Data Structures');
-    expect(result?.courses[1].id).toBe('374');
-    expect(result?.courses[1].title).toBe('Intro to Algorithms');
+    expect(result?.courses[0].id).toBe('CS 225');
+    expect(result?.courses[0].label).toBe('Data Structures');
+    expect(result?.courses[1].id).toBe('CS 374');
+    expect(result?.courses[1].label).toBe('Intro to Algorithms');
   });
 
   it('parses detailedSection elements (not just <section>)', async () => {
     const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
 
     // CS 225 should have 2 sections
-    const cs225 = result?.courses.find(c => c.id === '225');
+    const cs225 = result?.courses.find(c => c.id === 'CS 225');
     expect(cs225?.sections).toHaveLength(2);
 
     // First section should be the lecture
@@ -135,7 +135,7 @@ describe('parseSubjectCascadeXml', () => {
 
   it('parses section meeting details correctly', async () => {
     const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
-    const cs225 = result?.courses.find(c => c.id === '225');
+    const cs225 = result?.courses.find(c => c.id === 'CS 225');
     const lecture = cs225?.sections[0];
     const meeting = lecture?.meetings[0];
 
@@ -148,7 +148,7 @@ describe('parseSubjectCascadeXml', () => {
 
   it('parses instructor information correctly', async () => {
     const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
-    const cs225 = result?.courses.find(c => c.id === '225');
+    const cs225 = result?.courses.find(c => c.id === 'CS 225');
     const lecture = cs225?.sections[0];
     const meeting = lecture?.meetings[0];
 
@@ -159,17 +159,17 @@ describe('parseSubjectCascadeXml', () => {
 
   it('parses genEd categories correctly', async () => {
     const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
-    const cs225 = result?.courses.find(c => c.id === '225');
+    const cs225 = result?.courses.find(c => c.id === 'CS 225');
 
     expect(cs225?.genEdCategories[0].id).toBe('QR');
   });
 
   it('does not let gen-ed descriptions overwrite course descriptions', async () => {
     const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
-    const cs225 = result?.courses.find(c => c.id === '225');
+    const cs225 = result?.courses.find(c => c.id === 'CS 225');
 
     expect(cs225?.description).toBe('Data abstractions and algorithms.');
-    expect(cs225?.genEdCategories[0].name).toBe('Quantitative Reasoning I');
+    expect(cs225?.genEdCategories[0].description).toBe('Quantitative Reasoning I');
   });
 
   it('parses cultural-studies genEd sub-attributes', async () => {
@@ -190,16 +190,16 @@ describe('parseSubjectCascadeXml', () => {
         </cascadingCourse>
       </ns2:subject>
     `));
-    const clcv100 = result?.courses.find(c => c.id === '100');
+    const clcv100 = result?.courses.find(c => c.id === 'CLCV 100');
 
     expect(clcv100?.genEdCategories).toEqual([
       {
         id: 'CS',
-        name: 'Cultural Studies',
+        description: 'Cultural Studies',
         attributes: [
           {
             code: 'WCC',
-            name: 'Western/Comparative Cultures'
+            description: 'Western/Comparative Cultures'
           }
         ]
       }
@@ -212,7 +212,7 @@ describe('parseSubjectCascadeXml', () => {
 
   it('handles sections without instructors gracefully', async () => {
     const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
-    const cs374 = result?.courses.find(c => c.id === '374');
+    const cs374 = result?.courses.find(c => c.id === 'CS 374');
     const section = cs374?.sections[0];
     const meeting = section?.meetings[0];
 
@@ -366,13 +366,8 @@ describe('parseCourseDetailXml', () => {
   });
 });
 
-// This test specifically documents the bug that was fixed
-describe('parseSubjectCascadeXml - detailedSection bug regression test', () => {
-  it('MUST parse detailedSection elements - this was a production bug', async () => {
-    // This test exists because the parser originally looked for <section>
-    // but CISAPI returns <detailedSection> in cascade mode.
-    // If this test fails, sections will be 0 in the database.
-
+describe('parseSubjectCascadeXml detailed sections', () => {
+  it('preserves all detailedSection elements', async () => {
     const result = await parseSubjectCascadeXml(createStream(SAMPLE_CASCADE_XML));
 
     const totalSections = result?.courses.reduce(
@@ -380,9 +375,8 @@ describe('parseSubjectCascadeXml - detailedSection bug regression test', () => {
       0
     ) ?? 0;
 
-    // CRITICAL: Must be > 0, otherwise we're back to the bug
     expect(totalSections).toBeGreaterThan(0);
-    expect(totalSections).toBe(3); // 2 for CS 225, 1 for CS 374
+    expect(totalSections).toBe(3);
   });
 });
 

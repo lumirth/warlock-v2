@@ -1,5 +1,10 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { ExtractedQuery, SearchPlan, QueryHint } from './search-planner-types.js';
+import {
+  isSearchTermFilter,
+  type SearchTermFilter,
+} from '@uiuc-course-search/query-types';
+import type { ExtractionResult } from './extractor.js';
+import type { Hint, SearchPlan } from './search-planner-types.js';
 import { applyStructuredNegation } from './search-intent-policy.js';
 import { appendQueryText } from './search-plan-query-language.js';
 import {
@@ -13,17 +18,21 @@ type InstructorResolution = {
   residualText?: string;
 };
 
-export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): Promise<SearchPlan> {
+export async function resolveQuery(
+  db: D1Database,
+  rawQuery: string,
+  extraction: ExtractionResult,
+): Promise<SearchPlan> {
   const plan: SearchPlan = {
     filters: {},
-    semanticQuery: extracted.residual,
-    keywordQuery: extracted.residual,
+    semanticQuery: extraction.residual,
+    keywordQuery: extraction.residual,
     ambiguities: []
   };
 
-  for (const hint of extracted.hints) {
+  for (const hint of extraction.hints) {
     switch (hint.type) {
-      case 'course_code':
+      case 'courseCode':
         await resolveCourseCode(db, hint, plan);
         break;
 
@@ -47,7 +56,7 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
         const subjectValue = String(hint.value);
         const validSubj = await validateSubject(db, subjectValue);
         if (validSubj) {
-          await resolveSubjectHint(db, hint, validSubj, plan, extracted.rawQuery);
+          await resolveSubjectHint(db, hint, validSubj, plan, rawQuery);
         } else {
           plan.keywordQuery = appendQueryText(plan.keywordQuery, subjectValue);
           plan.semanticQuery = appendQueryText(plan.semanticQuery, subjectValue);
@@ -56,98 +65,78 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
       }
 
       case 'crn':
-        // CRN is a direct lookup - handled specially in search
         plan.filters.crn = String(hint.value);
         break;
 
       case 'days':
-        plan.filters.days = hint.value as string;
+        plan.filters.days = hint.value;
         break;
 
       case 'time':
-        plan.filters.time = hint.value as string;
+        plan.filters.time = hint.value;
         break;
 
       case 'partOfTerm':
-        plan.filters.partOfTerm = hint.value as string;
+        plan.filters.partOfTerm = hint.value;
         break;
 
       case 'term': {
-        if (typeof hint.value === 'object' && hint.value !== null && 'term' in hint.value && 'year' in hint.value) {
-          plan.filters.term = hint.value.term;
-          plan.filters.year = hint.value.year;
-        } else if (typeof hint.value === 'string') {
-          const parsed = parseTermValue(hint.value);
-          if (parsed) {
-            plan.filters.term = parsed.term;
-            plan.filters.year = parsed.year;
-          }
-        }
+        plan.filters.term = hint.value.term;
+        plan.filters.year = hint.value.year;
         break;
       }
 
       case 'level': {
-        const levelValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
-        plan.filters.level = levelValue;
+        plan.filters.level = hint.value;
         break;
       }
 
       case 'levelBoost': {
-        const levelValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
         plan.softPreferences = {
           ...plan.softPreferences,
-          levelBoost: levelValue,
+          levelBoost: hint.value,
         };
         break;
       }
 
       case 'credits': {
-        const creditsValue = typeof hint.value === 'number' ? hint.value : parseInt(hint.value as string);
-        plan.filters.credits = creditsValue;
+        plan.filters.credits = hint.value;
         break;
       }
 
       case 'online':
-        if (typeof hint.value === 'boolean') {
-          plan.filters.online = hint.value;
-        } else {
-          plan.filters.online = hint.value === 'true';
-        }
+        plan.filters.online = hint.value;
         break;
 
       case 'status':
-        plan.filters.status = hint.value as string;
+        plan.filters.status = hint.value;
         break;
 
       case 'workload':
-        plan.filters.workload = hint.value as 'easy' | 'hard';
+        plan.filters.workload = hint.value;
         break;
 
       case 'negation': {
-        // Handle negation hints - they come as { target: HintType, value: string }
-        const negValue = hint.value as { target: string; value: string } | string;
-        if (typeof negValue === 'object' && 'target' in negValue) {
-          plan.filters.not = plan.filters.not || {};
-          if (negValue.target === 'time') {
-            plan.filters.not.time = plan.filters.not.time || [];
-            plan.filters.not.time.push(negValue.value);
-          } else if (negValue.target === 'days') {
-            plan.filters.not.days = plan.filters.not.days || [];
-            plan.filters.not.days.push(negValue.value);
-          } else if (negValue.target === 'subject') {
-            applyStructuredNegation('subject', negValue.value, plan);
-          } else if (negValue.target === 'requirement') {
-            applyStructuredNegation('requirement', negValue.value, plan);
-          } else if (negValue.target === 'keyword' || negValue.target === 'workload') {
-            applyStructuredNegation(negValue.target, negValue.value, plan);
-          }
+        const negValue = hint.value;
+        plan.filters.not = plan.filters.not || {};
+        if (negValue.target === 'time') {
+          plan.filters.not.time = plan.filters.not.time || [];
+          plan.filters.not.time.push(negValue.value);
+        } else if (negValue.target === 'days') {
+          plan.filters.not.days = plan.filters.not.days || [];
+          plan.filters.not.days.push(negValue.value);
+        } else if (negValue.target === 'subject') {
+          applyStructuredNegation('subject', negValue.value, plan);
+        } else if (negValue.target === 'requirement') {
+          applyStructuredNegation('requirement', negValue.value, plan);
+        } else if (negValue.target === 'keyword' || negValue.target === 'workload') {
+          applyStructuredNegation(negValue.target, negValue.value, plan);
         }
         break;
       }
     }
   }
 
-  // Clean up empty ambiguities array
   if (plan.ambiguities?.length === 0) {
     delete plan.ambiguities;
   }
@@ -155,7 +144,7 @@ export async function resolveQuery(db: D1Database, extracted: ExtractedQuery): P
   return plan;
 }
 
-export function parseTermValue(value: string): { term: string; year: number } | null {
+export function parseTermValue(value: string): { term: SearchTermFilter; year: number } | null {
   const normalized = value.trim().toLowerCase();
   const match = /^(spring|fall|summer|winter)[-_ ]?(20\d{2})$/.exec(normalized)
     ?? /^(20\d{2})[-_ ]?(spring|fall|summer|winter)$/.exec(normalized);
@@ -164,41 +153,34 @@ export function parseTermValue(value: string): { term: string; year: number } | 
     return null;
   }
 
-  if (match[1].startsWith('20')) {
-    return { year: parseInt(match[1], 10), term: match[2] };
-  }
-
-  return { term: match[1], year: parseInt(match[2], 10) };
+  const term = match[1].startsWith('20') ? match[2] : match[1];
+  if (!isSearchTermFilter(term)) return null;
+  const year = match[1].startsWith('20') ? match[1] : match[2];
+  return { term, year: parseInt(year, 10) };
 }
 
 async function resolveCourseCode(
   db: D1Database,
-  hint: QueryHint,
+  hint: Extract<Hint, { type: 'courseCode' }>,
   plan: SearchPlan
 ): Promise<void> {
-  const subject = hint.metadata?.subject;
-  const number = hint.metadata?.number;
-
-  if (!number) return;
+  const { subject, number } = hint.value;
   if (!subject) {
     plan.filters.number = number;
     return;
   }
 
-  // Validate subject exists
   const validSubject = await validateSubject(db, subject);
 
   if (validSubject) {
     plan.filters.subject = validSubject;
     plan.filters.number = number;
 
-    // Clear residual since we've fully resolved this
-    const rawValue = String(hint.value);
+    const rawValue = hint.metadata.raw;
     plan.semanticQuery = plan.semanticQuery.replace(rawValue, '').trim();
     plan.keywordQuery = plan.keywordQuery.replace(rawValue, '').trim();
   } else {
-    // Subject not found - keep in queries for fuzzy matching
-    const rawValue = String(hint.value);
+    const rawValue = hint.metadata.raw;
     plan.semanticQuery = appendQueryText(rawValue, plan.semanticQuery);
     plan.keywordQuery = appendQueryText(rawValue, plan.keywordQuery);
   }
@@ -232,6 +214,13 @@ async function resolveInstructor(db: D1Database, name: string): Promise<Instruct
   }
 
   return { ids };
+}
+
+export async function resolveInstructorIds(
+  db: D1Database,
+  name: string,
+): Promise<number[]> {
+  return (await resolveInstructor(db, name)).ids;
 }
 
 function instructorSearchCandidates(name: string): InstructorResolutionCandidate[] {

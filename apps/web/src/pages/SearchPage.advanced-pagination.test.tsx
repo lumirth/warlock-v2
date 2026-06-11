@@ -5,7 +5,6 @@ import {
   course,
   expectLastSearchCalledWithRequest,
   renderSearchPage,
-  searchAction,
   searchResponse,
   setQuery,
   submitSearch,
@@ -34,8 +33,11 @@ describe('SearchPage advanced filters and pagination', () => {
     fireEvent.change(screen.getByLabelText('Subject'), {
       target: { value: 'cs' },
     })
-    fireEvent.click(screen.getByRole('combobox', { name: 'Year' }))
-    fireEvent.click(await screen.findByRole('option', { name: '2026' }))
+    expect(screen.getByRole('option', { name: '2027' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '2026' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Year' }), {
+      target: { value: '2026' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
 
     await waitFor(() => {
@@ -48,6 +50,24 @@ describe('SearchPage advanced filters and pagination', () => {
         }),
       })
     })
+  })
+
+  it('shows an explicit unavailable state when available years cannot be loaded', async () => {
+    vi.mocked(api.getTermOptions).mockRejectedValueOnce(
+      new Error('Terms endpoint unavailable')
+    )
+
+    renderSearchPage()
+
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+
+    expect(
+      await screen.findByRole('combobox', { name: 'Year' })
+    ).toBeDisabled()
+    expect(screen.getByRole('option', { name: 'Years unavailable' })).toBeInTheDocument()
+    expect(
+      screen.getByText(/available years could not be loaded/i)
+    ).toBeInTheDocument()
   })
 
   it('defaults multiple GenEd selections to all selected', async () => {
@@ -81,8 +101,10 @@ describe('SearchPage advanced filters and pagination', () => {
         ...searchResponse([], 'fixture'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'algorithms', residual: 'algorithms' },
           nextRequest: {
+            query: 'algorithms',
+          },
+          interpretedRequest: {
             query: 'algorithms',
           },
           ui: {
@@ -91,7 +113,7 @@ describe('SearchPage advanced filters and pagination', () => {
           },
         },
       })
-      .mockResolvedValueOnce(searchResponse([], 'fixture'))
+      .mockResolvedValueOnce(searchResponse([], 'algorithms'))
 
     renderSearchPage()
 
@@ -109,10 +131,12 @@ describe('SearchPage advanced filters and pagination', () => {
     fireEvent.change(screen.getByLabelText('Instructor'), {
       target: { value: 'Fagen' },
     })
-    fireEvent.click(screen.getByRole('combobox', { name: 'Credits' }))
-    fireEvent.click(await screen.findByRole('option', { name: '4 credits' }))
-    fireEvent.click(screen.getByRole('combobox', { name: 'Level' }))
-    fireEvent.click(await screen.findByRole('option', { name: '400 level' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Credits' }), {
+      target: { value: '4' },
+    })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Level' }), {
+      target: { value: '400' },
+    })
     fireEvent.click(screen.getByLabelText('Include past terms'))
     fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
 
@@ -142,7 +166,6 @@ describe('SearchPage advanced filters and pagination', () => {
         ...searchResponse([], 'fixture'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'intro to CS', residual: 'intro to' },
           nextRequest: {
             query: 'intro to CS',
           },
@@ -157,10 +180,7 @@ describe('SearchPage advanced filters and pagination', () => {
                 type: 'subject',
                 label: 'Subject CS',
                 value: 'CS',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: 'intro to' }),
+                removeRequest: ({ query: 'intro to' }),
               },
             ],
             ambiguityActions: [],
@@ -197,7 +217,6 @@ describe('SearchPage advanced filters and pagination', () => {
         ...searchResponse([], 'fixture'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'CS algorithms', residual: 'algorithms' },
           nextRequest: {
             query: 'CS algorithms',
           },
@@ -212,10 +231,7 @@ describe('SearchPage advanced filters and pagination', () => {
                 type: 'subject',
                 label: 'Subject CS',
                 value: 'CS',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: 'algorithms' }),
+                removeRequest: ({ query: 'algorithms' }),
               },
             ],
             ambiguityActions: [],
@@ -253,7 +269,6 @@ describe('SearchPage advanced filters and pagination', () => {
       ...searchResponse([], 'fixture'),
       meta: {
         ...searchResponse([], 'fixture').meta,
-        query: { raw: 'intro to CS', residual: 'intro to' },
         nextRequest: {
           query: 'intro to CS',
         },
@@ -268,10 +283,7 @@ describe('SearchPage advanced filters and pagination', () => {
               type: 'subject',
               label: 'Subject CS',
               value: 'CS',
-              source: 'natural_language',
-              removable: true,
-              editable: true,
-              action: searchAction({ query: 'intro to' }),
+              removeRequest: ({ query: 'intro to' }),
             },
           ],
           ambiguityActions: [],
@@ -312,7 +324,6 @@ describe('SearchPage advanced filters and pagination', () => {
         ...searchResponse([], 'fixture'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'professor fagen algorithms', residual: 'algorithms' },
           nextRequest: {
             query: 'professor fagen algorithms',
           },
@@ -327,10 +338,7 @@ describe('SearchPage advanced filters and pagination', () => {
                 type: 'instructor',
                 label: 'Instructor fagen',
                 value: 'fagen',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: 'algorithms' }),
+                removeRequest: ({ query: 'algorithms' }),
               },
             ],
             ambiguityActions: [],
@@ -347,6 +355,7 @@ describe('SearchPage advanced filters and pagination', () => {
         ], 'algorithms'),
         pagination: {
           totalResults: 21,
+          browseableResults: 21,
           limit: 20,
           offset: 0,
           hasMore: true,
@@ -363,6 +372,7 @@ describe('SearchPage advanced filters and pagination', () => {
         ], 'algorithms'),
         pagination: {
           totalResults: 21,
+          browseableResults: 21,
           limit: 20,
           offset: 20,
           hasMore: false,
@@ -405,6 +415,7 @@ describe('SearchPage advanced filters and pagination', () => {
         ], 'intro to CS'),
         pagination: {
           totalResults: 21,
+          browseableResults: 21,
           limit: 20,
           offset: 0,
           hasMore: true,
@@ -421,6 +432,7 @@ describe('SearchPage advanced filters and pagination', () => {
         ], 'intro to CS'),
         pagination: {
           totalResults: 21,
+          browseableResults: 21,
           limit: 20,
           offset: 20,
           hasMore: false,
@@ -446,7 +458,7 @@ describe('SearchPage advanced filters and pagination', () => {
     })
   })
 
-  it('falls back to offset plus limit when a hasMore page omits nextOffset', async () => {
+  it('falls back to offset plus limit and adopts the latest exact server total', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
         ...searchResponse([
@@ -456,7 +468,13 @@ describe('SearchPage advanced filters and pagination', () => {
             title: 'Freshman Orientation',
           }),
         ], 'intro to CS'),
-        pagination: { totalResults: 21, limit: 20, offset: 0, hasMore: true },
+        pagination: {
+          totalResults: 21,
+          browseableResults: 21,
+          limit: 20,
+          offset: 0,
+          hasMore: true,
+        },
       })
       .mockResolvedValueOnce({
         ...searchResponse([
@@ -466,7 +484,13 @@ describe('SearchPage advanced filters and pagination', () => {
             title: 'Intro Computing',
           }),
         ], 'intro to CS'),
-        pagination: { totalResults: 22, limit: 20, offset: 20, hasMore: true },
+        pagination: {
+          totalResults: 22,
+          browseableResults: 22,
+          limit: 20,
+          offset: 20,
+          hasMore: true,
+        },
       })
 
     renderSearchPage()
@@ -482,5 +506,6 @@ describe('SearchPage advanced filters and pagination', () => {
       query: 'intro to CS',
       pagination: { limit: 20, offset: 20 },
     })
+    expect(screen.getByText('Showing 2 of 22')).toBeInTheDocument()
   })
 })

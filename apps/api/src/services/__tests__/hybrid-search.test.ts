@@ -7,7 +7,9 @@ import {
   type SearchCandidateBudget,
 } from '../search-budget.js';
 import {
+  exactCourseSearch,
   keywordSearch,
+  structuredCourseSearch,
 } from '../search-retrieval-course-lanes.js';
 import {
   hybridSearch,
@@ -21,7 +23,7 @@ import {
 import * as embeddings from '../embeddings.js';
 import { requirementFilter, singleRequirementFilter } from '@uiuc-course-search/query-types';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import type { Course } from '../../db/index.js';
+import type { Course } from '../../db/types.js';
 import type { SearchFilters, SearchPlan } from '../search-planner-types.js';
 
 // Mock dependencies
@@ -35,6 +37,9 @@ const mockAi = {};
 vi.mock('../embeddings.js', () => ({
   searchCourses: vi.fn().mockResolvedValue([]),
 }));
+vi.mock('../search-candidate-count.js', () => ({
+  countSearchCandidates: vi.fn().mockResolvedValue(0),
+}));
 
 describe('hybridSearch', () => {
   beforeEach(() => {
@@ -43,15 +48,16 @@ describe('hybridSearch', () => {
 
   async function retrievalPlan(
     plan: SearchPlan,
-    limit = 20,
     budgetOverrides: Partial<SearchCandidateBudget> = {},
+    scope: "active" | "all" = "active",
+    currentTermIds: string[] = [],
   ) {
-    const controls = normalizeSearchControls();
+    const controls = normalizeSearchControls({ scope });
     const budget = {
-      ...buildSearchCandidateBudget(plan, { limit, offset: 0 }, controls),
+      ...buildSearchCandidateBudget(),
       ...budgetOverrides,
     };
-    return buildRetrievalPlan(plan, controls, budget);
+    return buildRetrievalPlan(plan, controls, budget, currentTermIds);
   }
 
   it('skips semantic search for purely navigational queries (Subject + Number)', async () => {
@@ -101,7 +107,7 @@ describe('hybridSearch', () => {
       mockDb as unknown as D1Database,
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
-      await retrievalPlan(plan),
+      await retrievalPlan(plan, {}, "all"),
       plan,
     );
 
@@ -110,8 +116,11 @@ describe('hybridSearch', () => {
         expect.anything(),
         expect.anything(),
         'easy ai',
-        plan.filters,
-        80
+        {
+          filters: plan.filters,
+          termIds: [],
+          topK: 100,
+        },
     );
   });
 
@@ -132,7 +141,7 @@ describe('hybridSearch', () => {
       mockDb as unknown as D1Database,
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
-      await retrievalPlan(plan),
+      await retrievalPlan(plan, {}, "active", ["2026-fall"]),
       plan,
     );
 
@@ -140,8 +149,11 @@ describe('hybridSearch', () => {
         expect.anything(),
         expect.anything(),
         'Computer Science',
-        {},
-        80
+        {
+          filters: {},
+          termIds: ["2026-fall"],
+          topK: 100,
+        },
     );
     expect(plan.filters).toEqual({});
   });
@@ -215,15 +227,15 @@ describe('hybridSearch', () => {
       filters: {},
     };
 
-    const results = await hybridSearch(
+    const { results } = await hybridSearch(
       mockDb as unknown as D1Database,
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
-      await retrievalPlan(plan),
+      await retrievalPlan(plan, {}, "all"),
       plan,
     );
 
-    expect(results).toHaveLength(80);
+    expect(results).toHaveLength(150);
     expect(courseLoadBindSizes.length).toBeGreaterThan(1);
     expect(courseLoadBindSizes.every(size => size <= 50)).toBe(true);
     expect(results[0].laneResults?.[0]).toEqual(expect.objectContaining({
@@ -304,13 +316,13 @@ describe('hybridSearch', () => {
       semanticQuery: 'data structures',
       filters: {},
     };
-    const results = await hybridSearch(
+    const { results } = await hybridSearch(
       mockDb as unknown as D1Database,
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
-      await retrievalPlan(plan, 1, {
-        executionResultLimit: 1,
-        termCandidateLimit: 1,
+      await retrievalPlan(plan, {
+        browseableResultLimit: 1,
+        semanticLaneResultLimit: 1,
       }),
       plan,
     );
@@ -320,7 +332,7 @@ describe('hybridSearch', () => {
   });
 });
 
-describe('keywordSearch', () => {
+describe('course retrieval lanes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -344,22 +356,44 @@ describe('keywordSearch', () => {
       })),
     };
 
-    const results = await keywordSearch(db as unknown as D1Database, {
-      filters: {
+    const results = await exactCourseSearch(
+      db as unknown as D1Database,
+      {
         subject: 'CS',
         number: '225',
         online: true,
         requirement: singleRequirementFilter('HUM'),
       },
-      keywordQuery: '',
-      cleanKeywordQuery: '',
-      titleQuery: '',
-    }, 20);
+      20,
+    );
 
     expect(results).toEqual([
       expect.objectContaining({
         id: 'CS-225-2026-spring',
         lane: 'exact',
+      }),
+    ]);
+  });
+
+  it('keeps structured filter recall out of the official-text lane', async () => {
+    const db = {
+      prepare: vi.fn(() => ({
+        bind: vi.fn(() => ({
+          all: vi.fn(async () => ({ results: [{ id: 'CS-124-2026-fall' }] })),
+        })),
+      })),
+    };
+
+    const results = await structuredCourseSearch(
+      db as unknown as D1Database,
+      { subject: 'CS' },
+      20,
+    );
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: 'CS-124-2026-fall',
+        lane: 'structured_course',
       }),
     ]);
   });
@@ -401,6 +435,7 @@ describe('keywordSearch', () => {
       keywordQuery: 'data structures',
       cleanKeywordQuery: 'data structures',
       titleQuery: 'data structures',
+      scope: 'all',
     }, 20);
 
     expect(seenSql.some(sql => sql.includes('LOWER(c.title) LIKE'))).toBe(true);
@@ -438,6 +473,7 @@ describe('keywordSearch', () => {
       keywordQuery: 'class about movies no essays film cinema media documentary television pop culture visual culture papers essays',
       cleanKeywordQuery: 'class about movies no essays film cinema media documentary television pop culture visual culture papers essays',
       titleQuery: '',
+      scope: 'all',
     }, 20);
   });
 });

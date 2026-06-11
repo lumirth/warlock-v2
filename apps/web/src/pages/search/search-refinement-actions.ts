@@ -1,10 +1,6 @@
 import type {
   AdvancedSearchStateDto,
-  SearchAmbiguityActionDto,
-  SearchActionDto,
-  SearchChipDto,
   SearchRequestDto,
-  SearchRecoveryGroup,
 } from '@uiuc-course-search/query-types'
 import {
   cleanAdvancedFilters,
@@ -22,31 +18,10 @@ export type SearchRefinementPlan =
       kind: 'clear'
       draft?: AdvancedSearchStateDto
     }
-  | { kind: 'noop' }
 
-export function planChipRemoval(
-  chip: SearchChipDto
-): SearchRefinementPlan {
-  return planSearchAction(chip.action)
-}
-
-export function planAmbiguityAction(
-  action: SearchAmbiguityActionDto
-): SearchRefinementPlan {
-  return planSearchAction(action.action)
-}
-
-export function planRecoveryAction(
-  group: SearchRecoveryGroup
-): SearchRefinementPlan {
-  return planSearchAction(group.action)
-}
-
-function planSearchAction(action: SearchActionDto | undefined): SearchRefinementPlan {
-  if (!action) return { kind: 'noop' }
-
-  const nextFilters = advancedStateFromRequest(action.nextRequest)
-  const nextQuery = action.nextRequest.query.trim()
+export function planSearchRequest(nextRequest: SearchRequestDto): SearchRefinementPlan {
+  const nextFilters = advancedStateFromRequest(nextRequest)
+  const nextQuery = nextRequest.query.trim()
   const draft = cleanAdvancedFilters(nextFilters)
 
   if (!nextQuery && !hasSearchableAdvancedFilterValue(draft)) {
@@ -56,6 +31,6 @@ function planSearchAction(action: SearchActionDto | undefined): SearchRefinement
   return {
     kind: 'search',
     draft,
-    request: action.nextRequest,
+    request: nextRequest,
   }
 }

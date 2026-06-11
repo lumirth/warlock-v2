@@ -1,14 +1,13 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type { CourseRequirementDto } from "@uiuc-course-search/query-types";
-import { loadSearchResultRequirements } from "../dto/search-requirements.js";
-import type { SearchRequestPagination } from "../http/search-request.js";
-import type { SearchPipelineResult } from "./search-response.js";
+import type { SearchRequestPaginationDto } from "@uiuc-course-search/query-types";
+import type { SearchPipelineResult } from "./search-pipeline-result.js";
 import { getSearchTermSummary } from "./term-state.js";
 
 export async function presentSearchDebugResponse(input: {
   db: D1Database;
   result: SearchPipelineResult;
-  pagination: SearchRequestPagination;
+  pagination: SearchRequestPaginationDto;
 }): Promise<{
   results: Array<{
     id: string;
@@ -21,7 +20,6 @@ export async function presentSearchDebugResponse(input: {
   }>;
   meta: {
     query: SearchPipelineResult["meta"]["query"];
-    fallback: SearchPipelineResult["meta"]["fallback"];
     term: Awaited<ReturnType<typeof getSearchTermSummary>>;
   };
   _debug: {
@@ -29,20 +27,12 @@ export async function presentSearchDebugResponse(input: {
     compilerEvents: SearchPipelineResult["meta"]["compilerEvents"];
     plan: SearchPipelineResult["meta"]["plan"];
     retrievalPlan: SearchPipelineResult["meta"]["retrievalPlan"];
-    retrievalPlans: SearchPipelineResult["meta"]["retrievalPlans"];
-    budget: SearchPipelineResult["meta"]["budget"];
   };
 }> {
   const { db, pagination, result } = input;
   const { limit, offset } = pagination;
   const pageResults = result.results.slice(offset, offset + limit);
-  const [requirementsByCourseId, term] = await Promise.all([
-    loadSearchResultRequirements(
-      db,
-      pageResults.map((searchResult) => searchResult.course.id),
-    ),
-    getSearchTermSummary(db),
-  ]);
+  const term = await getSearchTermSummary(db);
 
   return {
     results: pageResults.map((searchResult) => ({
@@ -51,12 +41,11 @@ export async function presentSearchDebugResponse(input: {
       subject: searchResult.course.subject,
       number: searchResult.course.number,
       avg_gpa: searchResult.course.avg_gpa,
-      requirements: requirementsByCourseId.get(searchResult.course.id) ?? [],
+      requirements: searchResult.requirements ?? [],
       score: searchResult.score,
     })),
     meta: {
       query: result.meta.query,
-      fallback: result.meta.fallback,
       term,
     },
     _debug: {
@@ -64,8 +53,6 @@ export async function presentSearchDebugResponse(input: {
       compilerEvents: result.meta.compilerEvents,
       plan: result.meta.plan,
       retrievalPlan: result.meta.retrievalPlan,
-      retrievalPlans: result.meta.retrievalPlans,
-      budget: result.meta.budget,
     },
   };
 }

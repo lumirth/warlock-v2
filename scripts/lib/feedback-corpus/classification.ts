@@ -140,7 +140,7 @@ export function buildReviewChecklist(target: PromotionTarget): string[] {
     return [
       'Check /admin/sync/status freshness for the reported term or data source.',
       'Run the relevant sync in staging after backup preflight if data mutation is needed.',
-      'Record freshness evidence in the stabilization report.',
+      'Record freshness evidence in the maintenance evidence file for the run.',
     ];
   }
   if (target === 'copy_audit') {

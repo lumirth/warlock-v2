@@ -3,7 +3,7 @@ import type { SearchResult } from '../search-types.js';
 import { appendScoreComponents, scoreComponent } from './score-utils.js';
 import { sortValueForResult } from './sort-policy.js';
 
-export type FinalOrderingControls = {
+type FinalOrderingControls = {
   sort: SearchSort;
   scope: SearchScope;
 };

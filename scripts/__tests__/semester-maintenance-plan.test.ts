@@ -171,6 +171,15 @@ describe('semester maintenance plan', () => {
     });
   });
 
+  it('rejects malformed and out-of-range operator numbers', () => {
+    expect(() => parseSemesterMaintenanceArgs(['--from-year', '2026.5']))
+      .toThrow('--from-year must be a non-negative integer');
+    expect(() => parseSemesterMaintenanceArgs(['--target-size-mb', '-1']))
+      .toThrow('--target-size-mb must be a non-negative number');
+    expect(() => parseSemesterMaintenanceArgs(['--feedback-limit', '1001']))
+      .toThrow('--feedback-limit must be between 1 and 1000');
+  });
+
   it('writes a read-only maintenance bundle from live status and retained-term planning', async () => {
     const report = await runSemesterMaintenancePlan(args(), {
       fetcher: termlistFetcher(),

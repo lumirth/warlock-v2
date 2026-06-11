@@ -16,7 +16,7 @@ export type SelectOption = {
   label: string
 }
 
-export type SortFieldOption = SelectOption & {
+type SortFieldOption = SelectOption & {
   value: SortField
 }
 

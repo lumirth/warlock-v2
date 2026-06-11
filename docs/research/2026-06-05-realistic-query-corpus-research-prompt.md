@@ -93,6 +93,7 @@ Goal: derive the real *content, vocabulary, slang, intents, and frustrations* of
 - The **slang/shorthand lexicon** (orgo, diffeq, gen ed, gut, blow-off, GPA booster, "the diversity req", gateway courses, "James Scholar", course/professor nicknames) — with sources.
 - The **criteria** students optimize (easy/GPA, schedule fit, good prof, fills a requirement, low workload, no prereqs, online, specific topic).
 - The **misconceptions and ambiguities** real students carry (e.g. conflating subject vs requirement, vague topic language).
+- The **range of sophistication** — not just the simple average, but how *power users* search: the heavily-constrained, multi-criteria, expert-vocabulary queries sophisticated students actually write (see §6.2).
 - Representative real phrasings, preserving their messiness.
 
 ## 6. Research Prong B — How humans formulate search queries in general
@@ -104,7 +105,7 @@ Goal: derive the *shape and statistical texture* of real queries — length, err
 - **Broder's taxonomy** of search intent (navigational / informational / transactional) and its course-search analogs (known-item, exploratory/topic, "register this section").
 - The **vocabulary mismatch problem** (users and systems name the same concept differently) — the core justification for handling slang/synonyms.
 - **Misspelling/typo rates** in real queries; how people abbreviate and drop punctuation/casing.
-- The **rarity of advanced operators** (most users never use quotes, booleans, field filters) — so any power-syntax cases should be a small, honest minority.
+- The split between the **casual majority and the power-user minority**: most users keep it short and never touch quotes/booleans/field filters, but a real minority write long, precise, heavily-constrained queries, and query length has a long upper tail. We care about **both ends** — study the power-user shape too (§6.2), not just the simple average.
 - **Query reformulation / session behavior** (people re-query, narrow, broaden, give up) — informs reformulation-pair cases.
 - **Exploratory vs known-item search** and **satisficing** (users often accept the first plausible result) — informs how strict "top result" expectations should be.
 - **Recent shifts toward natural-language, conversational, voice, and LLM-style querying** — question-form and full-sentence queries are rising; reflect current behavior, not just 2000s keyword-ese.
@@ -120,8 +121,15 @@ Real student queries exercise specific phenomena, several of which are exactly w
 - **Question forms** ("is cs 225 hard", "how hard is orgo", "what should I take after 225").
 - **Slang / shorthand / typos** ("orgo", "diffeq", "compsci", "macroecon", "psych", misspelled subject names).
 - **Multi-constraint vibe asks** ("chill 3-credit online class after 2pm that counts for something").
+- **Complex / power-user compound queries** — many constraints stacked at once ("open 400-level ECE, MWF or online, 3+ credits, not 8am, good prof"), exact code + instructor + term together, precise/expert vocabulary, and comparison asks ("is 233 or 241 easier"). Rarer, but they exercise the most capability.
 - **Punctuation & robustness** (apostrophes, emoji, empty, gibberish, very long input) — must never crash.
 - **Known-item navigation** (course codes in every casing/spacing, CRNs) — the common head, where exactness matters.
+
+### 6.2 Cover the whole spectrum — both the simple majority and the power user
+
+Research will likely confirm that the *average* query is short and simple. That's genuinely useful, and the common head must be dense and well-tested. But we also explicitly want to serve the **power-user minority**: students who stack many constraints into one query, use precise or expert vocabulary, compare specific courses, or write near-structured syntax. They're a smaller share of traffic but disproportionately important — they exercise the system's hardest capabilities, and they're exactly the sophisticated users most likely to switch to a tool that beats the official catalog.
+
+So tag every query's frequency honestly (don't pretend power-user queries are common), but **deliberately over-sample the complex end relative to raw frequency** so the benchmark actually measures capability there. The corpus should span the full range from one-word asks to dense multi-constraint power queries. Study what sophisticated UIUC students *actually* write (Prong A) — the goal is realistic power-user queries, not a synthetic showcase of invented "advanced" operators.
 
 ## 7. What to produce (deliverables)
 
@@ -135,7 +143,7 @@ Use your judgment on packaging; the substance is what matters.
    - A **frequency tag** (head vs long-tail).
    - A **held-out flag** (see below).
 2. **A research report / methodology document.** Findings from both prongs, the query taxonomy you built, design decisions and why, an **annotated bibliography** (links + confidence notes), and an honest account of where evidence was thin and you used judgment.
-3. **A coverage map.** Across intent × phenomena × difficulty, showing the corpus mirrors the **real frequency distribution** (dense head of common simple queries + a rich long tail), not just a pile of exotic edge cases. Include a **held-out split**: realistic queries reserved as "the system is never tuned on these," to measure overfit directly — ideally with a recipe for *freshly generating* new held-out cases per phenomenon so special-casing can't beat the benchmark.
+3. **A coverage map.** Across intent × phenomena × query-complexity, showing the corpus mirrors the **real frequency distribution** (dense head of common simple queries + a rich long tail) and spans the full simple↔complex spectrum, including a well-developed **power-user end** (§6.2) — not just a pile of exotic edge cases. Include a **held-out split**: realistic queries reserved as "the system is never tuned on these," to measure overfit directly — ideally with a recipe for *freshly generating* new held-out cases per phenomenon so special-casing can't beat the benchmark.
 4. **A robustness/adversarial set and contrastive disambiguation pairs.** Must-not-crash inputs; must-not-zero-result on reasonable queries; must-not-grad-dominate; and tight contrastive pairs that pin boundaries (e.g. "computer science" vs "cs gen ed" vs "easy science").
 5. **Benchmark-design recommendations.** How this corpus should be *run and scored* — e.g. exact-match for known-item queries vs. property-based must-include / must-exclude / ordering checks for fuzzy ones; aggregate health gates (zero-result rate, crash rate, grad-domination rate); how to use the held-out set. You may recommend changing our current evaluation approach — argue for it.
 
@@ -143,6 +151,7 @@ Use your judgment on packaging; the substance is what matters.
 
 - **Realism over neatness, always.** If a query is ungrammatical, misspelled, or barely coherent but is how people really search, it belongs — as written. A too-clean corpus is the failure we're fixing.
 - **Mirror the real distribution.** Most real queries are short and ordinary (a course code, a subject name, a one-word topic, "easy gen ed"). Make the head dense and well-tested, then cover the long tail richly. Don't let edge cases crowd out common cases, or clean cases crowd out the messy majority.
+- **Cover the full complexity spectrum; over-sample the hard end.** Mirroring the real distribution sets how dense the simple head is — it does *not* mean starving the power-user tail. Represent complex, multi-constraint, expert queries richly enough to benchmark capability there, with honest frequency tags (§6.2).
 - **Ground every query in real catalog entities, and verify** against Course Explorer. Don't invent a "CS 999" or a professor who doesn't teach the thing. (Catalog details from memory may be stale — verify.)
 - **Author expectations from intent + the catalog, never from current system output (see §2).** Decide what the student means, then determine the ideal answer from the real data. The engine is a black box you're writing the answer key *for*, not *from*.
 - **Prefer assertions/bounds over brittle exact lists, except where exactness is the point.** "Should be a 100–200-level Natural-Sciences course with reasonable GPA; not a grad seminar; not Math" beats freezing an exact ranked list that term-to-term drift will break. But for **known-item** queries ("CS 225"), an exact expected top result *is* the right assertion. Match the assertion's strictness to the intent's strictness.

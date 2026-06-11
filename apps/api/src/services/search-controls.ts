@@ -9,7 +9,7 @@ import type { SearchPlan } from "./search-planner-types.js";
 import { applyFinalOrderingControls, isSearchSort } from "./ranking/index.js";
 import type { SearchResult } from "./search-types.js";
 
-export interface SearchControls {
+interface SearchControls {
   sort?: Partial<SearchSort>;
   scope?: SearchScope;
 }
@@ -19,7 +19,7 @@ export type AppliedSearchControls = {
   scope: SearchScope;
 };
 
-export const DEFAULT_SEARCH_CONTROLS: AppliedSearchControls = {
+const DEFAULT_SEARCH_CONTROLS: AppliedSearchControls = {
   sort: DEFAULT_SEARCH_SORT,
   scope: DEFAULT_SEARCH_SCOPE,
 };

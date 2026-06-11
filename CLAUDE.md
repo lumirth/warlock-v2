@@ -49,19 +49,19 @@ The canonical baseline migration in `apps/api/migrations/0001_initial_schema.sql
 ### Sync & Discovery Architecture
 - **Worker adapter** (`index.ts`): delegates scheduled events to `services/scheduled-workflows.ts`; keep cron workflow details out of the entrypoint.
 - **Scheduled workflow policy** (`services/scheduled-workflows.ts`): maps cron strings to named workflows and dispatches them via `waitUntil`.
-- **Auto-discovery** (`services/term-discovery.ts`): twice-daily cron (`0 10,22 * * *`) discovers terms and classifies them as `active` or `historical`.
-- **Fan-out course sync** (`services/sync-coordinator.ts`, `services/parallel-sync.ts`, `routes/sync-course-routes.ts`): every 5 minutes (`*/5 * * * *`), active terms are split into subject batches and dispatched through the `SELF` service binding.
-- **Snapshot persistence** (`transforms/course.ts`, `services/snapshot-persistence-operations.ts`, `services/course-snapshot-writer.ts`): CISAPI data flows through a canonical `CourseSnapshot` shape before D1 writes, SQL artifacts, embeddings, or DTO projection.
+- **Auto-discovery** (`services/term-discovery.ts`): twice-daily cron (`0 10,22 * * *`) discovers terms and classifies them as `registrable`, `active`, or `historical`.
+- **Fan-out course sync** (`services/sync-coordinator.ts`, `services/parallel-sync.ts`, `routes/sync-course-routes.ts`): every 5 minutes (`*/5 * * * *`), active and registrable terms are split into subject batches and dispatched through the `SELF` service binding.
+- **Snapshot persistence** (`transforms/course.ts`, `services/snapshot-persistence-operations.ts`, `services/snapshot-persistence-sql.ts`, `services/course-snapshot-writer.ts`): CISAPI data flows through a canonical `CourseSnapshot`; operation planning is separate from D1/raw-SQL rendering.
 
 ### Search Pipeline
-Search is intentionally split between interpretation, execution, and presentation. Avoid adding new search behavior to `services/search.ts`; it is now a compatibility-facing facade, not the policy owner.
+Search is intentionally split between interpretation, execution, and presentation. Each stage owns one product concept; routes and public DTOs do not reinterpret internal search state.
 
-1. **HTTP contract** (`http/search-request.ts`, `services/search-request.ts`): normalizes public request fields into a canonical immutable search request.
-2. **Query planning** (`services/query-parser.ts`, `services/extractor.ts`, `services/query-resolver.ts`, `services/search-plan-compiler.ts`): parses power syntax, extracts hints, validates hints, resolves subject/GenEd ambiguity, applies intent passes, and produces immutable plans plus fallback plans.
-3. **Retrieval planning** (`services/search-retrieval-plan.ts`): derives executable lanes and candidate budgets from the immutable plan. Explanatory lanes in response metadata are not execution config.
-4. **Retrieval execution** (`services/search-executor.ts`, `services/search-hybrid.ts`, `services/search-retrieval-lanes.ts`, `services/search-term-ranking.ts`): runs FTS, structured lanes, aliases, workload evidence, and optional Vectorize recall.
+1. **HTTP contract** (`packages/query-types/search-contract.ts`, `packages/query-types/search-request-codec.ts`, `http/search-request.ts`): owns and decodes the canonical immutable public search request.
+2. **Query planning** (`services/query-parser.ts`, `services/extractor.ts`, `services/query-resolver.ts`, `services/search-plan-compiler.ts`): parses power syntax, extracts hints, validates hints, resolves subject/GenEd ambiguity, and produces one immutable plan.
+3. **Retrieval planning** (`services/search-retrieval-plan.ts`): derives the executable lanes and candidate budgets from the immutable plan.
+4. **Retrieval execution** (`services/search-executor.ts`, `services/search-hybrid.ts`, `services/search-retrieval-lane-executors.ts`): runs exact, FTS, structured, and optional Vectorize recall before term ordering and applied controls.
 5. **Ranking policy** (`services/ranking/*`): named score components, requirement/workload/negative-preference policy, attribute sort behavior, nulls-last sort semantics, and term ordering.
-6. **Response presentation** (`services/search-response.ts`, `services/search-result-presentation.ts`, `services/search-ui-plan.ts`): builds public DTOs, chips, explanations, warnings, and recovery groups.
+6. **Response presentation** (`services/search-pipeline-result.ts`, `services/search-response-presenter.ts`, `services/search-result-presentation.ts`, `services/search-ui-plan.ts`): converts the private pipeline result into public DTOs, chips, explanations, and warnings.
 
 ### Course Detail Boundary
 - `routes/course.ts` only adapts HTTP params/headers to `CourseDetailRequest`.
@@ -88,10 +88,10 @@ Search is intentionally split between interpretation, execution, and presentatio
 - `docs/rollback-checklist.md`
 - `docs/security-route-matrix.md`
 - `docs/architecture/search-ownership.md`
-- `docs/plans/2026-06-01-stabilization-hardening-master-plan.md`
-- `docs/reports/2026-06-01-stabilization-report.md`
+- `docs/architecture/course-data-vocabulary.md`
+- `docs/search-interpretation-chip-model.md`
 
 ## GenEd Codes
 Common UIUC gened categories: `HUM`, `NAT`, `SBS`, `CS`, `QR1`, `QR2`, `ACP`, `NW`, `US`, `WCC`.
 
-Full requirement evidence should flow through `course_gened` / `CourseGenedDto` / `transforms/course-requirements.ts`. The flat `courses.gened` column is a denormalized compatibility summary, not the source of truth for requirement display, ranking, or embeddings.
+Full requirement evidence flows through `course_gened`, `CourseRequirementDto`, and `transforms/course-requirements.ts`.

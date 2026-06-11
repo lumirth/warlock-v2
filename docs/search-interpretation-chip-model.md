@@ -51,20 +51,11 @@ Examples:
 
 Topic chips are removable because removing them broadens the search.
 
-## Internal Assumptions
+## Explanations Are Not Chips
 
-Planner assumptions explain ranking mechanics or uncertainty. They should not
-be shown as public chips when they are not directly removable user constraints.
-
-Examples:
-
-- `GenEd match matters`
-- `Schedule or delivery fit matters`
-- `Online preferred` when `Online` is already a chip
-- `Low workload preferred` when `Easy workload` is already a chip
-
-These may still appear in result explanations, confidence reasons, warnings, or
-debug/eval output.
+Ranking rationale, confidence reasons, and warnings belong in result
+explanations. They are not separate planner assumptions and must not be shown as
+chips when the student cannot remove them as search intent.
 
 ## Action Authoring
 
@@ -75,15 +66,11 @@ either remove an exact public filter from the executable request or remove raw
 text from the original executable query. Removing text from the already-stripped
 display query is a no-op trap.
 
-Chip `source` should preserve provenance:
-
-- `manual_override` for explicit request or advanced-control filters.
-- `advanced_control` for UI controls when they are distinct from raw URL/manual
-  request overrides.
-- `natural_language` for parser/resolver/extractor hints.
-
-Every removable chip should have a test proving its `action.nextRequest` changes
-the represented intent.
+Every public chip is removable and carries a complete `removeRequest` that
+changes the represented intent. Ambiguity choices carry their executable
+`nextRequest` directly. Origin metadata and editability flags are not part of
+the public chip contract because the UI does not use them and a request cannot
+reliably distinguish URL parameters from advanced controls.
 
 ## Generic GenEd Intent
 
@@ -139,4 +126,4 @@ Do not:
 
 - `Requirement lane match` on a course with no requirement mapping
 - duplicate `Easy workload` and `Low workload preferred`
-- show hidden ranking assumptions as removable filters
+- show ranking explanations as removable filters

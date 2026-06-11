@@ -10,13 +10,13 @@ import {
   getWorkloadTierRank,
   formatGenEdDisplayLabel,
   requirementFilter,
-  coerceSearchRequestDto,
+  normalizeSearchRequestDto,
   decodeSearchRequestQuery,
   GENED_REQUIREMENT_GROUPS,
   canonicalRequirementCode,
+  resolveRequirementAlias,
   isKnownRequirementCode,
   searchRequestToQueryEntries,
-  toNormalizedQualityScore,
 } from './index.js';
 
 describe('shared external link builders', () => {
@@ -83,10 +83,10 @@ describe('shared course score tiers', () => {
     expect(getWorkloadTierRank(undefined)).toBeNull();
   });
 
-  it('brands normalized scores by clamping to the 0-100 policy scale', () => {
-    expect(toNormalizedQualityScore(120)).toBe(100);
-    expect(toNormalizedQualityScore(-5)).toBe(0);
-    expect(toNormalizedQualityScore(Number.NaN)).toBeNull();
+  it('normalizes out-of-range scores while assigning public tiers', () => {
+    expect(getQualityTierLabel(120)).toBe('Excellent');
+    expect(getQualityTierLabel(-5)).toBe('Low');
+    expect(getQualityTierLabel(Number.NaN)).toBeNull();
   });
 
   it('keeps workload filters aligned with displayed workload tiers', () => {
@@ -125,6 +125,13 @@ describe('shared requirement policy', () => {
     expect(isKnownRequirementCode('not-a-code')).toBe(false);
   });
 
+  it('resolves requirement labels, aliases, and source codes from one registry', () => {
+    expect(resolveRequirementAlias('Natural Sciences & Technology')).toBe('NAT');
+    expect(resolveRequirementAlias('minority cultures')).toBe('US');
+    expect(resolveRequirementAlias('CMP')).toBe('COMP1');
+    expect(resolveRequirementAlias('psych')).toBeNull();
+  });
+
   it('formats public GenEd labels with canonical student-facing codes', () => {
     expect(formatGenEdDisplayLabel(['1US', 'cmp', 'HUM'])).toBe('GenEd US, COMP1, HUM');
   });
@@ -132,7 +139,7 @@ describe('shared requirement policy', () => {
 
 describe('shared public search contract', () => {
   it('normalizes public request filters without backend planner names', () => {
-    expect(coerceSearchRequestDto({
+    expect(normalizeSearchRequestDto({
       query: 'online stats class',
       filters: {
         subject: ' stat ',
@@ -153,18 +160,27 @@ describe('shared public search contract', () => {
     });
   });
 
-  it('normalizes invalid sort and scope controls back to defaults', () => {
-    expect(coerceSearchRequestDto({
+  it('rejects invalid values instead of silently dropping programmer errors', () => {
+    expect(() => normalizeSearchRequestDto({
       query: 'history',
       sort: { field: 'not-real', direction: 'sideways' } as never,
-      scope: 'past' as never,
-      filters: { level: 700 as never },
-    })).toEqual({
+    })).toThrow('sort field must be one of');
+    expect(() => normalizeSearchRequestDto({
       query: 'history',
-      filters: {},
-      sort: { field: 'relevance', direction: 'desc' },
-      scope: 'active',
-    });
+      scope: 'past' as never,
+    })).toThrow('scope must be one of');
+    expect(() => normalizeSearchRequestDto({
+      query: 'history',
+      filters: { level: 700 as never },
+    })).toThrow('level must be one of');
+    expect(() => searchRequestToQueryEntries({
+      query: 'history',
+      pagination: { limit: 51 },
+    })).toThrow('limit must be an integer between 1 and 50');
+    expect(() => searchRequestToQueryEntries({
+      query: 'history',
+      pagination: { offset: -1 },
+    })).toThrow('offset must be an integer between 0 and 1150');
   });
 
   it('serializes and decodes search URL params through the canonical codec', () => {
@@ -250,7 +266,7 @@ describe('shared public search contract', () => {
     });
   });
 
-  it('decodes multiple requirement codes as any-match unless a mode is explicit', () => {
+  it('decodes multiple requirement codes as all-match unless a mode is explicit', () => {
     expect(decodeSearchRequestQuery(paramReader([
       ['q', 'easy gen ed'],
       ['requirement', 'hum, us'],
@@ -260,7 +276,7 @@ describe('shared public search contract', () => {
         request: {
           query: 'easy gen ed',
           filters: {
-            requirement: { mode: 'any', codes: ['HUM', 'US'] },
+            requirement: { mode: 'all', codes: ['HUM', 'US'] },
           },
           sort: { field: 'relevance', direction: 'desc' },
           scope: 'active',

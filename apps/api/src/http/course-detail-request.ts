@@ -1,4 +1,5 @@
 import type { CourseDetailRequest } from '../services/course-detail-types.js';
+import { SEARCH_TERM_VALUES } from '@uiuc-course-search/query-types';
 import {
   parseBoundedIntParam,
   parseCourseNumberParam,
@@ -6,9 +7,7 @@ import {
   parseSubjectParam,
 } from './params.js';
 
-const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-
-export type CourseDetailHttpRequestInput = {
+type CourseDetailHttpRequestInput = {
   rawSubject: string;
   rawNumber: string;
   requestedYear?: string;
@@ -18,7 +17,7 @@ export type CourseDetailHttpRequestInput = {
   maxYear?: number;
 };
 
-export type ParsedCourseDetailHttpRequest =
+type ParsedCourseDetailHttpRequest =
   | { ok: true; request: CourseDetailRequest }
   | { ok: false; status: 400; body: { error: string } };
 
@@ -44,7 +43,7 @@ export function parseCourseDetailHttpRequest(
   }
 
   if (input.requestedTerm) {
-    const parsedTerm = parseEnumParam(input.requestedTerm, 'term', TERMS);
+    const parsedTerm = parseEnumParam(input.requestedTerm, 'term', SEARCH_TERM_VALUES);
     if (!parsedTerm.ok) return badRequest(parsedTerm.error);
   }
 

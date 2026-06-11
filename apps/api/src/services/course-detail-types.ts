@@ -1,11 +1,14 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type {
   CourseDetailResponseDto,
-  CourseRequirementDto,
-  CourseSectionDto,
-  InstructorLinkDto,
 } from '@uiuc-course-search/query-types';
-import type { Course } from '../db/types.js';
+import type {
+  Course,
+  CourseGened,
+  InstructorLinkReadRow,
+  Meeting,
+  Section,
+} from '../db/types.js';
 import type { CourseSnapshot } from '../transforms/course.js';
 import type { ResolvedTerm } from './term-state.js';
 
@@ -28,7 +31,7 @@ export type CourseDetailRequest = {
   bypassCache?: boolean;
 };
 
-export type CourseDetailErrorBody = {
+type CourseDetailErrorBody = {
   error: string;
   retryAfter?: number | null;
   upstreamStatus?: number;
@@ -44,9 +47,6 @@ export type CourseDetailContext = {
   subject: string;
   number: string;
   resolvedTerm: ResolvedTerm;
-  year: string;
-  term: string;
-  termId: string;
   courseId: string;
   cacheTtlMs: number;
 };
@@ -65,10 +65,18 @@ export type CourseDetailMetadata = Pick<
 >;
 
 export type CourseDetailEnrichment = {
-  linksMap: Record<string, InstructorLinkDto>;
-  enrichedSections: CourseSectionDto[];
+  instructorLinkRows: InstructorLinkReadRow[];
+  sections: CourseDetailSectionReadModel[];
   medianGpa: number | null;
-  requirements: CourseRequirementDto[];
+  requirementRows: CourseGened[];
+};
+
+export type CourseDetailMeetingReadModel = Meeting & {
+  instructor_names?: string | null;
+};
+
+export type CourseDetailSectionReadModel = Section & {
+  meetings?: CourseDetailMeetingReadModel[];
 };
 
 export type StoredDetailOptions =

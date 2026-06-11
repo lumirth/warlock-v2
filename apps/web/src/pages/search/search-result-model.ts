@@ -1,41 +1,27 @@
 import {
   canonicalRequirementCode,
-  getWorkloadTierLabel,
   type CourseRequirementDto,
+  type SearchCourseResultDto,
   type CourseSummaryDto,
   type SearchChipDto,
-  type SearchRecoveryGroup,
 } from '@uiuc-course-search/query-types'
-import { getQualityLabel, getQualityTone } from '../../utils/grading'
+import {
+  getQualityLabel,
+  getQualityTone,
+  getWorkloadLabel,
+  getWorkloadTone,
+  isFiniteMetric,
+  type MetricTone,
+} from '../../utils/grading'
 import { cn } from '@/lib/utils'
 
-export type Tone = 'success' | 'warning' | 'destructive' | 'muted'
+type Tone = MetricTone
 
-export type CourseResultMetric = {
+type CourseResultMetric = {
   label: string
   value: string
   tone?: Tone
   title?: string
-}
-
-export function getWorkloadLabel(score: number): string {
-  return getWorkloadTierLabel(score) ?? 'Easy'
-}
-
-export function getWorkloadTone(score: number): Tone {
-  const label = getWorkloadTierLabel(score)
-  if (label === 'Hard') return 'destructive'
-  if (label === 'Moderate') return 'warning'
-  return 'success'
-}
-
-export function toneTextClass(tone?: Tone): string {
-  return cn(
-    tone === 'success' && 'text-success',
-    tone === 'warning' && 'text-warning',
-    tone === 'destructive' && 'text-destructive',
-    tone === 'muted' && 'text-muted-foreground'
-  )
 }
 
 export function getCourseKey(course: CourseSummaryDto): string {
@@ -46,7 +32,15 @@ export function getCourseKey(course: CourseSummaryDto): string {
 }
 
 export function getCoursePath(course: CourseSummaryDto): string {
-  return `/course/${course.subject}/${course.number}?term=${course.term}&year=${course.year}`
+  const params = new URLSearchParams({
+    term: course.term,
+    year: String(course.year),
+  })
+  return `/course/${encodeURIComponent(course.subject)}/${encodeURIComponent(course.number)}?${params.toString()}`
+}
+
+export function isHistoricalResult(result: SearchCourseResultDto): boolean {
+  return result.warnings?.some((warning) => warning.kind === 'historical') ?? false
 }
 
 export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[] {
@@ -56,7 +50,7 @@ export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[]
   const avgGpa = course.metrics.avgGpa
   const stats: CourseResultMetric[] = []
 
-  if (typeof qualityScore === 'number') {
+  if (isFiniteMetric(qualityScore)) {
     const qualityLabel = getQualityLabel(qualityScore)
     stats.push({
       label: 'Quality',
@@ -68,17 +62,17 @@ export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[]
           : undefined,
     })
   }
-  if (typeof workloadScore === 'number') {
+  if (isFiniteMetric(workloadScore)) {
     stats.push({
       label: 'Workload',
       value: getWorkloadLabel(workloadScore),
-      tone: getWorkloadTone(workloadScore),
+      tone: getWorkloadTone(getWorkloadLabel(workloadScore)),
     })
   }
-  if (typeof primaryInstructorRmp === 'number') {
+  if (isFiniteMetric(primaryInstructorRmp)) {
     stats.push({ label: 'Instructor', value: primaryInstructorRmp.toFixed(1) })
   }
-  if (typeof avgGpa === 'number') {
+  if (isFiniteMetric(avgGpa)) {
     stats.push({
       label: 'Avg GPA',
       value: avgGpa.toFixed(2),
@@ -94,9 +88,8 @@ export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[]
 
 export function getChipClass(chip: SearchChipDto): string {
   return cn(
-    chip.removable && 'border-border bg-secondary text-secondary-foreground',
+    'border-border bg-secondary text-secondary-foreground',
     chip.type === 'semantic' && 'text-muted-foreground',
-    chip.type === 'assumption' && 'text-muted-foreground'
   )
 }
 
@@ -104,7 +97,7 @@ export function formatTermLabel(term: string, year: number): string {
   return `${term.charAt(0).toUpperCase()}${term.slice(1).toLowerCase()} ${year}`
 }
 
-export function requirementLabel(requirement: CourseRequirementDto): string {
+function requirementLabel(requirement: CourseRequirementDto): string {
   const category = requirement.categoryName ?? requirement.categoryId
   if (requirement.attributeName) return `${category}: ${requirement.attributeName}`
   if (requirement.attributeCode) return `${category}: ${requirement.attributeCode}`
@@ -140,13 +133,9 @@ export function formatNumber(
   value: number | null | undefined,
   digits: number
 ): string {
-  return typeof value === 'number' ? value.toFixed(digits) : '-'
+  return isFiniteMetric(value) ? value.toFixed(digits) : '-'
 }
 
 export function formatCredits(value: number | null): string {
-  return typeof value === 'number' ? String(value) : '-'
-}
-
-export function recoveryButtonLabel(group: SearchRecoveryGroup): string {
-  return group.label.startsWith('Show ') ? group.label : `Try: ${group.label}`
+  return isFiniteMetric(value) ? String(value) : '-'
 }

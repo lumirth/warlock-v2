@@ -69,7 +69,7 @@ describe('parseCourseDetailHttpRequest', () => {
     })).toEqual({
       ok: false,
       status: 400,
-      body: { error: 'term must be one of: winter, spring, summer, fall' },
+      body: { error: 'term must be one of: spring, summer, fall, winter' },
     });
   });
 });

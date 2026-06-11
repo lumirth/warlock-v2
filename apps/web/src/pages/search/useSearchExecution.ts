@@ -14,7 +14,7 @@ import type {
   SearchControllerAction,
 } from './search-controller-state'
 
-export type ExecuteSearch = (command: SearchCommand) => void
+type ExecuteSearch = (command: SearchCommand) => void
 
 export function useSearchExecution({
   dispatch,
@@ -82,6 +82,7 @@ async function runSearch({
     dispatch({
       type: 'search/failed',
       message: 'Give it another moment, or try a broader search.',
+      mode: resolved.mode,
     })
   } finally {
     if (searchController.current === controller) {

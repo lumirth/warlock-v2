@@ -1,5 +1,11 @@
-import type { Course, Meeting, Section } from '../db/types.js';
 import type {
+  Course,
+  InstructorLinkReadRow,
+  Meeting,
+  Section,
+} from '../db/types.js';
+import type {
+  CourseDetailCacheDto,
   CourseSectionMeetingDto,
   CourseDetailResponseDto,
   CourseDetailDto,
@@ -8,11 +14,6 @@ import type {
   CourseSectionDto,
   CourseSummaryDto,
   InstructorLinkDto,
-  MatchEvidence,
-  ResultExplanation,
-  ResultWarning,
-  SectionMatchDto,
-  SearchCourseResultDto,
 } from '@uiuc-course-search/query-types';
 import {
   buildCourseExplorerCourseUrl,
@@ -20,11 +21,6 @@ import {
   buildRmpProfessorUrl,
   buildRmpSearchUrl,
 } from '@uiuc-course-search/query-types';
-import type { SearchResult } from '../services/search-types.js';
-import {
-  buildSearchResultPresentation,
-  type SearchResultEvidenceContext,
-} from '../services/search-result-presentation.js';
 import { normalizeSectionAvailability } from '../services/section-availability-policy.js';
 import { courseSnapshotRequirementEvidence } from '../transforms/course-requirements.js';
 import { formatInstructorName, type CourseSnapshot } from '../transforms/course.js';
@@ -57,50 +53,19 @@ type CourseSource = Pick<
   | 'approval_code'
 >>;
 
-type InstructorLinkRow = Partial<{
-  instructor_name: string | null;
-  rmp_rating: number | null;
-  rmp_difficulty: number | null;
-  rmp_id: string | null;
-  avg_gpa: number | null;
-  median_gpa: number | null;
-  gpa_sample_size: number | null;
-  num_ratings: number | null;
-  would_take_again_pct: number | null;
-  top_tags: string | string[] | null;
-  department: string | null;
-}>;
-
 type SectionWithStats = Section & {
   instructor_stats?: InstructorLinkDto[] | null;
   meetings?: SectionMeetingWithStats[] | null;
 };
 
-export type CourseDtoOptions = {
-  sections?: CourseSectionDto[];
+type CourseSummaryDtoOptions = {
   instructorLinks?: Record<string, InstructorLinkDto>;
   requirements?: CourseRequirementDto[];
   medianGpa?: number | null;
 };
 
-export type SearchCourseResultDtoOptions = CourseDtoOptions & {
-  score?: number;
-  semanticRank?: number;
-  keywordRank?: number;
-  historical?: boolean;
-  matchEvidence?: MatchEvidence[];
-  explanation?: ResultExplanation;
-  warnings?: ResultWarning[];
-  sectionMatches?: SectionMatchDto[];
-};
-
-export type CourseDetailResponseDtoOptions = CourseDtoOptions & {
-  cached?: boolean;
-  stale?: boolean;
-  staleReason?: string | null;
-  ageSeconds?: number;
-  fetchedAt?: number;
-  termStatus?: string;
+type CourseDetailDtoOptions = CourseSummaryDtoOptions & {
+  sections?: CourseSectionDto[];
 };
 
 type SectionMeetingWithStats = Omit<Meeting, 'id'> & {
@@ -115,7 +80,7 @@ function validRmpMetric(value: number | null | undefined, numRatings?: number | 
   return value;
 }
 
-export function toInstructorLinkDto(row: InstructorLinkRow | null | undefined): InstructorLinkDto {
+export function toInstructorLinkDto(row: InstructorLinkReadRow | null | undefined): InstructorLinkDto {
   const instructorName = row?.instructor_name ?? null;
 
   return {
@@ -135,7 +100,7 @@ export function toInstructorLinkDto(row: InstructorLinkRow | null | undefined): 
   };
 }
 
-export function toInstructorLinkMap(rows: InstructorLinkRow[]): Record<string, InstructorLinkDto> {
+export function toInstructorLinkMap(rows: InstructorLinkReadRow[]): Record<string, InstructorLinkDto> {
   return Object.fromEntries(
     rows
       .map(toInstructorLinkDto)
@@ -184,6 +149,32 @@ export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto 
   };
 }
 
+export function toCourseSectionDtos(
+  sections: SectionWithStats[],
+  linksMap: Record<string, InstructorLinkDto>,
+): CourseSectionDto[] {
+  return sections.map((section) => {
+    const instructorStats = instructorStatsForNames(section.instructor, linksMap);
+    const primaryStats = instructorStats[0];
+    return toCourseSectionDto({
+      ...section,
+      instructor_stats: instructorStats,
+      instructor_rmp: primaryStats?.rmpRating ?? section.instructor_rmp,
+      instructor_gpa: primaryStats?.avgGpa ?? section.instructor_gpa,
+      meetings: (section.meetings ?? []).map((meeting) => {
+        const instructorNames = meetingInstructorNames(meeting);
+        return {
+          ...meeting,
+          instructor_names: instructorNames.join(';'),
+          instructor_stats: instructorNames
+            .map((name) => linksMap[name])
+            .filter(Boolean),
+        };
+      }),
+    });
+  });
+}
+
 function toCourseSectionMeetingDto(meeting: SectionMeetingWithStats): CourseSectionMeetingDto {
   const instructorNames = meeting.instructor_names
     ? meeting.instructor_names.split(';').map(name => name.trim()).filter(Boolean)
@@ -205,7 +196,10 @@ function toCourseSectionMeetingDto(meeting: SectionMeetingWithStats): CourseSect
   };
 }
 
-export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}): CourseSummaryDto {
+export function toCourseDto(
+  course: CourseSource,
+  options: CourseSummaryDtoOptions = {},
+): CourseSummaryDto {
   return {
     id: course.id,
     subject: course.subject,
@@ -244,9 +238,9 @@ export function toCourseDto(course: CourseSource, options: CourseDtoOptions = {}
   };
 }
 
-export function courseSnapshotToCourseDto(
+function courseSnapshotToCourseDto(
   snapshot: CourseSnapshot,
-  options: CourseDtoOptions = {}
+  options: CourseDetailDtoOptions = {}
 ): CourseDetailDto {
   const {
     sections: providedSections,
@@ -269,43 +263,31 @@ export function courseSnapshotToCourseDto(
 
 export function toCourseDetailResponseDto(
   course: CourseSource,
-  options: CourseDetailResponseDtoOptions = {},
+  options: CourseDetailDtoOptions = {},
+  cache?: CourseDetailCacheDto,
 ): CourseDetailResponseDto {
   const courseDto: CourseDetailDto = {
     ...toCourseDto(course, options),
     sections: options.sections ?? [],
   };
-  const cache = {
-    cached: options.cached,
-    stale: options.stale,
-    staleReason: options.staleReason,
-    ageSeconds: options.ageSeconds,
-    fetchedAt: options.fetchedAt,
-    termStatus: options.termStatus,
-  };
-
-  return Object.values(cache).some((value) => value !== undefined)
-    ? { course: courseDto, cache }
-    : { course: courseDto };
+  return courseDetailResponse(courseDto, cache);
 }
 
 export function courseSnapshotToCourseDetailResponseDto(
   snapshot: CourseSnapshot,
-  options: CourseDetailResponseDtoOptions = {},
+  options: CourseDetailDtoOptions = {},
+  cache?: CourseDetailCacheDto,
 ): CourseDetailResponseDto {
-  const courseDto = courseSnapshotToCourseDto(snapshot, options);
-  const cache = {
-    cached: options.cached,
-    stale: options.stale,
-    staleReason: options.staleReason,
-    ageSeconds: options.ageSeconds,
-    fetchedAt: options.fetchedAt,
-    termStatus: options.termStatus,
-  };
+  return courseDetailResponse(courseSnapshotToCourseDto(snapshot, options), cache);
+}
 
-  return Object.values(cache).some((value) => value !== undefined)
-    ? { course: courseDto, cache }
-    : { course: courseDto };
+function courseDetailResponse(
+  course: CourseDetailDto,
+  cache?: CourseDetailCacheDto,
+): CourseDetailResponseDto {
+  return cache && Object.values(cache).some((value) => value !== undefined)
+    ? { course, cache }
+    : { course };
 }
 
 function snapshotRequirementsToDto(snapshot: CourseSnapshot): CourseRequirementDto[] {
@@ -316,15 +298,9 @@ function snapshotSectionsToDto(
   snapshot: CourseSnapshot,
   linksMap: Record<string, InstructorLinkDto>
 ): CourseSectionDto[] {
-  return snapshot.sections.map(({ section, meetings }) => {
-    const instructorStats = instructorStatsForNames(section.instructor, linksMap);
-    const primaryStats = instructorStats[0];
-
-    return toCourseSectionDto({
+  return toCourseSectionDtos(
+    snapshot.sections.map(({ section, meetings }) => ({
       ...section,
-      instructor_stats: instructorStats,
-      instructor_rmp: primaryStats?.rmpRating ?? section.instructor_rmp,
-      instructor_gpa: primaryStats?.avgGpa ?? section.instructor_gpa,
       meetings: meetings.map(meeting => {
         const instructorNames = meeting.instructors
           .map(formatInstructorName)
@@ -333,11 +309,11 @@ function snapshotSectionsToDto(
         return {
           ...meeting,
           instructor_names: instructorNames.join(';'),
-          instructor_stats: instructorNames.map(name => linksMap[name]).filter(Boolean),
         };
       }),
-    });
-  });
+    })),
+    linksMap,
+  );
 }
 
 function instructorStatsForNames(
@@ -348,6 +324,18 @@ function instructorStatsForNames(
     ? instructorNames.split(';').map(name => name.trim()).filter(Boolean)
     : [];
   return names.map(name => linksMap[name]).filter(Boolean);
+}
+
+function meetingInstructorNames(meeting: SectionMeetingWithStats): string[] {
+  if (meeting.instructor_names) {
+    return meeting.instructor_names
+      .split(';')
+      .map((name) => name.trim())
+      .filter(Boolean);
+  }
+  return (meeting.instructor_stats ?? [])
+    .map((stat) => stat.instructorName)
+    .filter((name): name is string => Boolean(name));
 }
 
 function normalizeTopTags(value: string | string[] | null | undefined): string[] | null {
@@ -399,25 +387,4 @@ function buildSectionCourseExplorerUrl(section: SectionWithStats): string | unde
     ...courseParts,
     crn: section.crn,
   });
-}
-
-export function searchResultToCourseDto(
-  result: SearchResult,
-  context?: SearchResultEvidenceContext,
-): SearchCourseResultDto {
-  const presentation = buildSearchResultPresentation(result, context);
-  return {
-    course: toCourseDto(result.course, {
-      requirements: context?.requirements,
-    }),
-    search: {
-      score: result.score,
-      semanticRank: result.semanticRank,
-      keywordRank: result.keywordRank,
-      historical: result.historical,
-    },
-    matchEvidence: presentation.matchEvidence,
-    explanation: presentation.explanation,
-    warnings: presentation.warnings,
-  };
 }

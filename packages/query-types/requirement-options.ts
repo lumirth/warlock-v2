@@ -137,7 +137,7 @@ export const GENED_REQUIREMENT_LABELS: Record<string, string> =
     GENED_REQUIREMENT_OPTIONS.map((option) => [option.code, option.label]),
   );
 
-export const GENERIC_GENED_REQUIREMENT_CODES = [
+export const GENERIC_REQUIREMENT_CODES = [
   ...GENED_REQUIREMENT_CATEGORY_CODES,
 ];
 
@@ -149,6 +149,8 @@ const REQUIREMENT_CODE_ALIASES: Record<string, string> = {
 const GENED_REQUIREMENT_CODE_SET = new Set(
   GENED_REQUIREMENT_OPTIONS.map((option) => option.code),
 );
+
+const GENED_REQUIREMENT_ALIAS_LOOKUP = buildRequirementAliasLookup();
 
 export function canonicalRequirementCode(
   value: string | null | undefined,
@@ -176,13 +178,19 @@ export function isKnownRequirementCode(value: string | null | undefined): boolea
   return Boolean(code && GENED_REQUIREMENT_CODE_SET.has(code));
 }
 
-export function isGenericAnyGenEdRequirementFilter(
+export function resolveRequirementAlias(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return null;
+  return GENED_REQUIREMENT_ALIAS_LOOKUP[normalized] ?? null;
+}
+
+export function isGenericAnyRequirementFilter(
   values: readonly string[] | undefined,
 ): boolean {
   if (!values?.length) return false;
 
   const normalized = new Set(canonicalRequirementCodes(values));
-  return GENERIC_GENED_REQUIREMENT_CODES.every((code) => normalized.has(code));
+  return GENERIC_REQUIREMENT_CODES.every((code) => normalized.has(code));
 }
 
 function categoryAliases(code: string): string[] {
@@ -200,4 +208,22 @@ function categoryAliases(code: string): string[] {
     return ["social science", "behavioral science", "social and behavioral"];
   }
   return [];
+}
+
+function buildRequirementAliasLookup(): Record<string, string> {
+  const lookup: Record<string, string> = {};
+
+  for (const option of GENED_REQUIREMENT_OPTIONS) {
+    lookup[option.code.toLowerCase()] = option.code;
+    lookup[option.label.toLowerCase()] = option.code;
+    for (const alias of option.aliases) {
+      lookup[alias.toLowerCase()] = option.code;
+    }
+  }
+
+  for (const [alias, code] of Object.entries(REQUIREMENT_CODE_ALIASES)) {
+    lookup[alias.toLowerCase()] = code;
+  }
+
+  return lookup;
 }

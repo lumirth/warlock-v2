@@ -8,13 +8,12 @@ import type {
   SearchScope,
   SearchSort,
 } from '@uiuc-course-search/query-types'
-import { DEFAULT_SEARCH_SORT } from './search-sort-model'
+import { DEFAULT_SEARCH_SORT } from '@uiuc-course-search/query-types'
 import type { ResultViewMode } from './search-sort-model'
-import type { SearchPagination } from './search-types'
 
 export type SearchExecutionMode = 'replace' | 'refine' | 'append' | 'refresh'
 
-export type SearchDraftState = {
+type SearchDraftState = {
   query: string
   inputDirty: boolean
   advancedOpen: boolean
@@ -22,11 +21,11 @@ export type SearchDraftState = {
   resultViewMode: ResultViewMode
 }
 
-export type SearchSessionState = {
+type SearchSessionState = {
   activeRequest: SearchRequestDto | null
   results: SearchCourseResultDto[]
   meta: SearchResponseDto['meta'] | null
-  pagination: SearchPagination | null
+  pagination: SearchResponseDto['pagination'] | null
   loading: boolean
   loadingMore: boolean
   error: string | null
@@ -61,11 +60,15 @@ export type SearchControllerAction =
       mode: SearchExecutionMode
       requestSort: SearchSort
     }
-  | { type: 'search/failed'; message: string }
+  | {
+      type: 'search/failed'
+      message: string
+      mode: SearchExecutionMode
+    }
   | { type: 'search/finished' }
   | { type: 'search/cleared' }
 
-export const INITIAL_SEARCH_DRAFT_STATE: SearchDraftState = {
+const INITIAL_SEARCH_DRAFT_STATE: SearchDraftState = {
   query: '',
   inputDirty: false,
   advancedOpen: false,
@@ -73,7 +76,7 @@ export const INITIAL_SEARCH_DRAFT_STATE: SearchDraftState = {
   resultViewMode: 'cards',
 }
 
-export const INITIAL_SEARCH_SESSION_STATE: SearchSessionState = {
+const INITIAL_SEARCH_SESSION_STATE: SearchSessionState = {
   activeRequest: null,
   results: [],
   meta: null,
@@ -135,25 +138,32 @@ export function searchControllerReducer(
             ? [...state.session.results, ...(action.response.results || [])]
             : action.response.results || [],
         meta: action.response.meta || null,
-        pagination: action.response.pagination || null,
+        pagination: action.response.pagination ?? null,
         sort:
           action.mode === 'append'
             ? state.session.sort
-            : action.response.meta?.appliedSort ?? action.requestSort,
+            : action.response.meta.nextRequest.sort ?? action.requestSort,
       })
     case 'search/failed':
-      return updateSession(state, {
-        error: action.message,
-        meta: null,
-        results: [],
-        pagination: null,
-      })
+      return updateSession(
+        state,
+        action.mode === 'append' || action.mode === 'refresh'
+          ? { error: action.message }
+          : {
+              error: action.message,
+              meta: null,
+              results: [],
+              pagination: null,
+            }
+      )
     case 'search/finished':
       return updateSession(state, { loading: false, loadingMore: false })
     case 'search/cleared':
       return {
         draft: {
           ...state.draft,
+          query: '',
+          inputDirty: false,
           advancedDraft: { filters: {} },
         },
         session: {

@@ -12,7 +12,7 @@ export type EnrichmentCoverageRow = {
   enriched_links: number;
 };
 
-export type SyncStatusSnapshot = {
+type SyncStatusSnapshot = {
   syncStates: SyncState[];
   termStates: TermState[];
   enrichmentCoverage: EnrichmentCoverageRow[];

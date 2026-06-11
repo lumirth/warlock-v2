@@ -1,7 +1,10 @@
 import type { SearchFilters } from "./search-planner-types.js";
-import { effectiveRequirementFilter } from "@uiuc-course-search/query-types";
-import { canonicalRequirementCode, canonicalRequirementCodes } from "./requirement-codes.js";
+import {
+  canonicalRequirementCode,
+  canonicalRequirementCodes,
+} from "@uiuc-course-search/query-types";
 import { WORKLOAD_FILTER_THRESHOLDS } from "./ranking/ranking-policy.js";
+import { rawSectionStatusesForSearchFilter } from "./section-availability-policy.js";
 
 export const TIME_RANGES: Record<string, { start?: string; end?: string }> = {
   early: { end: "09:00" },
@@ -9,12 +12,6 @@ export const TIME_RANGES: Record<string, { start?: string; end?: string }> = {
   midday: { start: "10:00", end: "14:00" },
   afternoon: { start: "12:00", end: "17:00" },
   evening: { start: "17:00" },
-};
-
-const STATUS_VALUES: Record<string, string[]> = {
-  open: ["Open"],
-  available: ["Open", "Restricted"],
-  closed: ["Closed"],
 };
 
 const DAY_ALIASES: Record<string, string> = {
@@ -106,7 +103,7 @@ export function buildFilterClauses(
     params.push(filters.level);
   }
 
-  const requirement = effectiveRequirementFilter(filters);
+  const requirement = filters.requirement;
   if (requirement?.mode === "single") {
     const requirementCode = canonicalRequirementCode(requirement.codes[0]);
     if (requirementCode) {
@@ -144,20 +141,31 @@ export function buildFilterClauses(
     params.push(filters.partOfTerm);
   }
 
-  if (filters.instructor_ids?.length) {
+  if (filters.compressedTerm) {
     joinKeys.add("sections");
-    joinKeys.add("meetings");
-    joinKeys.add("meetingInstructors");
-    const placeholders = filters.instructor_ids.map(() => "?").join(",");
-    where.push(`mi.instructor_id IN (${placeholders})`);
-    params.push(...filters.instructor_ids);
+    where.push("s.part_of_term IS NOT NULL AND s.part_of_term != '' AND s.part_of_term != '1'");
+  }
+
+  if (filters.instructor_ids) {
+    if (filters.instructor_ids.length === 0) {
+      where.push("0");
+    } else {
+      joinKeys.add("sections");
+      joinKeys.add("meetings");
+      joinKeys.add("meetingInstructors");
+      const placeholders = filters.instructor_ids.map(() => "?").join(",");
+      where.push(`mi.instructor_id IN (${placeholders})`);
+      params.push(...filters.instructor_ids);
+    }
   }
 
   if (filters.days) {
     joinKeys.add("sections");
     joinKeys.add("meetings");
-    where.push("m.days = ?");
-    params.push(filters.days);
+    for (const dayCode of selectedDayCodes(filters.days)) {
+      where.push("m.days LIKE ?");
+      params.push(`%${dayCode}%`);
+    }
   }
 
   if (filters.time) {
@@ -176,19 +184,33 @@ export function buildFilterClauses(
     }
   }
 
+  if (filters.startAfterMinutes !== undefined) {
+    joinKeys.add("sections");
+    joinKeys.add("meetings");
+    where.push("m.start_time >= ?");
+    params.push(minutesToTime(filters.startAfterMinutes));
+  }
+
+  if (filters.startBeforeMinutes !== undefined) {
+    joinKeys.add("sections");
+    joinKeys.add("meetings");
+    where.push("m.start_time < ?");
+    params.push(minutesToTime(filters.startBeforeMinutes));
+  }
+
   if (filters.online !== undefined) {
     joinKeys.add("sections");
     joinKeys.add("meetings");
     if (filters.online) {
-      where.push("(m.building_name = '' OR m.building_name IS NULL OR LOWER(m.building_name) LIKE '%online%')");
+      where.push(onlineEvidenceSql());
     } else {
-      where.push("m.building_name != '' AND m.building_name IS NOT NULL AND LOWER(m.building_name) NOT LIKE '%online%'");
+      where.push(`NOT ${onlineEvidenceSql()} AND ${physicalLocationEvidenceSql()}`);
     }
   }
 
   if (filters.status) {
     joinKeys.add("sections");
-    const statuses = STATUS_VALUES[filters.status] ?? ["Open"];
+    const statuses = rawSectionStatusesForSearchFilter(filters.status);
     const placeholders = statuses.map(() => "?").join(",");
     where.push(`s.status IN (${placeholders})`);
     params.push(...statuses);
@@ -333,4 +355,28 @@ function canonicalAttributeCodeSql(alias: string): string {
 function normalizeDayToken(day: string): string {
   const normalized = day.trim().toLowerCase();
   return DAY_ALIASES[normalized] ?? day.trim().toUpperCase();
+}
+
+function selectedDayCodes(days: string): string[] {
+  return [...new Set(normalizeDayToken(days).split(""))]
+    .filter((day) => /^[MTWRFSU]$/.test(day));
+}
+
+function minutesToTime(minutes: number): string {
+  const bounded = Math.max(0, Math.min(23 * 60 + 59, Math.round(minutes)));
+  const hours = Math.floor(bounded / 60);
+  const remainder = bounded % 60;
+  return `${String(hours).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function onlineEvidenceSql(): string {
+  return `(LOWER(COALESCE(m.type_name, '')) LIKE '%online%'
+    OR LOWER(COALESCE(m.type_code, '')) LIKE '%online%'
+    OR LOWER(COALESCE(m.building_name, '')) LIKE '%online%'
+    OR LOWER(COALESCE(m.room_number, '')) LIKE '%online%'
+    OR LOWER(COALESCE(s.location, '')) LIKE '%online%')`;
+}
+
+function physicalLocationEvidenceSql(): string {
+  return "NULLIF(TRIM(COALESCE(NULLIF(m.building_name, ''), s.location, '')), '') IS NOT NULL";
 }

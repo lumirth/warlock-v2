@@ -20,6 +20,7 @@ export function RefinePanel({
   meta,
   resultCountLabel,
   availableYears,
+  availableYearsError,
   advancedOpen,
   advancedDraft,
   hasAdvancedDraftChanges,
@@ -34,6 +35,7 @@ export function RefinePanel({
   meta: SearchMetaDto | null
   resultCountLabel?: string
   availableYears?: number[]
+  availableYearsError: boolean
   advancedOpen: boolean
   advancedDraft: AdvancedSearchStateDto
   hasAdvancedDraftChanges: boolean
@@ -48,8 +50,7 @@ export function RefinePanel({
   onApplyAdvancedSearch: () => void
   onResetAdvancedDraft: () => void
 }) {
-  const activeChips = meta?.ui?.chips.filter((chip) => chip.removable) ?? []
-  const interpretationChips = meta?.ui?.chips.filter((chip) => !chip.removable) ?? []
+  const activeChips = meta?.ui.chips ?? []
 
   return (
     <Card>
@@ -75,36 +76,21 @@ export function RefinePanel({
           </Button>
         </div>
 
-        {activeChips.length || interpretationChips.length ? (
-          <div className="flex flex-col gap-2">
-            {activeChips.length ? (
-              <div aria-label="Active search filters" className="flex flex-wrap gap-2">
-                {activeChips.map((chip) => (
-                  <SearchChipBadge
-                    key={chip.id}
-                    chip={chip}
-                    onRemoveChip={onRemoveChip}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {interpretationChips.length ? (
-              <div className="flex flex-wrap gap-2" aria-label="Search interpretation">
-                {interpretationChips.map((chip) => (
-                  <SearchChipBadge
-                    key={chip.id}
-                    chip={chip}
-                    onRemoveChip={onRemoveChip}
-                  />
-                ))}
-              </div>
-            ) : null}
+        {activeChips.length ? (
+          <div aria-label="Active search filters" className="flex flex-wrap gap-2">
+            {activeChips.map((chip) => (
+              <SearchChipBadge
+                key={chip.id}
+                chip={chip}
+                onRemoveChip={onRemoveChip}
+              />
+            ))}
           </div>
         ) : meta ? (
           <p className="text-muted-foreground text-sm">Searching by topic.</p>
         ) : null}
 
-        {meta?.ui?.ambiguityActions?.length ? (
+        {meta?.ui.ambiguityActions.length ? (
           <div className="flex flex-col gap-2">
             <p className="text-muted-foreground text-xs">
               Did you mean a different interpretation?
@@ -132,6 +118,7 @@ export function RefinePanel({
             <AdvancedSearchFields
               advancedDraft={advancedDraft}
               availableYears={availableYears}
+              availableYearsError={availableYearsError}
               onAdvancedDraftFilterChange={onAdvancedDraftFilterChange}
               onAdvancedDraftScopeChange={onAdvancedDraftScopeChange}
             />
@@ -174,27 +161,25 @@ function SearchChipBadge({
 }) {
   return (
     <Badge
-      variant={chip.type === 'semantic' || !chip.removable ? 'outline' : 'secondary'}
+      variant={chip.type === 'semantic' ? 'outline' : 'secondary'}
       className={cn(
         'h-auto min-h-5 py-0.5 normal-case',
         getChipClass(chip)
       )}
     >
       {chip.label}
-      {chip.removable && (
-        <Button
-          aria-label={`Remove ${chip.label}`}
-          size="icon-xs"
-          variant="ghost"
-          className="-mr-1 size-4 rounded-[var(--radius-sm)] p-0"
-          onClick={(event) => {
-            event.preventDefault()
-            onRemoveChip(chip)
-          }}
-        >
-          <XIcon aria-hidden />
-        </Button>
-      )}
+      <Button
+        aria-label={`Remove ${chip.label}`}
+        size="icon-xs"
+        variant="ghost"
+        className="-mr-1 size-4 rounded-[var(--radius-sm)] p-0"
+        onClick={(event) => {
+          event.preventDefault()
+          onRemoveChip(chip)
+        }}
+      >
+        <XIcon aria-hidden />
+      </Button>
     </Badge>
   )
 }

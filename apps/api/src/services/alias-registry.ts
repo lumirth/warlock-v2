@@ -4,16 +4,16 @@ import {
   STUDENT_LANGUAGE_ALIAS_ENTRIES,
 } from './student-language-lexicon.js';
 
-export type AliasKind = 'subject' | 'requirement' | 'delivery' | 'status' | 'workload' | 'days' | 'time';
+type AliasKind = 'subject' | 'requirement' | 'delivery' | 'status' | 'workload' | 'days' | 'time';
 
-export interface AliasEntry {
+interface AliasEntry {
   kind: AliasKind;
   canonical: string;
   aliases: string[];
   requiresCue?: boolean;
 }
 
-export interface AliasMatch {
+interface AliasMatch {
   kind: AliasKind;
   canonical: string;
   span: [number, number];

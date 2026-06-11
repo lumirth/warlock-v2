@@ -1,41 +1,21 @@
-import { useId, useState, type InputHTMLAttributes } from 'react'
-import { ChevronDownIcon } from 'lucide-react'
 import {
   ANY_GENED_DISPLAY_LABEL,
-  GENED_REQUIREMENT_GROUPS,
   GENED_DISPLAY_NAME,
-  canonicalRequirementCodes,
   isSearchLevelFilter,
   isSearchStatusFilter,
   isSearchTermFilter,
   isSearchTimeFilter,
-  requirementFilter,
-  type RequirementFilterMode,
   type AdvancedSearchStateDto,
   type SearchRequestFilterKey,
   type SearchRequestFiltersDto,
   type SearchScope,
 } from '@uiuc-course-search/query-types'
-import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import {
-  Field,
   FieldGroup,
-  FieldLabel,
   FieldLegend,
   FieldSet,
 } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  ANY_SELECT_VALUE,
   CREDIT_OPTIONS,
   DELIVERY_OPTIONS,
   LEVEL_OPTIONS,
@@ -46,20 +26,28 @@ import {
   WORKLOAD_OPTIONS,
   type SelectOption,
 } from './search-options'
-
-const REQUIREMENT_MATCH_OPTIONS = [
-  { value: 'all', label: 'All selected' },
-  { value: 'any', label: 'Any selected' },
-] as const satisfies SelectOption[]
+import {
+  AdvancedCheckboxField,
+  AdvancedSelectField,
+  AdvancedTextField,
+} from './AdvancedSearchControls'
+import {
+  REQUIREMENT_MATCH_OPTIONS,
+  RequirementPicker,
+  requirementFilterFromCodes,
+  requirementMatchMode,
+} from './RequirementPicker'
 
 export function AdvancedSearchFields({
   advancedDraft,
   availableYears,
+  availableYearsError,
   onAdvancedDraftFilterChange,
   onAdvancedDraftScopeChange,
 }: {
   advancedDraft: AdvancedSearchStateDto
   availableYears?: number[]
+  availableYearsError: boolean
   onAdvancedDraftFilterChange: <Key extends SearchRequestFilterKey>(
     key: Key,
     value: SearchRequestFiltersDto[Key]
@@ -134,7 +122,7 @@ export function AdvancedSearchFields({
             }}
           />
         </FieldGroup>
-        <RequirementOptionField
+        <RequirementPicker
           value={filters.requirement}
           onChange={(value) => onAdvancedDraftFilterChange('requirement', value)}
         />
@@ -156,9 +144,15 @@ export function AdvancedSearchFields({
           <AdvancedSelectField
             id="advanced-year"
             label="Year"
-            placeholder="Any year"
+            placeholder={availableYearsError ? 'Years unavailable' : 'Any year'}
             value={filters.year?.toString()}
             options={yearOptions}
+            disabled={availableYearsError}
+            description={
+              availableYearsError
+                ? 'Available years could not be loaded. Try again after the API is reachable.'
+                : undefined
+            }
             onChange={(value) =>
               onAdvancedDraftFilterChange('year', yearFilterValue(value))
             }
@@ -265,46 +259,6 @@ export function AdvancedSearchFields({
   )
 }
 
-function AdvancedTextField({
-  id,
-  label,
-  value,
-  placeholder,
-  inputMode,
-  maxLength,
-  onChange,
-}: {
-  id: string
-  label: string
-  value: string
-  placeholder: string
-  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
-  maxLength?: number
-  onChange: (value: string) => void
-}) {
-  const inputId = useId()
-
-  return (
-    <Field>
-      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
-      <Input
-        type="search"
-        id={inputId}
-        data-search-filter-field={id}
-        autoComplete="off"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        inputMode={inputMode}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-    </Field>
-  )
-}
-
 function termFilterValue(
   value: string | undefined
 ): SearchRequestFiltersDto['term'] {
@@ -344,108 +298,6 @@ function creditFilterValue(
   return Number.isNaN(credits) ? undefined : credits
 }
 
-function requirementMatchMode(
-  requirement: SearchRequestFiltersDto['requirement']
-): Extract<RequirementFilterMode, 'any' | 'all'> {
-  return requirement?.mode === 'any' ? 'any' : 'all'
-}
-
-function requirementFilterFromCodes(
-  values: readonly string[],
-  mode: Extract<RequirementFilterMode, 'any' | 'all'>
-): SearchRequestFiltersDto['requirement'] {
-  const codes = canonicalRequirementCodes(values)
-  if (codes.length === 0) return undefined
-  return requirementFilter(codes.length === 1 ? 'single' : mode, codes)
-}
-
-function RequirementOptionField({
-  value,
-  onChange,
-}: {
-  value: SearchRequestFiltersDto['requirement']
-  onChange: (value: SearchRequestFiltersDto['requirement']) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const selectedCodes = new Set(canonicalRequirementCodes(value?.codes))
-  const mode = requirementMatchMode(value)
-  const selectedSummary = [...selectedCodes]
-    .sort()
-    .join(', ')
-
-  const toggleCode = (code: string, checked: boolean) => {
-    const nextCodes = new Set(selectedCodes)
-    if (checked) {
-      nextCodes.add(code)
-    } else {
-      nextCodes.delete(code)
-    }
-    onChange(requirementFilterFromCodes([...nextCodes], mode))
-  }
-
-  return (
-    <Field className="rounded-md border bg-background px-3 py-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <FieldLabel asChild>
-            <span>{GENED_DISPLAY_NAME} categories</span>
-          </FieldLabel>
-          <p className="text-muted-foreground mt-1 text-xs">
-            {selectedSummary
-              ? `${selectedCodes.size} selected: ${selectedSummary}`
-              : 'No GenEd filter selected'}
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="xs"
-          variant="outline"
-          aria-expanded={open}
-          aria-controls="advanced-requirement-options"
-          onClick={() => setOpen((nextOpen) => !nextOpen)}
-        >
-          Choose GenEds
-          <ChevronDownIcon
-            aria-hidden
-            className={
-              open ? 'rotate-180 transition-transform' : 'transition-transform'
-            }
-          />
-        </Button>
-      </div>
-      <Collapsible open={open}>
-        <CollapsibleContent id="advanced-requirement-options">
-          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {GENED_REQUIREMENT_GROUPS.map((group) => (
-              <div key={group.code} className="flex min-w-0 flex-col gap-2">
-                <RequirementOptionCheckbox
-                  code={group.code}
-                  label={group.label}
-                  checked={selectedCodes.has(group.code)}
-                  onChange={toggleCode}
-                />
-                {group.options.length > 0 ? (
-                  <div className="ml-6 flex flex-col gap-1.5 border-l pl-3">
-                    {group.options.map((option) => (
-                      <RequirementOptionCheckbox
-                        key={option.code}
-                        code={option.code}
-                        label={option.label}
-                        checked={selectedCodes.has(option.code)}
-                        onChange={toggleCode}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </Field>
-  )
-}
-
 function getYearOptions(
   availableYears: number[] | undefined,
   selectedYear: number | undefined
@@ -455,112 +307,4 @@ function getYearOptions(
   return [...years]
     .sort((left, right) => right - left)
     .map((year) => ({ value: String(year), label: String(year) }))
-}
-
-function RequirementOptionCheckbox({
-  code,
-  label,
-  checked,
-  onChange,
-}: {
-  code: string
-  label: string
-  checked: boolean
-  onChange: (code: string, checked: boolean) => void
-}) {
-  const id = `advanced-requirement-${code.toLowerCase()}`
-  return (
-    <label
-      htmlFor={id}
-      className="flex min-w-0 cursor-pointer items-start gap-2 rounded-sm px-1 py-0.5 text-sm leading-5 hover:bg-muted/60"
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(code, event.currentTarget.checked)}
-        className="mt-0.5 size-4 rounded-[var(--radius-sm)] border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{label}</span>
-        <span className="text-muted-foreground text-xs">{code}</span>
-      </span>
-    </label>
-  )
-}
-
-function AdvancedSelectField({
-  id,
-  label,
-  placeholder,
-  value,
-  options,
-  onChange,
-}: {
-  id: string
-  label: string
-  placeholder: string
-  value?: string
-  options: SelectOption[]
-  onChange: (value: string | undefined) => void
-}) {
-  return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Select
-        value={value ?? ANY_SELECT_VALUE}
-        onValueChange={(nextValue) =>
-          onChange(nextValue === ANY_SELECT_VALUE ? undefined : nextValue)
-        }
-      >
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectItem value={ANY_SELECT_VALUE}>{placeholder}</SelectItem>
-            {options.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-    </Field>
-  )
-}
-
-function AdvancedCheckboxField({
-  id,
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  id: string
-  label: string
-  description: string
-  checked: boolean
-  onChange: (checked: boolean) => void
-}) {
-  return (
-    <Field className="rounded-md border bg-background px-3 py-2">
-      <div className="flex items-start gap-2">
-        <input
-          id={id}
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => onChange(event.currentTarget.checked)}
-          className="mt-1 size-4 rounded-[var(--radius-sm)] border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        />
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <FieldLabel htmlFor={id}>{label}</FieldLabel>
-          <p className="text-muted-foreground text-xs leading-5">
-            {description}
-          </p>
-        </div>
-      </div>
-    </Field>
-  )
 }

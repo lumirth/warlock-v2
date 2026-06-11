@@ -70,15 +70,6 @@ export function workloadPreferenceComponents(
     ));
   }
 
-  if (result.laneMatches?.includes("workload_evidence")) {
-    components.push(scoreComponent(
-      "workload_evidence",
-      RANKING_POLICY.components.easyIntent.boosts.workloadEvidence,
-      "Structured workload evidence reinforces the easy/low-workload preference.",
-      result.supportedSubjectiveClaims,
-    ));
-  }
-
   return components;
 }
 
@@ -111,14 +102,12 @@ export function nullDataPenaltyComponent(
   plan: SearchPlan,
 ): RankingScoreComponent | null {
   const needsEvidence = Boolean(
-    plan.rescue?.queryTypes.includes("subjective_vibe")
-    || plan.rescue?.queryTypes.includes("avoidance"),
+    plan.intent?.queryTypes.includes("subjective_vibe")
+    || plan.intent?.queryTypes.includes("avoidance"),
   );
   if (!needsEvidence) return null;
 
-  const hasStructuredSupport = result.laneMatches?.includes("workload_evidence")
-    || Boolean(result.supportedSubjectiveClaims?.length)
-    || typeof result.course.quality_score === "number"
+  const hasStructuredSupport = typeof result.course.quality_score === "number"
     || typeof result.course.difficulty_score === "number"
     || typeof result.course.avg_gpa === "number";
 

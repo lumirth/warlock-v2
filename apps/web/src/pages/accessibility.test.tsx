@@ -112,13 +112,16 @@ describe('page accessibility', () => {
     vi.mocked(api.search).mockResolvedValueOnce({
       results: [course()],
       meta: {
-        query: { raw: 'cs 225', residual: 'cs 225' },
         nextRequest: { query: 'cs 225' },
-        timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
-        appliedSort: { field: 'relevance', direction: 'desc' },
-        appliedScope: 'active',
+        interpretedRequest: { query: 'cs 225' },
+        ui: { chips: [], ambiguityActions: [] },
       },
-      pagination: { totalResults: 1, limit: 20, offset: 0 },
+      pagination: {
+        totalResults: 1,
+        browseableResults: 1,
+        limit: 20,
+        offset: 0,
+      },
     })
 
     const { container } = render(

@@ -14,7 +14,7 @@ export const FRESHNESS_THRESHOLDS = {
   rmpMaxAgeSeconds: 14 * 24 * 60 * 60,
 } as const;
 
-export type FreshnessSummary = {
+type FreshnessSummary = {
   generatedAt: number;
   currentTermId: string;
   currentTermPresent: boolean;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { formatInstructorName, fromCourseDetail, fromSubjectCascade } from '../course.js';
 import type { ParsedSubjectCascade } from '../../cisapi/parser.js';
-import type { CISAPICourseDetail } from '../../cisapi/types.js';
+import type { CourseExplorerCourse } from '../../cisapi/types.js';
 
 describe('formatInstructorName', () => {
   it('formats full name as "LastName, F"', () => {
@@ -35,14 +35,14 @@ describe('fromSubjectCascade', () => {
       addressLine1: 'Siebel Center',
       addressLine2: '201 N Goodwin',
       phoneNumber: '217-333-3333',
-      websiteUrl: 'https://cs.illinois.edu',
-      description: 'The best CS department.'
+      webSiteURL: 'https://cs.illinois.edu',
+      collegeDepartmentDescription: 'The best CS department.'
     },
     courses: [
       {
-        id: '225',
-        subject: 'CS',
-        title: 'Data Structures',
+        id: 'CS 225',
+        subjectId: 'CS',
+        label: 'Data Structures',
         description: 'Learn data structures.',
         creditHours: '4',
         courseSectionInformation: 'Prerequisite: CS 173.',
@@ -54,9 +54,9 @@ describe('fromSubjectCascade', () => {
         genEdCategories: [
           {
             id: 'QR',
-            name: 'Quantitative Reasoning',
+            description: 'Quantitative Reasoning',
             attributes: [
-              { code: '1QR2', name: 'Quantitative Reasoning II' }
+              { code: '1QR2', description: 'Quantitative Reasoning II' }
             ]
           }
         ],
@@ -78,7 +78,6 @@ describe('fromSubjectCascade', () => {
             creditHours: '4',
             meetings: [
               {
-                index: 0,
                 typeCode: 'LEC',
                 type: 'Lecture',
                 start: '09:00',
@@ -108,7 +107,6 @@ describe('fromSubjectCascade', () => {
             creditHours: '0',
             meetings: [
               {
-                index: 0,
                 typeCode: 'DIS',
                 type: 'Discussion',
                 start: '10:00',
@@ -126,7 +124,7 @@ describe('fromSubjectCascade', () => {
     ]
   };
 
-  it('transforms parsed cascade to TransformResult', () => {
+  it('transforms a parsed cascade into a subject snapshot', () => {
     const result = fromSubjectCascade(sampleParsed, 2026, 'spring');
 
     // Verify Subject
@@ -165,7 +163,7 @@ describe('fromSubjectCascade', () => {
           genEdCategories: [
             {
               id: 'HUM',
-              name: 'Humanities - Lit Arts',
+              description: 'Humanities - Lit Arts',
               attributes: []
             }
           ]
@@ -194,10 +192,10 @@ describe('fromSubjectCascade', () => {
           genEdCategories: [
             {
               id: 'CS',
-              name: 'Cultural Studies',
+              description: 'Cultural Studies',
               attributes: [
-                { code: 'WCC', name: 'Western/Comparative Cultures' },
-                { code: 'NW', name: 'Non-Western Cultures' }
+                { code: 'WCC', description: 'Western/Comparative Cultures' },
+                { code: 'NW', description: 'Non-Western Cultures' }
               ]
             }
           ]
@@ -278,7 +276,7 @@ describe('fromSubjectCascade', () => {
 
 describe('fromCourseDetail', () => {
   it('uses the canonical snapshot mapping for live course detail data', () => {
-    const parsed: CISAPICourseDetail = {
+    const parsed: CourseExplorerCourse = {
       id: 'CS 225',
       subjectId: 'CS',
       label: 'Data Structures',

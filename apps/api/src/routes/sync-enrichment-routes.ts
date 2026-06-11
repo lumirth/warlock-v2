@@ -1,19 +1,21 @@
 import { Hono } from 'hono';
-import { SEARCH_SCOPE_VALUES } from '@uiuc-course-search/query-types';
+import {
+  SEARCH_SCOPE_VALUES,
+  SEARCH_TERM_VALUES,
+} from '@uiuc-course-search/query-types';
 import type { RmpTeacherNode } from '../services/rmp-sync.js';
+import { resumeGpaSync } from '../services/gpa-sync.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 import type { SyncRouteBindings } from '../services/sync-operations.js';
 import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import {
   processRmpTeachers,
   resetGpaCursor,
-  resumeGpaEnrichment,
   runGpaEnrichment,
   runRmpAndScoringEnrichment,
   runScoringEnrichment,
 } from '../services/enrichment-application.js';
 import { backfillCourseEmbeddings } from '../services/embedding-backfill-service.js';
-import { TERMS } from '../services/sync-operations.js';
 
 export const syncEnrichmentRoutes = new Hono<{ Bindings: SyncRouteBindings }>();
 
@@ -67,7 +69,7 @@ syncEnrichmentRoutes.post('/admin/reset-gpa-sync', async (c) => {
 
 syncEnrichmentRoutes.post('/admin/sync-gpa', async (c) => {
   try {
-    return c.json(await resumeGpaEnrichment(c.env.DB, c.env.GPA_CACHE));
+    return c.json(await resumeGpaSync(c.env.DB, c.env.GPA_CACHE));
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }
@@ -101,7 +103,7 @@ syncEnrichmentRoutes.post('/admin/embeddings/backfill', async (c) => {
   if (parsedYear && !parsedYear.ok) return c.json({ error: parsedYear.error }, 400);
 
   const termRaw = c.req.query('term');
-  const parsedTerm = termRaw ? parseEnumParam(termRaw, 'term', TERMS) : undefined;
+  const parsedTerm = termRaw ? parseEnumParam(termRaw, 'term', SEARCH_TERM_VALUES) : undefined;
   if (parsedTerm && !parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
 
   try {

@@ -1,36 +1,12 @@
-import type { RequirementFilter, SearchRequestFiltersDto, SearchSort } from "@uiuc-course-search/query-types";
-
-export type QueryHintType =
-  | "instructor"
-  | "requirement"
-  | "subject"
-  | "credits"
-  | "term"
-  | "level"
-  | "levelBoost"
-  | "course_code"
-  | "crn"
-  | "days"
-  | "time"
-  | "workload"
-  | "online"
-  | "status"
-  | "negation"
-  | "partOfTerm";
-
-export interface QueryHint {
-  type: QueryHintType;
-  value: string | number | boolean | NegationValue | TermValue;
-  confidence: number;
-  isExplicit?: boolean;
-  metadata?: Record<string, string>;
-}
-
-export interface ExtractedQuery {
-  rawQuery: string;
-  hints: QueryHint[];
-  residual: string;
-}
+import type {
+  RequirementFilter,
+  SearchLevelFilter,
+  SearchSort,
+  SearchStatusFilter,
+  SearchTermFilter,
+  SearchTimeFilter,
+  SearchWorkloadFilter,
+} from "@uiuc-course-search/query-types";
 
 export interface SearchFilters {
   instructor_ids?: number[];
@@ -39,13 +15,16 @@ export interface SearchFilters {
   crn?: string;
   requirement?: RequirementFilter;
   days?: string;
-  time?: string;
+  time?: SearchTimeFilter;
   partOfTerm?: string;
-  level?: number;
+  compressedTerm?: boolean;
+  startAfterMinutes?: number;
+  startBeforeMinutes?: number;
+  level?: SearchLevelFilter;
   credits?: number;
   online?: boolean;
-  status?: string;
-  workload?: "easy" | "hard";
+  status?: SearchStatusFilter;
+  workload?: SearchWorkloadFilter;
   not?: {
     time?: string[];
     days?: string[];
@@ -54,7 +33,7 @@ export interface SearchFilters {
     requirementCodes?: string[];
     keywords?: string[];
   };
-  term?: string;
+  term?: SearchTermFilter;
   year?: number;
 }
 
@@ -64,7 +43,7 @@ export interface Ambiguity {
   alternatives: { type: string; value: string; label: string }[];
 }
 
-export type DecisionQueryType =
+export type SearchIntentKind =
   | "exact_course"
   | "requirement"
   | "schedule"
@@ -73,19 +52,7 @@ export type DecisionQueryType =
   | "avoidance"
   | "eligibility"
   | "degree_progress"
-  | "comparison"
-  | "help_or_how_to";
-
-export type RetrievalLane =
-  | "exact"
-  | "official_text"
-  | "requirement"
-  | "section_text"
-  | "structured_section"
-  | "student_language_alias"
-  | "topic_semantic"
-  | "workload_evidence"
-  | "help_path";
+  | "comparison";
 
 export type SearchPlanWarningKind =
   | "student_profile_required"
@@ -95,93 +62,50 @@ export type SearchPlanWarningKind =
   | "prereq_evidence_incomplete"
   | "math_risk_inferred";
 
-export interface SearchPlanAssumption {
-  kind: string;
-  label: string;
-  confidence: number;
-  source: "rule" | "alias" | "fallback";
-}
-
 export interface SearchPlanWarning {
   kind: SearchPlanWarningKind;
   message: string;
   confidence: number;
 }
 
-export interface SearchRelaxationStep {
-  id: string;
-  label: string;
-  relaxes: string[];
-  keeps: string[];
-}
-
-export interface SearchPlanRescue {
-  queryTypes: DecisionQueryType[];
+export interface SearchIntent {
+  queryTypes: SearchIntentKind[];
   negativeTerms: string[];
   topicTerms: string[];
   expandedTerms: string[];
-  assumptions: SearchPlanAssumption[];
   warnings: SearchPlanWarning[];
-  /** Explanatory lane hints inferred from intent. Executable lanes live in RetrievalPlan. */
-  interpretedLanes: RetrievalLane[];
-  relaxationPlan: SearchRelaxationStep[];
-  needsStudentProfile: boolean;
   confidence: number;
 }
 
 export type SearchSoftPreferences = {
-  easy?: number;
   lowWriting?: number;
   lowReading?: number;
   lowMath?: number;
-  lowBiology?: number;
   lowExams?: number;
   lowWorkload?: number;
-  lowGroupWork?: number;
   fun?: number;
-  practical?: number;
-  asyncFriendly?: number;
   nonMajorFriendly?: number;
   noListedPrereq?: boolean;
-  compressedTerm?: boolean;
-  startAfterMinutes?: number;
-  startBeforeMinutes?: number;
-  levelBoost?: number | "introductory";
-  introductoryIntent?: "gateway";
+  levelBoost?: number;
   topicExpansions?: string[];
   inferredSort?: SearchSort;
 };
 
 export interface SearchPlan {
-  rawQuery?: string;
   filters: SearchFilters;
   softPreferences?: SearchSoftPreferences;
-  intents?: SearchIntent[];
+  introductoryGateway?: true;
   semanticQuery: string;
   keywordQuery: string;
   ambiguities?: Ambiguity[];
-  rescue?: SearchPlanRescue;
+  intent?: SearchIntent;
 }
 
-export type SearchIntent = "introductory_gateway" | "query_rescue";
-
 export interface HintMetadata {
-  source: "regex" | "alias" | "nlp" | "manual";
+  source: "regex" | "alias" | "nlp";
   span?: [number, number];
   confidence: number;
   raw: string;
-}
-
-export interface Hint {
-  type: HintType;
-  value:
-    | string
-    | number
-    | boolean
-    | NegationValue
-    | CourseCodeValue
-    | TermValue;
-  metadata: HintMetadata;
 }
 
 export type HintType =
@@ -202,6 +126,33 @@ export type HintType =
   | "partOfTerm"
   | "negation";
 
+export type HintValueByType = {
+  courseCode: CourseCodeValue;
+  crn: string;
+  subject: string;
+  instructor: string;
+  days: string;
+  time: SearchTimeFilter;
+  level: SearchLevelFilter;
+  levelBoost: number;
+  credits: number;
+  online: boolean;
+  status: SearchStatusFilter;
+  workload: SearchWorkloadFilter;
+  requirement: string;
+  term: TermValue;
+  partOfTerm: string;
+  negation: NegationValue;
+};
+
+export type Hint = {
+  [K in HintType]: {
+    type: K;
+    value: HintValueByType[K];
+    metadata: HintMetadata;
+  }
+}[HintType];
+
 export interface NegationValue {
   target: HintType | "keyword" | "workload";
   value: string;
@@ -213,22 +164,11 @@ export interface CourseCodeValue {
 }
 
 export interface TermValue {
-  term: string;
+  term: SearchTermFilter;
   year: number;
 }
 
-export interface Suggestion {
-  text: string;
-  action: "add_filter" | "remove_filter" | "change_filter";
-  filter?: Partial<SearchRequestFiltersDto>;
-}
-
 export interface ParsedQuery {
-  raw: string;
-  clauses: ParsedClause[];
-}
-
-export interface ParsedClause {
   filters: FieldFilter[];
   negations: string[];
   phrases: string[];

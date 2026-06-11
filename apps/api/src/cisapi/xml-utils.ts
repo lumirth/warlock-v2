@@ -1,7 +1,7 @@
 import { DomUtils, parseDocument } from 'htmlparser2';
 import type { AnyNode, Document, Element } from 'domhandler';
 
-export function decodeXmlText(value: string | undefined): string {
+function decodeXmlText(value: string | undefined): string {
   if (!value) return '';
 
   return value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (entity, code: string) => {
@@ -21,7 +21,7 @@ export function decodeXmlText(value: string | undefined): string {
   });
 }
 
-export type XmlDocument = Document;
+type XmlDocument = Document;
 export type XmlElement = Element;
 
 export function parseXmlDocument(xml: string): XmlDocument {
@@ -39,7 +39,7 @@ export function localName(node: AnyNode): string {
   return separator >= 0 ? name.slice(separator + 1) : name;
 }
 
-export function isXmlElement(node: AnyNode, name?: string): node is XmlElement {
+function isXmlElement(node: AnyNode, name?: string): node is XmlElement {
   if (node.type !== 'tag') return false;
   return name ? localName(node) === name : true;
 }
@@ -51,11 +51,6 @@ export function elementAttr(element: XmlElement | undefined, name: string): stri
 export function elementText(element: XmlElement | undefined): string {
   if (!element) return '';
   return decodeXmlText(DomUtils.textContent(element)).replace(/\s+/g, ' ').trim();
-}
-
-export function childElements(parent: AnyNode | undefined, name?: string): XmlElement[] {
-  if (!parent || !('children' in parent)) return [];
-  return parent.children.filter((child): child is XmlElement => isXmlElement(child, name));
 }
 
 export function descendantElements(parent: AnyNode | undefined, name?: string): XmlElement[] {
@@ -72,22 +67,6 @@ export function firstDescendantElement(
 
 export function firstDescendantText(parent: AnyNode | undefined, name: string): string {
   return elementText(firstDescendantElement(parent, name));
-}
-
-export function tagText(xml: string, tag: string): string {
-  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`<(?:[\\w]+:)?${escaped}[^>]*>([\\s\\S]*?)<\\/(?:[\\w]+:)?${escaped}>`).exec(xml);
-  return decodeXmlText(match?.[1]).trim();
-}
-
-export function textWithoutTags(xml: string): string {
-  return decodeXmlText(xml.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
-}
-
-export function xmlAttribute(openTagAttributes: string, name: string): string {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`\\b${escaped}="([^"]*)"`).exec(openTagAttributes);
-  return decodeXmlText(match?.[1]).trim();
 }
 
 export function convertTo24Hour(time12: string): string {

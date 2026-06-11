@@ -11,8 +11,6 @@ import type {
   MatchEvidence,
   ResultExplanation,
   ResultWarning,
-  SearchCourseMetadataDto,
-  SearchActionDto,
   SearchCourseResultDto,
   SearchRequestDto,
   SearchResponseDto,
@@ -37,7 +35,7 @@ vi.mock('../lib/api-client', () => ({
 
 export const api = apiMock.api
 
-export type Deferred<T> = {
+type Deferred<T> = {
   promise: Promise<T>
   resolve: (value: T) => void
   reject: (reason?: unknown) => void
@@ -67,7 +65,6 @@ type SearchResultOverride = Omit<
   catalog?: Partial<CourseSummaryDto['catalog']>
   scheduleNotes?: Partial<CourseSummaryDto['scheduleNotes']>
   registration?: Partial<CourseSummaryDto['registration']>
-  search?: SearchCourseMetadataDto
   matchEvidence?: MatchEvidence[]
   explanation?: ResultExplanation
   warnings?: ResultWarning[]
@@ -112,7 +109,6 @@ export function course(overrides: SearchResultOverride = {}): SearchCourseResult
 
   return {
     course: summary,
-    search: overrides.search,
     matchEvidence: overrides.matchEvidence,
     explanation: overrides.explanation,
     warnings: overrides.warnings,
@@ -128,18 +124,16 @@ export function searchResponse(
   return {
     results,
     meta: {
-      query: { raw: request.query, residual: request.query },
       nextRequest: request,
-      timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
+      interpretedRequest: request,
+      ui: { chips: [], ambiguityActions: [] },
     },
-    pagination: { totalResults: results.length, limit: 20, offset: 0 },
-  }
-}
-
-export function searchAction(nextRequest: SearchRequestDto): SearchActionDto {
-  return {
-    kind: 'run_search',
-    nextRequest,
+    pagination: {
+      totalResults: results.length,
+      browseableResults: results.length,
+      limit: 20,
+      offset: 0,
+    },
   }
 }
 

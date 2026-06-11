@@ -5,7 +5,9 @@ import { SearchPipeline } from "../../services/search-pipeline.js";
 import type { D1Database, VectorizeIndex, Ai } from "@cloudflare/workers-types";
 import {
   singleRequirementFilter,
+  type SearchScope,
   type SearchResponseDto,
+  type SearchSort,
 } from "@uiuc-course-search/query-types";
 
 vi.mock("../../services/search-pipeline.js");
@@ -15,6 +17,13 @@ type SearchRouteBindings = {
   VECTORIZE: VectorizeIndex;
   AI: Ai;
 };
+
+function testRetrievalPlan(
+  sort: SearchSort = { field: "relevance", direction: "desc" },
+  scope: SearchScope = "active",
+) {
+  return { controls: { sort, scope } };
+}
 
 describe("Search Routes", () => {
   let app: Hono<{ Bindings: SearchRouteBindings }>;
@@ -46,7 +55,6 @@ describe("Search Routes", () => {
           title: "Data Structures",
           description: null,
           credit_hours: 4,
-          gened: null,
           year: 2026,
           term: "spring",
           avg_gpa: null,
@@ -66,11 +74,12 @@ describe("Search Routes", () => {
 
     const mockPipelineResult = {
       results: mockResults,
+      totalResults: mockResults.length,
       meta: {
         query: { raw: "CS 225", residual: "" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan(),
         plan: { filters: {}, semanticQuery: "", keywordQuery: "" },
-        timing: { extraction_ms: 10, search_ms: 20, total_ms: 30 },
       },
     };
 
@@ -116,7 +125,6 @@ describe("Search Routes", () => {
         sort: { field: "relevance", direction: "desc" },
         scope: "active",
       }),
-      { limit: 20, offset: 0 },
       expect.any(Function),
     );
   });
@@ -124,16 +132,13 @@ describe("Search Routes", () => {
   it("does not expose planner debug on the public search endpoint", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: "CS 225", residual: "" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan(),
         compilerEvents: [],
         plan: { filters: {}, semanticQuery: "", keywordQuery: "" },
-        retrievalPlan: {},
-        retrievalPlans: [],
-        budget: {},
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
-        fallback: { tierReached: 2, constraintsRelaxed: [], originalResultCount: 0 },
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -189,15 +194,16 @@ describe("Search Routes", () => {
   it("normalizes bounded manual search filters", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: "systems", residual: "systems" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan(),
         plan: {
           filters: {},
           semanticQuery: "systems",
           keywordQuery: "systems",
         },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -242,7 +248,6 @@ describe("Search Routes", () => {
         sort: { field: "relevance", direction: "desc" },
         scope: "active",
       }),
-      { limit: 20, offset: 0 },
       expect.any(Function),
     );
   });
@@ -250,15 +255,16 @@ describe("Search Routes", () => {
   it("allows filter-only searches without fabricating query text", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: "", residual: "" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan(),
         plan: {
           filters: { online: true },
           semanticQuery: "",
           keywordQuery: "",
         },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -289,7 +295,6 @@ describe("Search Routes", () => {
         sort: { field: "relevance", direction: "desc" },
         scope: "active",
       }),
-      { limit: 20, offset: 0 },
       expect.any(Function),
     );
   });
@@ -297,15 +302,16 @@ describe("Search Routes", () => {
   it("passes sort, all-term scope, and level controls to the pipeline", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: "history", residual: "history" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan({ field: "gpa", direction: "asc" }, "all"),
         plan: {
           filters: { level: 500 },
           semanticQuery: "history",
           keywordQuery: "history",
         },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -336,13 +342,10 @@ describe("Search Routes", () => {
         sort: { field: "gpa", direction: "asc" },
         scope: "all",
       }),
-      { limit: 5, offset: 0 },
       expect.any(Function),
     );
 
     const data = (await res.json()) as SearchResponseDto;
-    expect(data.meta.appliedSort).toEqual({ field: "gpa", direction: "asc" });
-    expect(data.meta.appliedScope).toBe("all");
     expect(data.meta.nextRequest).toMatchObject({
       query: "history",
       filters: { level: 500 },
@@ -354,9 +357,11 @@ describe("Search Routes", () => {
   it("separates executable continuation from interpreted display request", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: "highest gpa classes", residual: "" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan({ field: "gpa", direction: "desc" }),
         plan: {
           filters: {},
           semanticQuery: "",
@@ -365,10 +370,6 @@ describe("Search Routes", () => {
             inferredSort: { field: "gpa", direction: "desc" },
           },
         },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
-        fallback: { tierReached: 2, constraintsRelaxed: [], originalResultCount: 0 },
-        appliedSort: { field: "gpa", direction: "desc" },
-        appliedScope: "active",
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -393,7 +394,6 @@ describe("Search Routes", () => {
 
     expect(res.status).toBe(200);
     const data = (await res.json()) as SearchResponseDto;
-    expect(data.meta.appliedSort).toEqual({ field: "gpa", direction: "desc" });
     expect(data.meta.nextRequest).toMatchObject({
       query: "highest gpa classes",
       sort: { field: "gpa", direction: "desc" },
@@ -409,15 +409,16 @@ describe("Search Routes", () => {
   it("rejects invalid new controls instead of silently falling back", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: "history", residual: "history" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan(),
         plan: {
           filters: {},
           semanticQuery: "history",
           keywordQuery: "history",
         },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -450,15 +451,16 @@ describe("Search Routes", () => {
   it("rejects level filters with trailing malformed characters", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: "history", residual: "history" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan(),
         plan: {
           filters: {},
           semanticQuery: "history",
           keywordQuery: "history",
         },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -522,7 +524,6 @@ describe("Search Routes", () => {
         title: `Course ${index}`,
         description: null,
         credit_hours: 3,
-        gened: null,
         year: 2026,
         term: "spring",
         avg_gpa: null,
@@ -536,15 +537,16 @@ describe("Search Routes", () => {
     }));
     const searchSpy = vi.fn().mockResolvedValue({
       results: mockResults,
+      totalResults: 42,
       meta: {
         query: { raw: "intro to CS", residual: "" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan(),
         plan: {
           filters: { subject: "CS" },
           semanticQuery: "",
           keywordQuery: "",
         },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -576,7 +578,6 @@ describe("Search Routes", () => {
         sort: { field: "relevance", direction: "desc" },
         scope: "active",
       }),
-      { limit: 5, offset: 10 },
       expect.any(Function),
     );
     expect(data.results.map((result) => result.course.id)).toEqual([
@@ -587,7 +588,8 @@ describe("Search Routes", () => {
       "CS-14-2026-spring",
     ]);
     expect(data.pagination).toEqual({
-      totalResults: 16,
+      totalResults: 42,
+      browseableResults: 16,
       limit: 5,
       offset: 10,
       hasMore: true,
@@ -595,18 +597,19 @@ describe("Search Routes", () => {
     });
   });
 
-  it("allows deep historical result pages while keeping an offset cap", async () => {
+  it("rejects pages beyond the ranked browse window", async () => {
     const searchSpy = vi.fn().mockResolvedValue({
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: "history", residual: "history" },
         extraction: { hints: [] },
+        retrievalPlan: testRetrievalPlan(),
         plan: {
           filters: {},
           semanticQuery: "history",
           keywordQuery: "history",
         },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
       },
     });
     vi.mocked(SearchPipeline).mockImplementation(function () {
@@ -616,7 +619,7 @@ describe("Search Routes", () => {
     });
 
     const ok = await app.request(
-      "/api/search?q=history&offset=1000",
+      "/api/search?q=history&offset=1150",
       {},
       {
         DB: mockDB,
@@ -636,12 +639,11 @@ describe("Search Routes", () => {
         sort: { field: "relevance", direction: "desc" },
         scope: "active",
       }),
-      { limit: 20, offset: 1000 },
       expect.any(Function),
     );
 
     const tooDeep = await app.request(
-      "/api/search?q=history&offset=1001",
+      "/api/search?q=history&offset=1151",
       {},
       {
         DB: mockDB,
@@ -651,7 +653,7 @@ describe("Search Routes", () => {
     );
     expect(tooDeep.status).toBe(400);
     await expect(tooDeep.json()).resolves.toEqual({
-      error: "offset must be between 0 and 1000",
+      error: "offset must be between 0 and 1150",
     });
   });
 });

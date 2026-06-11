@@ -55,7 +55,7 @@ function publicRateLimit(
 
 app.use('/api/*', cors({
   origin: '*',
-  allowHeaders: ['X-Search-Hints', 'Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type'],
 }));
 
 app.use('/admin/*', requireBearerToken('ADMIN_TOKEN'));

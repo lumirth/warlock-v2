@@ -30,7 +30,7 @@ Before a public demo deployment, configure Cloudflare Workers Rate Limiting bind
 - Use a lower threshold for repeated 4xx/5xx responses if Cloudflare rules allow it.
 - Leave `/admin/*` and `/internal/*` protected by token auth regardless of WAF settings.
 
-Record namespace IDs or rule IDs, expressions, thresholds, action, and deploy/dashboard evidence in the stabilization report. `npm run cloudflare:preflight` requires `Rate-Limit Namespace IDs`, `WAF Rule ID`, or `Rate-Limit Rule ID`, plus `Abuse Control Routes`, `Abuse Control Action`, and `Abuse Control Thresholds`. See `docs/cloudflare-hardening-runbook.md`.
+Record namespace IDs or rule IDs, expressions, thresholds, action, and deploy/dashboard evidence in the evidence file passed to `npm run cloudflare:preflight`. The preflight requires `Rate-Limit Namespace IDs`, `WAF Rule ID`, or `Rate-Limit Rule ID`, plus `Abuse Control Routes`, `Abuse Control Action`, and `Abuse Control Thresholds`. See `docs/cloudflare-hardening-runbook.md`.
 
 ## Database Bootstrap
 
@@ -61,6 +61,33 @@ npm run bootstrap:fresh-check
 
 Normal production search must not print raw SQL, SQL params, or raw query analytics. Add analytics later through an explicit privacy-reviewed model rather than ad hoc request logging.
 
+## Vectorize Metadata
+
+Semantic search pre-filters by subject, course level, and term before Vectorize selects its top matches. Create all three metadata indexes for every Vectorize environment:
+
+```bash
+cd apps/api
+npx wrangler vectorize create-metadata-index course-embeddings --propertyName subject --type string
+npx wrangler vectorize create-metadata-index course-embeddings --propertyName level_bucket --type number
+npx wrangler vectorize create-metadata-index course-embeddings --propertyName term_id --type string
+
+npx wrangler vectorize create-metadata-index course-embeddings-staging --propertyName subject --type string
+npx wrangler vectorize create-metadata-index course-embeddings-staging --propertyName level_bucket --type number
+npx wrangler vectorize create-metadata-index course-embeddings-staging --propertyName term_id --type string
+```
+
+After adding or changing embedding metadata, rebuild embeddings before accepting semantic-search smoke results. Old vectors without `term_id` cannot participate in active-scope semantic recall.
+
+Backfill each page until the response reports `"hasMore": false`:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "$STAGING_API_BASE_URL/admin/embeddings/backfill?scope=all&limit=250&offset=0"
+```
+
+Increase `offset` by `processed` for each subsequent request.
+
 ## D1 Backups
 
 Before destructive remote D1 operations, create a backup using the current Cloudflare-supported mechanism, verify that it is restorable, and record the target database, timestamp, and backup location before proceeding. For this FTS-backed schema, use Cloudflare D1 Time Travel because SQL export refuses databases with virtual tables.
@@ -73,7 +100,7 @@ npx wrangler d1 time-travel info course-search-db-staging --json
 npx wrangler d1 execute course-search-db-staging --remote --command "INSERT OR REPLACE INTO app_meta (key, value, updated_at) VALUES ('restore-test-$BACKUP_REF', 'marker', unixepoch())"
 npx wrangler d1 time-travel restore course-search-db-staging --bookmark <bookmark-from-info>
 npx wrangler d1 execute course-search-db-staging --remote --command "SELECT COUNT(*) AS marker_count FROM app_meta WHERE key = 'restore-test-$BACKUP_REF'"
-npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
+npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file artifacts/d1-backup-evidence.md --restore-verified
 ```
 
 Record the report markers exactly:
@@ -103,7 +130,7 @@ npm run eval:staging
 npm run cloudflare:preflight
 ```
 
-The stabilization report must include `Staging API URL`, `Staging Web URL`, `Pages Project: uiuc-course-search-web`, and `Pages Branch: staging` before `npm run cloudflare:preflight` can pass.
+The evidence file passed to `npm run cloudflare:preflight` must include `Staging API URL`, `Staging Web URL`, `Pages Project: uiuc-course-search-web`, and `Pages Branch: staging`.
 
 ## Data Freshness
 
@@ -115,22 +142,6 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync/s
 
 The response must include `freshness.currentTermPresent`, `freshness.activeTermIds`, `freshness.upcomingTermIds`, `freshness.historicalTermCount`, `freshness.staleTermIds`, and `freshness.staleSyncStateIds`. Follow `docs/data-refresh-runbook.md` when any required source is stale.
 
-## Current Staging Evidence
+## Required Staging Evidence
 
-As of 2026-06-03, Wrangler OAuth is authenticated locally; do not commit token cache files or secret values.
-
-- Staging API URL: `https://uiuc-course-search-staging.lumirth.workers.dev`
-- Staging Web URL: `https://staging.uiuc-course-search-web.pages.dev`
-- Pages Project: `uiuc-course-search-web`
-- Pages Branch: `staging`
-- Worker: `uiuc-course-search-staging`
-- Latest verified API deploy version: `333fc846-4e86-4e25-a180-5f35253a2316`
-- Staging D1: `course-search-db-staging`
-- Rate-Limit Namespace IDs: `SEARCH_RATE_LIMITER=26060111`, `COURSE_RATE_LIMITER=26060112`
-- Abuse Control Routes: `/api/search*`, `/api/course/*`; `/api/feedback` uses the search limiter class.
-- Abuse Control Thresholds: `/api/search*` and `/api/feedback` at 120 requests/min/IP; `/api/course/*` at 240 requests/min/IP.
-- Latest live freshness audit: `artifacts/live/data-freshness-audit-2026-06-03-rmp-enrichment.md`, 15/15 passing.
-- Latest D1 destructive-action backup evidence: `artifacts/d1-backups/20260603T002001Z-pre-retention-prune/evidence.md`, `D1 Restore Verified: yes`.
-- Latest staging smoke evidence: `artifacts/staging-smoke-report.md`, 10/10 passing after the 2026-06-03 staging auth rotation.
-- Latest staging eval evidence: `docs/reports/2026-06-03-cloudflare-preflight-report.md`, 100/100 passing.
-- Latest Cloudflare preflight evidence: `docs/reports/2026-06-03-cloudflare-preflight-report.md`, 32/32 passing with staging env vars populated.
+Create a fresh evidence file under `artifacts/` for every release. It must identify the deployed Worker and Pages targets, current deploy version, D1 database, abuse-control configuration, freshness audit, destructive-action backup when applicable, staging smoke result, staging eval result, and Cloudflare preflight result. Never treat a previous release's evidence as current.

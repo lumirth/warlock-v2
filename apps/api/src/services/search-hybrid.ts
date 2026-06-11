@@ -2,10 +2,11 @@ import type { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 import { fuseRetrievalResults } from "./search-fusion.js";
 import {
   fetchCoursesById,
-  fetchRequirementCodesByCourseId,
+  fetchRequirementsByCourseId,
 } from "./search-loaders.js";
 import { applyRankingPolicy } from "./ranking/index.js";
 import { executeRetrievalLanes } from "./search-retrieval-lane-executors.js";
+import { countSearchCandidates } from "./search-candidate-count.js";
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
 import type { SearchPlan } from "./search-planner-types.js";
 import type { SearchResult } from "./search-types.js";
@@ -16,7 +17,7 @@ export async function hybridSearch(
   ai: Ai,
   retrievalPlan: RetrievalPlan,
   rankingPlan: SearchPlan,
-): Promise<SearchResult[]> {
+): Promise<{ results: SearchResult[]; totalResults: number }> {
   const { budget } = retrievalPlan;
   const laneResults = await executeRetrievalLanes({
     db,
@@ -24,18 +25,19 @@ export async function hybridSearch(
     ai,
     retrievalPlan,
   });
+  const totalResults = await countSearchCandidates(db, retrievalPlan, laneResults);
   const scores = fuseRetrievalResults({
     laneResults,
   });
 
   if (scores.length === 0) {
-    return [];
+    return { results: [], totalResults };
   }
 
   const courseIds = scores.map(score => score.id);
-  const [courseMap, requirementCodesByCourseId] = await Promise.all([
+  const [courseMap, requirementsByCourseId] = await Promise.all([
     fetchCoursesById(db, courseIds),
-    fetchRequirementCodesByCourseId(db, courseIds),
+    fetchRequirementsByCourseId(db, courseIds),
   ]);
 
   const rankedResults: SearchResult[] = [];
@@ -49,13 +51,15 @@ export async function hybridSearch(
       keywordRank: score.keywordRank,
       laneMatches: score.laneMatches,
       laneRanks: score.laneRanks,
-      requirementCodes: requirementCodesByCourseId.get(score.id),
+      requirements: requirementsByCourseId.get(score.id) ?? [],
       laneResults: score.laneResults,
-      supportedSubjectiveClaims: score.supportedSubjectiveClaims,
     });
   }
 
-  return applyRankingPolicy(rankedResults, rankingPlan, {
-    query: rankingPlan.keywordQuery || "",
-  }).slice(0, budget.termCandidateLimit);
+  return {
+    results: applyRankingPolicy(rankedResults, rankingPlan, {
+      query: rankingPlan.keywordQuery || "",
+    }).slice(0, budget.browseableResultLimit),
+    totalResults,
+  };
 }

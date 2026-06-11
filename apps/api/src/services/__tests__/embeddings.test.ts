@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { CourseSnapshot } from '../../transforms/course.js';
 import {
   courseSnapshotToEmbeddingData,
   createCourseEmbeddingText,
   generateEmbeddings,
+  searchCourses,
   upsertCourseEmbeddings,
 } from '../embeddings.js';
 
@@ -118,6 +119,7 @@ describe('course embeddings', () => {
     await upsertCourseEmbeddings(vectorize as never, ai as never, [
       {
         id: 'CS-124-2026-fall',
+        termId: '2026-fall',
         subject: 'CS',
         number: '124',
         title: 'Introduction to Computer Science I',
@@ -129,6 +131,7 @@ describe('course embeddings', () => {
       },
       {
         id: 'AAS-281-2026-fall',
+        termId: '2026-fall',
         subject: 'AAS',
         number: '281',
         title: 'Constructing Race in America',
@@ -147,6 +150,7 @@ describe('course embeddings', () => {
         metadata: {
           subject: 'CS',
           number: '124',
+          term_id: '2026-fall',
           gened: 'QR',
           catalog_number: 124,
           level_bucket: 100,
@@ -158,11 +162,38 @@ describe('course embeddings', () => {
         metadata: {
           subject: 'AAS',
           number: '281',
+          term_id: '2026-fall',
           gened: 'CS',
           catalog_number: 281,
           level_bucket: 200,
         },
       },
     ]);
+  });
+
+  it('applies semantic metadata filters before Vectorize selects top matches', async () => {
+    const ai = {
+      run: async () => ({ data: [[0.1, 0.2]] }),
+    };
+    const vectorize = {
+      query: async () => ({ matches: [] }),
+    };
+    const query = vi.spyOn(vectorize, 'query');
+
+    await searchCourses(vectorize as never, ai as never, 'algorithms', {
+      filters: { subject: 'CS', level: 200 },
+      termIds: ['2026-fall', '2027-spring'],
+      topK: 25,
+    });
+
+    expect(query).toHaveBeenCalledWith([0.1, 0.2], {
+      topK: 25,
+      returnMetadata: 'none',
+      filter: {
+        subject: 'CS',
+        level_bucket: 200,
+        term_id: { $in: ['2026-fall', '2027-spring'] },
+      },
+    });
   });
 });

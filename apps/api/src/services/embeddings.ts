@@ -5,6 +5,7 @@ import { courseSnapshotRequirementEvidence } from '../transforms/course-requirem
 
 export interface CourseEmbeddingData {
   id: string;
+  termId: string;
   subject: string;
   number: string;
   title: string;
@@ -20,6 +21,7 @@ export function courseSnapshotToEmbeddingData(snapshot: CourseSnapshot): CourseE
 
   return {
     id: snapshot.course.id,
+    termId: `${snapshot.course.year}-${snapshot.course.term}`,
     subject: snapshot.course.subject,
     number: snapshot.course.number,
     title: snapshot.course.title,
@@ -54,7 +56,7 @@ export function createCourseEmbeddingText(course: CourseEmbeddingData): string {
   return parts.filter(Boolean).join(' ').slice(0, 512); // Limit length
 }
 
-export async function generateEmbedding(ai: Ai, text: string): Promise<number[]> {
+async function generateEmbedding(ai: Ai, text: string): Promise<number[]> {
   const embeddings = await generateEmbeddings(ai, [text]);
   return embeddings[0];
 }
@@ -96,6 +98,7 @@ export async function upsertCourseEmbeddings(
         subject: course.subject,
         number: course.number,
         title: course.title,
+        term_id: course.termId,
         gened: course.requirementSummaryCode || '',
         catalog_number: catalogNumber,
         level_bucket: levelBucket
@@ -112,36 +115,38 @@ export async function upsertCourseEmbedding(
   await upsertCourseEmbeddings(vectorize, ai, [course]);
 }
 
+export type SemanticSearchOptions = {
+  filters?: SearchFilters;
+  topK?: number;
+  termIds?: string[];
+};
+
 export async function searchCourses(
   vectorize: VectorizeIndex,
   ai: Ai,
   query: string,
-  filters?: SearchFilters,
-  topK: number = 50
+  options: SemanticSearchOptions = {},
 ): Promise<{ id: string; score: number }[]> {
   const queryEmbedding = await generateEmbedding(ai, query);
+  const { filters, topK = 50, termIds = [] } = options;
 
   const vectorizeOptions: VectorizeQueryOptions = {
     topK,
     returnMetadata: 'none'
   };
 
-  // Apply metadata filters if supported
-  if (filters) {
-    const filterConditions: VectorizeVectorMetadataFilter = {};
-
-    if (filters.subject) {
-      filterConditions.subject = filters.subject;
-    }
-
-    if (filters.level) {
-      filterConditions.level_bucket = filters.level;
-    }
-
-    // If we have filters, attach them
-    if (Object.keys(filterConditions).length > 0) {
-      vectorizeOptions.filter = filterConditions;
-    }
+  const filterConditions: VectorizeVectorMetadataFilter = {};
+  if (filters?.subject) {
+    filterConditions.subject = filters.subject;
+  }
+  if (filters?.level) {
+    filterConditions.level_bucket = filters.level;
+  }
+  if (termIds.length > 0) {
+    filterConditions.term_id = { $in: termIds };
+  }
+  if (Object.keys(filterConditions).length > 0) {
+    vectorizeOptions.filter = filterConditions;
   }
 
   const results = await vectorize.query(queryEmbedding, vectorizeOptions);

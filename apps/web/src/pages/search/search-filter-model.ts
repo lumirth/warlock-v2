@@ -1,6 +1,6 @@
 import {
   type AdvancedSearchStateDto,
-  coerceSearchRequestDto,
+  normalizeSearchRequestDto,
   searchRequestHasFilters,
   type SearchRequestDto,
 } from '@uiuc-course-search/query-types'
@@ -38,7 +38,7 @@ export function cleanAdvancedFilters(
 export function advancedStateFromRequest(
   request: SearchRequestDto
 ): AdvancedSearchStateDto {
-  const normalized = coerceSearchRequestDto(request)
+  const normalized = normalizeSearchRequestDto(request)
   return {
     filters: normalized.filters,
     ...(normalized.scope === 'all' ? { scope: normalized.scope } : {}),

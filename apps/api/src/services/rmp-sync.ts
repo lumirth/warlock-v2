@@ -5,6 +5,8 @@ const RMP_GRAPHQL_URL = 'https://www.ratemyprofessors.com/graphql';
 const UIUC_SCHOOL_ID = 'U2Nob29sLTExMTI='; // School-1112 (UIUC)
 const RMP_SYNC_ID = 'rmp';
 const RUNNING_LOCK_TTL_SECONDS = 60 * 60;
+const D1_BATCH_SIZE = 10;
+const RMP_PROPAGATION_BATCH_SIZE = 50;
 
 // GraphQL Queries
 const TEACHER_SEARCH_QUERY = `
@@ -15,7 +17,6 @@ const TEACHER_SEARCH_QUERY = `
           cursor
           node {
             id
-            legacyId
             firstName
             lastName
             avgRating
@@ -41,7 +42,6 @@ const TEACHER_SEARCH_QUERY = `
 
 export interface RmpTeacherNode {
   id: string;
-  legacyId: number;
   firstName: string;
   lastName: string;
   avgRating: number;
@@ -73,12 +73,12 @@ interface RmpSyncState {
   etag: string | null;
 }
 
-export interface CoordinateRmpSyncOptions {
+interface CoordinateRmpSyncOptions {
   rmpAuthToken?: string;
   internalToken?: string;
 }
 
-export interface RmpPageResult {
+interface RmpPageResult {
   teachers: RmpTeacherNode[];
   hasNextPage: boolean;
   endCursor: string | null;
@@ -96,7 +96,7 @@ function normalizeRmpName(first: string, last: string): string {
 /**
  * Fetches a single page of professors from RMP.
  */
-export async function fetchRmpPage(cursor: string | null, authToken: string): Promise<RmpPageResult> {
+async function fetchRmpPage(cursor: string | null, authToken: string): Promise<RmpPageResult> {
   const response = await fetch(RMP_GRAPHQL_URL, {
     method: 'POST',
     headers: {
@@ -243,7 +243,6 @@ async function updateRmpSyncState(
 export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]): Promise<void> {
   if (teachers.length === 0) return;
 
-  // 1. Prepare statements for rmp_cache
   const statements = teachers.map(node => {
     const normalizedName = normalizeRmpName(node.firstName, node.lastName);
     const topTags = node.teacherRatingTags
@@ -286,23 +285,19 @@ export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]
     );
   });
 
-  // 2. Execute in chunks (D1 limit)
-  const CHUNK_SIZE = 10; // Conservative limit due to parameter count (8 params * 10 rows = 80 params < 100 limit)
-  for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
-    const batch = statements.slice(i, i + CHUNK_SIZE);
+  for (let i = 0; i < statements.length; i += D1_BATCH_SIZE) {
+    const batch = statements.slice(i, i + D1_BATCH_SIZE);
     await db.batch(batch);
   }
 
-  // 3. Propagate to main tables (Optimization: Only for these specific teachers)
-  // We can do this efficiently by only updating records where the name matches the batch
-  // We can't bind thousands of names, so we'll do a general update for now
-  // Or better, we can just run the general update queries which are fast enough on indexed columns
-  // For simplicity and correctness, we'll run the propagation queries.
-  // In a high-scale system, we'd batch these by ID too, but for 1000 records, the subquery match is fine.
+  const instructorNames = teachers.map(node => normalizeRmpName(node.firstName, node.lastName));
+  for (let i = 0; i < instructorNames.length; i += RMP_PROPAGATION_BATCH_SIZE) {
+    await propagateRmpBatch(db, instructorNames.slice(i, i + RMP_PROPAGATION_BATCH_SIZE));
+  }
+}
 
-  // NOTE: Running this 5 times (once per batch) is redundant but safe.
-  // Alternatively, we could have a "Finalize" step, but that requires coordination.
-  // Let's keep it self-contained in the batch worker.
+async function propagateRmpBatch(db: D1Database, instructorNames: string[]): Promise<void> {
+  const placeholders = instructorNames.map(() => '?').join(', ');
 
   await db.prepare(`
     UPDATE instructors
@@ -310,11 +305,9 @@ export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]
       rmp_rating = (SELECT rating FROM rmp_cache WHERE instructor_name = instructors.display_name),
       rmp_difficulty = (SELECT difficulty FROM rmp_cache WHERE instructor_name = instructors.display_name),
       rmp_num_ratings = (SELECT num_ratings FROM rmp_cache WHERE instructor_name = instructors.display_name)
-    WHERE display_name IN (SELECT instructor_name FROM rmp_cache WHERE fetched_at > unixepoch() - 300)
-    AND EXISTS (SELECT 1 FROM rmp_cache WHERE instructor_name = instructors.display_name)
-  `).run();
+    WHERE display_name IN (${placeholders})
+  `).bind(...instructorNames).run();
 
-  // Same for courses
   await db.prepare(`
     UPDATE courses
     SET primary_instructor_rmp = (
@@ -322,11 +315,6 @@ export async function processRmpBatch(db: D1Database, teachers: RmpTeacherNode[]
       FROM rmp_cache
       WHERE instructor_name = courses.primary_instructor
     )
-    WHERE primary_instructor IN (SELECT instructor_name FROM rmp_cache WHERE fetched_at > unixepoch() - 300)
-  `).run();
-
-}
-
-export async function syncRateMyProfessorData(_db: D1Database): Promise<{ count: number; message: string }> {
-  throw new Error("Use coordinateRmpSync or processRmpBatch instead.");
+    WHERE primary_instructor IN (${placeholders})
+  `).bind(...instructorNames).run();
 }

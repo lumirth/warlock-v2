@@ -6,9 +6,7 @@ import type { Hint, SearchPlan } from "./search-planner-types.js";
 import { buildAmbiguityActions } from "./search-ambiguity-actions.js";
 import { buildSearchChips } from "./search-chip-presenter.js";
 
-export { buildInterpretedSearchRequest } from "./search-interpreted-request.js";
-
-export type SearchUiPlanRequestContext = {
+type SearchUiPlanRequestContext = {
   executableRequest: NormalizedSearchRequestDto;
   interpretedRequest: NormalizedSearchRequestDto;
 };

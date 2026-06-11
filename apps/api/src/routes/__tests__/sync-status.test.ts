@@ -34,10 +34,21 @@ function requestSyncRoute(path: string, db: D1Database) {
   });
 }
 
+function bindableStatement(
+  all: () => Promise<{ success: boolean; results: unknown[] }>
+) {
+  const statement = {
+    all: vi.fn(all),
+    bind: vi.fn(),
+  };
+  statement.bind.mockImplementation(() => statement);
+  return statement;
+}
+
 function createDb(): D1Database {
   return {
-    prepare: vi.fn((sql: string) => ({
-      all: vi.fn(async () => {
+    prepare: vi.fn((sql: string) =>
+      bindableStatement(async () => {
         if (sql.includes('FROM sync_state')) {
           return {
             success: true,
@@ -110,15 +121,15 @@ function createDb(): D1Database {
           };
         }
         return { success: true, results: [] };
-      }),
-    })),
+      })
+    ),
   } as unknown as D1Database;
 }
 
 function createCourseBackedTermDb(): D1Database {
   return {
-    prepare: vi.fn((sql: string) => ({
-      all: vi.fn(async () => {
+    prepare: vi.fn((sql: string) =>
+      bindableStatement(async () => {
         if (sql.includes('FROM term_state')) {
           return { success: true, results: [] };
         }
@@ -133,8 +144,8 @@ function createCourseBackedTermDb(): D1Database {
           };
         }
         return { success: true, results: [] };
-      }),
-    })),
+      })
+    ),
   } as unknown as D1Database;
 }
 
@@ -195,6 +206,23 @@ describe('sync status route', () => {
         status: 'active',
       }),
     ]);
+  });
+
+  it('does not expose database errors from the public term-options route', async () => {
+    const db = {
+      prepare: vi.fn(() => ({
+        all: vi.fn(async () => {
+          throw new Error('secret database detail');
+        }),
+      })),
+    } as unknown as D1Database;
+
+    const response = await requestSyncRoute('/api/terms', db);
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Term options could not be loaded',
+    });
   });
 
   it('reports sync_state and term_state health for admin operators', async () => {

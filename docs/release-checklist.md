@@ -1,7 +1,5 @@
 # Pre-Alpha Release Checklist
 
-Date: 2026-06-01
-
 Use this checklist before any public demo. The project is greenfield/pre-alpha: if a check fails, fix it directly instead of adding compatibility shims.
 
 ## Local Gates
@@ -89,7 +87,7 @@ npx wrangler d1 time-travel info course-search-db-staging --json
 npx wrangler d1 execute course-search-db-staging --remote --command "INSERT OR REPLACE INTO app_meta (key, value, updated_at) VALUES ('restore-test-$BACKUP_REF', 'marker', unixepoch())"
 npx wrangler d1 time-travel restore course-search-db-staging --bookmark <bookmark-from-info>
 npx wrangler d1 execute course-search-db-staging --remote --command "SELECT COUNT(*) AS marker_count FROM app_meta WHERE key = 'restore-test-$BACKUP_REF'"
-npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
+npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file artifacts/d1-backup-evidence.md --restore-verified
 npm run cloudflare:preflight
 ```
 

@@ -35,7 +35,6 @@ for object in \
   app_meta \
   courses \
   subjects \
-  subject_aliases \
   instructors \
   sections \
   meetings \
@@ -47,8 +46,6 @@ for object in \
   sync_state \
   term_state \
   feedback_events \
-  gened_aliases \
-  topic_aliases \
   courses_fts \
   sections_fts; do
   expect_object "$object"

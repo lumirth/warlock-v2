@@ -1,7 +1,9 @@
 import {
+  REQUIREMENT_FILTER_MODES,
   requirementFilter,
   type RequirementFilter,
 } from "./course-policy.js";
+import { isKnownRequirementCode } from "./requirement-options.js";
 
 export const SEARCH_SORT_FIELDS = [
   "relevance",
@@ -83,7 +85,7 @@ export type SearchLevelFilter = (typeof SEARCH_LEVEL_VALUES)[number];
 
 export const SEARCH_PAGINATION_DEFAULT_LIMIT = 20;
 export const SEARCH_PAGINATION_MAX_LIMIT = 50;
-export const SEARCH_PAGINATION_MAX_OFFSET = 1000;
+export const SEARCH_PAGINATION_MAX_OFFSET = 1_150;
 
 export function isSearchSortField(value: unknown): value is SortField {
   return includesSearchValue(SEARCH_SORT_FIELDS, value);
@@ -134,32 +136,10 @@ export type SearchRequestFiltersDto = {
 
 export type SearchRequestFilterKey = keyof SearchRequestFiltersDto;
 
-export const SEARCH_REQUEST_FILTER_KEYS = [
-  "subject",
-  "number",
-  "instructor",
-  "term",
-  "year",
-  "requirement",
-  "credits",
-  "days",
-  "time",
-  "partOfTerm",
-  "online",
-  "status",
-  "workload",
-  "level",
-] as const satisfies readonly SearchRequestFilterKey[];
-
 export type AdvancedSearchStateDto = {
   filters: SearchRequestFiltersDto;
   scope?: SearchScope;
 };
-
-export const ADVANCED_SEARCH_STATE_KEYS = [
-  "filters",
-  "scope",
-] as const satisfies readonly (keyof AdvancedSearchStateDto)[];
 
 export type SearchPaginationDto = {
   limit?: number;
@@ -186,15 +166,28 @@ export type SearchRequestPaginationDto = {
   offset: number;
 };
 
-export function coerceSearchRequestDto(
+export function normalizeSearchRequestDto(
   request: SearchRequestDto,
 ): NormalizedSearchRequestDto {
-  return deepFreezeSearchContractValue({
+  if (typeof request.query !== "string") {
+    throw new TypeError("query must be a string");
+  }
+  return {
     query: request.query,
     filters: compactSearchRequestFilters(request.filters),
     sort: normalizeSearchSortDto(request.sort),
     scope: normalizeSearchScopeDto(request.scope),
-  });
+  };
+}
+
+export function normalizeSearchPaginationDto(
+  pagination: SearchPaginationDto | undefined,
+): SearchRequestPaginationDto {
+  const limit = pagination?.limit ?? SEARCH_PAGINATION_DEFAULT_LIMIT;
+  const offset = pagination?.offset ?? 0;
+  assertSearchInteger(limit, "limit", 1, SEARCH_PAGINATION_MAX_LIMIT);
+  assertSearchInteger(offset, "offset", 0, SEARCH_PAGINATION_MAX_OFFSET);
+  return { limit, offset };
 }
 
 export function searchRequestHasFilters(
@@ -212,23 +205,19 @@ export function splitAdvancedSearchState(
   };
 }
 
-export function deepFreezeSearchContractValue<T>(value: T): T {
-  if (!value || typeof value !== "object" || Object.isFrozen(value)) {
-    return value;
-  }
-
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreezeSearchContractValue((value as Record<string, unknown>)[key]);
-  }
-
-  return Object.freeze(value);
-}
-
 function normalizeSearchSortDto(sort: SearchRequestDto["sort"]): SearchSort {
-  const field = isSearchSortField(sort?.field)
-    ? sort.field
-    : DEFAULT_SEARCH_SORT.field;
+  if (sort?.field !== undefined && !isSearchSortField(sort.field)) {
+    throw new TypeError(`sort field must be one of: ${SEARCH_SORT_FIELDS.join(", ")}`);
+  }
+  const field = sort?.field ?? DEFAULT_SEARCH_SORT.field;
   const defaultDirection = SEARCH_SORT_DEFAULT_DIRECTIONS[field];
+  if (
+    sort?.direction !== undefined
+    && sort.direction !== "asc"
+    && sort.direction !== "desc"
+  ) {
+    throw new TypeError("sort direction must be one of: asc, desc");
+  }
   const direction =
     sort?.direction === "asc" || sort?.direction === "desc"
       ? sort.direction
@@ -241,7 +230,10 @@ function normalizeSearchSortDto(sort: SearchRequestDto["sort"]): SearchSort {
 }
 
 function normalizeSearchScopeDto(scope: SearchRequestDto["scope"]): SearchScope {
-  return isSearchScope(scope) ? scope : DEFAULT_SEARCH_SCOPE;
+  if (scope !== undefined && !isSearchScope(scope)) {
+    throw new TypeError(`scope must be one of: ${SEARCH_SCOPE_VALUES.join(", ")}`);
+  }
+  return scope ?? DEFAULT_SEARCH_SCOPE;
 }
 
 function compactSearchRequestFilters(
@@ -251,37 +243,82 @@ function compactSearchRequestFilters(
 
   const compact: SearchRequestFiltersDto = {};
   const subject = normalizeSearchString(filters.subject, "upper");
-  if (subject) compact.subject = subject;
+  if (subject) {
+    assertSearchPattern(subject, "subject", /^[A-Z]{2,4}$/, "a 2-4 letter subject code");
+    compact.subject = subject;
+  }
   const number = normalizeSearchString(filters.number);
-  if (number) compact.number = number;
+  if (number) {
+    assertSearchPattern(
+      number,
+      "number",
+      /^\d{3}[A-Z]?$/,
+      "a 3 digit catalog number with optional suffix",
+    );
+    compact.number = number;
+  }
   const instructor = normalizeSearchString(filters.instructor);
-  if (instructor) compact.instructor = instructor;
-  const term = normalizeEnumSearchString(filters.term, SEARCH_TERM_VALUES, "lower");
+  if (instructor) {
+    if (instructor.length > 80) {
+      throw new TypeError("instructor must be 80 characters or fewer");
+    }
+    compact.instructor = instructor;
+  }
+  const term = normalizeEnumSearchString(filters.term, "term", SEARCH_TERM_VALUES, "lower");
   if (term) compact.term = term;
-  if (filters.year !== undefined) compact.year = filters.year;
+  if (filters.year !== undefined) {
+    assertSearchInteger(filters.year, "year", 2000, 2100);
+    compact.year = filters.year;
+  }
   const requirement = normalizeSearchRequirementFilter(filters.requirement);
   if (requirement) compact.requirement = requirement;
-  if (filters.credits !== undefined) compact.credits = filters.credits;
+  if (filters.credits !== undefined) {
+    assertSearchInteger(filters.credits, "credits", 0, 8);
+    compact.credits = filters.credits;
+  }
   const days = normalizeSearchString(filters.days, "upper");
-  if (days) compact.days = days;
-  const time = normalizeEnumSearchString(filters.time, SEARCH_TIME_VALUES, "lower");
+  if (days) {
+    assertSearchPattern(days, "days", /^[MTWRFSU]{1,7}$/, "meeting-day letters like MWF or TR");
+    compact.days = days;
+  }
+  const time = normalizeEnumSearchString(filters.time, "time", SEARCH_TIME_VALUES, "lower");
   if (time) compact.time = time;
   const partOfTerm = normalizeSearchString(filters.partOfTerm, "upper");
-  if (partOfTerm) compact.partOfTerm = partOfTerm;
-  if (filters.online !== undefined) compact.online = filters.online;
+  if (partOfTerm) {
+    assertSearchPattern(
+      partOfTerm,
+      "partOfTerm",
+      /^[A-Z0-9]$/,
+      "a single Course Explorer part-of-term code",
+    );
+    compact.partOfTerm = partOfTerm;
+  }
+  if (filters.online !== undefined) {
+    if (typeof filters.online !== "boolean") {
+      throw new TypeError("online must be a boolean");
+    }
+    compact.online = filters.online;
+  }
   const status = normalizeEnumSearchString(
     filters.status,
+    "status",
     SEARCH_STATUS_VALUES,
     "lower",
   );
   if (status) compact.status = status;
   const workload = normalizeEnumSearchString(
     filters.workload,
+    "workload",
     SEARCH_WORKLOAD_VALUES,
     "lower",
   );
   if (workload) compact.workload = workload;
-  if (isSearchLevelFilter(filters.level)) compact.level = filters.level;
+  if (filters.level !== undefined) {
+    if (!isSearchLevelFilter(filters.level)) {
+      throw new TypeError(`level must be one of: ${SEARCH_LEVEL_VALUES.join(", ")}`);
+    }
+    compact.level = filters.level;
+  }
 
   return compact;
 }
@@ -290,8 +327,21 @@ function normalizeSearchRequirementFilter(
   value: SearchRequestFiltersDto["requirement"],
 ): RequirementFilter | undefined {
   if (!value) return undefined;
-  const mode = value.mode === "any" || value.mode === "all" ? value.mode : "single";
+  if (!(REQUIREMENT_FILTER_MODES as readonly unknown[]).includes(value.mode)) {
+    throw new TypeError(
+      `requirement mode must be one of: ${REQUIREMENT_FILTER_MODES.join(", ")}`,
+    );
+  }
+  for (const code of value.codes) {
+    if (!isKnownRequirementCode(code)) {
+      throw new TypeError(`unknown requirement code: ${code}`);
+    }
+  }
+  const mode = value.mode;
   const codes = mode === "single" ? value.codes.slice(0, 1) : value.codes;
+  if (mode === "single" && value.codes.length > 1) {
+    throw new TypeError("single requirement filters must contain exactly one code");
+  }
   return requirementFilter(mode, codes);
 }
 
@@ -308,13 +358,38 @@ function normalizeSearchString(
 
 function normalizeEnumSearchString<T extends string>(
   value: T | undefined,
+  name: string,
   allowed: readonly T[],
   casing?: "upper" | "lower",
 ): T | undefined {
   const normalized = normalizeSearchString(value, casing);
-  return (allowed as readonly string[]).includes(normalized ?? "")
-    ? (normalized as T)
-    : undefined;
+  if (!normalized) return undefined;
+  if (!(allowed as readonly string[]).includes(normalized)) {
+    throw new TypeError(`${name} must be one of: ${allowed.join(", ")}`);
+  }
+  return normalized as T;
+}
+
+function assertSearchInteger(
+  value: number,
+  name: string,
+  min: number,
+  max: number,
+): void {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new TypeError(`${name} must be an integer between ${min} and ${max}`);
+  }
+}
+
+function assertSearchPattern(
+  value: string,
+  name: string,
+  pattern: RegExp,
+  description: string,
+): void {
+  if (!pattern.test(value)) {
+    throw new TypeError(`${name} must be ${description}`);
+  }
 }
 
 function includesSearchValue<const Values extends readonly unknown[]>(

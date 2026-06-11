@@ -1,15 +1,11 @@
-import type { DecisionQueryType, RetrievalLane, SearchPlanWarningKind } from '../services/search-planner-types.js';
+import type { SearchIntentKind, SearchPlanWarningKind } from '../services/search-planner-types.js';
 
 export type { QueryFailureClass } from '@uiuc-course-search/query-types';
 
-export interface ExpectedRescuePlan {
-  queryTypes?: DecisionQueryType[];
+interface ExpectedSearchIntent {
+  queryTypes?: SearchIntentKind[];
   negativeTerms?: string[];
   warnings?: SearchPlanWarningKind[];
-  interpretedLanes?: RetrievalLane[];
-  relaxationSteps?: string[];
-  assumptions?: string[];
-  needsStudentProfile?: boolean;
 }
 
 export interface ResultSelector {
@@ -22,7 +18,7 @@ export interface ResultSelector {
   level_lte?: number;
 }
 
-export interface ResultCoherenceExpectation {
+interface ResultCoherenceExpectation {
   non_empty?: boolean;
   top_k?: number;
   must_include?: ResultSelector[];
@@ -43,13 +39,10 @@ export interface GoldQuery {
   expected_filters: Record<string, unknown>;
   expected_filter_keys?: string[];
   expected_soft_preferences?: Record<string, unknown>;
-  expected_rescue?: ExpectedRescuePlan;
-  expected_residual: string;
+  expected_intent?: ExpectedSearchIntent;
   expected_top1?: string;
   expected_top1_title?: string;
   expected_results?: ResultCoherenceExpectation;
-  require_term_metadata?: boolean;
-  allow_fallback_relaxation?: boolean;
   invariants?: {
     subject?: string;
     level_gte?: number;
@@ -76,7 +69,6 @@ export interface GoldQuery {
 export interface EvalResult {
   query: GoldQuery;
   actualFilters: Record<string, unknown>;
-  actualResidual: string;
   results: Array<{
     id: string;
     title: string;
@@ -94,7 +86,6 @@ export interface EvalResult {
   violations: string[];  // list of violated invariants
   parseViolations: string[];
   resultViolations: string[];
-  tierReached: number | null;
 }
 
 export interface EvalMetrics {

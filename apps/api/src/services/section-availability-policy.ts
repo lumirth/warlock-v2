@@ -1,9 +1,10 @@
 import type {
   CourseSectionAvailabilityDto,
   CourseSectionAvailabilityStatus,
+  SearchStatusFilter,
 } from "@uiuc-course-search/query-types";
 
-export type SectionAvailabilityInput = {
+type SectionAvailabilityInput = {
   status?: string | null;
   statusCode?: string | null;
   sectionStatusCode?: string | null;
@@ -17,6 +18,18 @@ const STATUS_LABELS: Record<CourseSectionAvailabilityStatus, string> = {
   cancelled: "Cancelled",
   unknown: "Unknown",
 };
+
+const SEARCH_STATUS_RAW_LABELS: Record<SearchStatusFilter, readonly string[]> = {
+  open: ["Open"],
+  available: ["Open", "Restricted"],
+  closed: ["Closed"],
+};
+
+export function rawSectionStatusesForSearchFilter(
+  status: SearchStatusFilter,
+): readonly string[] {
+  return SEARCH_STATUS_RAW_LABELS[status];
+}
 
 export function normalizeSectionAvailability(
   input: SectionAvailabilityInput,

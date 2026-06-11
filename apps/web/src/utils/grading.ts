@@ -5,20 +5,25 @@ import {
   type WorkloadTierLabel,
 } from '@uiuc-course-search/query-types'
 
-export type QualityLabel = QualityTierLabel
-export type WorkloadLabel = WorkloadTierLabel
+type QualityLabel = QualityTierLabel
+type WorkloadLabel = WorkloadTierLabel
+export type MetricTone = 'success' | 'warning' | 'destructive' | 'muted'
 
-export function getQualityLabel(score: number): QualityLabel {
-  return getQualityTierLabel(score) ?? 'Low'
+export function isFiniteMetric(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
 }
 
-export function getWorkloadLabel(score: number): WorkloadLabel {
-  return getWorkloadTierLabel(score) ?? 'Easy'
+export function getQualityLabel(score: number): QualityLabel | 'N/A' {
+  return getQualityTierLabel(score) ?? 'N/A'
+}
+
+export function getWorkloadLabel(score: number): WorkloadLabel | 'N/A' {
+  return getWorkloadTierLabel(score) ?? 'N/A'
 }
 
 export function getQualityTone(
   label: QualityLabel | 'N/A'
-): 'success' | 'warning' | 'destructive' | 'muted' {
+): MetricTone {
   if (label === 'N/A') return 'muted'
   if (label === 'Excellent' || label === 'Good') return 'success'
   if (label === 'Fair') return 'warning'
@@ -27,9 +32,17 @@ export function getQualityTone(
 
 export function getWorkloadTone(
   label: WorkloadLabel | 'N/A'
-): 'success' | 'warning' | 'destructive' | 'muted' {
+): MetricTone {
   if (label === 'N/A') return 'muted'
   if (label === 'Hard') return 'destructive'
   if (label === 'Moderate') return 'warning'
   return 'success'
+}
+
+export function metricToneTextClass(tone?: MetricTone): string {
+  if (tone === 'success') return 'text-success'
+  if (tone === 'warning') return 'text-warning'
+  if (tone === 'destructive') return 'text-destructive'
+  if (tone === 'muted') return 'text-muted-foreground'
+  return ''
 }

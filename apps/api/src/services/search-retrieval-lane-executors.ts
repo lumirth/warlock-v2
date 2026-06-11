@@ -1,152 +1,112 @@
 import type { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
 import { searchCourses as semanticSearch } from "./embeddings.js";
 import { errorFields, logger } from "../observability/logger.js";
-import type { RetrievalLane } from "./search-planner-types.js";
-import {
-  enabledRetrievalLanes,
-  type RetrievalLaneExecution,
-  type RetrievalPlan,
+import type {
+  RetrievalLaneExecution,
+  RetrievalPlan,
 } from "./search-retrieval-plan.js";
 import {
+  exactCourseSearch,
   keywordSearch,
+  structuredCourseSearch,
 } from "./search-retrieval-course-lanes.js";
 import {
   postFilterSemanticResults,
   sectionKeywordSearch,
-  structuredSectionLaneSearch,
 } from "./search-retrieval-section-lanes.js";
-import {
-  requirementLaneSearch,
-} from "./search-retrieval-requirement-lanes.js";
-import {
-  studentAliasLaneSearch,
-} from "./search-retrieval-alias-lanes.js";
-import {
-  workloadEvidenceLaneSearch,
-} from "./search-retrieval-workload-lanes.js";
-import type { RetrievalLaneResult } from "./search-types.js";
+import type { RetrievalLane, RetrievalLaneResult } from "./search-types.js";
 
-export type RetrievalLaneExecutorContext = {
+type RetrievalLaneExecutorContext = {
   db: D1Database;
   vectorize: VectorizeIndex;
   ai: Ai;
   retrievalPlan: RetrievalPlan;
 };
 
-type RetrievalLaneExecutor = {
-  lane: RetrievalLane;
-  execute: (
-    context: RetrievalLaneExecutorContext,
-    lane: RetrievalLaneExecution,
-  ) => Promise<RetrievalLaneResult[]>;
-};
-
-const keywordLaneExecutor = (lane: "exact" | "official_text"): RetrievalLaneExecutor => ({
-  lane,
-  execute: ({ db, retrievalPlan }, laneExecution) => {
-    return keywordSearch(db, retrievalPlan.inputs, laneExecution.limit);
-  },
-});
+type RetrievalLaneExecutor = (
+  context: RetrievalLaneExecutorContext,
+  lane: RetrievalLaneExecution,
+) => Promise<RetrievalLaneResult[]>;
 
 const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
-  exact: keywordLaneExecutor("exact"),
-  official_text: keywordLaneExecutor("official_text"),
-  section_text: {
-    lane: "section_text",
-    execute: ({ db, retrievalPlan }, laneExecution) => {
-      return sectionKeywordSearch(
-        db,
-        retrievalPlan.inputs.keywordQuery,
-        retrievalPlan.inputs.filters,
-        laneExecution.limit,
-      );
-    },
+  exact: ({ db, retrievalPlan }, laneExecution) => {
+    return exactCourseSearch(
+      db,
+      retrievalPlan.inputs.filters,
+      laneExecution.limit,
+      retrievalPlan.inputs.scope,
+    );
   },
-  requirement: {
-    lane: "requirement",
-    execute: ({ db, retrievalPlan }, laneExecution) => {
-      return requirementLaneSearch(
-        db,
-        retrievalPlan.inputs.filters,
-        laneExecution.limit,
-      );
-    },
+  official_text: ({ db, retrievalPlan }, laneExecution) => {
+    return keywordSearch(db, retrievalPlan.inputs, laneExecution.limit);
   },
-  structured_section: {
-    lane: "structured_section",
-    execute: ({ db, retrievalPlan }, laneExecution) => {
-      return structuredSectionLaneSearch(
-        db,
-        retrievalPlan.inputs.filters,
-        laneExecution.limit,
-      );
-    },
+  structured_course: ({ db, retrievalPlan }, laneExecution) => {
+    return structuredCourseSearch(
+      db,
+      retrievalPlan.inputs.filters,
+      laneExecution.limit,
+      retrievalPlan.inputs.scope,
+    );
   },
-  student_language_alias: {
-    lane: "student_language_alias",
-    execute: ({ db, retrievalPlan }, laneExecution) => {
-      return studentAliasLaneSearch(
-        db,
-        retrievalPlan.inputs.filters,
-        retrievalPlan.inputs.aliasQuery,
-        laneExecution.limit,
-      );
-    },
+  section_text: ({ db, retrievalPlan }, laneExecution) => {
+    return sectionKeywordSearch(
+      db,
+      retrievalPlan.inputs.keywordQuery,
+      retrievalPlan.inputs.filters,
+      laneExecution.limit,
+      retrievalPlan.inputs.scope,
+    );
   },
-  topic_semantic: {
-    lane: "topic_semantic",
-    execute: async ({ db, vectorize, ai, retrievalPlan }, laneExecution) => {
-      const rawSemanticResults = await semanticSearch(
-        vectorize,
-        ai,
-        retrievalPlan.inputs.semanticQuery,
-        retrievalPlan.inputs.filters,
-        laneExecution.limit,
-      );
-      const semanticResults = await postFilterSemanticResults(
-        db,
-        rawSemanticResults,
-        retrievalPlan.inputs.filters,
-      );
-      return semanticResults.map((row, index): RetrievalLaneResult => ({
-        id: row.id,
-        lane: "topic_semantic",
-        rank: index + 1,
-        rawScore: row.score,
-        reason: "Semantic topic recall.",
-        matchedTerms: [retrievalPlan.inputs.semanticQuery].filter(Boolean),
-      }));
-    },
-  },
-  workload_evidence: {
-    lane: "workload_evidence",
-    execute: ({ db, retrievalPlan }, laneExecution) => {
-      return workloadEvidenceLaneSearch(
-        db,
-        retrievalPlan.inputs.filters,
-        retrievalPlan.inputs.workloadSignalTypes,
-        laneExecution.limit,
-      );
-    },
-  },
-  help_path: {
-    lane: "help_path",
-    execute: async () => [],
+  topic_semantic: async ({ db, vectorize, ai, retrievalPlan }, laneExecution) => {
+    const rawSemanticResults = await semanticSearch(
+      vectorize,
+      ai,
+      retrievalPlan.inputs.semanticQuery,
+      {
+        filters: retrievalPlan.inputs.filters,
+        topK: laneExecution.limit,
+        termIds: retrievalPlan.inputs.semanticTermIds,
+      },
+    );
+    const semanticResults = await postFilterSemanticResults(
+      db,
+      rawSemanticResults,
+      retrievalPlan.inputs.filters,
+      retrievalPlan.inputs.scope,
+    );
+    return semanticResults.map((row, index): RetrievalLaneResult => ({
+      id: row.id,
+      lane: "topic_semantic",
+      rank: index + 1,
+      rawScore: row.score,
+      reason: "Semantic topic recall.",
+      matchedTerms: [retrievalPlan.inputs.semanticQuery].filter(Boolean),
+    }));
   },
 };
 
 export async function executeRetrievalLanes(
   context: RetrievalLaneExecutorContext,
 ): Promise<RetrievalLaneResult[]> {
-  const laneRuns = enabledRetrievalLanes(context.retrievalPlan).map(async laneExecution => {
+  const laneRuns = context.retrievalPlan.lanes.map(async laneExecution => {
     const executor = RETRIEVAL_LANE_EXECUTORS[laneExecution.lane];
     try {
-      return await executor.execute(context, laneExecution);
+      return {
+        failed: false as const,
+        rows: await executor(context, laneExecution),
+      };
     } catch (err) {
       logger.warn(`search.${laneExecution.lane}.failed`, { ...errorFields(err) });
-      return [];
+      return {
+        failed: true as const,
+        rows: [] as RetrievalLaneResult[],
+      };
     }
   });
 
-  return (await Promise.all(laneRuns)).flat();
+  const runs = await Promise.all(laneRuns);
+  if (runs.length > 0 && runs.every((run) => run.failed)) {
+    throw new Error("All search retrieval lanes failed");
+  }
+  return runs.flatMap((run) => run.rows);
 }

@@ -13,28 +13,15 @@ import {
 import { errorFields, logger } from "../observability/logger.js";
 import {
   buildSearchCandidateBudget,
-  type SearchPageWindow,
 } from "./search-budget.js";
 import {
   controlsWithPlanInferredSort,
   normalizeSearchControls,
 } from "./search-controls.js";
 import { executeSearchPlan } from "./search-executor.js";
-import { buildRecoveryGroups } from "./search-recovery.js";
-import {
-  assembleSearchPipelineResult,
-  type SearchPipelineResult,
-} from "./search-response.js";
-import {
-  createSearchPlan,
-  extractSearchPlanningInput,
-} from "./search-plan-compiler.js";
-import {
-  deepFreeze,
-  type CanonicalSearchRequest,
-} from "./search-request.js";
-
-export type { SearchPipelineResult } from "./search-response.js";
+import type { SearchPipelineResult } from "./search-pipeline-result.js";
+import { createSearchPlan } from "./search-plan-compiler.js";
+import type { NormalizedSearchRequestDto } from "@uiuc-course-search/query-types";
 
 type WaitUntil = (promise: Promise<unknown>) => void;
 
@@ -48,55 +35,16 @@ export class SearchPipeline {
 
   /**
    * Main search entry point. SearchPipeline owns planning/cache orchestration;
-   * execution details live in retrieval-plan, executor, controls, and recovery modules.
+   * execution details live in retrieval-plan, executor, and controls modules.
    */
   async search(
-    request: CanonicalSearchRequest,
-    page: Partial<SearchPageWindow> = {},
+    request: NormalizedSearchRequestDto,
     waitUntil?: WaitUntil,
   ): Promise<SearchPipelineResult> {
-    const startTime = performance.now();
     const query = request.query;
-    const controls = normalizeSearchControls({
-      sort: request.sort,
-      scope: request.scope,
-    });
-    const pageWindow: SearchPageWindow = {
-      limit: page.limit ?? 20,
-      offset: page.offset ?? 0,
-    };
-
-    let planning = await getCachedSearchPlan(
-      this.searchCache,
-      request,
-    ).catch((error) => {
-      logger.warn("search.cache.plan_get_failed", { ...errorFields(error) });
-      return null;
-    });
-    if (!planning) {
-      const planningInput = extractSearchPlanningInput(query);
-      planning = await createSearchPlan(
-        this.db,
-        query,
-        planningInput,
-        request.filters,
-      );
-      enqueueCacheWrite(
-        cacheSearchPlan(this.searchCache, request, planning),
-        waitUntil,
-        "search.cache.plan_put_failed",
-      );
-    }
-    const extractionEndTime = performance.now();
-    const { extraction, queryResidual, plan, compilerEvents } = deepFreeze(planning);
-    const fallbackPlans = deepFreeze(planning.fallbackPlans ?? []);
-    const effectiveControls = controlsWithPlanInferredSort(controls, plan);
-    const budget = buildSearchCandidateBudget(plan, pageWindow, effectiveControls);
-
     const cachedResult = await getCachedSearchResult(
       this.searchCache,
       request,
-      budget.executionResultLimit,
     ).catch((error) => {
       logger.warn("search.cache.result_get_failed", { ...errorFields(error) });
       return null;
@@ -105,46 +53,62 @@ export class SearchPipeline {
       return cachedResult;
     }
 
-    const searchStartTime = performance.now();
+    const controls = normalizeSearchControls({
+      sort: request.sort,
+      scope: request.scope,
+    });
+    let planning = await getCachedSearchPlan(
+      this.searchCache,
+      request,
+    ).catch((error) => {
+      logger.warn("search.cache.plan_get_failed", { ...errorFields(error) });
+      return null;
+    });
+    if (!planning) {
+      planning = await createSearchPlan(
+        this.db,
+        query,
+        request.filters,
+      );
+      enqueueCacheWrite(
+        cacheSearchPlan(this.searchCache, request, planning),
+        waitUntil,
+        "search.cache.plan_put_failed",
+      );
+    }
+    const { extraction, queryResidual, plan, compilerEvents } = planning;
+    const effectiveControls = controlsWithPlanInferredSort(controls, plan);
+    const budget = buildSearchCandidateBudget();
+
     const execution = await executeSearchPlan(
       this.db,
       this.vectorize,
       this.ai,
       plan,
-      pageWindow,
       effectiveControls,
-      fallbackPlans,
       budget,
     );
-    const recoveryGroups = buildRecoveryGroups(
-      plan,
-      request,
-      execution.results.length,
-    );
-    const searchEndTime = performance.now();
-    const totalEndTime = performance.now();
-    const result = assembleSearchPipelineResult({
-      rawQuery: query,
-      queryResidual,
-      extractionHints: extraction.hints,
-      compilerEvents,
-      plan,
-      execution,
-      recoveryGroups,
-      appliedSort: effectiveControls.sort,
-      appliedScope: effectiveControls.scope,
-      timings: {
-        extractionMs: extractionEndTime - startTime,
-        searchMs: searchEndTime - searchStartTime,
-        totalMs: totalEndTime - startTime,
+    const result: SearchPipelineResult = {
+      results: execution.results,
+      totalResults: execution.totalResults,
+      meta: {
+        query: {
+          raw: query,
+          residual: queryResidual,
+        },
+        extraction: {
+          hints: extraction.hints,
+        },
+        compilerEvents,
+        plan,
+        retrievalPlan: execution.retrievalPlan,
       },
-    });
+    };
 
     enqueueCacheWrite(
       cacheSearchResult(
         this.searchCache,
         request,
-        budget.executionResultLimit,
         result,
       ),
       waitUntil,

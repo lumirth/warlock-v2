@@ -1,8 +1,8 @@
 import type { GoldQuery, EvalResult, ResultSelector } from './types.js';
-import type { SearchPlanRescue } from '../services/search-planner-types.js';
-import { canonicalRequirementCode } from '../services/requirement-codes.js';
+import type { SearchIntent } from '../services/search-planner-types.js';
+import { canonicalRequirementCode } from '@uiuc-course-search/query-types';
 
-export interface ApiSearchResult {
+interface ApiSearchResult {
   id: string;
   title: string;
   subject: string;
@@ -14,32 +14,15 @@ export interface ApiSearchResult {
     attributeCode?: string | null;
     attribute_code?: string | null;
   }>;
-  score?: number;
 }
 
 export interface SearchResponseForEval {
   results: unknown[];
-  meta: {
-    query: {
-      residual: string;
-    };
-    fallback?: {
-      tierReached: number;
-      constraintsRelaxed?: string[];
-      originalResultCount?: number;
-    };
-    term?: {
-      activeTermId: string | null;
-      registrableTermId: string | null;
-      activeTermIds?: string[];
-      registrableTermIds?: string[];
-    };
-  };
   _debug?: {
     plan: {
       filters: Record<string, unknown>;
       softPreferences?: Record<string, unknown>;
-      rescue?: SearchPlanRescue;
+      intent?: SearchIntent;
     };
     extraction: {
       hints: unknown[];
@@ -93,7 +76,6 @@ function normalizeApiSearchResult(result: unknown): ApiSearchResult {
   const publicCourse = isRecord(result.course) ? result.course : null;
   const source = publicCourse ?? result;
   const metrics = isRecord(source.metrics) ? source.metrics : {};
-  const search = isRecord(result.search) ? result.search : {};
 
   return {
     id: stringValue(source.id ?? result.id),
@@ -102,7 +84,6 @@ function normalizeApiSearchResult(result: unknown): ApiSearchResult {
     number: stringValue(source.number ?? result.number),
     avg_gpa: numberValue(result.avg_gpa ?? metrics.avgGpa),
     requirements: normalizeRequirements(source.requirements ?? result.requirements),
-    score: numberValue(result.score ?? search.score),
   };
 }
 
@@ -158,12 +139,6 @@ export function checkExpectedKeys(
     .map(key => `${label}.${key} expected to be present`);
 }
 
-export function checkExpectedResidual(query: GoldQuery, actualResidual: string): string[] {
-  return actualResidual === query.expected_residual
-    ? []
-    : [`residual expected ${formatValue(query.expected_residual)}, got ${formatValue(actualResidual)}`];
-}
-
 function checkExpectedArraySubset<T>(
   label: string,
   expected: T[] | undefined,
@@ -177,35 +152,23 @@ function checkExpectedArraySubset<T>(
     .map(value => `${label} expected to include ${formatValue(value)}, got ${formatValue(actual ?? [])}`);
 }
 
-export function checkExpectedRescue(query: GoldQuery, rescue: SearchPlanRescue | undefined): string[] {
-  if (!query.expected_rescue) return [];
-  const expected = query.expected_rescue;
+export function checkExpectedIntent(query: GoldQuery, intent: SearchIntent | undefined): string[] {
+  if (!query.expected_intent) return [];
+  const expected = query.expected_intent;
   const violations = [
-    ...checkExpectedArraySubset('rescue.queryTypes', expected.queryTypes, rescue?.queryTypes),
-    ...checkExpectedArraySubset('rescue.negativeTerms', expected.negativeTerms, rescue?.negativeTerms),
-    ...checkExpectedArraySubset('rescue.warnings', expected.warnings, rescue?.warnings.map(warning => warning.kind)),
-    ...checkExpectedArraySubset('rescue.interpretedLanes', expected.interpretedLanes, rescue?.interpretedLanes),
-    ...checkExpectedArraySubset('rescue.relaxationPlan', expected.relaxationSteps, rescue?.relaxationPlan.map(step => step.id)),
-    ...checkExpectedArraySubset('rescue.assumptions', expected.assumptions, rescue?.assumptions.map(assumption => assumption.kind)),
+    ...checkExpectedArraySubset('intent.queryTypes', expected.queryTypes, intent?.queryTypes),
+    ...checkExpectedArraySubset('intent.negativeTerms', expected.negativeTerms, intent?.negativeTerms),
+    ...checkExpectedArraySubset('intent.warnings', expected.warnings, intent?.warnings.map(warning => warning.kind)),
   ];
 
-  if (
-    expected.needsStudentProfile !== undefined
-    && rescue?.needsStudentProfile !== expected.needsStudentProfile
-  ) {
-    violations.push(
-      `rescue.needsStudentProfile expected ${formatValue(expected.needsStudentProfile)}, got ${formatValue(rescue?.needsStudentProfile)}`
-    );
-  }
-
-  if (!rescue) {
-    violations.push('rescue expected to be present');
+  if (!intent) {
+    violations.push('intent expected to be present');
   }
 
   return violations;
 }
 
-export function checkInvariants(query: GoldQuery, results: ApiSearchResult[]): string[] {
+function checkInvariants(query: GoldQuery, results: ApiSearchResult[]): string[] {
   const violations: string[] = [];
   if (!query.invariants) return violations;
 
@@ -352,7 +315,7 @@ export function checkResultCoherence(query: GoldQuery, results: ApiSearchResult[
   return violations;
 }
 
-export function calculateReciprocalRank(query: GoldQuery, results: ApiSearchResult[]): number | null {
+function calculateReciprocalRank(query: GoldQuery, results: ApiSearchResult[]): number | null {
   if (!query.expected_top1 && !query.expected_top1_title) {
     return null;
   }
@@ -385,13 +348,11 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
     return {
       query,
       actualFilters: {},
-      actualResidual: data.meta.query.residual,
       results,
       reciprocalRank: calculateReciprocalRank(query, results),
       violations: [missingDebug],
       parseViolations: [missingDebug],
       resultViolations: [],
-      tierReached: data.meta.fallback?.tierReached ?? null,
     };
   }
 
@@ -399,61 +360,46 @@ export function evaluateSearchResponse(query: GoldQuery, data: SearchResponseFor
     ...checkExpectedObject('filters', query.expected_filters, plannerDebug.plan.filters),
     ...checkExpectedKeys('filters', query.expected_filter_keys, plannerDebug.plan.filters),
     ...checkExpectedObject('softPreferences', query.expected_soft_preferences, plannerDebug.plan.softPreferences),
-    ...checkExpectedRescue(query, plannerDebug.plan.rescue),
-    ...checkExpectedResidual(query, data.meta.query.residual),
+    ...checkExpectedIntent(query, plannerDebug.plan.intent),
   ];
-  const resultViolations = checkPublicResultViolations(query, data, results);
+  const resultViolations = checkPublicResultViolations(query, results);
 
   const violations = [...parseViolations, ...resultViolations];
 
   return {
     query,
     actualFilters: plannerDebug.plan.filters,
-    actualResidual: data.meta.query.residual,
     results,
     reciprocalRank: calculateReciprocalRank(query, results),
     violations,
     parseViolations,
     resultViolations,
-    tierReached: data.meta.fallback?.tierReached ?? null,
   };
 }
 
 export function evaluatePublicSearchResponse(query: GoldQuery, data: SearchResponseForEval): EvalResult {
   const results = normalizeApiSearchResults(data.results);
-  const resultViolations = checkPublicResultViolations(query, data, results);
+  const resultViolations = checkPublicResultViolations(query, results);
 
   return {
     query,
     actualFilters: {},
-    actualResidual: data.meta.query.residual,
     results,
     reciprocalRank: calculateReciprocalRank(query, results),
     violations: resultViolations,
     parseViolations: [],
     resultViolations,
-    tierReached: data.meta.fallback?.tierReached ?? null,
   };
 }
 
 function checkPublicResultViolations(
   query: GoldQuery,
-  data: SearchResponseForEval,
   results: ApiSearchResult[],
 ): string[] {
   const violations = [
     ...checkInvariants(query, results),
     ...checkResultCoherence(query, results),
   ];
-
-  if (query.require_term_metadata && !data.meta.term) {
-    violations.push('term metadata is missing');
-  }
-
-  const relaxed = data.meta.fallback?.constraintsRelaxed ?? [];
-  if (!query.allow_fallback_relaxation && relaxed.length > 0) {
-    violations.push(`fallback relaxed hard constraints: ${relaxed.join(', ')}`);
-  }
 
   return violations;
 }

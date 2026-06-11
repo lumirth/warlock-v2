@@ -6,7 +6,7 @@ import { errorFields, logger } from '../observability/logger.js';
 import { getSubjectsForTerm } from './parallel-sync.js';
 import { MAX_SYNC_SUBJECTS_PER_REQUEST, type SyncBatchRequest } from './sync-batch-contract.js';
 
-export type CourseSyncCoordinatorEnv = {
+type CourseSyncCoordinatorEnv = {
   DB: D1Database;
   SELF: Fetcher;
   CISAPI_BASE: string;
@@ -16,13 +16,13 @@ export type CourseSyncCoordinatorEnv = {
 
 export type CourseSyncTrigger = 'default_cron' | 'gpa_resume_fallthrough';
 
-export type CourseSyncCoordinatorOptions = {
+type CourseSyncCoordinatorOptions = {
   runId: string;
   cron: string;
   trigger: CourseSyncTrigger;
 };
 
-export type CourseSyncTermResult = {
+type CourseSyncTermResult = {
   termId: string;
   subjectCount: number;
   batchCount: number;
@@ -30,7 +30,7 @@ export type CourseSyncTermResult = {
   success: boolean;
 };
 
-export type CourseSyncCoordinatorResult = {
+type CourseSyncCoordinatorResult = {
   termCount: number;
   results: CourseSyncTermResult[];
   failedTermCount: number;

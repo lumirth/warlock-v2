@@ -1,11 +1,10 @@
-import type { CISAPICourseDetail } from '../cisapi/types.js';
-import type { ParsedCascadeCourse, ParsedSubjectCascade } from '../cisapi/parser.js';
+import type { CourseExplorerCourse, ParsedSubjectCascade } from '../cisapi/parser.js';
 import { makeCourseId, makeSectionId, makeTermId } from '../db/ids.js';
 import type { Course, Section, Subject, Meeting } from '../db/types.js';
 
-export type SnapshotInstructor = { firstName: string; lastName: string };
+type SnapshotInstructor = { firstName: string; lastName: string };
 
-export interface SectionSnapshot {
+interface SectionSnapshot {
   section: Section;
   meetings: (Omit<Meeting, 'id'> & { instructors: SnapshotInstructor[] })[];
 }
@@ -32,11 +31,6 @@ export interface SubjectSnapshot {
   syncTimestamp: number;
 }
 
-export type SectionWithDetails = SectionSnapshot;
-export type CourseWithSections = CourseSnapshot;
-export type TransformedGenEdCategory = CourseGenEdSnapshot;
-export type TransformResult = SubjectSnapshot;
-
 type TransformOptions = {
   syncTimestamp?: number;
 };
@@ -51,7 +45,7 @@ export function formatInstructorName(
     : instructor.lastName;
 }
 
-export function formatInstructors(instructors: string[]): string | null {
+function formatInstructors(instructors: string[]): string | null {
   if (instructors.length === 0) return null;
   return instructors.join('; ');
 }
@@ -76,16 +70,17 @@ export function fromSubjectCascade(
     address_line1: parsed.subjectMetadata?.addressLine1 || null,
     address_line2: parsed.subjectMetadata?.addressLine2 || null,
     phone_number: parsed.subjectMetadata?.phoneNumber || null,
-    website_url: parsed.subjectMetadata?.websiteUrl || null,
-    description: parsed.subjectMetadata?.description || null,
+    website_url: parsed.subjectMetadata?.webSiteURL || null,
+    description: parsed.subjectMetadata?.collegeDepartmentDescription || null,
     last_synced: now,
   };
 
   return {
     subject,
-    courses: parsed.courses.map(course => transformCascadeCourseToSnapshot({
+    courses: parsed.courses.map(course => transformCourseExplorerCourseToSnapshot({
       course,
       subjectId: parsed.subjectId,
+      courseNumber: courseNumberFromSourceId(course.id),
       year,
       term,
       termId,
@@ -99,7 +94,7 @@ export function fromSubjectCascade(
 }
 
 export function fromCourseDetail(
-  parsed: CISAPICourseDetail,
+  parsed: CourseExplorerCourse,
   subject: string,
   number: string,
   year: number,
@@ -109,9 +104,10 @@ export function fromCourseDetail(
   const termId = makeTermId(year, term);
   const syncTimestamp = options.syncTimestamp ?? Math.floor(Date.now() / 1000);
 
-  return transformCascadeCourseToSnapshot({
-    course: courseDetailToCascadeCourse(parsed, subject, number),
+  return transformCourseExplorerCourseToSnapshot({
+    course: parsed,
     subjectId: subject,
+    courseNumber: number,
     year,
     term,
     termId,
@@ -119,22 +115,24 @@ export function fromCourseDetail(
   });
 }
 
-function transformCascadeCourseToSnapshot({
+function transformCourseExplorerCourseToSnapshot({
   course,
   subjectId,
+  courseNumber,
   year,
   term,
   termId,
   syncTimestamp,
 }: {
-  course: ParsedCascadeCourse;
+  course: CourseExplorerCourse;
   subjectId: string;
+  courseNumber: string;
   year: number;
   term: string;
   termId: string;
   syncTimestamp: number;
 }): CourseSnapshot {
-  const courseId = makeCourseId(subjectId, course.id, year, term);
+  const courseId = makeCourseId(subjectId, courseNumber, year, term);
 
   const allInstructors = new Set<string>();
   const lectureInstructors = new Set<string>();
@@ -164,8 +162,8 @@ function transformCascadeCourseToSnapshot({
     course: {
       id: courseId,
       subject: subjectId,
-      number: course.id,
-      title: course.title,
+      number: courseNumber,
+      title: course.label,
       description: course.description || null,
       credit_hours: parseInt(course.creditHours, 10) || null,
       year,
@@ -228,9 +226,9 @@ function transformCascadeCourseToSnapshot({
         credit_hours: s.creditHours || null,
       };
 
-      const meetings = s.meetings.map(m => ({
+      const meetings = s.meetings.map((m, meetingIndex) => ({
         section_id: sectionId,
-        meeting_index: m.index,
+        meeting_index: meetingIndex,
         type_code: m.typeCode || null,
         type_name: m.type || null,
         days: m.daysOfTheWeek || null,
@@ -248,12 +246,12 @@ function transformCascadeCourseToSnapshot({
   };
 }
 
-function flattenGenEdCategories(course: Pick<ParsedCascadeCourse, 'genEdCategories'>): CourseGenEdSnapshot[] {
+function flattenGenEdCategories(course: Pick<CourseExplorerCourse, 'genEdCategories'>): CourseGenEdSnapshot[] {
   return course.genEdCategories.flatMap<CourseGenEdSnapshot>(cat => {
     if (cat.attributes.length === 0) {
       return [{
         categoryId: cat.id,
-        categoryName: cat.name || null,
+        categoryName: cat.description || null,
         attributeCode: null,
         attributeName: null,
       }];
@@ -261,65 +259,13 @@ function flattenGenEdCategories(course: Pick<ParsedCascadeCourse, 'genEdCategori
 
     return cat.attributes.map(attr => ({
       categoryId: cat.id,
-      categoryName: cat.name || null,
+      categoryName: cat.description || null,
       attributeCode: attr.code || null,
-      attributeName: attr.name || null,
+      attributeName: attr.description || null,
     }));
   });
 }
 
-function courseDetailToCascadeCourse(
-  parsed: CISAPICourseDetail,
-  subject: string,
-  number: string
-): ParsedCascadeCourse {
-  return {
-    id: number,
-    subject,
-    title: parsed.label,
-    description: parsed.description,
-    creditHours: parsed.creditHours,
-    courseSectionInformation: parsed.courseSectionInformation,
-    sectionDegreeAttributes: parsed.sectionDegreeAttributes,
-    classScheduleInformation: parsed.classScheduleInformation,
-    sectionDateRange: parsed.sectionDateRange,
-    sectionRegistrationNotes: parsed.sectionRegistrationNotes,
-    sectionApprovalCode: parsed.sectionApprovalCode,
-    genEdCategories: parsed.genEdCategories.map(category => ({
-      id: category.id,
-      name: category.description,
-      attributes: category.attributes.map(attribute => ({
-        code: attribute.code,
-        name: attribute.description,
-      })),
-    })),
-    sections: parsed.sections.map(section => ({
-      crn: section.crn,
-      sectionNumber: section.sectionNumber,
-      sectionTitle: section.sectionTitle,
-      enrollmentStatus: section.enrollmentStatus,
-      statusCode: section.statusCode,
-      sectionStatusCode: section.sectionStatusCode,
-      sectionText: section.sectionText,
-      sectionNotes: section.sectionNotes,
-      sectionCappArea: section.sectionCappArea,
-      sectionDateRange: section.sectionDateRange,
-      partOfTerm: section.partOfTerm,
-      startDate: section.startDate,
-      endDate: section.endDate,
-      creditHours: section.creditHours,
-      meetings: section.meetings.map((meeting, index) => ({
-        index,
-        typeCode: meeting.typeCode,
-        type: meeting.type,
-        start: meeting.start,
-        end: meeting.end,
-        daysOfTheWeek: meeting.daysOfTheWeek,
-        buildingName: meeting.buildingName,
-        roomNumber: meeting.roomNumber,
-        meetingDateRange: meeting.meetingDateRange,
-        instructors: meeting.instructors,
-      })),
-    })),
-  };
+function courseNumberFromSourceId(sourceId: string): string {
+  return sourceId.trim().split(/\s+/).at(-1) ?? sourceId;
 }

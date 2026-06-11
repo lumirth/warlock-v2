@@ -1,10 +1,10 @@
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
 import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from './enrichment.js';
-import { resumeGpaSync, resetGpaSync } from './gpa-sync.js';
+import { resetGpaSync } from './gpa-sync.js';
 import { coordinateRmpSync, processRmpBatch, type RmpTeacherNode } from './rmp-sync.js';
 import type { SyncRouteBindings } from './sync-operations.js';
 
-export type EnrichmentApplicationEnv = Pick<
+type EnrichmentApplicationEnv = Pick<
   SyncRouteBindings,
   'DB' | 'SELF' | 'INTERNAL_TOKEN' | 'RMP_AUTH_TOKEN' | 'GPA_CACHE'
 >;
@@ -42,8 +42,4 @@ export async function runGpaEnrichment(db: D1Database) {
 export async function resetGpaCursor(db: D1Database, cache: KVNamespace) {
   await resetGpaSync(db, cache);
   return { message: 'GPA sync cursor reset to 0.' };
-}
-
-export function resumeGpaEnrichment(db: D1Database, cache: KVNamespace) {
-  return resumeGpaSync(db, cache);
 }

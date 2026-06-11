@@ -1,12 +1,11 @@
 import {
-  DEFAULT_SEARCH_SORT,
   SEARCH_SORT_DEFAULT_DIRECTIONS,
   type SearchSort,
   type SortDirection,
   type SortField,
 } from '@uiuc-course-search/query-types'
 
-export const RESULT_VIEW_STORAGE_KEY = 'uiuc-course-search.result-view'
+const RESULT_VIEW_STORAGE_KEY = 'uiuc-course-search.result-view'
 
 export type ResultViewMode = 'cards' | 'table'
 
@@ -75,5 +74,3 @@ export function sortButtonLabel(
   const nextDirection = direction === 'asc' ? 'desc' : 'asc'
   return `Sort by ${label}, ${directionLabel(nextDirection).toLowerCase()}`
 }
-
-export { DEFAULT_SEARCH_SORT }

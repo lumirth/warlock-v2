@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import { singleRequirementFilter } from '@uiuc-course-search/query-types';
+import {
+  singleRequirementFilter,
+  type CourseRequirementDto,
+} from '@uiuc-course-search/query-types';
 import {
   applyRankingPolicy,
   applyTermRankingPolicy,
@@ -11,6 +14,7 @@ import {
 } from '../search-retrieval-plan.js';
 import {
   buildSearchCandidateBudget,
+  MAX_BROWSEABLE_SEARCH_RESULTS,
 } from '../search-budget.js';
 import {
   hybridSearch,
@@ -20,7 +24,7 @@ import {
 } from '../search-controls.js';
 import { fuseRetrievalResults } from '../search-fusion.js';
 import type { SearchResult } from '../search-types.js';
-import type { Course } from '../../db/index.js';
+import type { Course } from '../../db/types.js';
 import type { SearchPlan } from '../search-planner-types.js';
 
 function course(overrides: Partial<Course>): Course {
@@ -53,9 +57,21 @@ function course(overrides: Partial<Course>): Course {
   };
 }
 
-async function retrievalPlan(plan: SearchPlan, limit = 20) {
+function requirements(...codes: string[]): CourseRequirementDto[] {
+  return codes.map(code => ({
+    categoryId: code,
+    categoryName: null,
+    attributeCode: null,
+    attributeName: null,
+  }));
+}
+
+async function retrievalPlan(
+  plan: SearchPlan,
+  limit = MAX_BROWSEABLE_SEARCH_RESULTS,
+) {
   const controls = normalizeSearchControls();
-  const budget = buildSearchCandidateBudget(plan, { limit, offset: 0 }, controls);
+  const budget = buildSearchCandidateBudget(limit);
   return buildRetrievalPlan(plan, controls, budget);
 }
 
@@ -146,17 +162,12 @@ describe('title-match ranking component', () => {
       resultWithTitle('CS-521', 'Advanced Topics in Programming Systems', 0.36),
       resultWithTitle('CS-426', 'Compiler Construction', 0.28),
     ], 'intro to compilers', {
-      rawQuery: 'intro to compilers',
-      rescue: {
+      intent: {
         queryTypes: ['topic'],
         negativeTerms: [],
         topicTerms: ['intro to compilers'],
         expandedTerms: ['compiler design programming languages'],
-        assumptions: [],
         warnings: [],
-        interpretedLanes: ['official_text', 'topic_semantic'],
-        relaxationPlan: [],
-        needsStudentProfile: false,
         confidence: 0.74,
       },
       softPreferences: {
@@ -195,8 +206,8 @@ describe('introductory gateway ranking components', () => {
       },
     ], '', {
       filters: { subject: 'CS' },
-      intents: ['introductory_gateway'],
-      softPreferences: { levelBoost: 100, introductoryIntent: 'gateway' },
+      introductoryGateway: true,
+      softPreferences: { levelBoost: 100 },
     });
 
     expect(ranked[0].course.id).toBe('CS-124');
@@ -235,8 +246,8 @@ describe('introductory gateway ranking components', () => {
       },
     ], '', {
       filters: { subject: 'CS' },
-      intents: ['introductory_gateway'],
-      softPreferences: { levelBoost: 100, introductoryIntent: 'gateway' },
+      introductoryGateway: true,
+      softPreferences: { levelBoost: 100 },
     });
 
     expect(ranked.map(result => result.course.id)).toEqual(['CS-124', 'CS-107', 'CS-199']);
@@ -272,9 +283,8 @@ describe('decision-search ranking policy', () => {
           number: '281',
           title: 'Constructing Race in America',
         }),
-        requirementCodes: ['CS', 'US'],
+        requirements: requirements('CS', 'US'),
         score: 0.4,
-        laneMatches: ['requirement'],
       },
       {
         course: course({
@@ -283,24 +293,19 @@ describe('decision-search ranking policy', () => {
           number: '222',
           title: 'Introduction to Modern Africa',
         }),
-        requirementCodes: ['CS'],
+        requirements: requirements('CS'),
         score: 0.7,
-        laneMatches: ['requirement'],
       },
     ], {
       filters: { requirement: singleRequirementFilter('US') },
       semanticQuery: 'us minority',
       keywordQuery: 'us minority',
-      rescue: {
+      intent: {
         queryTypes: ['requirement'],
         negativeTerms: [],
         topicTerms: [],
         expandedTerms: [],
-        assumptions: [],
         warnings: [],
-        interpretedLanes: ['requirement'],
-        relaxationPlan: [],
-        needsStudentProfile: false,
         confidence: 0.82,
       },
     });
@@ -324,9 +329,8 @@ describe('decision-search ranking policy', () => {
           number: '150',
           title: 'Introduction to Film',
         }),
-        requirementCodes: ['HUM'],
+        requirements: requirements('HUM'),
         score: 0.4,
-        laneMatches: ['requirement'],
       },
     ], {
       filters: { requirement: singleRequirementFilter('HUM') },
@@ -356,8 +360,6 @@ describe('decision-search ranking policy', () => {
           avg_gpa: 3.72,
         }),
         score: 0.5,
-        laneMatches: ['requirement', 'student_language_alias', 'workload_evidence'],
-        supportedSubjectiveClaims: ['low_workload', 'low_writing'],
       },
       {
         course: course({
@@ -378,16 +380,12 @@ describe('decision-search ranking policy', () => {
       filters: { requirement: singleRequirementFilter('HUM') },
       semanticQuery: 'movies',
       keywordQuery: 'movies',
-      rescue: {
+      intent: {
         queryTypes: ['requirement', 'topic', 'subjective_vibe', 'avoidance'],
         negativeTerms: ['writing_heavy'],
         topicTerms: ['movies'],
         expandedTerms: ['film cinema media documentary television pop culture visual culture'],
-        assumptions: [],
         warnings: [],
-        interpretedLanes: ['requirement', 'student_language_alias', 'topic_semantic', 'workload_evidence'],
-        relaxationPlan: [],
-        needsStudentProfile: false,
         confidence: 0.82,
       },
       softPreferences: { lowWriting: 0.9, lowWorkload: 0.84 },
@@ -397,7 +395,6 @@ describe('decision-search ranking policy', () => {
     expect(reranked[0].score).toBeGreaterThan(reranked[1].score);
     expect(reranked[0].scoreComponents).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'requirement_match' }),
-      expect.objectContaining({ name: 'workload_evidence' }),
       expect.objectContaining({ name: 'workload_preference' }),
     ]));
   });
@@ -425,7 +422,6 @@ describe('decision-search ranking policy', () => {
           difficulty_score: 34,
         }),
         score: 0.6,
-        laneMatches: ['student_language_alias'],
       },
     ];
 
@@ -479,8 +475,6 @@ describe('explainable ranking policy', () => {
           avg_gpa: 3.65,
         }),
         score: 0.6,
-        laneMatches: ['requirement', 'workload_evidence'],
-        supportedSubjectiveClaims: ['low_workload', 'low_math'],
       },
     ], {
       filters: {
@@ -491,16 +485,12 @@ describe('explainable ranking policy', () => {
       semanticQuery: 'easy science but no math',
       keywordQuery: 'easy science but no math',
       softPreferences: { lowMath: 0.86, lowWorkload: 0.84 },
-      rescue: {
+      intent: {
         queryTypes: ['requirement', 'subjective_vibe', 'avoidance'],
         negativeTerms: ['math_heavy'],
         topicTerms: ['science'],
         expandedTerms: ['natural science'],
-        assumptions: [],
         warnings: [],
-        interpretedLanes: ['requirement', 'workload_evidence', 'official_text'],
-        relaxationPlan: [],
-        needsStudentProfile: false,
         confidence: 0.78,
       },
     });
@@ -538,7 +528,6 @@ describe('explainable ranking policy', () => {
           quality_score: 76,
         }),
         score: 0.6,
-        laneMatches: ['student_language_alias'],
       },
     ], {
       filters: { subject: 'PHYS', workload: 'easy' },
@@ -549,7 +538,6 @@ describe('explainable ranking policy', () => {
 
     expect(reranked.map(result => result.course.id)).toEqual(['PHYS-100', 'PHYS-595']);
     expect(reranked[0].scoreComponents).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'student_language' }),
       expect.objectContaining({ name: 'level_accessibility', value: 0.55 }),
     ]));
   });
@@ -665,6 +653,12 @@ describe('search SQL batching', () => {
     const db = {
       prepare: (sql: string) => ({
         bind: (...params: unknown[]) => ({
+          first: async () => {
+            if (sql.includes('COUNT(DISTINCT id) AS total')) {
+              return { total: courses.length };
+            }
+            return null;
+          },
           all: async () => {
             bindCounts.push(params.length);
             if (params.length > 50) {
@@ -690,7 +684,7 @@ describe('search SQL batching', () => {
       keywordQuery: '',
       semanticQuery: '',
     };
-    const results = await hybridSearch(
+    const { results } = await hybridSearch(
       db,
       {} as VectorizeIndex,
       {} as Ai,

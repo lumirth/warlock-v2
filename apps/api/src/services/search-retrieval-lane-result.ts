@@ -1,8 +1,4 @@
-import type { RetrievalLane } from "./search-planner-types.js";
-import type { RetrievalLaneResult } from "./search-types.js";
-
-export type RankedLaneRow = RetrievalLaneResult;
-export type WorkloadLaneRow = RankedLaneRow & { claims: string[] };
+import type { RetrievalLane, RetrievalLaneResult } from "./search-types.js";
 
 export function rankedLaneRow(
   lane: RetrievalLane,
@@ -14,7 +10,7 @@ export function rankedLaneRow(
     matchedTerms?: string[];
     evidence?: string[];
   } = {},
-): RankedLaneRow {
+): RetrievalLaneResult {
   return {
     id,
     lane,

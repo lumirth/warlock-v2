@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { singleRequirementFilter } from "@uiuc-course-search/query-types";
+import {
+  normalizeSearchRequestDto,
+  singleRequirementFilter,
+} from "@uiuc-course-search/query-types";
 import { SearchPipeline } from "../search-pipeline.js";
-import { buildSearchCandidateBudget } from "../search-budget.js";
-import { normalizeSearchControls } from "../search-controls.js";
+import {
+  MAX_BROWSEABLE_SEARCH_RESULTS,
+  buildSearchCandidateBudget,
+} from "../search-budget.js";
 import type { D1Database, VectorizeIndex, Ai } from "@cloudflare/workers-types";
 import * as extractor from "../extractor.js";
 import * as queryResolver from "../query-resolver.js";
 import * as searchText from "../search-text.js";
-import * as termRanking from "../search-term-ranking.js";
+import * as searchExecutor from "../search-executor.js";
 import * as topicRegistry from "../topic-registry.js";
-import { normalizeSearchRequest } from "../search-request.js";
-import type { Course } from "../../db/index.js";
+import type { Course } from "../../db/types.js";
 import type { ExtractionResult } from "../extractor.js";
 import type { SearchResult } from "../search-types.js";
 import type { SearchPlan } from "../search-planner-types.js";
@@ -18,15 +22,46 @@ import type { SearchPlan } from "../search-planner-types.js";
 vi.mock("../extractor.js");
 vi.mock("../query-resolver.js");
 vi.mock("../search-text.js");
-vi.mock("../search-term-ranking.js");
+vi.mock("../search-executor.js");
 vi.mock("../topic-registry.js");
 
 function request(query: string, filters = {}) {
-  return normalizeSearchRequest({ query, filters });
+  return normalizeSearchRequestDto({ query, filters });
 }
 
 function planFromFirstSearchCall(): SearchPlan {
-  return vi.mocked(termRanking.hybridSearchWithTermRanking).mock.calls[0][4];
+  return vi.mocked(searchExecutor.executeSearchPlan).mock.calls[0][3];
+}
+
+function budgetFromFirstSearchCall() {
+  return vi.mocked(searchExecutor.executeSearchPlan).mock.calls[0][5]!;
+}
+
+function controlsFromFirstSearchCall() {
+  return vi.mocked(searchExecutor.executeSearchPlan).mock.calls[0][4];
+}
+
+function mockExecution(results: SearchResult[]): void {
+  vi.mocked(searchExecutor.executeSearchPlan).mockImplementation(
+    async (_db, _vectorize, _ai, plan, controls, budget = buildSearchCandidateBudget()) => ({
+      results,
+      totalResults: results.length,
+      retrievalPlan: {
+        controls,
+        budget,
+        lanes: [],
+        inputs: {
+          filters: plan.filters,
+          keywordQuery: plan.keywordQuery,
+          cleanKeywordQuery: plan.keywordQuery,
+          titleQuery: "",
+          semanticQuery: plan.semanticQuery,
+          scope: controls.scope,
+          semanticTermIds: [],
+        },
+      },
+    }),
+  );
 }
 
 const mockCourse = (overrides: Partial<Course> = {}): Course => ({
@@ -97,16 +132,14 @@ describe("SearchPipeline", () => {
       },
     ];
 
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(extractor.extract).mockReturnValue(mockExtracted);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue(
-      mockResults,
-    );
+    mockExecution(mockResults);
 
     const result = await pipeline.search(request(query));
 
     expect(result.results).toEqual(mockResults);
-    expect(termRanking.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(searchExecutor.executeSearchPlan).toHaveBeenCalledTimes(1);
   });
 
   it("Tier 2: should stop if structured search returns >= 3 results", async () => {
@@ -138,16 +171,14 @@ describe("SearchPipeline", () => {
         score: 0.8,
       }));
 
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(extractor.extract).mockReturnValue(mockExtracted);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue(
-      mockResults,
-    );
+    mockExecution(mockResults);
 
     const result = await pipeline.search(request(query));
 
     expect(result.results).toEqual(mockResults);
-    expect(termRanking.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(searchExecutor.executeSearchPlan).toHaveBeenCalledTimes(1);
   });
 
   it("widens internal candidates for introductory gateway intent without changing requested result count", async () => {
@@ -185,41 +216,35 @@ describe("SearchPipeline", () => {
       }),
     );
 
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(extractor.extract).mockReturnValue(mockExtracted);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
     vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
       (queryText) => queryText,
     );
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue(
-      mockResults,
-    );
+    mockExecution(mockResults);
 
-    const result = await pipeline.search(request(query), { limit: 5 });
+    const result = await pipeline.search(request(query));
 
     expect(planFromFirstSearchCall()).toMatchObject({
-        intents: ["introductory_gateway"],
-        softPreferences: { levelBoost: 100, introductoryIntent: "gateway" },
+        introductoryGateway: true,
+        softPreferences: { levelBoost: 100 },
     });
     expect(
-      vi.mocked(termRanking.hybridSearchWithTermRanking).mock.calls[0][3].budget
-        .executionResultLimit,
-    ).toBe(40);
+      budgetFromFirstSearchCall().browseableResultLimit,
+    ).toBe(MAX_BROWSEABLE_SEARCH_RESULTS);
     expect(result.results).toHaveLength(40);
   });
 
-  it("keeps ordinary relevance searches near the requested page window", () => {
-    const plan = { filters: {}, semanticQuery: "systems", keywordQuery: "systems" };
-    const controls = normalizeSearchControls();
-
+  it("uses the same browseable result universe for ordinary relevance searches", () => {
     expect(
-      buildSearchCandidateBudget(plan, { limit: 5, offset: 0 }, controls)
-        .executionResultLimit,
-    ).toBe(10);
+      buildSearchCandidateBudget()
+        .browseableResultLimit,
+    ).toBe(MAX_BROWSEABLE_SEARCH_RESULTS);
   });
 
-  it("infers attribute sort intent from superlative queries and widens candidates", async () => {
+  it("infers attribute sort intent from superlative queries", async () => {
     const query = "highest gpa classes";
-    vi.mocked(extractor.extractQuery).mockReturnValue({
+    vi.mocked(extractor.extract).mockReturnValue({
       hints: [],
       residual: "highest gpa",
     });
@@ -231,12 +256,12 @@ describe("SearchPipeline", () => {
     vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
       (queryText) => queryText,
     );
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue([
-      { course: mockCourse({ id: "LOW", avg_gpa: 3.1 }), score: 2 },
+    mockExecution([
       { course: mockCourse({ id: "HIGH", avg_gpa: 3.9 }), score: 1 },
+      { course: mockCourse({ id: "LOW", avg_gpa: 3.1 }), score: 2 },
     ]);
 
-    const result = await pipeline.search(request(query), { limit: 1 });
+    const result = await pipeline.search(request(query));
 
     expect(planFromFirstSearchCall()).toMatchObject({
         keywordQuery: "",
@@ -246,16 +271,15 @@ describe("SearchPipeline", () => {
         }),
     });
     expect(
-      vi.mocked(termRanking.hybridSearchWithTermRanking).mock.calls[0][3].budget
-        .executionResultLimit,
-    ).toBe(1200);
-    expect(result.meta.appliedSort).toEqual({ field: "gpa", direction: "desc" });
+      budgetFromFirstSearchCall().browseableResultLimit,
+    ).toBe(MAX_BROWSEABLE_SEARCH_RESULTS);
+    expect(controlsFromFirstSearchCall().sort).toEqual({ field: "gpa", direction: "desc" });
     expect(result.results[0].course.id).toBe("HIGH");
   });
 
   it("infers explicit sort-by commands without leaving sort words in the residual query", async () => {
     const query = "sort by difficulty";
-    vi.mocked(extractor.extractQuery).mockReturnValue({
+    vi.mocked(extractor.extract).mockReturnValue({
       hints: [],
       residual: "sort by difficulty",
     });
@@ -267,12 +291,12 @@ describe("SearchPipeline", () => {
     vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
       (queryText) => queryText,
     );
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue([
-      { course: mockCourse({ id: "HARD", difficulty_score: 82 }), score: 2 },
+    mockExecution([
       { course: mockCourse({ id: "EASY", difficulty_score: 12 }), score: 1 },
+      { course: mockCourse({ id: "HARD", difficulty_score: 82 }), score: 2 },
     ]);
 
-    const result = await pipeline.search(request(query), { limit: 1 });
+    const result = await pipeline.search(request(query));
 
     expect(planFromFirstSearchCall()).toMatchObject({
         keywordQuery: "",
@@ -282,10 +306,9 @@ describe("SearchPipeline", () => {
         }),
     });
     expect(
-      vi.mocked(termRanking.hybridSearchWithTermRanking).mock.calls[0][3].budget
-        .executionResultLimit,
-    ).toBe(1200);
-    expect(result.meta.appliedSort).toEqual({ field: "workload", direction: "asc" });
+      budgetFromFirstSearchCall().browseableResultLimit,
+    ).toBe(MAX_BROWSEABLE_SEARCH_RESULTS);
+    expect(controlsFromFirstSearchCall().sort).toEqual({ field: "workload", direction: "asc" });
     expect(result.results[0].course.id).toBe("EASY");
   });
 
@@ -298,21 +321,21 @@ describe("SearchPipeline", () => {
       keywordQuery: "ml",
     };
 
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(extractor.extract).mockReturnValue(mockExtracted);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
     vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
       (queryText) => queryText,
     );
     vi.mocked(topicRegistry.expandTopics).mockReturnValue(["machine learning"]);
 
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValueOnce([
+    mockExecution([
       { course: mockCourse({ id: "1" }), score: 0.5 },
     ]);
 
     const result = await pipeline.search(request(query));
 
     expect(topicRegistry.expandTopics).toHaveBeenCalledWith("ml");
-    expect(termRanking.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(searchExecutor.executeSearchPlan).toHaveBeenCalledTimes(1);
     expect(
       planFromFirstSearchCall(),
     ).toMatchObject({
@@ -323,48 +346,11 @@ describe("SearchPipeline", () => {
     expect(result.results.length).toBe(1);
   });
 
-  it("exposes each retrieval plan when sparse results trigger expansion", async () => {
-    const query = "ml courses";
-    vi.mocked(extractor.extractQuery).mockReturnValue({
-      hints: [],
-      residual: "ml",
-    });
-    vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
-      filters: {},
-      semanticQuery: "ml",
-      keywordQuery: "ml",
-    });
-    vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
-      (queryText) => queryText,
-    );
-    vi.mocked(topicRegistry.expandTopics)
-      .mockReturnValueOnce([])
-      .mockReturnValueOnce(["machine learning"]);
-    vi.mocked(termRanking.hybridSearchWithTermRanking)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        { course: mockCourse({ id: "expanded" }), score: 0.8 },
-      ]);
-
-    const result = await pipeline.search(request(query));
-
-    expect(termRanking.hybridSearchWithTermRanking).toHaveBeenCalledTimes(2);
-    expect(result.meta.retrievalPlans).toHaveLength(2);
-    expect(result.meta.retrievalPlans[0].inputs.keywordQuery).toBe("ml");
-    expect(result.meta.retrievalPlans[1].inputs.keywordQuery).toBe(
-      "ml machine learning",
-    );
-    expect(result.meta.fallback.constraintsRelaxed).toEqual([
-      "Added related topic terms: machine learning",
-    ]);
-    expect(result.results[0].course.id).toBe("expanded");
-  });
-
   it("applies Query Language v1 power fields, quoted phrases, and dash negation", async () => {
     const query =
       'status:open online:true days:MWF time:morning term:spring-2026 "data structures" -friday';
 
-    vi.mocked(extractor.extractQuery).mockReturnValue({
+    vi.mocked(extractor.extract).mockReturnValue({
       hints: [],
       residual: "",
     });
@@ -378,12 +364,12 @@ describe("SearchPipeline", () => {
       year: 2026,
     });
     vi.mocked(searchText.sanitizeFtsQuery).mockImplementation((query) => query);
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue([]);
+    mockExecution([]);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
     await pipeline.search(request(query));
 
-    expect(termRanking.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(searchExecutor.executeSearchPlan).toHaveBeenCalledTimes(1);
     expect(
       planFromFirstSearchCall(),
     ).toMatchObject({
@@ -404,7 +390,7 @@ describe("SearchPipeline", () => {
   it("does not silently drop unsupported dash negation tokens", async () => {
     const query = "algorithms -calculus";
 
-    vi.mocked(extractor.extractQuery).mockReturnValue({
+    vi.mocked(extractor.extract).mockReturnValue({
       hints: [],
       residual: "algorithms -calculus",
     });
@@ -416,7 +402,7 @@ describe("SearchPipeline", () => {
     vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
       (queryText) => queryText,
     );
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue([]);
+    mockExecution([]);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
     await pipeline.search(request(query));
@@ -450,24 +436,21 @@ describe("SearchPipeline", () => {
       ],
       residual: "",
     };
-    const mockPlan = {
+    const mockPlan: SearchPlan = {
       filters: { subject: "CS", level: 400, instructor_ids: [123] },
       semanticQuery: "",
       keywordQuery: "",
     };
 
-    vi.mocked(extractor.extractQuery).mockReturnValue(mockExtracted);
+    vi.mocked(extractor.extract).mockReturnValue(mockExtracted);
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue(mockPlan);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValueOnce([]);
+    mockExecution([]);
 
-    const result = await pipeline.search(request(query));
+    await pipeline.search(request(query));
 
-    expect(result.meta.fallback).toBeDefined();
-    expect(result.meta.fallback.tierReached).toBe(2);
-    expect(result.meta.fallback.constraintsRelaxed).toEqual([]);
-    expect(termRanking.hybridSearchWithTermRanking).toHaveBeenCalledTimes(1);
+    expect(searchExecutor.executeSearchPlan).toHaveBeenCalledTimes(1);
     expect(
       planFromFirstSearchCall().filters,
     ).toMatchObject({
@@ -478,20 +461,14 @@ describe("SearchPipeline", () => {
   });
 
   it("plans structured advanced-search overrides without rewriting the raw query", async () => {
-    vi.mocked(extractor.extractQuery).mockReturnValue({
+    vi.mocked(extractor.extract).mockReturnValue({
       hints: [],
       residual: "algorithms",
     });
     vi.mocked(queryResolver.resolveQuery).mockImplementation(
-      async (_db, extracted) => {
-        expect(extracted.rawQuery).toBe("algorithms");
-        expect(extracted.hints).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ type: "subject", value: "CS" }),
-            expect.objectContaining({ type: "credits", value: 4 }),
-            expect.objectContaining({ type: "instructor", value: "Fagen" }),
-          ]),
-        );
+      async (_db, rawQuery, extraction) => {
+        expect(rawQuery).toBe("algorithms");
+        expect(extraction.hints).toEqual([]);
 
         return {
           filters: { instructor_ids: [123] },
@@ -500,34 +477,22 @@ describe("SearchPipeline", () => {
         };
       },
     );
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue([
+    vi.mocked(queryResolver.resolveInstructorIds).mockResolvedValue([123]);
+    mockExecution([
       { course: mockCourse({ id: "CS-225" }), score: 1 },
     ]);
 
-    const result = await pipeline.search(normalizeSearchRequest({
+    const result = await pipeline.search(normalizeSearchRequestDto({
       query: "algorithms",
       filters: {
         subject: "CS",
         credits: 4,
         instructor: "Fagen",
       },
-    }), { limit: 20 });
+    }));
 
     expect(result.meta.query.raw).toBe("algorithms");
-    expect(result.meta.extraction.hints).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "subject",
-          value: "CS",
-          metadata: expect.objectContaining({ source: "manual" }),
-        }),
-        expect.objectContaining({
-          type: "instructor",
-          value: "Fagen",
-          metadata: expect.objectContaining({ source: "manual" }),
-        }),
-      ]),
-    );
+    expect(result.meta.extraction.hints).toEqual([]);
     expect(
       planFromFirstSearchCall().filters,
     ).toMatchObject({
@@ -537,10 +502,10 @@ describe("SearchPipeline", () => {
     });
   });
 
-  it("returns recovery groups for over-constrained decision searches with no results", async () => {
+  it("preserves interpreted intent for over-constrained searches with no results", async () => {
     const query = "online us minority no exams no essays 8 week";
 
-    vi.mocked(extractor.extractQuery).mockReturnValue({
+    vi.mocked(extractor.extract).mockReturnValue({
       hints: [
         {
           type: "online",
@@ -563,30 +528,19 @@ describe("SearchPipeline", () => {
     vi.mocked(searchText.sanitizeFtsQuery).mockImplementation(
       (queryText) => queryText,
     );
-    vi.mocked(termRanking.hybridSearchWithTermRanking).mockResolvedValue([]);
+    mockExecution([]);
     vi.mocked(topicRegistry.expandTopics).mockReturnValue([]);
 
     const result = await pipeline.search(request(query));
 
     expect(result.results).toEqual([]);
-    expect(result.meta.plan.rescue).toMatchObject({
+    expect(result.meta.plan.intent).toMatchObject({
       queryTypes: expect.arrayContaining([
         "requirement",
         "schedule",
         "avoidance",
         "subjective_vibe",
       ]),
-      relaxationPlan: expect.arrayContaining([
-        expect.objectContaining({ id: "evidence-backed-workload" }),
-        expect.objectContaining({ id: "any-delivery" }),
-        expect.objectContaining({ id: "adjacent-requirements" }),
-      ]),
     });
-    expect(result.meta.fallback.recoveryGroups).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: "evidence-backed-workload" }),
-        expect.objectContaining({ id: "any-delivery" }),
-      ]),
-    );
   });
 });

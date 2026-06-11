@@ -1,5 +1,6 @@
-export const TERM_STATUSES = ['registrable', 'active', 'historical'] as const;
-export type TermStateStatus = typeof TERM_STATUSES[number];
+import type { TermStatus } from '@uiuc-course-search/query-types';
+
+export type TermStateStatus = TermStatus;
 
 export interface Subject {
   id: string;
@@ -28,6 +29,20 @@ export interface Instructor {
   median_gpa?: number | null;
   gpa_sample_size: number | null;
 }
+
+export type InstructorLinkReadRow = Partial<{
+  instructor_name: string | null;
+  rmp_rating: number | null;
+  rmp_difficulty: number | null;
+  rmp_id: string | null;
+  avg_gpa: number | null;
+  median_gpa: number | null;
+  gpa_sample_size: number | null;
+  num_ratings: number | null;
+  would_take_again_pct: number | null;
+  top_tags: string | string[] | null;
+  department: string | null;
+}>;
 
 export interface Meeting {
   id: number;

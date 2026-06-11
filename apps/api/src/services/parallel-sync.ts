@@ -7,8 +7,6 @@ import { browserFetch } from '../http/browser-fetch.js';
 import { fromSubjectCascade } from '../transforms/course.js';
 import { errorFields, logger } from '../observability/logger.js';
 
-export { pruneStaleCourseGeneds, pruneStaleSubjectRows } from './course-snapshot-writer.js';
-
 const SUBJECT_SYNC_LOCK_TTL_SECONDS = 30 * 60;
 const SUBJECT_CASCADE_TIMEOUT_MS = 60_000;
 const SUBJECT_LIST_TIMEOUT_MS = 30_000;
@@ -20,13 +18,13 @@ export interface ParallelSyncConfig {
   limit?: number;
 }
 
-export type SubjectLockMode = 'respect-running' | 'force';
+type SubjectLockMode = 'respect-running' | 'force';
 
-export interface SyncSubjectsOptions {
+interface SyncSubjectsOptions {
   lockMode?: SubjectLockMode;
 }
 
-export interface SubjectSyncResult {
+interface SubjectSyncResult {
   subject: string;
   success: boolean;
   coursesCount: number;

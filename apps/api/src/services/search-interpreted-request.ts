@@ -1,5 +1,4 @@
 import {
-  effectiveRequirementFilter,
   isSearchLevelFilter,
   isSearchStatusFilter,
   isSearchTermFilter,
@@ -23,7 +22,12 @@ export function buildInterpretedSearchRequest(
   residual: string,
   request: NormalizedSearchRequestDto,
 ): SearchRequestDto {
-  const filters = publicFiltersFromPlan(hints, plan.filters, residual);
+  const filters = publicFiltersFromPlan(
+    hints,
+    plan.filters,
+    residual,
+    request.filters,
+  );
   return {
     query: meaningfulResidualQuery(residual),
     filters: Object.keys(filters).length > 0 ? filters : undefined,
@@ -32,17 +36,19 @@ export function buildInterpretedSearchRequest(
   };
 }
 
-export function publicFiltersFromPlan(
+function publicFiltersFromPlan(
   hints: Hint[],
   filters: SearchFilters,
   residual: string,
+  requestFilters: SearchRequestFiltersDto = {},
 ): SearchRequestFiltersDto {
   const instructorHint = hints.find((hint) => hint.type === "instructor");
 
   return compactPublicFilters({
     subject: filters.subject,
     number: filters.number,
-    instructor: instructorHint ? formatDisplayHintValue(instructorHint, residual) : undefined,
+    instructor: requestFilters.instructor
+      ?? (instructorHint ? formatDisplayHintValue(instructorHint, residual) : undefined),
     term: publicTerm(filters.term),
     year: filters.year,
     requirement: publicRequirementFilter(filters),
@@ -64,7 +70,7 @@ function compactPublicFilters(filters: SearchRequestFiltersDto): SearchRequestFi
 }
 
 function publicRequirementFilter(filters: SearchFilters): RequirementFilter | undefined {
-  const requirement = effectiveRequirementFilter(filters);
+  const requirement = filters.requirement;
   if (!requirement) return undefined;
   return requirement;
 }

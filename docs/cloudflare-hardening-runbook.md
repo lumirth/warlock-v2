@@ -1,7 +1,5 @@
 # Cloudflare Hardening Runbook
 
-Date: 2026-06-01
-
 This runbook is intentionally operational. It records what must exist for staging, public abuse controls, D1 restore safety, and smoke proof.
 
 ## Auth Preflight
@@ -25,6 +23,8 @@ Recommended names:
 - Worker rate limits: `SEARCH_RATE_LIMITER`, `COURSE_RATE_LIMITER`
 
 After creating staging resources, add real non-secret IDs to `apps/api/wrangler.toml` under an explicit `env.staging` block. D1/KV/Vectorize bindings must point at staging resources, not production resources.
+
+Create the `subject`, `level_bucket`, and `term_id` metadata indexes on each Vectorize index before rebuilding embeddings. Semantic filters are applied before Vectorize chooses top matches, so missing indexes are a search-correctness failure rather than an optional optimization. See `docs/deployment-checklist.md` for exact commands.
 
 ## Required Staging Secrets
 
@@ -51,7 +51,7 @@ npm run test:staging
 EVAL_BASE_URL=https://<staging-worker-host> npm run eval:staging
 ```
 
-Record the deployment targets in the stabilization report using these labels:
+Record the deployment targets in the evidence file passed to `npm run cloudflare:preflight` using these labels:
 
 ```text
 Staging API URL: https://<staging-worker-host>
@@ -71,7 +71,7 @@ Use Cloudflare Workers Rate Limiting bindings for the current `workers.dev` stag
 
 Admin/internal token checks remain mandatory regardless of WAF rules.
 
-Record the verified rule shape in the stabilization report using these labels:
+Record the verified rule shape in the evidence file passed to `npm run cloudflare:preflight` using these labels:
 
 ```text
 Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=<integer>, COURSE_RATE_LIMITER=<integer>
@@ -102,10 +102,10 @@ BOOKMARK=$(npx wrangler d1 time-travel info course-search-db-staging --json)
 npx wrangler d1 execute course-search-db-staging --remote --command "INSERT OR REPLACE INTO app_meta (key, value, updated_at) VALUES ('restore-test-$BACKUP_REF', 'marker', unixepoch())"
 npx wrangler d1 time-travel restore course-search-db-staging --bookmark <bookmark-from-json>
 npx wrangler d1 execute course-search-db-staging --remote --command "SELECT COUNT(*) AS marker_count FROM app_meta WHERE key = 'restore-test-$BACKUP_REF'"
-npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file docs/reports/2026-06-01-stabilization-report.md --restore-verified
+npm run d1:preflight -- --database course-search-db-staging --backup-ref "$BACKUP_REF" --evidence-file artifacts/d1-backup-evidence.md --restore-verified
 ```
 
-Record export path, restore DB name, schema verification output, and preflight command output in the stabilization report using these exact evidence labels:
+Record the backup reference, restore DB name, schema verification output, and preflight command output in the evidence file passed to `npm run cloudflare:preflight` using these exact labels:
 
 ```text
 D1 Backup Ref: <YYYYMMDDTHHMMSSZ>
@@ -123,4 +123,4 @@ After staging smoke, staging eval, WAF/rate-limit configuration, and D1 restore 
 npm run cloudflare:preflight
 ```
 
-This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, `artifacts/staging-smoke-results.json`, real HTTPS API and web staging URL evidence, Pages project/branch evidence, Workers rate-limit namespace IDs with route/action/threshold evidence, D1 backup ref/location markers, and D1 restore markers in `docs/reports/2026-06-01-stabilization-report.md`.
+This gate verifies Wrangler auth, explicit `env.staging` bindings, real-looking non-placeholder staging resource IDs, required staging environment variable names, staging smoke artifacts, real HTTPS API and web staging URL evidence, Pages project/branch evidence, Workers rate-limit namespace IDs with route/action/threshold evidence, and D1 backup/restore markers in the supplied evidence file.

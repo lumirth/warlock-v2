@@ -3,8 +3,8 @@ import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { asRecord, numericOrNull, positiveNumber, recordsFromArray, type JsonRecord } from './lib/json-shape.ts';
 import {
-  compareTerms,
   currentTermFromStatus,
+  expectedTermStatus,
   inferCurrentTerm,
   normalizeTerm,
   parseTermStateId,
@@ -69,13 +69,6 @@ export type TermCoverageReport = {
   backfill_commands: string[];
   freshness_audit_command: string;
 };
-
-function expectedStatus(row: AvailableTerm, stored: JsonRecord | undefined, currentYear: number, currentTerm: Term): TermStatus {
-  if (stored?.status === 'registrable' || stored?.status === 'active' || stored?.status === 'historical') {
-    return stored.status;
-  }
-  return compareTerms(row.year, row.term, currentYear, currentTerm) < 0 ? 'historical' : 'active';
-}
 
 function statusTermStates(status: JsonRecord | null): JsonRecord[] {
   return recordsFromArray(status?.termStates);
@@ -198,7 +191,7 @@ function buildRow(
 
   return {
     ...term,
-    expected_status: expectedStatus(term, stored, currentYear, currentTerm),
+    expected_status: expectedTermStatus(stored?.status, term.year, term.term, currentYear, currentTerm),
     present,
     stored_status: typeof stored?.status === 'string' ? stored.status : null,
     stale,

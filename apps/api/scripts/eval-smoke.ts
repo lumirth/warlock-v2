@@ -1,179 +1,54 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
-import { GOLDEN_QUERIES } from '../src/eval/golden-queries.js';
-import { checkExpectedKeys, checkExpectedObject, checkExpectedRescue, checkExpectedResidual } from '../src/eval/checks.js';
-import { evaluateCorpusCoverage, findDuplicateQueryIds, formatCorpusCoverageReport } from '../src/eval/corpus-coverage.js';
-import { createSearchPlan } from '../src/services/search-plan-compiler.js';
+import { mkdirSync, writeFileSync } from "node:fs";
 import {
-  isKnownSubjectCode,
-  subjectName,
-  subjectNames,
-} from '../src/services/subject-taxonomy.js';
-import type { EvalResult } from '../src/eval/types.js';
-
-type D1Row = Record<string, unknown>;
-
-class EvalD1Statement {
-  private params: unknown[] = [];
-
-  constructor(private readonly sql: string) {}
-
-  bind(...params: unknown[]): D1PreparedStatement {
-    this.params = params;
-    return this as unknown as D1PreparedStatement;
-  }
-
-  async first<T = D1Row>(): Promise<T | null> {
-    if (this.sql.includes('SELECT id FROM subjects WHERE id = ?')) {
-      const code = String(this.params[0] ?? '').toUpperCase();
-      return isKnownSubjectCode(code) ? { id: code } as T : null;
-    }
-
-    if (this.sql.includes('SELECT id FROM subjects WHERE LOWER(name) = ?')) {
-      const name = String(this.params[0] ?? '').toLowerCase();
-      const code = Object.entries(subjectNames())
-        .find(([, subjectName]) => subjectName.toLowerCase() === name)?.[0];
-      return code ? { id: code } as T : null;
-    }
-
-    if (this.sql.includes('SELECT subject_id FROM subject_aliases WHERE alias = ?')) {
-      const alias = String(this.params[0] ?? '').toLowerCase();
-      if (alias === 'comp sci') return { subject_id: 'CS' } as T;
-      return null;
-    }
-
-    if (this.sql.includes('SELECT id FROM subjects') && this.sql.includes('WHERE name LIKE ?')) {
-      const needle = String(this.params[0] ?? '').replace(/%/g, '').toLowerCase();
-      const code = Object.entries(subjectNames())
-        .find(([subjectCode, subjectName]) =>
-          subjectName.toLowerCase().includes(needle)
-          || subjectCode.toLowerCase().includes(needle)
-        )?.[0];
-      return code ? { id: code } as T : null;
-    }
-
-    if (this.sql.includes('SELECT DISTINCT subject FROM courses WHERE subject = ?')) {
-      const code = String(this.params[0] ?? '').toUpperCase();
-      return isKnownSubjectCode(code) ? { subject: code } as T : null;
-    }
-
-    if (this.sql.includes('SELECT name FROM subjects WHERE id = ?')) {
-      const code = String(this.params[0] ?? '').toUpperCase();
-      return { name: subjectName(code) ?? code } as T;
-    }
-
-    return null;
-  }
-
-  async all<T = D1Row>(): Promise<D1Result<T>> {
-    if (this.sql.includes('FROM instructors')) {
-      const needle = String(this.params[0] ?? '').replace(/%/g, '').toLowerCase();
-      const resolvableNeedles = new Set([
-        'fagen',
-        'fagen-ulmschneider',
-        'ulmschneider',
-        "o'brien",
-      ]);
-
-      return {
-        results: resolvableNeedles.has(needle) ? [{ id: 1 }] as T[] : [],
-        success: true,
-        meta: {},
-      } as unknown as D1Result<T>;
-    }
-
-    return {
-      results: [],
-      success: true,
-      meta: {},
-    } as unknown as D1Result<T>;
-  }
-}
-
-function createEvalDb(): D1Database {
-  return {
-    prepare(sql: string): D1PreparedStatement {
-      return new EvalD1Statement(sql) as unknown as D1PreparedStatement;
-    },
-  } as unknown as D1Database;
-}
+  evaluateCorpusCoverage,
+  findDuplicateQueryIds,
+  formatCorpusCoverageReport,
+} from "../src/eval/corpus-coverage.js";
+import { GOLDEN_QUERIES } from "../src/eval/golden-queries.js";
+import { evaluatePlanningCorpus } from "../src/eval/planning-smoke.js";
+import type { EvalResult } from "../src/eval/types.js";
 
 function formatReport(results: EvalResult[]): string {
-  const failures = results.filter(result => result.violations.length > 0);
-  const parseViolationCount = results.reduce((sum, result) => sum + result.parseViolations.length, 0);
-  const resultViolationCount = results.reduce((sum, result) => sum + result.resultViolations.length, 0);
+  const failures = results.filter((result) => result.violations.length > 0);
   const lines = [
-    '# Eval Smoke Report',
-    '',
-    'This smoke runner validates parse-layer expectations with a mock D1. Result-coherence expectations are enforced by the API eval runner against a real search endpoint.',
-    '',
+    "# Eval Smoke Report",
+    "",
+    "Validates canonical query interpretation and final SearchPlan filters with a hermetic API-owned database port.",
+    "",
     `Total queries: ${results.length}`,
     `Passing queries: ${results.length - failures.length}`,
     `Failed queries: ${failures.length}`,
-    `Violation count: ${results.reduce((sum, result) => sum + result.violations.length, 0)}`,
-    `Parse violation count: ${parseViolationCount}`,
-    `Result-coherence violation count: ${resultViolationCount}`,
-    '',
-    '## Query Results',
-    '',
+    "",
+    "## Query Results",
+    "",
   ];
 
   for (const result of results) {
-    const status = result.violations.length === 0 ? 'PASS' : 'FAIL';
-    lines.push(`- ${status} ${result.query.id}: ${result.query.query}`);
+    lines.push(`- ${result.violations.length === 0 ? "PASS" : "FAIL"} ${result.query.id}: ${result.query.query}`);
     for (const violation of result.violations) {
       lines.push(`  - ${violation}`);
     }
   }
 
-  return `${lines.join('\n')}\n`;
+  return `${lines.join("\n")}\n`;
 }
 
 async function main(): Promise<void> {
-  const db = createEvalDb();
-  const results: EvalResult[] = [];
-
-  for (const query of GOLDEN_QUERIES) {
-    const { plan, queryResidual } = await createSearchPlan(db, query.query);
-    const actualFilters = { ...plan.filters };
-    const violations = [
-      ...checkExpectedObject('filters', query.expected_filters, actualFilters),
-      ...checkExpectedKeys('filters', query.expected_filter_keys, actualFilters),
-      ...checkExpectedObject('softPreferences', query.expected_soft_preferences, plan.softPreferences),
-      ...checkExpectedRescue(query, plan.rescue),
-      ...checkExpectedResidual(query, queryResidual),
-    ];
-
-    results.push({
-      query,
-      actualFilters,
-      actualResidual: queryResidual,
-      results: [],
-      reciprocalRank: null,
-      violations,
-      parseViolations: violations,
-      resultViolations: [],
-      tierReached: null,
-    });
-  }
-
-  mkdirSync('artifacts', { recursive: true });
+  const results = await evaluatePlanningCorpus();
   const coverage = evaluateCorpusCoverage(GOLDEN_QUERIES);
   const duplicateIds = findDuplicateQueryIds(GOLDEN_QUERIES);
   const report = `${formatReport(results)}\n${formatCorpusCoverageReport(coverage)}`;
 
-  writeFileSync('artifacts/eval-smoke-report.md', report);
-  writeFileSync('artifacts/eval-smoke-results.json', `${JSON.stringify(results, null, 2)}\n`);
-
-  const failures = results.filter(result => result.violations.length > 0);
-  const coverageFailures = coverage.filter(result => !result.passes);
+  mkdirSync("artifacts", { recursive: true });
+  writeFileSync("artifacts/eval-smoke-report.md", report);
+  writeFileSync("artifacts/eval-smoke-results.json", `${JSON.stringify(results, null, 2)}\n`);
   console.log(report);
 
-  if (duplicateIds.length > 0) {
-    console.error(`Duplicate golden query ids: ${duplicateIds.join(', ')}`);
-  }
-
-  if (failures.length > 0 || coverageFailures.length > 0 || duplicateIds.length > 0) {
+  if (
+    results.some((result) => result.violations.length > 0)
+    || coverage.some((result) => !result.passes)
+    || duplicateIds.length > 0
+  ) {
     process.exitCode = 1;
   }
 }

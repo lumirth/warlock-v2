@@ -1,8 +1,15 @@
 import { Parser } from 'htmlparser2';
 import { convertTo24Hour } from './xml-utils.js';
+import type {
+  CourseExplorerCourse,
+  CourseExplorerInstructor,
+  CourseExplorerMeeting,
+  CourseExplorerRequirementCategory,
+  CourseExplorerSection,
+} from './types.js';
 
 // Subject cascade types and parser
-export interface ParsedSubjectMetadata {
+interface ParsedSubjectMetadata {
   id: string;
   label: string;
   collegeCode: string;
@@ -13,68 +20,15 @@ export interface ParsedSubjectMetadata {
   addressLine1: string;
   addressLine2: string;
   phoneNumber: string;
-  websiteUrl: string;
-  description: string;
+  webSiteURL: string;
+  collegeDepartmentDescription: string;
 }
 
 export interface ParsedSubjectCascade {
   subjectId: string;
   subjectLabel: string;
   subjectMetadata: ParsedSubjectMetadata;
-  courses: ParsedCascadeCourse[];
-}
-
-export interface ParsedGenEdCategory {
-  id: string;
-  name: string;
-  attributes: { code: string; name: string }[];
-}
-
-export interface ParsedMeeting {
-  index: number;
-  typeCode: string;
-  type: string;
-  start: string;
-  end: string;
-  daysOfTheWeek: string;
-  buildingName: string;
-  roomNumber: string;
-  meetingDateRange: string;
-  instructors: { firstName: string; lastName: string }[];
-}
-
-export interface ParsedCascadeSection {
-  crn: string;
-  sectionNumber: string;
-  sectionTitle: string;
-  enrollmentStatus: string;
-  statusCode: string;
-  sectionStatusCode: string;
-  sectionText: string;
-  sectionNotes: string;
-  sectionCappArea: string;
-  sectionDateRange: string;
-  partOfTerm: string;
-  startDate: string;
-  endDate: string;
-  creditHours: string;
-  meetings: ParsedMeeting[];
-}
-
-export interface ParsedCascadeCourse {
-  id: string;
-  subject: string;
-  title: string;
-  description: string;
-  creditHours: string;
-  courseSectionInformation: string;
-  sectionDegreeAttributes: string;
-  classScheduleInformation: string;
-  sectionDateRange: string;
-  sectionRegistrationNotes: string;
-  sectionApprovalCode: string;
-  genEdCategories: ParsedGenEdCategory[];
-  sections: ParsedCascadeSection[];
+  courses: CourseExplorerCourse[];
 }
 
 export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> | null): Promise<ParsedSubjectCascade> {
@@ -86,16 +40,16 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
     subjectMetadata: {
       id: '', label: '', collegeCode: '', departmentCode: '', unitName: '',
       contactName: '', contactTitle: '', addressLine1: '', addressLine2: '',
-      phoneNumber: '', websiteUrl: '', description: ''
+      phoneNumber: '', webSiteURL: '', collegeDepartmentDescription: ''
     },
     courses: []
   };
 
-  let currentCourse: ParsedCascadeCourse | null = null;
-  let currentSection: ParsedCascadeSection | null = null;
-  let currentMeeting: ParsedMeeting | null = null;
-  let currentInstructor: { firstName: string; lastName: string } | null = null;
-  let currentGenEd: ParsedGenEdCategory | null = null;
+  let currentCourse: CourseExplorerCourse | null = null;
+  let currentSection: CourseExplorerSection | null = null;
+  let currentMeeting: CourseExplorerMeeting | null = null;
+  let currentInstructor: CourseExplorerInstructor | null = null;
+  let currentGenEd: CourseExplorerRequirementCategory | null = null;
   let currentText = '';
 
   let inMeeting = false;
@@ -111,11 +65,10 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
         inSubject = true;
       }
       if (name === 'cascadingCourse') {
-        const courseId = (attrs.id || '').split(' ').pop() ?? attrs.id;
         currentCourse = {
-          id: courseId,
-          subject: result.subjectId,
-          title: '',
+          id: attrs.id || '',
+          subjectId: result.subjectId,
+          label: '',
           description: '',
           creditHours: '',
           courseSectionInformation: '',
@@ -152,7 +105,6 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
       if (name === 'meeting' && currentSection) {
         inMeeting = true;
         currentMeeting = {
-          index: currentSection.meetings.length,
           typeCode: '',
           type: '',
           start: '',
@@ -177,7 +129,7 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
       if ((name === 'genEdCategory' || name === 'category') && currentCourse && attrs.id) {
         currentGenEd = {
           id: attrs.id,
-          name: '',
+          description: '',
           attributes: []
         };
         currentCourse.genEdCategories.push(currentGenEd);
@@ -185,7 +137,7 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
       if ((name === 'attribute' || name === 'genEdAttribute' || name === 'ns2:genEdAttr') && currentGenEd && (attrs.code || attrs.id)) {
         currentGenEd.attributes.push({
             code: attrs.code || attrs.id || '',
-            name: ''
+            description: ''
         });
       }
     },
@@ -206,13 +158,13 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
         if (name === 'addressLine1') result.subjectMetadata.addressLine1 = text;
         if (name === 'addressLine2') result.subjectMetadata.addressLine2 = text;
         if (name === 'phoneNumber') result.subjectMetadata.phoneNumber = text;
-        if (name === 'webSiteURL') result.subjectMetadata.websiteUrl = text;
-        if (name === 'collegeDepartmentDescription') result.subjectMetadata.description = text;
+        if (name === 'webSiteURL') result.subjectMetadata.webSiteURL = text;
+        if (name === 'collegeDepartmentDescription') result.subjectMetadata.collegeDepartmentDescription = text;
       }
 
       // Course-level fields
       if (currentCourse && !currentSection && !currentGenEd) {
-        if (name === 'label') currentCourse.title = text;
+        if (name === 'label') currentCourse.label = text;
         if (name === 'description') currentCourse.description = text;
         if (name === 'creditHours') currentCourse.creditHours = text;
         if (name === 'courseSectionInformation') currentCourse.courseSectionInformation = text;
@@ -225,11 +177,11 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
 
       // GenEd Category fields
       if (currentGenEd) {
-          if (name === 'description') currentGenEd.name = text;
+          if (name === 'description') currentGenEd.description = text;
           if (name === 'attribute' || name === 'genEdAttribute' || name === 'ns2:genEdAttr') {
               const lastAttr = currentGenEd.attributes[currentGenEd.attributes.length - 1];
               if (lastAttr) {
-                  if (!lastAttr.name) lastAttr.name = text;
+                  if (!lastAttr.description) lastAttr.description = text;
               }
           }
       }
@@ -328,7 +280,7 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
   return result;
 }
 
-export function stringToXmlStream(xml: string): ReadableStream<Uint8Array> {
+function stringToXmlStream(xml: string): ReadableStream<Uint8Array> {
   return new ReadableStream({
     start(controller) {
       controller.enqueue(new TextEncoder().encode(xml));

@@ -36,7 +36,6 @@ export function buildSuggestedGoldQuery(
     query: candidate.query!,
     expected_filters: expectedFilters,
     expected_filter_keys: keys.length > 0 ? keys : undefined,
-    expected_residual: inferExpectedResidual(candidate, expectedFilters, keys),
     category,
     notes: notes.join(' '),
   };
@@ -51,21 +50,6 @@ function inferGoldCategory(
   if (mentionsSchedule(candidate)) return 'schedule';
   if (candidate.subject || candidate.term || candidate.year) return 'structured';
   return 'semantic';
-}
-
-function inferExpectedResidual(
-  candidate: FeedbackCorpusCandidate,
-  expectedFilters: Record<string, unknown>,
-  expectedFilterKeys: string[],
-): string {
-  const query = candidate.query?.trim().toUpperCase();
-  const courseCode = [expectedFilters.subject, expectedFilters.number]
-    .filter(Boolean)
-    .join(' ');
-  if (query && courseCode && query === courseCode) return '';
-  if (query && expectedFilters.crn && query === `CRN ${expectedFilters.crn}`) return '';
-  if (expectedFilterKeys.includes('instructor_ids') && !candidate.expected) return '';
-  return '__REVIEW_RESIDUAL__';
 }
 
 function hasInstructorExpectation(candidate: FeedbackCorpusCandidate): boolean {

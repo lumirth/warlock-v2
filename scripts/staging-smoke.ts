@@ -1,5 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { asRecord, type JsonRecord } from './lib/json-shape.ts';
+import { endpoint } from './lib/script-args.ts';
 
 export type SmokeResult = {
   name: string;
@@ -21,7 +23,6 @@ export const STAGING_SMOKE_CHECK_NAMES = [
   'internal accepts staging token',
 ] as const;
 
-type JsonRecord = Record<string, unknown>;
 type Fetcher = (request: Request) => Promise<Response>;
 
 type StagingSmokeOptions = {
@@ -40,16 +41,9 @@ function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
   return value;
 }
 
-function endpoint(baseUrl: string, path: string): string {
-  return new URL(path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString();
-}
-
 async function readJson(response: Response): Promise<JsonRecord | null> {
   try {
-    const value = await response.json();
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-      ? value as JsonRecord
-      : null;
+    return asRecord(await response.json());
   } catch {
     return null;
   }

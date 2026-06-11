@@ -8,7 +8,7 @@ import type {
   LiveCourseDetailSnapshot,
 } from './course-detail-types.js';
 
-export type CourseDetailLiveResult =
+type CourseDetailLiveResult =
   | { state: 'snapshot'; value: LiveCourseDetailSnapshot }
   | { state: 'not_found' }
   | { state: 'parse_error' }
@@ -60,7 +60,7 @@ export class CourseDetailLiveSource {
       state: 'snapshot',
       value: {
         fetchedAt,
-        snapshot: fromCourseDetail(parsed, context.subject, context.number, context.resolvedTerm.year, context.term, {
+        snapshot: fromCourseDetail(parsed, context.subject, context.number, context.resolvedTerm.year, context.resolvedTerm.term, {
           syncTimestamp: fetchedAt,
         }),
       },
@@ -68,6 +68,6 @@ export class CourseDetailLiveSource {
   }
 
   private courseExplorerXmlUrl(context: CourseDetailContext): string {
-    return `${this.env.CISAPI_BASE}/schedule/${context.year}/${context.term}/${context.subject}/${context.number}.xml?mode=cascade`;
+    return `${this.env.CISAPI_BASE}/schedule/${context.resolvedTerm.year}/${context.resolvedTerm.term}/${context.subject}/${context.number}.xml?mode=cascade`;
   }
 }

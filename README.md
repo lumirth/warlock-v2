@@ -19,6 +19,10 @@ npm run bootstrap:fresh-check
 
 Default `npm run build` is deterministic and does not regenerate subject data or fetch network data. Use `npm run generate:subjects` only when intentionally refreshing the committed subject list.
 
+Local web development proxies `/api` to `http://localhost:8787` by default. If
+Wrangler starts on another port, set `VITE_API_PROXY_TARGET`, for example
+`VITE_API_PROXY_TARGET=http://localhost:8788 npm run dev -w @uiuc-course-search/web`.
+
 ## Route Classes
 
 - Public: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`
@@ -61,8 +65,7 @@ Normal clone/build/test should not depend on large generated historical SQL arti
 ## Active Docs
 
 - `docs/architecture/search-ownership.md`
-- `docs/plans/2026-06-01-stabilization-hardening-master-plan.md`
-- `docs/plans/2026-06-03-decision-course-search-foundation.md`
+- `docs/architecture/course-data-vocabulary.md`
 - `docs/search-interpretation-chip-model.md`
 - `docs/deployment-checklist.md`
 - `docs/cloudflare-hardening-runbook.md`

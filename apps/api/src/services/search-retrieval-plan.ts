@@ -1,36 +1,28 @@
-import { hasRequirementFilter } from "@uiuc-course-search/query-types";
-import type { RetrievalLane, SearchFilters, SearchPlan } from "./search-planner-types.js";
+import type { SearchScope } from "@uiuc-course-search/query-types";
+import type { SearchFilters, SearchPlan } from "./search-planner-types.js";
 import type { SearchCandidateBudget } from "./search-budget.js";
 import type { AppliedSearchControls } from "./search-controls.js";
-import {
-  buildAliasLaneQuery,
-  workloadSignalTypes,
-} from "./search-retrieval-plan-queries.js";
+import type { RetrievalLane } from "./search-types.js";
 import { sanitizeFtsQuery, titleLaneQuery } from "./search-text.js";
 
 export type RetrievalLaneExecution = {
   lane: RetrievalLane;
-  enabled: boolean;
   limit: number;
-  reason: string;
 };
 
-export type RetrievalPlanInputs = {
+type RetrievalPlanInputs = {
   filters: SearchFilters;
   keywordQuery: string;
   cleanKeywordQuery: string;
   titleQuery: string;
   semanticQuery: string;
-  aliasQuery: string;
-  workloadSignalTypes: string[];
+  scope: SearchScope;
+  semanticTermIds: string[];
 };
 
 export type RetrievalPlan = {
   controls: AppliedSearchControls;
   budget: SearchCandidateBudget;
-  isNavigational: boolean;
-  hasKeywordQuery: boolean;
-  hasSemanticQuery: boolean;
   lanes: RetrievalLaneExecution[];
   inputs: RetrievalPlanInputs;
 };
@@ -39,6 +31,7 @@ export function buildRetrievalPlan(
   plan: SearchPlan,
   controls: AppliedSearchControls,
   budget: SearchCandidateBudget,
+  currentTermIds: string[] = [],
 ): RetrievalPlan {
   const hasKeywordQuery = plan.keywordQuery.trim().length > 0;
   const hasSemanticQuery = plan.semanticQuery.trim().length > 0;
@@ -47,118 +40,66 @@ export function buildRetrievalPlan(
     (plan.filters.subject && plan.filters.number) ||
       plan.filters.crn,
   );
-  const aliasQuery = buildAliasLaneQuery(plan);
-  const signalTypes = workloadSignalTypes(plan);
-
+  const lanes: RetrievalLaneExecution[] = [];
+  addLane(lanes, "exact", budget.browseableResultLimit, isNavigational);
+  addLane(
+    lanes,
+    "official_text",
+    budget.browseableResultLimit,
+    hasKeywordQuery && !isNavigational,
+  );
+  addLane(
+    lanes,
+    "structured_course",
+    budget.browseableResultLimit,
+    !hasKeywordQuery && !isNavigational,
+  );
+  addLane(lanes, "section_text", budget.browseableResultLimit, hasKeywordQuery);
+  addLane(
+    lanes,
+    "topic_semantic",
+    budget.semanticLaneResultLimit,
+    hasSemanticQuery && !isNavigational,
+  );
   return {
     controls,
     budget,
-    isNavigational,
-    hasKeywordQuery,
-    hasSemanticQuery,
-    lanes: [
-      lane(
-        isNavigational ? "exact" : "official_text",
-        true,
-        budget.laneCandidateLimit,
-        isNavigational
-          ? "course code or CRN lookup"
-          : "official course/title/description text",
-      ),
-      lane(
-        "section_text",
-        hasKeywordQuery,
-        budget.laneCandidateLimit,
-        "section text search for query terms",
-      ),
-      lane(
-        "requirement",
-        hasRequirementLane(plan),
-        budget.laneCandidateLimit,
-        "concrete requirement filter",
-      ),
-      lane(
-        "structured_section",
-        hasStructuredSectionLane(plan),
-        budget.laneCandidateLimit,
-        "structured section filters or schedule preferences",
-      ),
-      lane(
-        "student_language_alias",
-        aliasQuery.length > 0,
-        budget.laneCandidateLimit,
-        "student-language alias query",
-      ),
-      lane(
-        "topic_semantic",
-        hasSemanticQuery && !isNavigational,
-        budget.laneCandidateLimit,
-        "semantic topic query and not an exact lookup",
-      ),
-      lane(
-        "workload_evidence",
-        signalTypes.length > 0,
-        budget.laneCandidateLimit,
-        "workload or subjective evidence request",
-      ),
-      lane(
-        "help_path",
-        false,
-        budget.laneCandidateLimit,
-        "planned FAQ/degree-audit sidecar; no executable help corpus configured",
-      ),
-    ],
+    lanes,
     inputs: {
       filters: plan.filters,
       keywordQuery: plan.keywordQuery,
       cleanKeywordQuery,
-      titleQuery: hasKeywordQuery ? titleLaneQuery(plan, cleanKeywordQuery) : "",
+      titleQuery: hasKeywordQuery ? titleLaneQuery(cleanKeywordQuery) : "",
       semanticQuery: plan.semanticQuery,
-      aliasQuery,
-      workloadSignalTypes: signalTypes,
+      scope:
+        controls.scope === "active" && !plan.filters.term && !plan.filters.year
+          ? "active"
+          : "all",
+      semanticTermIds: semanticTermIds(plan.filters, controls.scope, currentTermIds),
     },
   };
 }
 
-export function laneEnabled(
-  plan: RetrievalPlan,
-  laneName: RetrievalLane,
-): boolean {
-  return plan.lanes.some((laneInfo) => laneInfo.lane === laneName && laneInfo.enabled);
+function semanticTermIds(
+  filters: SearchFilters,
+  scope: SearchScope,
+  currentTermIds: string[],
+): string[] {
+  if (filters.year && filters.term) {
+    return [`${filters.year}-${filters.term}`];
+  }
+  return scope === "active" ? currentTermIds : [];
 }
 
-export function enabledRetrievalLanes(plan: RetrievalPlan): RetrievalLaneExecution[] {
-  return plan.lanes.filter(laneInfo => laneInfo.enabled);
-}
-
-function lane(
+function addLane(
+  lanes: RetrievalLaneExecution[],
   laneName: RetrievalLane,
-  enabled: boolean,
   limit: number,
-  reason: string,
-): RetrievalLaneExecution {
-  return {
+  enabled = true,
+): void {
+  if (!enabled) return;
+  lanes.push({
     lane: laneName,
-    enabled,
     limit,
-    reason,
-  };
-}
-
-function hasRequirementLane(plan: SearchPlan): boolean {
-  return hasRequirementFilter(plan.filters);
-}
-
-function hasStructuredSectionLane(plan: SearchPlan): boolean {
-  return Boolean(
-    plan.filters.online !== undefined ||
-      plan.filters.days ||
-      plan.filters.time ||
-      plan.filters.status ||
-      plan.filters.partOfTerm ||
-      plan.softPreferences?.startAfterMinutes ||
-      plan.softPreferences?.startBeforeMinutes ||
-      plan.softPreferences?.compressedTerm ||
-      plan.softPreferences?.asyncFriendly,
-  );
+  });
 }

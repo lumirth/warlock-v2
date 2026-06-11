@@ -12,6 +12,19 @@ export function parseNonNegativeFloat(value: string | undefined, name: string): 
   return Number.parseFloat(value);
 }
 
+export function parseBoundedInt(
+  value: string | undefined,
+  name: string,
+  min: number,
+  max: number,
+): number {
+  const parsed = parseNonNegativeInt(value, name);
+  if (parsed < min || parsed > max) {
+    throw new Error(`${name} must be between ${min} and ${max}`);
+  }
+  return parsed;
+}
+
 export function parseEnumArg<T extends string>(
   value: string | undefined,
   name: string,

@@ -1,68 +1,38 @@
 import { describe, expect, it } from "vitest";
-import type { SearchPlan } from "../search-planner-types.js";
-import { buildSearchCandidateBudget } from "../search-budget.js";
-import { normalizeSearchControls } from "../search-controls.js";
-
-function plan(overrides: Partial<SearchPlan> = {}): SearchPlan {
-  return {
-    filters: {},
-    keywordQuery: "",
-    semanticQuery: "",
-    ...overrides,
-  };
-}
+import {
+  MAX_BROWSEABLE_SEARCH_RESULTS,
+  MAX_SEMANTIC_LANE_RESULTS,
+  buildSearchCandidateBudget,
+} from "../search-budget.js";
 
 describe("buildSearchCandidateBudget", () => {
-  it("keeps ordinary relevance requests close to the page window", () => {
-    const budget = buildSearchCandidateBudget(
-      plan(),
-      { limit: 10, offset: 20 },
-      normalizeSearchControls(),
-    );
+  it("keeps one stable browse window for every page", () => {
+    const firstRequest = buildSearchCandidateBudget();
+    const laterRequest = buildSearchCandidateBudget();
 
-    expect(budget.executionResultLimit).toBe(60);
-    expect(budget.termCandidateLimit).toBe(120);
-    expect(budget.laneCandidateLimit).toBe(120);
-    expect(budget.reasons).toEqual(["relevance_page_window"]);
+    expect(firstRequest.browseableResultLimit).toBe(
+      MAX_BROWSEABLE_SEARCH_RESULTS,
+    );
+    expect(laterRequest.browseableResultLimit).toBe(
+      firstRequest.browseableResultLimit,
+    );
+    expect(laterRequest.semanticLaneResultLimit).toBe(
+      firstRequest.semanticLaneResultLimit,
+    );
   });
 
-  it("uses the full bounded candidate window for attribute sorts", () => {
-    const budget = buildSearchCandidateBudget(
-      plan(),
-      { limit: 10, offset: 0 },
-      normalizeSearchControls({ sort: { field: "gpa" } }),
-      300,
-    );
+  it("keeps semantic recall within the Vectorize top-k limit", () => {
+    const budget = buildSearchCandidateBudget();
 
-    expect(budget.executionResultLimit).toBe(300);
-    expect(budget.termCandidateLimit).toBe(600);
-    expect(budget.laneCandidateLimit).toBe(600);
-    expect(budget.reasons).toEqual(["attribute_sort_full_window"]);
+    expect(budget.semanticLaneResultLimit).toBe(MAX_SEMANTIC_LANE_RESULTS);
   });
 
-  it("makes the introductory gateway minimum explicit", () => {
-    const budget = buildSearchCandidateBudget(
-      plan({ intents: ["introductory_gateway"] }),
-      { limit: 5, offset: 0 },
-      normalizeSearchControls(),
-    );
+  it("supports a smaller explicitly bounded browse window", () => {
+    const budget = buildSearchCandidateBudget(60);
 
-    expect(budget.executionResultLimit).toBe(40);
-    expect(budget.reasons).toEqual([
-      "relevance_page_window",
-      "introductory_gateway_minimum",
-    ]);
-  });
-
-  it("keeps every lane above the minimum candidate floor", () => {
-    const budget = buildSearchCandidateBudget(
-      plan(),
-      { limit: 1, offset: 0 },
-      normalizeSearchControls(),
-    );
-
-    expect(budget.executionResultLimit).toBe(2);
-    expect(budget.termCandidateLimit).toBe(4);
-    expect(budget.laneCandidateLimit).toBe(50);
+    expect(budget).toEqual({
+      browseableResultLimit: 60,
+      semanticLaneResultLimit: 60,
+    });
   });
 });

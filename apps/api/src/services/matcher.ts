@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 
-export interface InstructorMatch {
+interface InstructorMatch {
   fullName: string; // "Fleck, M"
   gpaName?: string;  // "Fleck, Margaret"
   gpaId?: number;
@@ -10,7 +10,7 @@ export interface InstructorMatch {
   avgGpa?: number;
 }
 
-export interface MatchContext {
+interface MatchContext {
   termId?: string;
   subject: string;
   number: string;

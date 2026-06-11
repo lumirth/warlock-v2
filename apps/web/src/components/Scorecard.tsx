@@ -6,6 +6,8 @@ import {
   getQualityTone,
   getWorkloadLabel,
   getWorkloadTone,
+  isFiniteMetric,
+  metricToneTextClass,
 } from '../utils/grading'
 
 interface ScorecardProps {
@@ -25,30 +27,19 @@ export function Scorecard({
   gpaSampleSize,
   primaryInstructorRmp,
 }: ScorecardProps) {
-  const qualityLabel =
-    qualityScore !== null ? getQualityLabel(qualityScore) : 'N/A'
+  const qualityLabel = isFiniteMetric(qualityScore)
+    ? getQualityLabel(qualityScore)
+    : 'N/A'
   const qualityTone = getQualityTone(qualityLabel)
 
-  // Explicit check for null/undefined to handle 0 correctly
-  const hasWorkload =
-    workloadScore !== null && workloadScore !== undefined
-  const hasAvgGpa = typeof avgGpa === 'number'
-  const hasMedianGpa = typeof medianGpa === 'number'
-  const hasPrimaryRating = typeof primaryInstructorRmp === 'number'
+  const hasWorkload = isFiniteMetric(workloadScore)
+  const hasAvgGpa = isFiniteMetric(avgGpa)
+  const hasMedianGpa = isFiniteMetric(medianGpa)
+  const hasPrimaryRating = isFiniteMetric(primaryInstructorRmp)
 
-  const workloadLabel = !hasWorkload
-    ? 'N/A'
-    : getWorkloadLabel(workloadScore!)
+  const workloadLabel = hasWorkload ? getWorkloadLabel(workloadScore) : 'N/A'
 
   const workloadTone = getWorkloadTone(workloadLabel)
-
-  const toneClass = (tone: 'success' | 'warning' | 'destructive' | 'muted') =>
-    cn(
-      tone === 'success' && 'text-success',
-      tone === 'warning' && 'text-warning',
-      tone === 'destructive' && 'text-destructive',
-      tone === 'muted' && 'text-muted-foreground'
-    )
 
   return (
     <Card>
@@ -59,14 +50,14 @@ export function Scorecard({
         <dl className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-4">
             <dt className="text-muted-foreground text-sm">Quality</dt>
-            <dd className={cn('text-sm font-semibold', toneClass(qualityTone))}>
+            <dd className={cn('text-sm font-semibold', metricToneTextClass(qualityTone))}>
               {qualityLabel}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4">
             <dt className="text-muted-foreground text-sm">Workload</dt>
             <dd
-              className={cn('text-sm font-semibold', toneClass(workloadTone))}
+              className={cn('text-sm font-semibold', metricToneTextClass(workloadTone))}
             >
               {workloadLabel}
             </dd>
@@ -107,7 +98,7 @@ export function Scorecard({
         </dl>
 
         <Badge variant="outline" className="text-muted-foreground w-fit">
-          {typeof qualityScore === 'number'
+          {isFiniteMetric(qualityScore)
             ? typeof gpaSampleSize === 'number'
               ? `Based on ${gpaSampleSize.toLocaleString()} records`
               : 'Record count unavailable'

@@ -8,7 +8,6 @@ function query(id: number): GoldQuery {
     id,
     query: `query ${id}`,
     expected_filters: {},
-    expected_residual: '',
     category: 'decision',
   };
 }
@@ -21,13 +20,11 @@ function result(
   return {
     query: query(id),
     actualFilters: {},
-    actualResidual: '',
     results: [],
     reciprocalRank: null,
     violations: [...parseViolations, ...resultViolations],
     parseViolations,
     resultViolations,
-    tierReached: null,
   };
 }
 

@@ -24,6 +24,12 @@ import {
   type TermRetentionReport,
 } from './term-retention-plan.js';
 import { asRecord, type JsonRecord } from './lib/json-shape.ts';
+import {
+  endpoint,
+  parseBoundedInt,
+  parseNonNegativeFloat,
+  parseNonNegativeInt,
+} from './lib/script-args.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -157,19 +163,19 @@ export function parseSemesterMaintenanceArgs(argv: string[]): SemesterMaintenanc
       args.adminToken = next;
       index += 1;
     } else if (arg === '--from-year' && next) {
-      args.fromYear = parseNonNegativeInteger(next, '--from-year');
+      args.fromYear = parseNonNegativeInt(next, '--from-year');
       index += 1;
     } else if (arg === '--to-year' && next) {
-      args.toYear = parseNonNegativeInteger(next, '--to-year');
+      args.toYear = parseNonNegativeInt(next, '--to-year');
       index += 1;
     } else if (arg === '--frontend-base' && next) {
       args.frontendBase = next;
       index += 1;
     } else if (arg === '--target-size-mb' && next) {
-      args.targetSizeMb = parseNonNegativeNumber(next, '--target-size-mb');
+      args.targetSizeMb = parseNonNegativeFloat(next, '--target-size-mb');
       index += 1;
     } else if (arg === '--max-retained-terms' && next) {
-      args.maxRetainedTerms = parseNonNegativeInteger(next, '--max-retained-terms');
+      args.maxRetainedTerms = parseNonNegativeInt(next, '--max-retained-terms');
       index += 1;
     } else if (arg === '--no-feedback') {
       args.noFeedback = true;
@@ -177,7 +183,7 @@ export function parseSemesterMaintenanceArgs(argv: string[]): SemesterMaintenanc
       args.feedbackDatabase = next;
       index += 1;
     } else if (arg === '--feedback-limit' && next) {
-      args.feedbackLimit = parseBoundedInteger(next, '--feedback-limit', 1, 1000);
+      args.feedbackLimit = parseBoundedInt(next, '--feedback-limit', 1, 1000);
       index += 1;
     } else if (arg === '--feedback-local') {
       args.feedbackRemote = false;
@@ -320,28 +326,6 @@ export function formatSemesterMaintenanceReport(report: SemesterMaintenanceRepor
   return `${lines.join('\n')}\n`;
 }
 
-function parseNonNegativeInteger(value: string, name: string): number {
-  if (!/^\d+$/.test(value)) {
-    throw new Error(`${name} must be a non-negative integer`);
-  }
-  return Number.parseInt(value, 10);
-}
-
-function parseNonNegativeNumber(value: string, name: string): number {
-  if (!/^\d+(\.\d+)?$/.test(value)) {
-    throw new Error(`${name} must be a non-negative number`);
-  }
-  return Number.parseFloat(value);
-}
-
-function parseBoundedInteger(value: string, name: string, min: number, max: number): number {
-  const parsed = parseNonNegativeInteger(value, name);
-  if (parsed < min || parsed > max) {
-    throw new Error(`${name} must be between ${min} and ${max}`);
-  }
-  return parsed;
-}
-
 function timestamp(date: Date): string {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
@@ -379,7 +363,7 @@ async function loadSyncStatus(args: SemesterMaintenanceArgs, options: RunOptions
     throw new Error('Provide --status-input or STAGING_API_BASE_URL and STAGING_ADMIN_TOKEN');
   }
 
-  const url = new URL('admin/sync/status', apiBaseUrl.endsWith('/') ? apiBaseUrl : `${apiBaseUrl}/`);
+  const url = endpoint(apiBaseUrl, 'admin/sync/status');
   const fetcher = options.fetcher ?? (request => fetch(request));
   const response = await fetcher(new Request(url, {
     headers: { Authorization: `Bearer ${adminToken}` },

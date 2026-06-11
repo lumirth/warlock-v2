@@ -1,5 +1,4 @@
 import {
-  effectiveRequirementFilter,
   formatGenEdDisplayLabel,
   isSearchLevelFilter,
   isSearchStatusFilter,
@@ -68,10 +67,6 @@ export function resolvedFilterFromHint(
   }
 
   return filterFromHint(hint, residual);
-}
-
-export function isEditableHint(hint: Hint): boolean {
-  return hint.type !== "crn" && hint.type !== "negation";
 }
 
 function formatHintLabel(hint: Hint, residual = ""): string {
@@ -180,7 +175,7 @@ function isSubjectHintResolvedAsRequirement(
   hint: Hint,
   plan: SearchPlan,
 ): boolean {
-  const requirement = effectiveRequirementFilter(plan.filters);
+  const requirement = plan.filters.requirement;
   return hint.type === "subject"
     && !plan.filters.subject
     && requirement?.mode === "single"

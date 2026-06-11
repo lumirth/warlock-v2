@@ -175,7 +175,7 @@ describe('Historical Sync SQL Generation', () => {
     expect(parsed.subjectMetadata.collegeCode).toBe('KP');
     expect(parsed.subjectMetadata.unitName).toBe('Siebel School of Computing and Data Science');
     expect(parsed.courses).toHaveLength(1);
-    expect(parsed.courses[0].id).toBe('101');
+    expect(parsed.courses[0].id).toBe('CS 101');
     expect(parsed.courses[0].sections).toHaveLength(2);
   });
 

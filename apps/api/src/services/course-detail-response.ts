@@ -1,7 +1,11 @@
 import type { InstructorLinkDto } from '@uiuc-course-search/query-types';
+import type { InstructorLinkReadRow } from '../db/types.js';
+import { courseRequirementRowsToDto } from '../transforms/course-requirements.js';
 import {
   courseSnapshotToCourseDetailResponseDto,
   toCourseDetailResponseDto,
+  toCourseSectionDtos,
+  toInstructorLinkMap,
 } from '../dto/course.js';
 import type {
   CourseDetailContext,
@@ -20,14 +24,16 @@ export function buildStoredCourseDetailResponse(
   options: StoredDetailOptions
 ): CourseDetailResponse {
   const isStale = options.state === 'stale';
+  const linksMap = toInstructorLinkMap(enrichment.instructorLinkRows);
 
   return {
     status: 200,
     body: toCourseDetailResponseDto(course, {
-      sections: enrichment.enrichedSections,
-      instructorLinks: enrichment.linksMap,
-      requirements: enrichment.requirements,
+      sections: toCourseSectionDtos(enrichment.sections, linksMap),
+      instructorLinks: linksMap,
+      requirements: courseRequirementRowsToDto(enrichment.requirementRows),
       medianGpa: enrichment.medianGpa,
+    }, {
       cached: !isStale,
       stale: isStale,
       staleReason: isStale ? options.staleReason : undefined,
@@ -47,12 +53,13 @@ export function buildLiveCourseDetailResponse(
   context: CourseDetailContext,
   liveSnapshot: LiveCourseDetailSnapshot,
   readModel: {
-    linksMap: Record<string, InstructorLinkDto>;
+    instructorLinkRows: InstructorLinkReadRow[];
     existingMetadata: CourseDetailMetadata | null;
     medianGpa: number | null;
   }
 ): CourseDetailResponse {
-  const { linksMap, existingMetadata, medianGpa } = readModel;
+  const { instructorLinkRows, existingMetadata, medianGpa } = readModel;
+  const linksMap = toInstructorLinkMap(instructorLinkRows);
 
   return {
     status: 200,
@@ -69,6 +76,7 @@ export function buildLiveCourseDetailResponse(
     }, {
       instructorLinks: linksMap,
       medianGpa,
+    }, {
       cached: false,
       fetchedAt: liveSnapshot.fetchedAt,
       termStatus: context.resolvedTerm.status,

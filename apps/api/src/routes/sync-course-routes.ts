@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
+import {
+  SEARCH_TERM_VALUES,
+  TERM_STATUS_VALUES,
+  type TermStatus,
+} from '@uiuc-course-search/query-types';
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
-import { TERM_STATUSES, type TermStateStatus } from '../db/types.js';
 import { MAX_SYNC_SUBJECTS_PER_REQUEST, type SyncBatchRequest } from '../services/sync-batch-contract.js';
 import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
@@ -11,7 +15,6 @@ import {
 } from '../services/course-sync-application.js';
 import {
   parseForceRunningLocks,
-  TERMS,
   type SyncRouteBindings,
 } from '../services/sync-operations.js';
 
@@ -36,7 +39,12 @@ syncCourseRoutes.post('/internal/sync-batch', async (c) => {
       return c.json({ error: 'year must be an integer between 2004 and five years from now' }, 400);
     }
 
-    const parsedTerm = typeof term === 'string' ? parseEnumParam(term.toLowerCase(), 'term', TERMS) : { ok: false as const, error: 'term must be one of: winter, spring, summer, fall' };
+    const parsedTerm = typeof term === 'string'
+      ? parseEnumParam(term.toLowerCase(), 'term', SEARCH_TERM_VALUES)
+      : {
+          ok: false as const,
+          error: `term must be one of: ${SEARCH_TERM_VALUES.join(', ')}`,
+        };
     if (!parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
 
     const normalizedSubjects = subjects.map(subject => typeof subject === 'string' ? subject.trim().toUpperCase() : '');
@@ -44,9 +52,9 @@ syncCourseRoutes.post('/internal/sync-batch', async (c) => {
       return c.json({ error: 'subjects must be 2-4 letter subject codes' }, 400);
     }
 
-    let requestedStatus: TermStateStatus | undefined;
+    let requestedStatus: TermStatus | undefined;
     if (status !== undefined) {
-      const parsedStatus = parseEnumParam(status, 'status', TERM_STATUSES);
+      const parsedStatus = parseEnumParam(status, 'status', TERM_STATUS_VALUES);
       if (!parsedStatus.ok) return c.json({ error: parsedStatus.error }, 400);
       requestedStatus = parsedStatus.value;
     }
@@ -105,7 +113,7 @@ syncCourseRoutes.post('/admin/sync/:year/:term', async (c) => {
   const parsedYear = parseBoundedIntParam(year, 'year', { min: 2004, max: new Date().getFullYear() + 2 });
   if (!parsedYear.ok) return c.json({ error: parsedYear.error }, 400);
 
-  const parsedTerm = parseEnumParam(term, 'term', TERMS);
+  const parsedTerm = parseEnumParam(term, 'term', SEARCH_TERM_VALUES);
   if (!parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
 
   const parsedOffset = parseBoundedIntParam(c.req.query('offset'), 'offset', {
@@ -123,9 +131,9 @@ syncCourseRoutes.post('/admin/sync/:year/:term', async (c) => {
   if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
 
   const requestedStatusRaw = c.req.query('status');
-  let requestedStatus: TermStateStatus | undefined;
+  let requestedStatus: TermStatus | undefined;
   if (requestedStatusRaw !== undefined && requestedStatusRaw !== '') {
-    const parsedStatus = parseEnumParam(requestedStatusRaw, 'status', TERM_STATUSES);
+    const parsedStatus = parseEnumParam(requestedStatusRaw, 'status', TERM_STATUS_VALUES);
     if (!parsedStatus.ok) return c.json({ error: parsedStatus.error }, 400);
     requestedStatus = parsedStatus.value;
   }

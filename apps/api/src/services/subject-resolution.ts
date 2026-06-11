@@ -1,18 +1,19 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { singleRequirementFilter } from '@uiuc-course-search/query-types';
-import type { QueryHint, SearchPlan } from './search-planner-types.js';
+import {
+  GENED_REQUIREMENT_LABELS,
+  resolveRequirementAlias,
+  singleRequirementFilter,
+} from '@uiuc-course-search/query-types';
+import type { Hint, SearchPlan } from './search-planner-types.js';
 import {
   FUZZY_SUBJECT_NAME_BLOCKLIST,
-  REQUIREMENT_LABELS,
-  REQUIREMENT_LOOKUP,
   SUBJECT_REQUIREMENT_CONFLICTS,
 } from './student-language-lexicon.js';
 
 type InterpretationType = 'subject' | 'requirement';
 
 export function resolveRequirement(value: string, plan: SearchPlan): void {
-  const normalized = value.toLowerCase().trim();
-  const code = REQUIREMENT_LOOKUP[normalized];
+  const code = resolveRequirementAlias(value);
 
   if (code) {
     plan.filters.requirement = singleRequirementFilter(code);
@@ -23,7 +24,7 @@ export function resolveRequirement(value: string, plan: SearchPlan): void {
 
 export async function resolveSubjectHint(
   db: D1Database,
-  hint: QueryHint,
+  hint: Extract<Hint, { type: 'subject' }>,
   subject: string,
   plan: SearchPlan,
   rawQuery: string
@@ -33,7 +34,7 @@ export async function resolveSubjectHint(
     return;
   }
 
-  const requirementCode = REQUIREMENT_LOOKUP[subject.toLowerCase()];
+  const requirementCode = resolveRequirementAlias(subject);
   if (!requirementCode) {
     plan.filters.subject = subject;
     return;
@@ -49,7 +50,7 @@ export async function resolveSubjectHint(
     delete plan.filters.subject;
     plan.filters.requirement = singleRequirementFilter(requirementCode);
     await addSubjectRequirementAmbiguity(db, plan, {
-      term: String(hint.metadata?.raw ?? hint.value),
+      term: hint.metadata.raw,
       chosen: 'requirement',
       subject,
       requirementCode,
@@ -60,7 +61,7 @@ export async function resolveSubjectHint(
   plan.filters.subject = subject;
   if (decision.showAlternative) {
     await addSubjectRequirementAmbiguity(db, plan, {
-      term: String(hint.metadata?.raw ?? hint.value),
+      term: hint.metadata.raw,
       chosen: 'subject',
       subject,
       requirementCode,
@@ -84,11 +85,6 @@ export async function validateSubject(
     .bind(normalized)
     .first<{ id: string }>();
   if (byName) return byName.id;
-
-  const byAlias = await db.prepare('SELECT subject_id FROM subject_aliases WHERE alias = ?')
-    .bind(normalized)
-    .first<{ subject_id: string }>();
-  if (byAlias) return byAlias.subject_id;
 
   const fuzzyClauses: string[] = [];
   const fuzzyParams: string[] = [];
@@ -122,11 +118,11 @@ export async function validateSubject(
 
 function chooseSubjectOrRequirementInterpretation(context: {
   subject: string;
-  hint: QueryHint;
+  hint: Extract<Hint, { type: 'subject' }>;
   rawQuery: string;
 }): { preferred: InterpretationType; showAlternative: boolean } {
   const raw = context.rawQuery;
-  const hintRaw = String(context.hint.metadata?.raw ?? context.hint.value);
+  const hintRaw = context.hint.metadata.raw;
 
   if (hasExplicitSubjectField(context.subject, raw)) {
     return { preferred: 'subject', showAlternative: false };
@@ -264,5 +260,5 @@ async function getSubjectName(db: D1Database, code: string): Promise<string> {
 }
 
 function getRequirementLabel(code: string): string {
-  return REQUIREMENT_LABELS[code] || code;
+  return GENED_REQUIREMENT_LABELS[code] || code;
 }

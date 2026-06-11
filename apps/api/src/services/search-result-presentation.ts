@@ -1,39 +1,52 @@
 import {
   ANY_GENED_DISPLAY_LABEL,
-  effectiveRequirementFilter,
   formatGenEdDisplayLabel,
   getQualityTierLabel,
-  type CourseRequirementDto,
+  isGenericAnyRequirementFilter,
   type MatchEvidence,
   type MatchEvidenceKind,
   type MatchEvidenceSource,
   type MatchEvidenceWeight,
   type ResultExplanation,
   type ResultWarning,
+  type SearchCourseResultDto,
 } from '@uiuc-course-search/query-types';
+import { toCourseDto } from '../dto/course.js';
 import type { Hint, SearchPlan } from './search-planner-types.js';
 import type { SearchResult } from './search-types.js';
-import { isGenericAnyRequirementFilter } from './requirement-codes.js';
 import {
   matchingRequirementCodes,
   searchResultRequirementCodes,
 } from './search-requirements.js';
-import { hasIntroductoryGatewayIntent } from './search-intent.js';
 
-export type SearchResultEvidenceContext = {
+type SearchResultEvidenceContext = {
   plan: SearchPlan;
   rawQuery: string;
   hints?: Hint[];
-  requirements?: CourseRequirementDto[];
 };
 
-export type SearchResultPresentation = {
+type SearchResultPresentation = {
   matchEvidence?: MatchEvidence[];
   explanation?: ResultExplanation;
   warnings: ResultWarning[];
 };
 
-export function buildSearchResultPresentation(
+export function presentSearchCourseResult(
+  result: SearchResult,
+  context?: SearchResultEvidenceContext,
+): SearchCourseResultDto {
+  const presentation = buildSearchResultPresentation(result, context);
+  return {
+    course: toCourseDto(result.course, {
+      requirements: result.requirements,
+    }),
+    matchEvidence: presentation.matchEvidence,
+    explanation: presentation.explanation,
+    warnings: presentation.warnings,
+  };
+}
+
+function buildSearchResultPresentation(
   result: SearchResult,
   context?: SearchResultEvidenceContext,
 ): SearchResultPresentation {
@@ -87,22 +100,39 @@ function hasHint(hints: Hint[] | undefined, type: Hint['type']): boolean {
 
 function resultRequirementCodes(
   result: SearchResult,
-  context: SearchResultEvidenceContext,
 ): string[] {
-  return searchResultRequirementCodes(result, context.requirements);
+  return searchResultRequirementCodes(result);
 }
 
 function hasStructuredRequirementEvidence(
   result: SearchResult,
-  context: SearchResultEvidenceContext,
+  plan: SearchPlan,
 ): boolean {
+  const requested = plan.filters.requirement;
   return Boolean(
-    result.laneMatches?.includes('requirement')
-    && resultRequirementCodes(result, context).length > 0,
+    requested
+    && matchingRequirementCodes(
+      resultRequirementCodes(result),
+      requested.codes,
+    ).length > 0,
   );
 }
 
-export function buildMatchEvidence(
+function hasStructuredSectionEvidence(plan: SearchPlan): boolean {
+  const { filters } = plan;
+  return Boolean(
+    filters.online !== undefined
+    || filters.days
+    || filters.time
+    || filters.status
+    || filters.partOfTerm
+    || filters.compressedTerm
+    || filters.startAfterMinutes !== undefined
+    || filters.startBeforeMinutes !== undefined,
+  );
+}
+
+function buildMatchEvidence(
   result: SearchResult,
   context: SearchResultEvidenceContext,
 ): MatchEvidence[] {
@@ -139,9 +169,9 @@ export function buildMatchEvidence(
     addEvidence(evidence, seen, 'title', `Title match: ${course.title}`, 'keyword', 'rank', course.title);
   }
 
-  const requirement = effectiveRequirementFilter(filters);
+  const requirement = filters.requirement;
   const requirementFilters = requirement?.codes ?? [];
-  const courseRequirementCodes = resultRequirementCodes(result, context);
+  const courseRequirementCodes = resultRequirementCodes(result);
   if (requirementFilters.length > 0) {
     const isGenericRequirement = requirement?.mode === 'any' && isGenericAnyRequirementFilter(requirement.codes);
     const matchedCodes = matchingRequirementCodes(courseRequirementCodes, requirementFilters);
@@ -197,27 +227,7 @@ export function buildMatchEvidence(
     }
   }
 
-  if (result.laneMatches?.includes('student_language_alias')) {
-    addEvidence(evidence, seen, 'alias', 'Student-language alias match', 'alias', 'rank');
-  }
-
-  if (result.laneMatches?.includes('workload_evidence')) {
-    const claims = result.supportedSubjectiveClaims?.length
-      ? result.supportedSubjectiveClaims.join(', ')
-      : undefined;
-    addEvidence(evidence, seen, 'workload', 'Workload evidence match', 'signal', 'soft', claims);
-  }
-
-  if (result.laneMatches?.includes('requirement') && courseRequirementCodes.length > 0) {
-    const value = courseRequirementCodes.join(', ');
-    addEvidence(evidence, seen, 'requirement', formatGenEdDisplayLabel(courseRequirementCodes), 'filter', 'soft', value);
-  }
-
-  if (result.laneMatches?.includes('structured_section')) {
-    addEvidence(evidence, seen, 'schedule', 'Section availability or schedule match', 'filter', 'soft');
-  }
-
-  if (softPreferences?.levelBoost && hasIntroductoryGatewayIntent(context.plan)) {
+  if (softPreferences?.levelBoost && context.plan.introductoryGateway === true) {
     const levelLabel = softPreferences.levelBoost === 100
       ? 'Introductory course'
       : `${softPreferences.levelBoost} level preference`;
@@ -248,7 +258,7 @@ export function buildMatchEvidence(
   return evidence;
 }
 
-export function buildResultWarnings(result: SearchResult): ResultWarning[] {
+function buildResultWarnings(result: SearchResult): ResultWarning[] {
   const warnings: ResultWarning[] = [];
   if (result.historical) {
     warnings.push({ kind: 'historical', message: 'Historical term result' });
@@ -256,13 +266,13 @@ export function buildResultWarnings(result: SearchResult): ResultWarning[] {
   return warnings;
 }
 
-export function buildResultExplanation(
+function buildResultExplanation(
   result: SearchResult,
   context: SearchResultEvidenceContext,
   evidence: MatchEvidence[],
   warnings: ResultWarning[],
 ): ResultExplanation {
-  const rescue = context.plan.rescue;
+  const intent = context.plan.intent;
   const evidenceReasons = evidence
     .slice(0, 7)
     .map(item => item.value ? `${item.label}: ${item.value}` : item.label);
@@ -287,21 +297,19 @@ export function buildResultExplanation(
 
   const watchOut = [
     ...warnings.map(warning => warning.message),
-    ...(rescue?.warnings.map(warning => warning.message) ?? []),
+    ...(intent?.warnings.map(warning => warning.message) ?? []),
     ...(result.scoreComponents
       ?.filter(component => component.value < 0)
       .map(component => component.reason) ?? []),
   ];
 
   if (
-    rescue?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
-    && !result.laneMatches?.includes('workload_evidence')
-    && !result.supportedSubjectiveClaims?.length
+    intent?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
+    && !hasVisibleSubjectiveEvidence(result)
   ) {
     watchOut.push('Subjective preferences are not fully backed by assignment-level evidence for this course.');
   }
 
-  const matchedChips = rescue?.assumptions.map(item => item.label) ?? [];
   const confidenceScore = explanationConfidenceScore(result, context);
   const confidenceLabel: ResultExplanation['confidence']['label'] =
     confidenceScore >= 0.82 ? 'high'
@@ -312,7 +320,6 @@ export function buildResultExplanation(
   return {
     whyMatched,
     watchOut: Array.from(new Set(watchOut)).slice(0, 6),
-    matchedChips,
     confidence: {
       score: confidenceScore,
       label: confidenceLabel,
@@ -323,15 +330,16 @@ export function buildResultExplanation(
 
 function explanationConfidenceScore(result: SearchResult, context: SearchResultEvidenceContext): number {
   const { plan } = context;
-  let score = plan.rescue?.confidence ?? 0.72;
+  let score = plan.intent?.confidence ?? 0.72;
   if (result.laneMatches?.includes('exact')) score += 0.12;
-  if (hasStructuredRequirementEvidence(result, context)) score += 0.08;
-  if (result.laneMatches?.includes('structured_section')) score += 0.05;
-  if (result.laneMatches?.includes('workload_evidence')) score += 0.1;
+  if (hasStructuredRequirementEvidence(result, plan)) score += 0.08;
+  score -= missingRequirementEvidencePenalty(result, plan);
+  if (hasStructuredSectionEvidence(plan)) score += 0.05;
+  if (hasVisibleSubjectiveEvidence(result)) score += 0.08;
+  score -= incompleteEvidencePenalty(plan);
   if (
-    plan.rescue?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
-    && !result.laneMatches?.includes('workload_evidence')
-    && !result.supportedSubjectiveClaims?.length
+    plan.intent?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
+    && !hasVisibleSubjectiveEvidence(result)
   ) {
     score -= 0.22;
   }
@@ -342,14 +350,47 @@ function explanationConfidenceReasons(result: SearchResult, context: SearchResul
   const { plan } = context;
   const reasons: string[] = [];
   if (result.laneMatches?.includes('exact')) reasons.push('Exact course lookup is structured.');
-  if (hasStructuredRequirementEvidence(result, context)) reasons.push('GenEd evidence came from structured mappings.');
-  if (result.laneMatches?.includes('structured_section')) reasons.push('Schedule or availability evidence came from section data.');
-  if (result.laneMatches?.includes('workload_evidence')) reasons.push('Subjective workload preference has an evidence signal.');
+  if (hasStructuredRequirementEvidence(result, plan)) reasons.push('GenEd evidence came from structured mappings.');
+  if (hasMissingRequirementEvidence(result, plan)) reasons.push('Requested requirement has no visible mapping for this course.');
+  if (hasStructuredSectionEvidence(plan)) reasons.push('Schedule or availability evidence came from section data.');
+  if (hasVisibleSubjectiveEvidence(result)) reasons.push('Visible workload, quality, or GPA data supports the explanation.');
+  if (plan.intent?.warnings.length) reasons.push('Some inferred preferences have incomplete evidence.');
   if (
-    plan.rescue?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
-    && !result.laneMatches?.includes('workload_evidence')
+    plan.intent?.queryTypes.some(type => type === 'subjective_vibe' || type === 'avoidance')
+    && !hasVisibleSubjectiveEvidence(result)
   ) {
     reasons.push('Subjective workload evidence is incomplete for this course.');
   }
   return reasons.length > 0 ? reasons : ['Matched by course text and structured filters.'];
+}
+
+function incompleteEvidencePenalty(plan: SearchPlan): number {
+  const warningCount = plan.intent?.warnings.length ?? 0;
+  return warningCount > 0
+    ? Math.min(0.4, 0.25 + (warningCount - 1) * 0.08)
+    : 0;
+}
+
+function missingRequirementEvidencePenalty(
+  result: SearchResult,
+  plan: SearchPlan,
+): number {
+  return hasMissingRequirementEvidence(result, plan) ? 0.18 : 0;
+}
+
+function hasMissingRequirementEvidence(
+  result: SearchResult,
+  plan: SearchPlan,
+): boolean {
+  const hasRequirementIntent = Boolean(
+    plan.filters.requirement
+    || plan.intent?.queryTypes.some(type => type === 'requirement' || type === 'degree_progress'),
+  );
+  return hasRequirementIntent && resultRequirementCodes(result).length === 0;
+}
+
+function hasVisibleSubjectiveEvidence(result: SearchResult): boolean {
+  return typeof result.course.quality_score === 'number'
+    || typeof result.course.difficulty_score === 'number'
+    || typeof result.course.avg_gpa === 'number';
 }

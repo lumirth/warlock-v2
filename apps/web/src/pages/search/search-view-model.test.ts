@@ -4,6 +4,7 @@ import {
   type SearchControllerState,
 } from './search-controller-state'
 import { buildSearchViewModel } from './search-view-model'
+import type { SearchCourseResultDto } from '@uiuc-course-search/query-types'
 
 type StateOverrides = {
   draft?: Partial<SearchControllerState['draft']>
@@ -26,6 +27,46 @@ function state(
   }
 }
 
+function result(id: string): SearchCourseResultDto {
+  const [subject, number] = id.split('-')
+  return {
+    course: {
+      id,
+      subject,
+      number,
+      title: `${subject} ${number}`,
+      description: null,
+      creditHours: null,
+      year: 2026,
+      term: 'spring',
+      primaryInstructor: null,
+      metrics: {
+        primaryInstructorRating: null,
+        avgGpa: null,
+        medianGpa: null,
+        gpaSampleSize: null,
+        qualityScore: null,
+        workloadScore: null,
+      },
+      catalog: {
+        courseInfo: null,
+        degreeAttributes: null,
+      },
+      scheduleNotes: {
+        classScheduleInfo: null,
+        dateRangeText: null,
+      },
+      registration: {
+        registrationNotes: null,
+        approvalCode: null,
+      },
+      requirements: [],
+      instructorLinks: {},
+      links: {},
+    },
+  }
+}
+
 describe('buildSearchViewModel', () => {
   it('shows the first-run helper only before any active request exists', () => {
     const model = buildSearchViewModel(state({ draft: { query: '' } }))
@@ -42,16 +83,15 @@ describe('buildSearchViewModel', () => {
           activeRequest: {
             query: 'online stats class',
           },
-          results: [
-            { id: 'STAT-100' } as unknown as SearchControllerState['session']['results'][number],
-          ],
+          results: [result('STAT-100')],
           meta: {
-            query: { raw: 'online stats class', residual: 'stats' },
             nextRequest: { query: 'online stats class' },
-            timing: { extraction_ms: 1, search_ms: 2, total_ms: 3 },
+            interpretedRequest: { query: 'online stats class' },
+            ui: { chips: [], ambiguityActions: [] },
           },
           pagination: {
             totalResults: 41,
+            browseableResults: 41,
             limit: 20,
             offset: 0,
             hasMore: true,
@@ -67,6 +107,27 @@ describe('buildSearchViewModel', () => {
     expect(model.resultsHeadingLabel).toBe('Results for online stats class')
   })
 
+  it('distinguishes the exact match total from the ranked browse window', () => {
+    const model = buildSearchViewModel(
+      state({
+        session: {
+          results: [result('HIST-1')],
+          pagination: {
+            totalResults: 4509,
+            browseableResults: 1,
+            limit: 1,
+            offset: 0,
+            hasMore: false,
+            nextOffset: null,
+          },
+        },
+      })
+    )
+
+    expect(model.resultCountLabel).toBe('4,509 results')
+    expect(model.showingResultsLabel).toBe('Showing top 1 of 4,509')
+  })
+
   it('distinguishes initial skeletons from result refreshes', () => {
     expect(
       buildSearchViewModel(state({ session: { loading: true } })).showInitialSkeleton
@@ -77,9 +138,9 @@ describe('buildSearchViewModel', () => {
         session: {
           loading: true,
           meta: {
-            query: { raw: 'cs', residual: 'cs' },
             nextRequest: { query: 'cs' },
-            timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
+            interpretedRequest: { query: 'cs' },
+            ui: { chips: [], ambiguityActions: [] },
           },
         },
       })

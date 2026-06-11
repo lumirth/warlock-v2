@@ -5,7 +5,7 @@ export type TextMatch = {
   length: number;
 };
 
-export function maskRange(text: string, start: number, length: number): string {
+function maskRange(text: string, start: number, length: number): string {
   return text.slice(0, start) + ' '.repeat(length) + text.slice(start + length);
 }
 

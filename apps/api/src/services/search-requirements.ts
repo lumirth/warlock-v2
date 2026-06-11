@@ -1,13 +1,9 @@
-import type { CourseRequirementDto } from "@uiuc-course-search/query-types";
-import { normalizeRequirementCodes } from "@uiuc-course-search/query-types";
-import { canonicalRequirementCode } from "./requirement-codes.js";
+import {
+  canonicalRequirementCode,
+  normalizeRequirementCodes,
+  type CourseRequirementDto,
+} from "@uiuc-course-search/query-types";
 import type { SearchResult } from "./search-types.js";
-
-export function structuredRequirementCodes(
-  codes: readonly string[] | undefined = [],
-): string[] {
-  return normalizeCanonicalRequirementCodes(codes);
-}
 
 export function courseRequirementDtoCodes(requirementCodes: readonly CourseRequirementDto[] | undefined): string[] {
   return normalizeCanonicalRequirementCodes(
@@ -20,12 +16,8 @@ export function courseRequirementDtoCodes(requirementCodes: readonly CourseRequi
 
 export function searchResultRequirementCodes(
   result: SearchResult,
-  requirementCodes?: readonly CourseRequirementDto[],
 ): string[] {
-  return structuredRequirementCodes([
-    ...courseRequirementDtoCodes(requirementCodes),
-    ...(result.requirementCodes ?? []),
-  ]);
+  return courseRequirementDtoCodes(result.requirements);
 }
 
 export function matchingRequirementCodes(

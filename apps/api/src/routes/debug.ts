@@ -1,11 +1,13 @@
 import { Hono } from 'hono';
 import type { Ai, D1Database, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
+import { SEARCH_TERM_VALUES } from '@uiuc-course-search/query-types';
 import { getUpstreamBackoff, resetUpstreamBackoff } from '../services/upstream-backoff.js';
 import { parseSearchHttpRequest } from '../http/search-request.js';
+import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
 import { SearchPipeline } from '../services/search-pipeline.js';
 import { presentSearchDebugResponse } from '../services/search-debug-response-presenter.js';
 import { errorFields, logger } from '../observability/logger.js';
-import { parseSubjectsXml } from '../cisapi/parser.js';
+import { inspectSubjectList } from '../services/subject-list-diagnostic.js';
 
 type Bindings = {
   DB: D1Database;
@@ -67,7 +69,6 @@ debugRoutes.get('/search-plan', async (c) => {
     );
     const result = await pipeline.search(
       request,
-      pagination,
       c.executionCtx.waitUntil.bind(c.executionCtx),
     );
     return c.json(await presentSearchDebugResponse({
@@ -83,41 +84,22 @@ debugRoutes.get('/search-plan', async (c) => {
 
 debugRoutes.get('/subjects/:year/:term', async (c) => {
   const { year, term } = c.req.param();
-  const url = `${c.env.CISAPI_BASE}/schedule/${year}/${term}.xml`;
+  const parsedYear = parseBoundedIntParam(year, 'year', {
+    min: 2004,
+    max: new Date().getFullYear() + 5,
+  });
+  if (!parsedYear.ok) return c.json({ error: parsedYear.error }, 400);
+
+  const parsedTerm = parseEnumParam(term.toLowerCase(), 'term', SEARCH_TERM_VALUES);
+  if (!parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
+
+  const url = `${c.env.CISAPI_BASE}/schedule/${parsedYear.value}/${parsedTerm.value}.xml`;
 
   try {
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/xml' },
-      redirect: 'follow'
-    });
-
-    const headers: Record<string, string> = {};
-    response.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-
-    if (!response.ok) {
-      return c.json({
-        error: `HTTP ${response.status}`,
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        headers
-      });
-    }
-
-    const xml = await response.text();
-    const subjects = parseSubjectsXml(xml).map(subject => subject.id);
-
-    return c.json({
-      url,
-      status: response.status,
-      subjectCount: subjects.length,
-      subjects: subjects.slice(0, 10),
-      xmlLength: xml.length,
-      xmlSnippet: xml.substring(0, 500),
-      headers
-    });
+    const diagnostic = await inspectSubjectList(url);
+    return diagnostic.ok
+      ? c.json(diagnostic)
+      : c.json({ error: `HTTP ${diagnostic.status}`, ...diagnostic });
   } catch (error) {
     return c.json({ error: String(error), url });
   }

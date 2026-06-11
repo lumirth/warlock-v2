@@ -1,29 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { singleRequirementFilter } from '@uiuc-course-search/query-types'
 import {
-  planAmbiguityAction,
-  planChipRemoval,
-  planRecoveryAction,
+  planSearchRequest,
 } from './search-refinement-actions'
 
 describe('search refinement actions', () => {
   it('turns public ambiguity actions into canonical filter-only refinement requests', () => {
-    const plan = planAmbiguityAction(
-      {
-        id: '0-0-requirement-CS',
-        term: 'CS',
-        label: 'Cultural Studies',
-        action: {
-          kind: 'run_search',
-          nextRequest: {
-            query: '',
-            filters: { requirement: singleRequirementFilter('CS') },
-            sort: { field: 'relevance', direction: 'desc' },
-            scope: 'active',
-          },
-        },
-      }
-    )
+    const plan = planSearchRequest({
+      query: '',
+      filters: { requirement: singleRequirementFilter('CS') },
+      sort: { field: 'relevance', direction: 'desc' },
+      scope: 'active',
+    })
 
     expect(plan).toEqual({
       kind: 'search',
@@ -38,25 +26,11 @@ describe('search refinement actions', () => {
   })
 
   it('removes chips by running their canonical next request', () => {
-    const plan = planChipRemoval(
-      {
-        id: 'subject-0',
-        type: 'subject',
-        label: 'Subject CS',
-        value: 'CS',
-        source: 'natural_language',
-        removable: true,
-        editable: true,
-        action: {
-          kind: 'run_search',
-          nextRequest: {
-            query: 'CS',
-            sort: { field: 'relevance', direction: 'desc' },
-            scope: 'active',
-          },
-        },
-      }
-    )
+    const plan = planSearchRequest({
+      query: 'CS',
+      sort: { field: 'relevance', direction: 'desc' },
+      scope: 'active',
+    })
 
     expect(plan).toEqual({
       kind: 'search',
@@ -64,38 +38,6 @@ describe('search refinement actions', () => {
       request: {
         query: 'CS',
         sort: { field: 'relevance', direction: 'desc' },
-        scope: 'active',
-      },
-    })
-  })
-
-  it('uses recovery group canonical requests and preserves the requested sort', () => {
-    const plan = planRecoveryAction(
-      {
-        id: 'any-delivery',
-        label: 'Show any delivery mode',
-        description: 'Relax online delivery.',
-        relaxes: ['online'],
-        keeps: ['topic'],
-        action: {
-          kind: 'run_search',
-          nextRequest: {
-            query: 'movies class',
-            filters: { online: true },
-            sort: { field: 'gpa', direction: 'desc' },
-            scope: 'active',
-          },
-        },
-      },
-    )
-
-    expect(plan).toEqual({
-      kind: 'search',
-      draft: { filters: { online: true } },
-      request: {
-        query: 'movies class',
-        filters: { online: true },
-        sort: { field: 'gpa', direction: 'desc' },
         scope: 'active',
       },
     })

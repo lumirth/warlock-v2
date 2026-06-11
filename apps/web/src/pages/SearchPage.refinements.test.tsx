@@ -10,7 +10,6 @@ import {
   deferred,
   expectLastSearchCalledWithRequest,
   renderSearchPage,
-  searchAction,
   searchResponse,
   setQuery,
   submitSearch,
@@ -23,7 +22,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
         ...searchResponse([], 'fixture'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'professor fagen algorithms', residual: 'algorithms' },
           nextRequest: {
             query: 'professor fagen algorithms',
           },
@@ -38,10 +36,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'instructor',
                 label: 'Instructor fagen',
                 value: 'fagen',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: 'algorithms' }),
+                removeRequest: ({ query: 'algorithms' }),
               },
             ],
             ambiguityActions: [],
@@ -77,7 +72,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
         ...searchResponse([], 'fixture'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'CS gened', residual: '' },
           nextRequest: {
             query: 'CS gened',
           },
@@ -92,7 +86,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                action: searchAction({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+                nextRequest: ({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
               },
             ],
           },
@@ -123,106 +117,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
     )
   })
 
-  it('offers recovery groups for empty searches and keeps the relaxed query through sort changes', async () => {
-    vi.mocked(api.search)
-      .mockResolvedValueOnce({
-        ...searchResponse([], 'fixture'),
-        meta: {
-          ...searchResponse([], 'fixture').meta,
-          query: {
-            raw: 'class about movies no essays',
-            residual: 'about movies',
-          },
-          nextRequest: {
-            query: 'class about movies no essays',
-          },
-          fallback: {
-            tierReached: 1,
-            constraintsRelaxed: [],
-            originalResultCount: 0,
-            recoveryGroups: [
-              {
-                id: 'evidence-backed-workload',
-                label:
-                  'Show low-workload evidence when exact assignment evidence is missing',
-                description:
-                  'Keeps the topic while relaxing low-writing evidence.',
-                relaxes: ['lowWriting'],
-                keeps: ['topic'],
-                action: searchAction({ query: 'class about movies' }),
-              },
-            ],
-          },
-          ui: {
-            chips: [],
-            ambiguityActions: [],
-          },
-        },
-      })
-      .mockResolvedValueOnce(
-        searchResponse([
-          course({
-            id: 'MACS-150-2026-spring',
-            subject: 'MACS',
-            number: '150',
-            title: 'Introduction to Film',
-          }),
-        ], { query: 'class about movies', filters: {} })
-      )
-      .mockResolvedValueOnce(
-        searchResponse([
-          course({
-            id: 'MACS-356-2026-spring',
-            subject: 'MACS',
-            number: '356',
-            title: 'Film History',
-            metrics: { avgGpa: 3.7 },
-          }),
-        ], { query: 'class about movies', filters: {}, sort: { field: 'gpa', direction: 'desc' } })
-      )
-
-    renderSearchPage()
-
-    setQuery('class about movies no essays')
-    submitSearch()
-
-    await screen.findByText('Nothing matched that search.')
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /show low-workload evidence/i,
-      })
-    )
-
-    await waitFor(() => {
-      expectLastSearchCalledWithRequest({
-        query: 'class about movies',
-        pagination: { limit: 20, offset: 0 },
-        filters: {},
-        scope: 'active',
-        sort: { field: 'relevance', direction: 'desc' },
-      })
-    })
-    expect(screen.getByLabelText(/course search query/i)).toHaveValue(
-      'class about movies no essays'
-    )
-
-    await screen.findByText(/MACS 150: Introduction to Film/i)
-    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
-    fireEvent.click(
-      screen.getByRole('button', { name: /sort by avg gpa, descending/i })
-    )
-
-    await waitFor(() => {
-      expectLastSearchCalledWithRequest({
-        query: 'class about movies',
-        pagination: { limit: 20, offset: 0 },
-        filters: {},
-        scope: 'active',
-        sort: { field: 'gpa', direction: 'desc' },
-      })
-    })
-  })
-
   it('keeps accepted ambiguity actions as the canonical request during sort changes', async () => {
     const culturalStudiesResponse = deferred<SearchResponseDto>()
     const sortedResponse = deferred<SearchResponseDto>()
@@ -237,7 +131,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
         ], 'CS'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'CS', residual: '' },
           nextRequest: {
             query: 'CS',
           },
@@ -252,10 +145,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'subject',
                 label: 'Subject CS',
                 value: 'CS',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: '', filters: undefined }),
+                removeRequest: ({ query: '', filters: undefined }),
               },
             ],
             ambiguityActions: [
@@ -263,7 +153,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                action: searchAction({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+                nextRequest: ({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
               },
             ],
           },
@@ -307,7 +197,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
         ], { query: '', filters: { requirement: singleRequirementFilter('CS') } }),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: '', residual: '' },
           nextRequest: {
             query: '',
             filters: { requirement: singleRequirementFilter('CS') },
@@ -319,10 +208,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'requirement',
                 label: 'GenEd CS',
                 value: 'CS',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: 'CS' }),
+                removeRequest: ({ query: 'CS' }),
               },
             ],
             ambiguityActions: [],
@@ -370,8 +256,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
         }),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: '', residual: '' },
-          appliedSort: { field: 'gpa', direction: 'desc' },
           nextRequest: {
             query: '',
             filters: { requirement: singleRequirementFilter('CS') },
@@ -384,10 +268,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'requirement',
                 label: 'GenEd CS',
                 value: 'CS',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: 'CS' }),
+                removeRequest: ({ query: 'CS' }),
               },
             ],
             ambiguityActions: [],
@@ -413,7 +294,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
         ], 'CS'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'CS', residual: '' },
           nextRequest: {
             query: 'CS',
           },
@@ -428,10 +308,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'subject',
                 label: 'Subject CS',
                 value: 'CS',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: '', filters: undefined }),
+                removeRequest: ({ query: '', filters: undefined }),
               },
             ],
             ambiguityActions: [
@@ -439,7 +316,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                action: searchAction({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+                nextRequest: ({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
               },
             ],
           },
@@ -456,7 +333,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
         ], { query: '', filters: { requirement: singleRequirementFilter('CS') } }),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: '', residual: '' },
           nextRequest: {
             query: '',
             filters: { requirement: singleRequirementFilter('CS') },
@@ -468,10 +344,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'requirement',
                 label: 'GenEd CS',
                 value: 'CS',
-                source: 'natural_language',
-                removable: true,
-                editable: true,
-                action: searchAction({ query: 'CS' }),
+                removeRequest: ({ query: 'CS' }),
               },
             ],
             ambiguityActions: [],
@@ -519,7 +392,6 @@ describe('SearchPage refinements and ambiguity actions', () => {
         ...searchResponse([], 'fixture'),
         meta: {
           ...searchResponse([], 'fixture').meta,
-          query: { raw: 'easy cs', residual: '' },
           nextRequest: {
             query: 'easy cs',
           },
@@ -534,7 +406,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-subject-CS',
                 term: 'cs',
                 label: 'Computer Science',
-                action: searchAction({
+                nextRequest: ({
                   query: '',
                   filters: { subject: 'CS', workload: 'easy' },
                 }),

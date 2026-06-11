@@ -1,26 +1,21 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import {
   type CourseGenEdSnapshot,
-  type CourseSnapshot,
   type SubjectSnapshot
 } from '../transforms/course.js';
 import {
   courseGenedPersistenceOperations,
-  courseSnapshotPersistenceOperations,
+  subjectSnapshotPersistencePlan,
+} from './snapshot-persistence-operations.js';
+import {
   escapeSqlValue,
   prepareSnapshotOperation,
   snapshotOperationsSqlStatements,
-  subjectSnapshotPersistencePlan,
-  subjectStalePruneOperations,
-  type GenEdCleanup,
-  type SnapshotPersistenceOperation,
-} from './snapshot-persistence-operations.js';
+} from './snapshot-persistence-sql.js';
 
 const DEFAULT_D1_WRITE_BATCH_SIZE = 100;
 
-export { escapeSqlValue, type GenEdCleanup };
-
-export type SubjectSnapshotWriteResult = {
+type SubjectSnapshotWriteResult = {
   coursesCount: number;
   sectionsCount: number;
 };
@@ -55,35 +50,9 @@ async function executeD1Batch(
   }
 }
 
-export async function pruneStaleCourseGeneds(
-  db: D1Database,
-  cleanup: GenEdCleanup
-): Promise<void> {
-  await executeD1Operations(db, [{ kind: 'course_gened.prune_stale', cleanup }]);
-}
-
-export async function pruneStaleSubjectRows(
-  db: D1Database,
-  subjectId: string,
-  year: number,
-  term: string,
-  syncTimestamp: number
-): Promise<void> {
-  await executeD1Operations(
-    db,
-    subjectStalePruneOperations(subjectId, year, term, syncTimestamp)
-  );
-}
-
 export function subjectSnapshotSqlStatements(snapshot: SubjectSnapshot): string[] {
   return snapshotOperationsSqlStatements(
     subjectSnapshotPersistencePlan(snapshot).operations
-  );
-}
-
-export function courseSnapshotSqlStatements(snapshot: CourseSnapshot): string[] {
-  return snapshotOperationsSqlStatements(
-    courseSnapshotPersistenceOperations(snapshot)
   );
 }
 
@@ -105,13 +74,4 @@ export function courseGenedSqlStatements(
   return snapshotOperationsSqlStatements(
     courseGenedPersistenceOperations(courseId, genEdCategories)
   );
-}
-
-async function executeD1Operations(
-  db: D1Database,
-  operations: SnapshotPersistenceOperation[]
-): Promise<void> {
-  for (const operation of operations) {
-    await prepareSnapshotOperation(db, operation).run();
-  }
 }

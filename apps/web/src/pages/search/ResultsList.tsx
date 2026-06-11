@@ -6,7 +6,7 @@ import type {
   SearchChipDto,
   SearchCourseResultDto,
   SearchMetaDto,
-  SearchRecoveryGroup,
+  SearchResponseDto,
   SearchSort,
   SortField,
 } from '@uiuc-course-search/query-types'
@@ -25,10 +25,10 @@ import {
   getCourseKey,
   getCourseMetrics,
   getCoursePath,
-  toneTextClass,
+  isHistoricalResult,
 } from './search-result-model'
+import { metricToneTextClass } from '../../utils/grading'
 import type { ResultViewMode } from './search-sort-model'
-import type { SearchPagination } from './search-types'
 
 export function ResultsList({
   meta,
@@ -42,19 +42,17 @@ export function ResultsList({
   isRefreshingResults,
   resultsHeadingLabel,
   showingResultsLabel,
-  recoveryGroups,
   onSortFieldChange,
   onDirectionToggle,
   onViewChange,
   onTableSort,
   onRemoveChip,
-  onApplyRecoveryGroup,
   onLoadMore,
   feedbackAction,
 }: {
   meta: SearchMetaDto | null
   results: SearchCourseResultDto[]
-  pagination: SearchPagination | null
+  pagination: SearchResponseDto['pagination'] | null
   loading: boolean
   loadingMore: boolean
   sort: SearchSort
@@ -63,14 +61,12 @@ export function ResultsList({
   isRefreshingResults: boolean
   resultsHeadingLabel: string
   showingResultsLabel: string
-  recoveryGroups: SearchRecoveryGroup[]
   feedbackAction?: ReactNode
   onSortFieldChange: (field: SortField) => void
   onDirectionToggle: () => void
   onViewChange: (view: ResultViewMode) => void
   onTableSort: (field: Exclude<SortField, 'relevance'>) => void
   onRemoveChip: (chip: SearchChipDto) => void
-  onApplyRecoveryGroup: (group: SearchRecoveryGroup) => void
   onLoadMore: () => void
 }) {
   return (
@@ -80,9 +76,7 @@ export function ResultsList({
       ) : results.length === 0 && meta ? (
         <EmptyResults
           meta={meta}
-          recoveryGroups={recoveryGroups}
           onRemoveChip={onRemoveChip}
-          onApplyRecoveryGroup={onApplyRecoveryGroup}
         />
       ) : (
         <div className="flex flex-col gap-3">
@@ -184,7 +178,7 @@ function ResultsSkeleton() {
 
 function CourseResultCard({ result }: { result: SearchCourseResultDto }) {
   const { course } = result
-  const isHistorical = result.search?.historical === true
+  const isHistorical = isHistoricalResult(result)
 
   return (
     <Link
@@ -258,7 +252,7 @@ function ScoreSummary({ course }: { course: CourseSummaryDto }) {
           <dd
             className={cn(
               'text-sm font-semibold tabular-nums',
-              toneTextClass(stat.tone)
+              metricToneTextClass(stat.tone)
             )}
           >
             {stat.value}

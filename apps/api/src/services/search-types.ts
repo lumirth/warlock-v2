@@ -1,16 +1,20 @@
-import type { RetrievalLane } from "./search-planner-types.js";
+import type { CourseRequirementDto } from "@uiuc-course-search/query-types";
 import type { Course } from '../db/types.js';
 
-export type RankingScoreComponentName =
+export type RetrievalLane =
+  | "exact"
+  | "official_text"
+  | "structured_course"
+  | "section_text"
+  | "topic_semantic";
+
+type RankingScoreComponentName =
   | "retrieval_fusion"
   | "title_match"
   | "topic_title_match"
   | "exactness"
   | "quality_tier"
   | "requirement_match"
-  | "availability_term"
-  | "student_language"
-  | "workload_evidence"
   | "introductory_gateway"
   | "level_accessibility"
   | "workload_preference"
@@ -34,8 +38,7 @@ export interface SearchResult {
   keywordRank?: number;
   laneMatches?: RetrievalLane[];
   laneRanks?: Partial<Record<RetrievalLane, number>>;
-  requirementCodes?: string[];
-  supportedSubjectiveClaims?: string[];
+  requirements?: CourseRequirementDto[];
   laneResults?: RetrievalLaneResult[];
   scoreComponents?: RankingScoreComponent[];
   termPriority?: number;
@@ -49,6 +52,5 @@ export interface RetrievalLaneResult {
   rawScore?: number;
   matchedTerms?: string[];
   evidence?: string[];
-  claims?: string[];
   reason: string;
 }

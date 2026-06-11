@@ -38,10 +38,10 @@ import { makeCourseId } from "../../apps/api/src/db/ids.ts";
 import { fromSubjectCascade } from "../../apps/api/src/transforms/course.ts";
 import {
   courseGenedSqlStatements,
-  escapeSqlValue,
   subjectSnapshotSqlStatements,
   termStateSqlStatements,
 } from "../../apps/api/src/services/course-snapshot-writer.ts";
+import { escapeSqlValue } from "../../apps/api/src/services/snapshot-persistence-sql.ts";
 import {
   COURSE_EXPLORER_BROWSER_HEADERS,
   CoordinatedRateLimitFetcher,

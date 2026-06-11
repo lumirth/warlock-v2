@@ -1,9 +1,9 @@
 import type {
-  CISAPICourseDetail,
-  CISAPIGenEd,
-  CISAPIInstructor,
-  CISAPIMeeting,
-  CISAPISection,
+  CourseExplorerCourse,
+  CourseExplorerInstructor,
+  CourseExplorerMeeting,
+  CourseExplorerRequirementCategory,
+  CourseExplorerSection,
 } from './types.js';
 import {
   convertTo24Hour,
@@ -17,7 +17,7 @@ import {
   type XmlElement,
 } from './xml-utils.js';
 
-export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
+export function parseCourseDetailXml(xml: string): CourseExplorerCourse | null {
   const document = parseXmlDocument(xml);
   const course = firstDescendantElement(document, 'course');
   const subject = firstDescendantElement(course, 'subject');
@@ -41,7 +41,7 @@ export function parseCourseDetailXml(xml: string): CISAPICourseDetail | null {
   };
 }
 
-function parseGenEdCategories(course: XmlElement): CISAPIGenEd[] {
+function parseGenEdCategories(course: XmlElement): CourseExplorerRequirementCategory[] {
   return descendantElements(course, 'genEdCategory')
     .map((category) => {
       const id = elementAttr(category, 'id');
@@ -54,7 +54,7 @@ function parseGenEdCategories(course: XmlElement): CISAPIGenEd[] {
     .filter((category) => category.id || category.description || category.attributes.length);
 }
 
-function parseGenEdAttributes(category: XmlElement): CISAPIGenEd['attributes'] {
+function parseGenEdAttributes(category: XmlElement): CourseExplorerRequirementCategory['attributes'] {
   const attributeNames = new Set(['genEdAttribute', 'genEdAttr', 'attribute']);
   return descendantElements(category)
     .filter((element) => attributeNames.has(localName(element)))
@@ -65,7 +65,7 @@ function parseGenEdAttributes(category: XmlElement): CISAPIGenEd['attributes'] {
     .filter((attribute) => attribute.code || attribute.description);
 }
 
-function parseSections(course: XmlElement): CISAPISection[] {
+function parseSections(course: XmlElement): CourseExplorerSection[] {
   const seenCrns = new Set<string>();
   return descendantElements(course)
     .filter((element) => {
@@ -96,7 +96,7 @@ function parseSections(course: XmlElement): CISAPISection[] {
     });
 }
 
-function parseMeetings(section: XmlElement): CISAPIMeeting[] {
+function parseMeetings(section: XmlElement): CourseExplorerMeeting[] {
   return descendantElements(section, 'meeting').map((meeting) => {
     const type = firstDescendantElement(meeting, 'type');
     return {
@@ -113,7 +113,7 @@ function parseMeetings(section: XmlElement): CISAPIMeeting[] {
   });
 }
 
-function parseInstructors(meeting: XmlElement): CISAPIInstructor[] {
+function parseInstructors(meeting: XmlElement): CourseExplorerInstructor[] {
   return descendantElements(meeting, 'instructor')
     .map((instructor) => ({
       firstName: elementAttr(instructor, 'firstName') || firstDescendantText(instructor, 'firstName'),

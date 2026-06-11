@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { KVNamespace } from '@cloudflare/workers-types';
+import { normalizeSearchRequestDto } from '@uiuc-course-search/query-types';
 import {
   cacheSearchPlan,
   cacheSearchResult,
@@ -8,65 +9,92 @@ import {
   searchPlanCacheKey,
   searchResultCacheKey,
 } from '../search-cache.js';
-import { normalizeSearchRequest } from '../search-request.js';
 import type { RetrievalPlan } from '../search-retrieval-plan.js';
-import type { SearchPipelineResult } from '../search-response.js';
+import type { SearchPipelineResult } from '../search-pipeline-result.js';
+import { MAX_BROWSEABLE_SEARCH_RESULTS } from '../search-budget.js';
 
-function memoryKv(): KVNamespace {
+function memoryKv(
+  onPut?: (options: { expirationTtl?: number }) => void,
+): KVNamespace {
   const store = new Map<string, string>();
   return {
     get: async (key: string) => store.get(key) ?? null,
-    put: async (key: string, value: string) => {
+    put: async (key: string, value: string, options?: { expirationTtl?: number }) => {
       store.set(key, value);
+      onPut?.(options ?? {});
     },
   } as unknown as KVNamespace;
 }
 
 describe('search cache', () => {
-  it('normalizes query text and stable override order in plan keys', () => {
-    const left = normalizeSearchRequest({
-      query: ' Easy   Online Gen Ed ',
+  it('preserves query text semantics while stabilizing filter order in plan keys', () => {
+    const left = normalizeSearchRequestDto({
+      query: 'Easy online GenEd',
       filters: { credits: 3, online: true },
     });
-    const right = normalizeSearchRequest({
-      query: 'easy online gen ed',
+    const right = normalizeSearchRequestDto({
+      query: 'Easy online GenEd',
+      filters: { online: true, credits: 3 },
+    });
+    const differentCase = normalizeSearchRequestDto({
+      query: 'easy online gened',
       filters: { online: true, credits: 3 },
     });
 
     expect(searchPlanCacheKey(left)).toBe(
       searchPlanCacheKey(right)
     );
+    expect(searchPlanCacheKey(left)).not.toBe(
+      searchPlanCacheKey(differentCase)
+    );
   });
 
-  it('keys canonical requests by normalized query, filters, sort, and scope', () => {
-    const left = normalizeSearchRequest({
-      query: ' Easy   Online Gen Ed ',
+  it('keys canonical requests by exact query, filters, sort, and scope', () => {
+    const left = normalizeSearchRequestDto({
+      query: 'Easy online GenEd',
       filters: { credits: 3, online: true },
       sort: { field: 'gpa', direction: 'desc' },
       scope: 'all',
     });
-    const right = normalizeSearchRequest({
-      query: 'easy online gen ed',
+    const right = normalizeSearchRequestDto({
+      query: 'Easy online GenEd',
       filters: { online: true, credits: 3 },
       sort: { field: 'gpa', direction: 'desc' },
       scope: 'all',
     });
-    const differentSort = normalizeSearchRequest({
-      query: 'easy online gen ed',
+    const differentSort = normalizeSearchRequestDto({
+      query: 'Easy online GenEd',
       filters: { online: true, credits: 3 },
       sort: { field: 'quality', direction: 'desc' },
       scope: 'all',
     });
 
     expect(searchPlanCacheKey(left)).toBe(searchPlanCacheKey(right));
-    expect(searchResultCacheKey(left, 20)).toBe(searchResultCacheKey(right, 20));
-    expect(searchResultCacheKey(left, 20)).not.toBe(
-      searchResultCacheKey(differentSort, 20),
+    expect(searchResultCacheKey(left)).toBe(searchResultCacheKey(right));
+    expect(searchResultCacheKey(left)).not.toBe(
+      searchResultCacheKey(differentSort),
+    );
+  });
+
+  it('does not collide queries whose casing changes planner meaning', () => {
+    const subjectCode = normalizeSearchRequestDto({ query: 'IS 101' });
+    const questionText = normalizeSearchRequestDto({ query: 'is 101' });
+
+    expect(searchPlanCacheKey(subjectCode)).not.toBe(
+      searchPlanCacheKey(questionText),
+    );
+    expect(searchResultCacheKey(subjectCode)).not.toBe(
+      searchResultCacheKey(questionText),
     );
   });
 
   it('round-trips cached plans and result payloads through KV JSON', async () => {
-    const kv = memoryKv();
+    const expirationTtls: number[] = [];
+    const kv = memoryKv((options) => {
+      if (options.expirationTtl !== undefined) {
+        expirationTtls.push(options.expirationTtl);
+      }
+    });
     const planning = {
       extraction: { hints: [], residual: '' },
       queryResidual: '',
@@ -75,25 +103,14 @@ describe('search cache', () => {
         keywordQuery: '',
         semanticQuery: '',
       },
-      fallbackPlans: [],
       compilerEvents: [],
     };
     const retrievalPlan: RetrievalPlan = {
       controls: { sort: { field: 'relevance', direction: 'desc' }, scope: 'active' },
       budget: {
-        pageLimit: 20,
-        pageOffset: 0,
-        requestedWindow: 21,
-        resultWindowLimit: 40,
-        executionResultLimit: 40,
-        termCandidateLimit: 80,
-        laneCandidateLimit: 80,
-        maxResultWindow: 1200,
-        reasons: ['relevance_page_window'],
+        browseableResultLimit: MAX_BROWSEABLE_SEARCH_RESULTS,
+        semanticLaneResultLimit: 100,
       },
-      isNavigational: false,
-      hasKeywordQuery: false,
-      hasSemanticQuery: false,
       lanes: [],
       inputs: {
         filters: planning.plan.filters,
@@ -101,43 +118,31 @@ describe('search cache', () => {
         cleanKeywordQuery: '',
         titleQuery: '',
         semanticQuery: '',
-        aliasQuery: '',
-        workloadSignalTypes: [],
+        scope: 'active',
+        semanticTermIds: [],
       },
     };
     const result = {
       results: [],
+      totalResults: 0,
       meta: {
         query: { raw: 'easy online gen ed', residual: '' },
         extraction: { hints: [] },
         compilerEvents: [],
         plan: planning.plan,
         retrievalPlan,
-        retrievalPlans: [retrievalPlan],
-        budget: {
-          pageLimit: 20,
-          pageOffset: 0,
-          requestedWindow: 21,
-          resultWindowLimit: 40,
-          executionResultLimit: 40,
-          termCandidateLimit: 80,
-          laneCandidateLimit: 80,
-          maxResultWindow: 1200,
-          reasons: ['relevance_page_window'],
-        },
-        timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
-        fallback: { tierReached: 2, constraintsRelaxed: [], originalResultCount: 0 },
       },
     } satisfies SearchPipelineResult;
-    const request = normalizeSearchRequest({
+    const request = normalizeSearchRequestDto({
       query: 'easy online gen ed',
       filters: { online: true },
     });
 
     await cacheSearchPlan(kv, request, planning);
-    await cacheSearchResult(kv, request, 20, result);
+    await cacheSearchResult(kv, request, result);
 
     await expect(getCachedSearchPlan(kv, request)).resolves.toEqual(planning);
-    await expect(getCachedSearchResult(kv, request, 20)).resolves.toEqual(result);
+    await expect(getCachedSearchResult(kv, request)).resolves.toEqual(result);
+    expect(expirationTtls.every((ttl) => ttl >= 60)).toBe(true);
   });
 });

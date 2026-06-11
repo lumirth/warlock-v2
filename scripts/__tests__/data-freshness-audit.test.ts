@@ -243,7 +243,8 @@ describe('data freshness audit', () => {
     }));
     const outputFile = join(tempRoot!, 'audit.json');
 
-    const result = spawnSync('npx', [
+    const result = spawnSync(process.execPath, [
+      '--import',
       'tsx',
       'scripts/data-freshness-audit.ts',
       '--input',
@@ -270,7 +271,8 @@ describe('data freshness audit', () => {
     const inputFile = makeTempFile('sync-status.json', JSON.stringify(status()));
     const outputFile = join(tempRoot!, 'audit');
 
-    const result = spawnSync('npx', [
+    const result = spawnSync(process.execPath, [
+      '--import',
       'tsx',
       'scripts/data-freshness-audit.ts',
       '--input',

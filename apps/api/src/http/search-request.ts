@@ -1,15 +1,13 @@
 import {
   decodeSearchRequestQuery,
+  type NormalizedSearchRequestDto,
   type SearchRequestPaginationDto,
 } from "@uiuc-course-search/query-types";
-import type { CanonicalSearchRequest } from "../services/search-request.js";
 import type { ParsedParam } from "./params.js";
 
-export type SearchRequestPagination = SearchRequestPaginationDto;
-
-export type ParsedSearchHttpRequest = Readonly<{
-  request: CanonicalSearchRequest;
-  pagination: SearchRequestPagination;
+type ParsedSearchHttpRequest = Readonly<{
+  request: NormalizedSearchRequestDto;
+  pagination: SearchRequestPaginationDto;
 }>;
 
 export function parseSearchHttpRequest(

@@ -6,7 +6,7 @@ import {
   hasAdvancedFilterValue,
 } from './search-filter-model'
 
-export type AdvancedSearchApplyContext = {
+type AdvancedSearchApplyContext = {
   activeRequestQuery: string
   currentInputQuery: string
   inputDirty: boolean
@@ -15,7 +15,7 @@ export type AdvancedSearchApplyContext = {
   interpretedQuery?: string
 }
 
-export type AdvancedSearchApplyPlan =
+type AdvancedSearchApplyPlan =
   | {
       kind: 'search'
       query: string

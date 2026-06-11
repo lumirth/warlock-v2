@@ -1,10 +1,15 @@
 import { asRecord, numericOrNull, type JsonRecord } from './json-shape.ts';
+import {
+  SEARCH_TERM_VALUES,
+  TERM_STATUS_VALUES,
+  type SearchTermFilter,
+  type TermStatus,
+} from '@uiuc-course-search/query-types';
 
-export const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-export const STATUSES = ['registrable', 'active', 'historical'] as const;
+export const TERMS = SEARCH_TERM_VALUES;
 
-export type Term = typeof TERMS[number];
-export type TermStatus = typeof STATUSES[number];
+export type Term = SearchTermFilter;
+export type { TermStatus };
 
 export const TERM_ORDER: Record<Term, number> = {
   winter: 0,
@@ -26,7 +31,7 @@ export function normalizeTerm(value: unknown): Term | null {
 }
 
 export function isTermStatus(value: unknown): value is TermStatus {
-  return typeof value === 'string' && (STATUSES as readonly string[]).includes(value.toLowerCase());
+  return typeof value === 'string' && (TERM_STATUS_VALUES as readonly string[]).includes(value.toLowerCase());
 }
 
 export function normalizeStatus(value: unknown): TermStatus | null {
@@ -49,6 +54,17 @@ export function compareTerms(
 ): number {
   if (year !== currentYear) return year - currentYear;
   return TERM_ORDER[term] - TERM_ORDER[currentTerm];
+}
+
+export function expectedTermStatus(
+  storedStatus: unknown,
+  year: number,
+  term: Term,
+  currentYear: number,
+  currentTerm: Term,
+): TermStatus {
+  return normalizeStatus(storedStatus)
+    ?? (compareTerms(year, term, currentYear, currentTerm) < 0 ? 'historical' : 'active');
 }
 
 export function parseTermStateId(row: JsonRecord): string | null {

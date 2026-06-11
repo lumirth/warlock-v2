@@ -122,11 +122,10 @@ describe('ApiClient', () => {
       json: async () => ({
         results: [],
         meta: {
-          query: { raw: 'intro to CS', residual: '' },
-          timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
         },
         pagination: {
           totalResults: 21,
+          browseableResults: 21,
           limit: 20,
           offset: 20,
           hasMore: true,
@@ -157,11 +156,10 @@ describe('ApiClient', () => {
       json: async () => ({
         results: [],
         meta: {
-          query: { raw: 'algorithms', residual: 'algorithms' },
-          timing: { extraction_ms: 1, search_ms: 1, total_ms: 2 },
         },
         pagination: {
           totalResults: 0,
+          browseableResults: 0,
           limit: 20,
           offset: 0,
         },

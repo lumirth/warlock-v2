@@ -28,7 +28,7 @@ const DEFAULT_CLASSIFICATION_SUBJECTS = [
 ] as const;
 const REGISTRABLE_STATUS_PATTERN = /\b(open|crosslistopen|wait\s*list)\b/i;
 
-export interface TermDiscoveryConfig {
+interface TermDiscoveryConfig {
   frontendBase: string;
   cisapiBase: string;
   fromYear?: number;
@@ -37,13 +37,13 @@ export interface TermDiscoveryConfig {
   maxClassificationSubjects?: number;
 }
 
-export interface DiscoveredTerm {
+interface DiscoveredTerm {
   year: number;
   term: string;
   termId: string;
 }
 
-export interface TermClassification {
+interface TermClassification {
   term: DiscoveredTerm;
   status: TermStateStatus;
   sampleEnrollmentStatuses: string[];
@@ -53,7 +53,7 @@ export interface TermClassification {
 /**
  * Fetches valid terms for a given year from the frontend AJAX endpoint
  */
-export async function discoverTermsForYear(
+async function discoverTermsForYear(
   config: TermDiscoveryConfig,
   year: number
 ): Promise<DiscoveredTerm[]> {

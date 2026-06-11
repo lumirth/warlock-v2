@@ -7,7 +7,7 @@ const MAX_EXPECTED_LENGTH = 1000;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_USER_AGENT_LENGTH = 300;
 
-export type SubmitFeedbackInput = {
+type SubmitFeedbackInput = {
   db: D1Database;
   body: FeedbackSubmitDto;
   userAgent?: string | null;

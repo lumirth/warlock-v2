@@ -17,12 +17,12 @@ import {
 } from './sync-operations.js';
 import { validateSyncResult } from './validation.js';
 
-export type CourseSyncApplicationEnv = Pick<
+type CourseSyncApplicationEnv = Pick<
   SyncRouteBindings,
   'DB' | 'CISAPI_BASE' | 'SYNC_CONCURRENCY' | 'SYNC_EMBEDDINGS' | 'VECTORIZE' | 'AI'
 >;
 
-export type SyncSubjectBatchCommand = {
+type SyncSubjectBatchCommand = {
   year: number;
   term: string;
   subjects: string[];
@@ -30,7 +30,7 @@ export type SyncSubjectBatchCommand = {
   totalSubjects?: number | null;
 };
 
-export type SyncTermCommand = {
+type SyncTermCommand = {
   year: number;
   term: string;
   offset: number;
@@ -39,17 +39,17 @@ export type SyncTermCommand = {
   forceRunningLocks?: boolean;
 };
 
-export type SyncActiveTermsCommand = {
+type SyncActiveTermsCommand = {
   offset: number;
   limit: number;
 };
 
-export type ManualTermSyncResult = TermSyncResult & {
+type ManualTermSyncResult = TermSyncResult & {
   forceRunningLocks: boolean;
   warnings: string[];
 };
 
-export type ActiveTermsSyncResult = {
+type ActiveTermsSyncResult = {
   results: Array<TermSyncResult & { warnings: string[] }>;
 };
 

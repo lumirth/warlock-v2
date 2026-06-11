@@ -49,7 +49,7 @@ export function applyTermRankingPolicy(
   return enrichedResults.slice(0, context.limit);
 }
 
-export function compareRankedSearchResults(
+function compareRankedSearchResults(
   left: SearchResult,
   right: SearchResult,
 ): number {

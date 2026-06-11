@@ -6,16 +6,13 @@ import { componentTotal } from "./score-utils.js";
 export {
   applyTermRankingPolicy,
   buildTermPriorityMap,
-  compareRankedSearchResults,
   type RankingTermInfo,
 } from "./term-ordering.js";
 export {
   isSearchSort,
-  sortValueForResult,
 } from "./sort-policy.js";
 export {
   applyFinalOrderingControls,
-  type FinalOrderingControls,
 } from "./final-ordering.js";
 
 export function applyRankingPolicy(

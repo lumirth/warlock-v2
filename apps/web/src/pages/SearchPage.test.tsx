@@ -220,7 +220,6 @@ describe('SearchPage request state', () => {
           id: 'CS-225-2026-spring',
           number: '225',
           title: 'Data Structures',
-          search: { score: 0.91 },
           matchEvidence: [
             {
               kind: 'course_code',
@@ -391,7 +390,7 @@ describe('SearchPage request state', () => {
           id: 'CS-225-2026-spring',
           number: '225',
           title: 'Data Structures',
-          search: { historical: true, score: 0.81 },
+          warnings: [{ kind: 'historical', message: 'Historical term result' }],
         }),
       ], 'cs 225')
     )

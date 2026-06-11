@@ -1,13 +1,13 @@
 import type { GoldQuery, QueryFailureClass } from './types.js';
 
-export interface CorpusCoverageRequirement {
+interface CorpusCoverageRequirement {
   failureClass: QueryFailureClass;
   description: string;
   minimumCases: number;
   queryIds: number[];
 }
 
-export interface CorpusCoverageResult extends CorpusCoverageRequirement {
+interface CorpusCoverageResult extends CorpusCoverageRequirement {
   presentIds: number[];
   missingIds: number[];
   passes: boolean;
@@ -99,8 +99,8 @@ export const CORPUS_COVERAGE_REQUIREMENTS: CorpusCoverageRequirement[] = [
     queryIds: [53, 54, 70, 112],
   },
   {
-    failureClass: 'decision_query_rescue',
-    description: 'Short, vague, and clunky advising-style queries compile into typed rescue plans',
+    failureClass: 'student_intent',
+    description: 'Short, vague, and clunky advising-style queries compile into typed search intent',
     minimumCases: 8,
     queryIds: [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
   },
@@ -115,12 +115,6 @@ export const CORPUS_COVERAGE_REQUIREMENTS: CorpusCoverageRequirement[] = [
     description: 'Counts-for and requirement language marks student-profile uncertainty instead of overclaiming degree progress',
     minimumCases: 3,
     queryIds: [104, 106, 110],
-  },
-  {
-    failureClass: 'no_result_recovery',
-    description: 'Over-constrained decision searches carry a relaxation plan for grouped recovery paths',
-    minimumCases: 2,
-    queryIds: [110, 111],
   },
 ];
 

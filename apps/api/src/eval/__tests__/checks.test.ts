@@ -7,7 +7,6 @@ function query(expectedResults: GoldQuery['expected_results']): GoldQuery {
     id: 9001,
     query: 'test query',
     expected_filters: {},
-    expected_residual: '',
     expected_results: expectedResults,
     category: 'decision',
   };
@@ -86,7 +85,6 @@ describe('result coherence checks', () => {
           },
         ],
       },
-      search: { score: 6.3 },
     };
 
     expect(normalizeApiSearchResults([publicResult])).toEqual([
@@ -104,7 +102,6 @@ describe('result coherence checks', () => {
             attribute_code: undefined,
           },
         ],
-        score: 6.3,
       },
     ]);
 
@@ -119,7 +116,6 @@ describe('result coherence checks', () => {
       },
       {
         results: [publicResult],
-        meta: { query: { residual: '' } },
       },
     );
 

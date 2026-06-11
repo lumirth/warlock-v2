@@ -1,4 +1,12 @@
-import type { ParsedQuery, ParsedClause, FieldFilter } from './search-planner-types.js';
+import {
+  isKnownRequirementCode,
+  isSearchLevelFilter,
+  isSearchStatusFilter,
+  isSearchTermFilter,
+  isSearchTimeFilter,
+  isSearchWorkloadFilter,
+} from '@uiuc-course-search/query-types';
+import type { ParsedQuery, FieldFilter } from './search-planner-types.js';
 
 const SUPPORTED_FIELD_FILTERS = new Set([
   'subject',
@@ -12,8 +20,6 @@ const SUPPORTED_FIELD_FILTERS = new Set([
   'time',
   'term',
   'partofterm',
-  'part_of_term',
-  'pot',
   'workload',
 ]);
 
@@ -22,35 +28,25 @@ const SUPPORTED_FIELD_FILTERS = new Set([
  * Extracts: field:value, requirement:any(...), requirement:all(...), -negations, "phrases"
  */
 export function parseQuery(query: string): ParsedQuery {
-  // For now, we don't support top-level OR, so single clause
-  const clause = parseClause(query);
-
-  return {
-    raw: query,
-    clauses: [clause],
-  };
-}
-
-function parseClause(text: string): ParsedClause {
   const filters: FieldFilter[] = [];
   const negations: string[] = [];
   const phrases: string[] = [];
-  let requirementMode: ParsedClause['requirementMode'] = undefined;
-  let residual = text;
+  let requirementMode: ParsedQuery['requirementMode'] = undefined;
+  let residual = query;
 
   // 1. Extract requirement:any(...) and requirement:all(...).
   const requirementAnyRegex = /(?:requirement|gened):any\(([^)]+)\)/gi;
   const requirementAllRegex = /(?:requirement|gened):all\(([^)]+)\)/gi;
 
   const anyMatch = requirementAnyRegex.exec(residual);
-  if (anyMatch) {
+  if (anyMatch && validRequirementCodes(anyMatch[1])) {
     requirementMode = requirementMode || {};
     requirementMode.any = anyMatch[1].split(',').map(s => s.trim().toUpperCase());
     residual = residual.replace(anyMatch[0], ' ');
   }
 
   const allMatch = requirementAllRegex.exec(residual);
-  if (allMatch) {
+  if (allMatch && validRequirementCodes(allMatch[1])) {
     requirementMode = requirementMode || {};
     requirementMode.all = allMatch[1].split(',').map(s => s.trim().toUpperCase());
     residual = residual.replace(allMatch[0], ' ');
@@ -89,6 +85,9 @@ function parseClause(text: string): ParsedClause {
     if (!SUPPORTED_FIELD_FILTERS.has(normalizedField)) {
       continue;
     }
+    if (!isValidFieldFilter(normalizedField, fieldMatch[2])) {
+      continue;
+    }
     filters.push({
       field: normalizedField,
       value: fieldMatch[2],
@@ -111,10 +110,70 @@ function parseClause(text: string): ParsedClause {
   };
 }
 
+function validRequirementCodes(value: string): boolean {
+  const codes = value
+    .split(',')
+    .map(code => code.trim().toUpperCase())
+    .filter(Boolean);
+  return codes.length > 0 && codes.every(isKnownRequirementCode);
+}
+
+function isValidFieldFilter(field: string, rawValue: string): boolean {
+  const value = rawValue.trim();
+  if (!value) return false;
+
+  switch (field) {
+    case 'subject':
+      return /^[A-Z]{2,4}$/i.test(value);
+    case 'requirement':
+      return isKnownRequirementCode(value.toUpperCase());
+    case 'credits': {
+      const credits = Number(value);
+      return Number.isInteger(credits) && credits >= 0 && credits <= 8;
+    }
+    case 'level':
+      return isSearchLevelFilter(Number(value));
+    case 'crn':
+      return /^\d{5,6}$/.test(value);
+    case 'status':
+      return isSearchStatusFilter(value.toLowerCase());
+    case 'online':
+      return [
+        'true',
+        'yes',
+        '1',
+        'online',
+        'remote',
+        'false',
+        'no',
+        '0',
+        'in-person',
+        'in_person',
+        'inperson',
+      ].includes(value.toLowerCase());
+    case 'days':
+      return /^[MTWRFSU]{1,7}$/i.test(value);
+    case 'time':
+      return isSearchTimeFilter(value.toLowerCase());
+    case 'term': {
+      const match = /^(?:(spring|summer|fall|winter)[-_ ]?(20\d{2})|(20\d{2})[-_ ]?(spring|summer|fall|winter))$/i.exec(value);
+      const term = match?.[1] ?? match?.[4];
+      return Boolean(term && isSearchTermFilter(term.toLowerCase()));
+    }
+    case 'partofterm':
+      return /^[A-Z0-9]$/i.test(value);
+    case 'workload':
+      return isSearchWorkloadFilter(value.toLowerCase());
+    default:
+      return false;
+  }
+}
+
 function normalizeFieldName(field: string): string {
   const normalized = field.toLowerCase().replace(/-/g, '_');
   if (normalized === 'gened') return 'requirement';
   if (normalized === 'difficulty') return 'workload';
+  if (normalized === 'part_of_term' || normalized === 'pot') return 'partofterm';
   return normalized;
 }
 

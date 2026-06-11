@@ -13,7 +13,6 @@ export type QueryFailureClass =
   | "ambiguity"
   | "semantic_topic"
   | "unsupported_language"
-  | "decision_query_rescue"
+  | "student_intent"
   | "avoidance_language"
-  | "requirement_uncertainty"
-  | "no_result_recovery";
+  | "requirement_uncertainty";

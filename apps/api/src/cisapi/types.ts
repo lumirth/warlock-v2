@@ -4,47 +4,25 @@ export interface CISAPISubject {
   label?: string;       // "Computer Science" (from some endpoints)
 }
 
-export interface CISAPISubjectDetail {
-  id: string;
-  label: string;
-  collegeCode: string;
-  departmentCode: string;
-  unitName: string;
-  contactName: string;
-  contactTitle: string;
-  addressLine1: string;
-  addressLine2: string;
-  phoneNumber: string;
-  webSiteURL: string;
-  collegeDepartmentDescription: string;
-}
-
-export interface CISAPICourse {
-  id: string;           // "225"
-  href: string;
-  label: string;        // "Data Structures"
-  subject: string;      // "CS" (added during parsing)
-}
-
-export interface CISAPISection {
+export interface CourseExplorerSection {
   crn: string;
   sectionNumber: string;
-  sectionTitle: string;           // NEW - for topics courses
+  sectionTitle: string;
   statusCode: string;
   sectionStatusCode: string;
   enrollmentStatus: string;
-  sectionText: string;            // NEW
-  sectionNotes: string;           // NEW
-  sectionCappArea: string;        // NEW
-  sectionDateRange: string;       // NEW
+  sectionText: string;
+  sectionNotes: string;
+  sectionCappArea: string;
+  sectionDateRange: string;
   partOfTerm: string;
   startDate: string;
   endDate: string;
-  creditHours: string;            // NEW - section-level override
-  meetings: CISAPIMeeting[];
+  creditHours: string;
+  meetings: CourseExplorerMeeting[];
 }
 
-export interface CISAPIMeeting {
+export interface CourseExplorerMeeting {
   type: string;
   typeCode: string;
   start: string;        // "09:00 AM"
@@ -52,16 +30,16 @@ export interface CISAPIMeeting {
   daysOfTheWeek: string;
   roomNumber: string;
   buildingName: string;
-  meetingDateRange: string;       // NEW
-  instructors: CISAPIInstructor[];
+  meetingDateRange: string;
+  instructors: CourseExplorerInstructor[];
 }
 
-export interface CISAPIInstructor {
+export interface CourseExplorerInstructor {
   firstName: string;
   lastName: string;
 }
 
-export interface CISAPICourseDetail {
+export interface CourseExplorerCourse {
   id: string;
   subjectId: string;
   label: string;
@@ -69,21 +47,21 @@ export interface CISAPICourseDetail {
   creditHours: string;
   courseSectionInformation: string;
   classScheduleInformation: string;
-  sectionDegreeAttributes: string;      // NEW
-  sectionDateRange: string;             // NEW
-  sectionRegistrationNotes: string;     // NEW
-  sectionApprovalCode: string;          // NEW
-  genEdCategories: CISAPIGenEd[];
-  sections: CISAPISection[];
+  sectionDegreeAttributes: string;
+  sectionDateRange: string;
+  sectionRegistrationNotes: string;
+  sectionApprovalCode: string;
+  genEdCategories: CourseExplorerRequirementCategory[];
+  sections: CourseExplorerSection[];
 }
 
-export interface CISAPIGenEd {
+export interface CourseExplorerRequirementCategory {
   id: string;
   description: string;
-  attributes: CISAPIGenEdAttribute[];   // NEW
+  attributes: CourseExplorerRequirementAttribute[];
 }
 
-export interface CISAPIGenEdAttribute {
+interface CourseExplorerRequirementAttribute {
   code: string;
   description: string;
 }

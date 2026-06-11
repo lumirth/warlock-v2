@@ -1,6 +1,12 @@
 import type { D1Database } from "@cloudflare/workers-types";
+import {
+  type CourseRequirementDto,
+} from "@uiuc-course-search/query-types";
 import type { Course } from '../db/types.js';
-import { canonicalRequirementCode } from "./requirement-codes.js";
+import {
+  courseRequirementRowToDto,
+  type CourseRequirementSourceRow,
+} from "../transforms/course-requirements.js";
 
 const D1_ID_BATCH_SIZE = 50;
 
@@ -35,41 +41,34 @@ export async function fetchCoursesById(
   return courseMap;
 }
 
-export async function fetchRequirementCodesByCourseId(
+export async function fetchRequirementsByCourseId(
   db: D1Database,
   courseIds: string[],
-): Promise<Map<string, string[]>> {
-  const requirementCodesByCourseId = new Map<string, string[]>();
+): Promise<Map<string, CourseRequirementDto[]>> {
+  const requirementsByCourseId = new Map<string, CourseRequirementDto[]>();
   if (courseIds.length === 0) {
-    return requirementCodesByCourseId;
+    return requirementsByCourseId;
   }
 
   for (const batch of chunkValues([...new Set(courseIds)], D1_ID_BATCH_SIZE)) {
     const placeholders = batch.map(() => "?").join(",");
     const result = await db.prepare(`
-      SELECT course_id, category_id, attribute_code
+      SELECT course_id, category_id, category_name, attribute_code, attribute_name
       FROM course_gened
       WHERE course_id IN (${placeholders})
       ORDER BY category_id, attribute_code
-    `).bind(...batch).all<{
+    `).bind(...batch).all<CourseRequirementSourceRow & {
       course_id: string;
-      category_id: string;
-      attribute_code: string | null;
     }>();
 
     for (const row of result.results) {
-      const codes = requirementCodesByCourseId.get(row.course_id) ?? [];
-      for (const value of [row.category_id, row.attribute_code]) {
-        const code = canonicalRequirementCode(value);
-        if (code && !codes.includes(code)) {
-          codes.push(code);
-        }
-      }
-      requirementCodesByCourseId.set(row.course_id, codes);
+      const requirements = requirementsByCourseId.get(row.course_id) ?? [];
+      requirements.push(courseRequirementRowToDto(row));
+      requirementsByCourseId.set(row.course_id, requirements);
     }
   }
 
-  return requirementCodesByCourseId;
+  return requirementsByCourseId;
 }
 
 export function chunkValues<T>(values: T[], size: number): T[][] {

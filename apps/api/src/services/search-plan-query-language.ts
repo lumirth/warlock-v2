@@ -1,4 +1,7 @@
 import {
+  isSearchLevelFilter,
+  isSearchStatusFilter,
+  isSearchTimeFilter,
   requirementFilter,
   singleRequirementFilter,
 } from '@uiuc-course-search/query-types';
@@ -9,7 +12,7 @@ import {
 } from './search-intent-policy.js';
 import type {
   FieldFilter,
-  ParsedClause,
+  ParsedQuery,
   SearchPlan,
 } from './search-planner-types.js';
 import { withSearchPlanUpdates } from './search-plan-model.js';
@@ -22,64 +25,64 @@ export function appendQueryText(current: string, addition: string): string {
   return [current, addition].filter(Boolean).join(' ').trim();
 }
 
-export type QueryLanguageClauseResult = {
+type QueryLanguageClauseResult = {
   plan: SearchPlan;
   events: SearchCompilerEvent[];
 };
 
-export function compileQueryLanguageClause(
-  clause: ParsedClause,
+export function compileQueryLanguage(
+  queryLanguage: ParsedQuery,
   inputPlan: SearchPlan,
 ): QueryLanguageClauseResult {
   const events: SearchCompilerEvent[] = [];
 
   const plan = withSearchPlanUpdates(inputPlan, draft => {
-    for (const filter of clause.filters) {
+    for (const filter of queryLanguage.filters) {
       applyFieldFilter(filter, draft);
     }
-    if (clause.filters.length > 0) {
+    if (queryLanguage.filters.length > 0) {
       events.push(
         compilerEvent('compile', 'query_language_filters', 'Applied explicit query-language filters', {
-          fields: clause.filters.map((filter) => filter.field),
+          fields: queryLanguage.filters.map((filter) => filter.field),
         }),
       );
     }
 
-    if (clause.requirementMode) {
-      if (clause.requirementMode.any) {
-        draft.filters.requirement = requirementFilter('any', clause.requirementMode.any);
+    if (queryLanguage.requirementMode) {
+      if (queryLanguage.requirementMode.any) {
+        draft.filters.requirement = requirementFilter('any', queryLanguage.requirementMode.any);
       }
-      if (clause.requirementMode.all) {
-        draft.filters.requirement = requirementFilter('all', clause.requirementMode.all);
+      if (queryLanguage.requirementMode.all) {
+        draft.filters.requirement = requirementFilter('all', queryLanguage.requirementMode.all);
       }
       events.push(
         compilerEvent('compile', 'query_language_requirements', 'Applied explicit requirement mode', {
-          mode: clause.requirementMode.any ? 'any' : 'all',
+          mode: queryLanguage.requirementMode.any ? 'any' : 'all',
         }),
       );
     }
 
-    for (const negation of clause.negations) {
+    for (const negation of queryLanguage.negations) {
       applyNegationToken(negation, draft);
     }
-    if (clause.negations.length > 0) {
+    if (queryLanguage.negations.length > 0) {
       events.push(
         compilerEvent('compile', 'query_language_negations', 'Applied explicit query-language negations', {
-          negations: clause.negations,
+          negations: queryLanguage.negations,
         }),
       );
     }
 
-    if (clause.phrases.length > 0) {
-      const keywordPhrases = clause.phrases
+    if (queryLanguage.phrases.length > 0) {
+      const keywordPhrases = queryLanguage.phrases
         .map((phrase) => `"${phrase.replace(/"/g, '""')}"`)
         .join(' ');
-      const semanticPhrases = clause.phrases.join(' ');
+      const semanticPhrases = queryLanguage.phrases.join(' ');
       draft.keywordQuery = appendQueryText(draft.keywordQuery, keywordPhrases);
       draft.semanticQuery = appendQueryText(draft.semanticQuery, semanticPhrases);
       events.push(
         compilerEvent('compile', 'quoted_phrases', 'Added quoted phrases to retrieval query text', {
-          phrases: clause.phrases,
+          phrases: queryLanguage.phrases,
         }),
       );
     }
@@ -108,14 +111,19 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
     }
     case 'level': {
       const level = parseInt(filter.value, 10);
-      if (!Number.isNaN(level)) plan.filters.level = level;
+      if (isSearchLevelFilter(level)) plan.filters.level = level;
       break;
     }
     case 'crn':
       plan.filters.crn = filter.value;
       break;
     case 'status':
-      plan.filters.status = filter.value.toLowerCase();
+      {
+        const status = filter.value.toLowerCase();
+        if (isSearchStatusFilter(status)) {
+          plan.filters.status = status;
+        }
+      }
       break;
     case 'online': {
       const online = parseBooleanFilterValue(filter.value);
@@ -126,7 +134,12 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
       plan.filters.days = filter.value.toUpperCase();
       break;
     case 'time':
-      plan.filters.time = filter.value.toLowerCase();
+      {
+        const time = filter.value.toLowerCase();
+        if (isSearchTimeFilter(time)) {
+          plan.filters.time = time;
+        }
+      }
       break;
     case 'term': {
       const parsed = parseTermValue(filter.value);
@@ -137,8 +150,6 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
       break;
     }
     case 'partofterm':
-    case 'part_of_term':
-    case 'pot':
       plan.filters.partOfTerm = filter.value.toUpperCase();
       break;
     case 'workload':

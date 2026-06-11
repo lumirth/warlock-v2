@@ -1,7 +1,5 @@
 # Data Refresh Runbook
 
-Date: 2026-06-02
-
 This project is pre-alpha, has no users, and has no compatibility obligations. Data freshness should be explicit and observable rather than inferred from scattered cron jobs.
 
 ## Sources
@@ -178,13 +176,22 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admi
 
 `enrich-gpa` propagates course-level GPA aggregates across every retained term, and `enrich-scoring` rebuilds instructor GPA/RMP links for every active or registrable term before recomputing public quality/workload scores.
 
+7. After broad term backfills or embedding metadata changes, rebuild semantic-search embeddings. Repeat with `offset` increased by the response's `processed` count until `hasMore` is false:
+
+```bash
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "$STAGING_API_BASE_URL/admin/embeddings/backfill?scope=all&limit=250&offset=0"
+```
+
+The Vectorize index must already have metadata indexes for `subject`, `level_bucket`, and `term_id`; see `docs/deployment-checklist.md`.
+
 ## Backup Rule
 
-Before destructive remote D1 actions, create and verify a restorable D1 Time Travel backup. Follow `docs/rollback-checklist.md` and record the backup reference, bookmark, restore target, and restore verification evidence in the stabilization report.
+Before destructive remote D1 actions, create and verify a restorable D1 Time Travel backup. Follow `docs/rollback-checklist.md` and record the backup reference, bookmark, restore target, and restore verification evidence in the maintenance evidence file for the run.
 
-## Promotion To Final Evidence
+## Required Maintenance Evidence
 
-The final stabilization report must include:
+The maintenance evidence file must include:
 
 - The `/admin/sync/status` JSON summary for staging.
 - The `npm run data:semester:plan` artifact bundle for the latest staging preflight.

@@ -1,4 +1,9 @@
-import type { Hint, HintType } from '../search-planner-types.js';
+import type { Hint } from '../search-planner-types.js';
+import {
+  isSearchLevelFilter,
+  isSearchStatusFilter,
+  isSearchTimeFilter,
+} from '@uiuc-course-search/query-types';
 import { createDefaultRegistry } from '../alias-registry.js';
 import {
   LEVEL_KEYWORDS_HARD,
@@ -27,11 +32,14 @@ export function extractAttributesAndAliases(text: string, hints: Hint[]): string
   const levelNumRegex = /\b([1-5])00\s*-?\s*level\b/gi;
   const levelMatches: TextMatch[] = [];
   while ((match = levelNumRegex.exec(residual)) !== null) {
-    hints.push({
-      type: 'level',
-      value: parseInt(match[1]) * 100,
-      metadata: createMetadata('regex', match[0], 0.9),
-    });
+    const level = parseInt(match[1]) * 100;
+    if (isSearchLevelFilter(level)) {
+      hints.push({
+        type: 'level',
+        value: level,
+        metadata: createMetadata('regex', match[0], 0.9),
+      });
+    }
     levelMatches.push({ index: match.index, length: match[0].length });
   }
   residual = maskMatches(residual, levelMatches);
@@ -73,30 +81,43 @@ function extractAliases(text: string, hints: Hint[]): string {
   const sortedMatches = [...matches].sort((a, b) => b.span[0] - a.span[0]);
 
   for (const match of sortedMatches) {
-    let hintType: HintType;
-    let value: string | number | boolean;
+    const metadata = {
+      source: 'alias' as const,
+      span: match.span,
+      confidence: match.confidence,
+      raw: match.raw,
+    };
 
     switch (match.kind) {
-      case 'time': hintType = 'time'; value = match.canonical; break;
-      case 'workload': hintType = 'workload'; value = match.canonical; break;
-      case 'status': hintType = 'status'; value = match.canonical; break;
-      case 'delivery': hintType = 'online'; value = match.canonical === 'true'; break;
-      case 'days': hintType = 'days'; value = match.canonical; break;
-      case 'subject': hintType = 'subject'; value = match.canonical; break;
-      case 'requirement': hintType = 'requirement'; value = match.canonical; break;
+      case 'time':
+        if (isSearchTimeFilter(match.canonical)) {
+          hints.push({ type: 'time', value: match.canonical, metadata });
+        }
+        break;
+      case 'workload':
+        if (match.canonical === 'easy' || match.canonical === 'hard') {
+          hints.push({ type: 'workload', value: match.canonical, metadata });
+        }
+        break;
+      case 'status':
+        if (isSearchStatusFilter(match.canonical)) {
+          hints.push({ type: 'status', value: match.canonical, metadata });
+        }
+        break;
+      case 'delivery':
+        hints.push({ type: 'online', value: match.canonical === 'true', metadata });
+        break;
+      case 'days':
+        hints.push({ type: 'days', value: match.canonical, metadata });
+        break;
+      case 'subject':
+        hints.push({ type: 'subject', value: match.canonical, metadata });
+        break;
+      case 'requirement':
+        hints.push({ type: 'requirement', value: match.canonical, metadata });
+        break;
       default: continue;
     }
-
-    hints.push({
-      type: hintType,
-      value,
-      metadata: {
-        source: 'alias',
-        span: match.span,
-        confidence: match.confidence,
-        raw: match.raw,
-      },
-    });
 
     residual =
       residual.slice(0, match.span[0]) +

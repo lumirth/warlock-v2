@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
-import { touchTermStateChecked } from '../index.js';
+import { touchTermStateChecked } from '../term-state-repository.js';
 
 describe('term_state database helpers', () => {
   it('touches last_checked without overwriting sync freshness fields', async () => {

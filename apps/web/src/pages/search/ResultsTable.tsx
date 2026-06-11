@@ -16,7 +16,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { getQualityLabel, getQualityTone } from '../../utils/grading'
+import {
+  getQualityLabel,
+  getQualityTone,
+  getWorkloadLabel,
+  getWorkloadTone,
+  isFiniteMetric,
+  metricToneTextClass,
+} from '../../utils/grading'
 import { cn } from '@/lib/utils'
 import { TABLE_SORT_COLUMNS, type TableSortColumn } from './search-options'
 import {
@@ -26,9 +33,7 @@ import {
   formatTermLabel,
   getCourseKey,
   getCoursePath,
-  getWorkloadLabel,
-  getWorkloadTone,
-  toneTextClass,
+  isHistoricalResult,
 } from './search-result-model'
 import { sortButtonLabel } from './search-sort-model'
 
@@ -60,13 +65,13 @@ export function CourseResultsTable({
       <TableBody>
         {results.map((result) => {
           const { course } = result
-          const isHistorical = result.search?.historical === true
+          const isHistorical = isHistoricalResult(result)
           const qualityLabel =
-            typeof course.metrics.qualityScore === 'number'
+            isFiniteMetric(course.metrics.qualityScore)
               ? getQualityLabel(course.metrics.qualityScore)
               : null
           const workloadLabel =
-            typeof course.metrics.workloadScore === 'number'
+            isFiniteMetric(course.metrics.workloadScore)
               ? getWorkloadLabel(course.metrics.workloadScore)
               : null
 
@@ -105,7 +110,7 @@ export function CourseResultsTable({
                   <span
                     className={cn(
                       'font-semibold',
-                      toneTextClass(getQualityTone(qualityLabel))
+                      metricToneTextClass(getQualityTone(qualityLabel))
                     )}
                   >
                     {qualityLabel}
@@ -119,7 +124,7 @@ export function CourseResultsTable({
                   <span
                     className={cn(
                       'font-semibold',
-                      toneTextClass(getWorkloadTone(course.metrics.workloadScore!))
+                      metricToneTextClass(getWorkloadTone(workloadLabel))
                     )}
                   >
                     {workloadLabel}

@@ -1,54 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { EXTRACTION_PASSES, extract } from '../extractor.js';
-import {
-  createExtractionContext,
-  recordExtractionArtifacts,
-  runExtractionPasses,
-  type ExtractionPass,
-} from '../extraction/types.js';
+import { extract } from '../extractor.js';
 import type { Hint } from '../search-planner-types.js';
 
 describe('extract', () => {
-  it('declares the extraction pipeline as named passes', () => {
-    expect(EXTRACTION_PASSES.map(pass => pass.id)).toEqual([
-      'positive_no_not_aliases',
-      'general_negations',
-      'course_codes_and_crns',
-      'question_scaffolding',
-      'student_shorthand',
-      'term_and_part_of_term',
-      'contextual_requirements',
-      'attributes_and_aliases',
-      'instructors',
-      'standalone_entities',
-      'clean_residual',
-    ]);
-    for (const pass of EXTRACTION_PASSES) {
-      expect(pass.reads.length).toBeGreaterThan(0);
-      expect(pass.writes.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('rejects extraction passes that claim an existing artifact without producing a new revision', () => {
-    const seed: ExtractionPass = {
-      id: 'seed_negation',
-      reads: ['normalized_text'],
-      writes: ['negations'],
-      run(context) {
-        recordExtractionArtifacts(context, 'negations');
-      },
-    };
-    const staleWriter: ExtractionPass = {
-      id: 'stale_negation',
-      reads: ['negations'],
-      writes: ['negations'],
-      run() {},
-    };
-
-    expect(() => runExtractionPasses(createExtractionContext('easy class'), [seed, staleWriter]))
-      .toThrow('Extraction pass "stale_negation" declared missing writes: negations');
-  });
-
   describe('phase 1: entities', () => {
     it('extracts course code "CS 225"', () => {
       const result = extract('CS 225');
@@ -436,12 +390,9 @@ describe('extract', () => {
       expect(result.residual).not.toContain('only');
     });
 
-    it('removes stop words even from valid titles (intended side effect)', () => {
-      // "Class" is a stop word, so "World Class Manufacturing" becomes "World Manufacturing"
+    it('preserves meaningful words inside a title-like query', () => {
       const result = extract('World Class Manufacturing');
-      expect(result.residual).not.toContain('Class');
-      expect(result.residual).toContain('World');
-      expect(result.residual).toContain('Manufacturing');
+      expect(result.residual).toBe('World Class Manufacturing');
     });
   });
 

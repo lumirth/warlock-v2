@@ -52,8 +52,8 @@ export function requirementComponent(
 function hasRequirementIntent(plan: SearchPlan): boolean {
   return Boolean(
     hasRequirementFilter(plan.filters)
-    || plan.rescue?.queryTypes.includes("requirement")
-    || plan.rescue?.queryTypes.includes("degree_progress"),
+    || plan.intent?.queryTypes.includes("requirement")
+    || plan.intent?.queryTypes.includes("degree_progress"),
   );
 }
 

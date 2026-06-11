@@ -34,9 +34,6 @@ class CompilerTestStatement {
       );
       return match ? ({ id: match[0] } as T) : null;
     }
-    if (this.sql.includes("SELECT subject_id FROM subject_aliases WHERE alias = ?")) {
-      return null;
-    }
     if (this.sql.includes("SELECT DISTINCT subject FROM courses WHERE subject = ?")) {
       return SUBJECT_NAMES[subject] ? ({ subject } as T) : null;
     }
@@ -57,10 +54,11 @@ function db(): D1Database {
 }
 
 describe("createSearchPlan", () => {
-  it("emits an immutable compiled artifact consumed unchanged by retrieval", async () => {
+  it("emits one compiled plan consumed directly by retrieval", async () => {
     const planning = await createSearchPlan(db(), "is cs 225 hard");
 
     expect(planning.plan.filters).toMatchObject({ subject: "CS", number: "225" });
+    expect(planning.plan).not.toHaveProperty("rawQuery");
     expect(planning.plan.filters.workload).toBeUndefined();
     expect(planning.queryResidual).toBe("");
     expect(planning.compilerEvents.map((event) => event.type)).toEqual(
@@ -68,20 +66,12 @@ describe("createSearchPlan", () => {
         "query_language",
         "student_language",
         "validated_hints",
-        "decision_search_rescue",
-        "sanitize_and_freeze",
+        "student_intent",
+        "sanitize",
       ]),
     );
-    expect(Object.isFrozen(planning)).toBe(true);
-    expect(Object.isFrozen(planning.plan)).toBe(true);
-    expect(Object.isFrozen(planning.plan.filters)).toBe(true);
-
     const controls = normalizeSearchControls();
-    const budget = buildSearchCandidateBudget(
-      planning.plan,
-      { limit: 10, offset: 0 },
-      controls,
-    );
+    const budget = buildSearchCandidateBudget();
     const retrievalPlan = buildRetrievalPlan(planning.plan, controls, budget);
 
     expect(retrievalPlan.inputs.filters).toEqual(planning.plan.filters);

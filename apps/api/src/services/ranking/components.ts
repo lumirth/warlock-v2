@@ -29,27 +29,6 @@ export function rankingComponentsForResult(
     exactnessComponent(result),
     qualityTierComponent(result.course),
     requirementComponent(result, plan),
-    laneMatchComponent(
-      result,
-      "structured_section",
-      "availability_term",
-      RANKING_POLICY.components.laneMatch.structuredSection,
-      "Section constraints matched structured offering data.",
-    ),
-    laneMatchComponent(
-      result,
-      "student_language_alias",
-      "student_language",
-      RANKING_POLICY.components.laneMatch.studentLanguageAlias,
-      "Student-language aliases matched this course.",
-    ),
-    laneMatchComponent(
-      result,
-      "workload_evidence",
-      "workload_evidence",
-      RANKING_POLICY.components.laneMatch.workloadEvidence,
-      "Workload evidence matched the subjective preference.",
-    ),
     ...workloadPreferenceComponents(result, plan),
     eligibilityComponent(result.course, plan),
     negativePreferenceComponent(result.course, plan),
@@ -88,8 +67,8 @@ function topicTitleMatchComponent(
   if (titleTerms.size === 0) return null;
 
   const directTerms = new Set(topicTokens([
-    ...(plan.rescue?.topicTerms ?? []),
-    plan.rawQuery ?? "",
+    ...(plan.intent?.topicTerms ?? []),
+    plan.semanticQuery,
   ].join(" ")));
   const expandedTerms = new Set(topicTokens(
     plan.softPreferences?.topicExpansions?.join(" ") ?? "",
@@ -188,18 +167,4 @@ function qualityTierComponent(course: Course): RankingScoreComponent | null {
     `${label} quality tier contributes a small trust component.`,
     label ? [label] : undefined,
   );
-}
-
-function laneMatchComponent(
-  result: SearchResult,
-  lane: NonNullable<SearchResult["laneMatches"]>[number],
-  name: RankingScoreComponent["name"],
-  value: number,
-  reason: string,
-): RankingScoreComponent | null {
-  if (!result.laneMatches?.includes(lane)) return null;
-  const evidence = result.laneResults
-    ?.filter(row => row.lane === lane)
-    .map(row => row.reason);
-  return scoreComponent(name, value, reason, evidence);
 }

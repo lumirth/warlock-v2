@@ -1,7 +1,5 @@
 # Rollback Checklist
 
-Date: 2026-06-01
-
 Rollback paths should be concrete because this is pre-alpha software and sharp cutovers are allowed.
 
 ## API Worker
@@ -46,4 +44,4 @@ For schema/data rollback, use the current Cloudflare-supported D1 backup mechani
 
 ## Generated Artifacts
 
-Large generated history artifacts are local-only. If needed, restore them from the verified whole-project backup recorded in `docs/remediation-report.md`, or regenerate them using the documented historical sync scripts. Do not recommit generated payloads.
+Large generated history artifacts are local-only. Restore them from the release's verified backup evidence or regenerate them using the documented historical sync scripts. Do not recommit generated payloads.

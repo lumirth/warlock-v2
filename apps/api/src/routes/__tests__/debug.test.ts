@@ -30,6 +30,17 @@ describe('debug routes', () => {
     expect(res.status).toBe(404);
   });
 
+  it('keeps the subject-list diagnostic constrained to valid term paths', async () => {
+    const app = new Hono();
+    app.route('/admin/debug', debugRoutes);
+
+    const invalidYear = await app.request('/admin/debug/subjects/nope/fall', {}, debugEnv);
+    const invalidTerm = await app.request('/admin/debug/subjects/2026/nope', {}, debugEnv);
+
+    expect(invalidYear.status).toBe(400);
+    expect(invalidTerm.status).toBe(400);
+  });
+
   it('does not keep legacy admin sync aliases mounted', async () => {
     const app = new Hono();
     app.route('/', adminRoutes);

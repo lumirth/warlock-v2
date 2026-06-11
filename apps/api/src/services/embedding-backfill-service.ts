@@ -1,10 +1,16 @@
 import type { Ai, D1Database, VectorizeIndex } from '@cloudflare/workers-types';
-import { normalizeRequirementCodes, type CourseRequirementDto, type SearchScope } from '@uiuc-course-search/query-types';
-import { canonicalRequirementCode } from './requirement-codes.js';
+import {
+  normalizeRequirementCodes,
+  type SearchScope,
+} from '@uiuc-course-search/query-types';
 import {
   upsertCourseEmbeddings,
   type CourseEmbeddingData,
 } from './embeddings.js';
+import {
+  courseRequirementRowsToDto,
+  type CourseRequirementSourceRow,
+} from '../transforms/course-requirements.js';
 
 const EMBEDDING_BACKFILL_BATCH_SIZE = 25;
 const REQUIREMENT_LOOKUP_BATCH_SIZE = 50;
@@ -18,9 +24,9 @@ const TERM_ORDER_SQL = `
   END
 `;
 
-export type EmbeddingBackfillScope = SearchScope;
+type EmbeddingBackfillScope = SearchScope;
 
-export type EmbeddingBackfillCommand = {
+type EmbeddingBackfillCommand = {
   scope: EmbeddingBackfillScope;
   limit: number;
   offset: number;
@@ -28,7 +34,7 @@ export type EmbeddingBackfillCommand = {
   term?: string;
 };
 
-export type EmbeddingBackfillResult = {
+type EmbeddingBackfillResult = {
   scope: EmbeddingBackfillScope;
   year?: number;
   term?: string;
@@ -43,6 +49,8 @@ export type EmbeddingBackfillResult = {
 
 type CourseEmbeddingRow = {
   id: string;
+  year: number;
+  term: string;
   subject: string;
   number: string;
   title: string;
@@ -50,12 +58,8 @@ type CourseEmbeddingRow = {
   primary_instructor: string | null;
 };
 
-type RequirementRow = {
+type RequirementRow = CourseRequirementSourceRow & {
   course_id: string;
-  category_id: string;
-  category_name: string | null;
-  attribute_code: string | null;
-  attribute_name: string | null;
 };
 
 type QueryParts = {
@@ -79,7 +83,7 @@ export async function backfillCourseEmbeddings(
   const rows = await db
     .prepare(
       `
-      SELECT c.id, c.subject, c.number, c.title, c.description, c.primary_instructor
+      SELECT c.id, c.year, c.term, c.subject, c.number, c.title, c.description, c.primary_instructor
       FROM courses c
       ${query.whereSql}
       ORDER BY c.year DESC, ${TERM_ORDER_SQL} DESC, c.subject, CAST(c.number AS INTEGER), c.number, c.id
@@ -153,8 +157,8 @@ function buildEmbeddingCourseQuery(command: EmbeddingBackfillCommand): QueryPart
 async function loadEmbeddingRequirements(
   db: D1Database,
   courseIds: string[],
-): Promise<Map<string, CourseRequirementDto[]>> {
-  const requirementsByCourseId = new Map<string, CourseRequirementDto[]>();
+): Promise<Map<string, CourseRequirementSourceRow[]>> {
+  const requirementsByCourseId = new Map<string, CourseRequirementSourceRow[]>();
   const uniqueIds = [...new Set(courseIds)].filter(Boolean);
   if (uniqueIds.length === 0) return requirementsByCourseId;
 
@@ -175,12 +179,7 @@ async function loadEmbeddingRequirements(
 
     for (const row of rows.results) {
       const requirements = requirementsByCourseId.get(row.course_id) ?? [];
-      requirements.push({
-        categoryId: row.category_id,
-        categoryName: row.category_name,
-        attributeCode: canonicalRequirementCode(row.attribute_code),
-        attributeName: row.attribute_name,
-      });
+      requirements.push(row);
       requirementsByCourseId.set(row.course_id, requirements);
     }
   }
@@ -190,8 +189,9 @@ async function loadEmbeddingRequirements(
 
 function courseRowToEmbeddingData(
   course: CourseEmbeddingRow,
-  requirements: CourseRequirementDto[],
+  requirementRows: CourseRequirementSourceRow[],
 ): CourseEmbeddingData {
+  const requirements = courseRequirementRowsToDto(requirementRows);
   const codes = normalizeRequirementCodes(
     requirements.flatMap(requirement => [
       requirement.categoryId,
@@ -205,6 +205,7 @@ function courseRowToEmbeddingData(
 
   return {
     id: course.id,
+    termId: `${course.year}-${course.term}`,
     subject: course.subject,
     number: course.number,
     title: course.title,

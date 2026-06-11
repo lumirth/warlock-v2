@@ -1,8 +1,6 @@
 import type { Ai, D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
 import type { TermState, TermStateStatus } from '../db/types.js';
 
-export const TERMS = ['winter', 'spring', 'summer', 'fall'] as const;
-
 export type SyncRouteBindings = {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
@@ -21,7 +19,7 @@ export type SyncRouteBindings = {
   RMP_AUTH_TOKEN?: string;
 };
 
-export type TermAggregateCounts = {
+type TermAggregateCounts = {
   subjectsCount: number;
   coursesCount: number;
   sectionsCount: number;

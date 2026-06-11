@@ -102,7 +102,6 @@ export type MatchEvidenceKind =
   | "schedule"
   | "delivery"
   | "instructor"
-  | "alias"
   | "workload"
   | "topic"
   | "semantic"
@@ -115,8 +114,6 @@ export type MatchEvidenceSource =
   | "query"
   | "keyword"
   | "semantic"
-  | "alias"
-  | "signal"
   | "metadata"
   | "term";
 
@@ -130,23 +127,16 @@ export type MatchEvidence = {
   weight: MatchEvidenceWeight;
 };
 
-export type ResultWarningKind = "historical" | "cached" | "stale" | "partial";
+export type ResultWarningKind = "historical";
 
 export type ResultWarning = {
   kind: ResultWarningKind;
   message: string;
 };
 
-export type SectionMatchDto = {
-  crn: string;
-  sectionNumber: string;
-  evidence: MatchEvidence[];
-};
-
 export type ResultExplanation = {
   whyMatched: string[];
   watchOut: string[];
-  matchedChips: string[];
   confidence: {
     score: number;
     label: "high" | "medium" | "low" | "uncertain";
@@ -205,20 +195,11 @@ export type CourseDetailDto = CourseSummaryDto & {
   sections: CourseSectionDto[];
 };
 
-export type SearchCourseMetadataDto = {
-  score?: number;
-  semanticRank?: number;
-  keywordRank?: number;
-  historical?: boolean;
-};
-
 export type SearchCourseResultDto = {
   course: CourseSummaryDto;
-  search?: SearchCourseMetadataDto;
   matchEvidence?: MatchEvidence[];
   explanation?: ResultExplanation;
   warnings?: ResultWarning[];
-  sectionMatches?: SectionMatchDto[];
 };
 
 export type CourseDetailCacheDto = {

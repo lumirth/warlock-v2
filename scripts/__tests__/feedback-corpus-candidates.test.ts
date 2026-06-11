@@ -205,7 +205,8 @@ describe('feedback corpus candidates', () => {
     }]));
     const outputFile = join(tempRoot!, 'candidates.json');
 
-    const result = spawnSync('npx', [
+    const result = spawnSync(process.execPath, [
+      '--import',
       'tsx',
       'scripts/feedback-corpus-candidates.ts',
       '--input',
@@ -222,7 +223,6 @@ describe('feedback corpus candidates', () => {
     expect(report.candidates[0].suggestedGoldQuery).toMatchObject({
       query: 'CS 225',
       expected_filters: { subject: 'CS', number: '225' },
-      expected_residual: '',
       category: 'navigational',
     });
     expect(report.candidates[0].suggestedFailureClasses).toEqual([

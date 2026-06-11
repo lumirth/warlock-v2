@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
 import type { SubjectSnapshot } from '../../transforms/course.js';
 import {
+  subjectSnapshotPersistencePlan,
+} from '../snapshot-persistence-operations.js';
+import {
   escapeSqlValue,
   prepareSnapshotOperation,
   snapshotOperationStatement,
   snapshotOperationsSqlStatements,
-  subjectSnapshotPersistencePlan,
-} from '../snapshot-persistence-operations.js';
+} from '../snapshot-persistence-sql.js';
 import { subjectSnapshotSqlStatements } from '../course-snapshot-writer.js';
 
 function sampleSnapshot(): SubjectSnapshot {

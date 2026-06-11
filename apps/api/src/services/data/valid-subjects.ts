@@ -1818,36 +1818,3 @@ export const UNSAFE_LOWERCASE_SUBJECTS = new Set([
   "US",
   "WE"
 ]);
-
-// Subjects that MUST be allowed in lowercase because they are extremely common search terms
-// and unlikely to be used as normal words in a course search context (or the ambiguity is acceptable)
-export const SAFE_LOWERCASE_SUBJECTS = new Set([
-  "adv",
-  "anth",
-  "arch",
-  "astr",
-  "badm",
-  "bio",
-  "chbe",
-  "chem",
-  "cs",
-  "dance",
-  "ece",
-  "econ",
-  "engl",
-  "fin",
-  "geol",
-  "hist",
-  "jour",
-  "ling",
-  "math",
-  "mus",
-  "nres",
-  "phil",
-  "phys",
-  "pol",
-  "psyc",
-  "soc",
-  "stat",
-  "thea"
-]);
