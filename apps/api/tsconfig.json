@@ -4,7 +4,10 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022"],
-    "types": ["@cloudflare/workers-types/2023-07-01"],
+    "types": [
+      "@cloudflare/workers-types/2023-07-01",
+      "@cloudflare/vitest-pool-workers/types"
+    ],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,

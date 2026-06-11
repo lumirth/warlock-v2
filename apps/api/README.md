@@ -55,6 +55,15 @@ The system automatically discovers new academic terms to sync:
 
 Full requirement behavior uses `course_gened`, `CourseRequirementDto`, and `transforms/course-requirements.ts`.
 
+## Testing
+
+`npm test -w @uiuc-course-search/api` runs two intentionally different suites:
+
+*   `test:unit` runs fast Node-based unit and boundary tests. These may mock focused dependencies.
+*   `test:integration` runs the Worker through Cloudflare's Workers Vitest pool. It applies the canonical D1 migrations to isolated local D1 storage and sends requests through the real Worker entrypoint. Integration tests must seed rows through the D1 binding; they must not simulate SQL by matching query strings.
+
+The integration configuration declares only local bindings. It deliberately does not connect to remote AI or Vectorize resources.
+
 ## Configuration
 
 Settings are managed in `wrangler.toml`:

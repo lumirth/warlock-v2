@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
@@ -19,6 +21,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.14",
     "@cloudflare/workers-types": "^4.20260120.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8",
