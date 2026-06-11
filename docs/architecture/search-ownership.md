@@ -95,8 +95,8 @@ not redefine it.
 
 ## Automated Boundaries
 
-`scripts/__tests__/architecture-boundaries.test.ts` enforces dependency
-direction. Behavior tests enforce semantics such as request validation,
-continuation requests, chip actions, exact-filter recall,
-ranking order, and public response shape. Architecture tests must not freeze
-helper names, exact file decomposition, or source strings.
+Repository lint enforces dependency direction with file-scoped
+`no-restricted-imports` rules in `eslint.config.mjs`. Behavior tests enforce
+semantics such as request validation, continuation requests, chip actions,
+exact-filter recall, ranking order, and public response shape. Boundary checks
+must not freeze helper names, exact file decomposition, or source strings.
