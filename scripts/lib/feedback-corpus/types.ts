@@ -15,7 +15,7 @@ export type PromotionTarget =
   | 'manual_review';
 
 export type CandidatePriority = 'high' | 'medium' | 'low';
-export type CandidateStatus = 'needs_review' | 'covered' | 'promoted' | 'dismissed';
+type CandidateStatus = 'needs_review' | 'covered' | 'promoted' | 'dismissed';
 
 export type FeedbackExportRow = {
   id?: string;

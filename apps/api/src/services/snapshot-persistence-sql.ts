@@ -25,14 +25,6 @@ export function prepareSnapshotOperation(
   return db.prepare(statement.sql).bind(...statement.params);
 }
 
-export function snapshotOperationsSqlStatements(
-  operations: SnapshotPersistenceOperation[]
-): string[] {
-  return operations.map(operation => renderSnapshotSqlStatement(
-    snapshotOperationStatement(operation)
-  ));
-}
-
 export function snapshotOperationStatement(
   operation: SnapshotPersistenceOperation
 ): SnapshotSqlStatement {
@@ -87,39 +79,6 @@ export function snapshotOperationStatement(
         operation
       );
   }
-}
-
-export function escapeSqlValue(value: string | null): string {
-  if (value === null) return 'NULL';
-  return `'${value
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "''")
-    .replace(/\r?\n/g, ' ')
-    .replace(/\r/g, ' ')
-  }'`;
-}
-
-function renderSnapshotSqlStatement(statement: SnapshotSqlStatement): string {
-  let paramIndex = 0;
-  const sql = statement.sql.replace(/\?/g, () => {
-    const value = statement.params[paramIndex++];
-    return renderSqlParam(value);
-  });
-
-  if (paramIndex !== statement.params.length) {
-    throw new Error(`SQL renderer used ${paramIndex} params for ${statement.params.length} values`);
-  }
-
-  return `${normalizeSql(sql)};`;
-}
-
-function renderSqlParam(value: SnapshotSqlParam): string {
-  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'NULL';
-  return escapeSqlValue(value);
-}
-
-function normalizeSql(sql: string): string {
-  return sql.replace(/\s+/g, ' ').trim();
 }
 
 function subjectUpsertStatement(subject: SubjectSnapshot['subject']): SnapshotSqlStatement {

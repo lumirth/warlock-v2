@@ -3,7 +3,7 @@ import { makeTermId } from '../db/ids.js';
 import { getTermState } from '../db/term-state-repository.js';
 import type { TermStateStatus } from '../db/types.js';
 
-export type TermStatus = TermStateStatus | 'requested' | 'fallback';
+type TermStatus = TermStateStatus | 'requested' | 'fallback';
 
 export interface ResolvedTerm {
   termId: string;
@@ -19,6 +19,13 @@ type TermStateRow = {
   term: string;
   status: TermStateStatus;
 };
+
+const SEARCH_TERM_ORDER_SQL = `
+  CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+  year DESC,
+  CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
+  CASE term WHEN 'fall' THEN 4 WHEN 'summer' THEN 3 WHEN 'spring' THEN 2 WHEN 'winter' THEN 1 ELSE 0 END DESC
+`;
 
 export async function getCurrentTermStates(db: D1Database): Promise<TermStateRow[]> {
   const result = await db.prepare(`
@@ -56,11 +63,7 @@ export async function resolveTermContext(
     SELECT term_id, year, term, status
     FROM term_state
     WHERE status IN ('registrable', 'active')
-    ORDER BY
-      CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
-      year DESC,
-      CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
-      CASE term WHEN 'fall' THEN 4 WHEN 'summer' THEN 3 WHEN 'spring' THEN 2 WHEN 'winter' THEN 1 ELSE 0 END DESC
+    ORDER BY ${SEARCH_TERM_ORDER_SQL}
     LIMIT 1
   `).first<TermStateRow>();
 
@@ -95,11 +98,7 @@ export async function getSearchTermSummary(db: D1Database): Promise<{
     SELECT term_id, status
     FROM term_state
     WHERE status IN ('active', 'registrable')
-    ORDER BY
-      CASE status WHEN 'registrable' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
-      year DESC,
-      CASE term WHEN 'fall' THEN 0 WHEN 'spring' THEN 0 WHEN 'summer' THEN 1 WHEN 'winter' THEN 1 ELSE 2 END,
-      CASE term WHEN 'fall' THEN 4 WHEN 'summer' THEN 3 WHEN 'spring' THEN 2 WHEN 'winter' THEN 1 ELSE 0 END DESC
+    ORDER BY ${SEARCH_TERM_ORDER_SQL}
   `).all<{ term_id: string; status: string }>();
   const activeTermIds = result.results
     .filter(row => row.status === 'active')

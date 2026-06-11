@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { runCli } from './lib/run-cli.ts';
 import { STAGING_SMOKE_CHECK_NAMES } from './staging-smoke.js';
 
 export type CheckResult = {
@@ -433,10 +433,4 @@ async function main(): Promise<void> {
   }
 }
 
-const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isDirectRun) {
-  main().catch(error => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
-}
+runCli(import.meta.url, main);

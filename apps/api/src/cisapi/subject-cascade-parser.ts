@@ -279,16 +279,3 @@ export async function parseSubjectCascadeXml(stream: ReadableStream<Uint8Array> 
 
   return result;
 }
-
-function stringToXmlStream(xml: string): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode(xml));
-      controller.close();
-    }
-  });
-}
-
-export function parseSubjectCascadeXmlFromString(xml: string): Promise<ParsedSubjectCascade> {
-  return parseSubjectCascadeXml(stringToXmlStream(xml));
-}

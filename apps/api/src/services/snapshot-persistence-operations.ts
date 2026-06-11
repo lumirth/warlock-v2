@@ -97,7 +97,7 @@ export function subjectSnapshotPersistencePlan(
   };
 }
 
-export function courseGenedPersistenceOperations(
+function courseGenedPersistenceOperations(
   courseId: string,
   genEdCategories: CourseGenEdSnapshot[]
 ): SnapshotPersistenceOperation[] {

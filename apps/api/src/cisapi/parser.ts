@@ -3,7 +3,6 @@ export { parseCourseDetailXml } from './course-detail-parser.js';
 export { parseEnrollmentStatusesXml } from './enrollment-status-parser.js';
 export {
   parseSubjectCascadeXml,
-  parseSubjectCascadeXmlFromString,
 } from './subject-cascade-parser.js';
 export type {
   ParsedSubjectCascade,

@@ -2,28 +2,20 @@ import { asRecord, numericOrNull, type JsonRecord } from './json-shape.ts';
 import {
   SEARCH_TERM_VALUES,
   TERM_STATUS_VALUES,
+  searchTermRank,
   type SearchTermFilter,
   type TermStatus,
 } from '@uiuc-course-search/query-types';
 
-export const TERMS = SEARCH_TERM_VALUES;
-
 export type Term = SearchTermFilter;
 export type { TermStatus };
-
-export const TERM_ORDER: Record<Term, number> = {
-  winter: 0,
-  spring: 1,
-  summer: 2,
-  fall: 3,
-};
 
 export function termId(year: number, term: Term): string {
   return `${year}-${term}`;
 }
 
 export function isTerm(value: unknown): value is Term {
-  return typeof value === 'string' && (TERMS as readonly string[]).includes(value.toLowerCase());
+  return typeof value === 'string' && (SEARCH_TERM_VALUES as readonly string[]).includes(value.toLowerCase());
 }
 
 export function normalizeTerm(value: unknown): Term | null {
@@ -34,7 +26,7 @@ export function isTermStatus(value: unknown): value is TermStatus {
   return typeof value === 'string' && (TERM_STATUS_VALUES as readonly string[]).includes(value.toLowerCase());
 }
 
-export function normalizeStatus(value: unknown): TermStatus | null {
+function normalizeStatus(value: unknown): TermStatus | null {
   return isTermStatus(value) ? value.toLowerCase() as TermStatus : null;
 }
 
@@ -46,14 +38,14 @@ export function inferCurrentTerm(date = new Date()): Term {
   return 'fall';
 }
 
-export function compareTerms(
+function compareTerms(
   year: number,
   term: Term,
   currentYear: number,
   currentTerm: Term,
 ): number {
   if (year !== currentYear) return year - currentYear;
-  return TERM_ORDER[term] - TERM_ORDER[currentTerm];
+  return searchTermRank(term) - searchTermRank(currentTerm);
 }
 
 export function expectedTermStatus(

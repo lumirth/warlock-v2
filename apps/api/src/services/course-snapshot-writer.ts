@@ -1,17 +1,9 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import type { SubjectSnapshot } from '../transforms/course.js';
 import {
-  type CourseGenEdSnapshot,
-  type SubjectSnapshot
-} from '../transforms/course.js';
-import {
-  courseGenedPersistenceOperations,
   subjectSnapshotPersistencePlan,
 } from './snapshot-persistence-operations.js';
-import {
-  escapeSqlValue,
-  prepareSnapshotOperation,
-  snapshotOperationsSqlStatements,
-} from './snapshot-persistence-sql.js';
+import { prepareSnapshotOperation } from './snapshot-persistence-sql.js';
 
 const DEFAULT_D1_WRITE_BATCH_SIZE = 100;
 
@@ -62,32 +54,4 @@ async function executeD1Finalization(
   statements: D1PreparedStatement[],
 ): Promise<void> {
   if (statements.length > 0) await db.batch(statements);
-}
-
-export function subjectSnapshotSqlStatements(snapshot: SubjectSnapshot): string[] {
-  const plan = subjectSnapshotPersistencePlan(snapshot);
-  return [
-    ...snapshotOperationsSqlStatements(plan.writeOperations),
-    ...snapshotOperationsSqlStatements(plan.finalizeOperations),
-  ];
-}
-
-export function termStateSqlStatements(
-  termResults: Map<string, { courses: number; sections: number; subjects: number }>,
-  lastSynced: number = Math.floor(Date.now() / 1000)
-): string[] {
-  return Array.from(termResults.entries()).map(([termId, termStats]) => {
-    const [yearStr, term] = termId.split('-');
-    const year = parseInt(yearStr, 10);
-    return `INSERT OR REPLACE INTO term_state (term_id, year, term, status, last_checked, last_synced, subjects_count, courses_count, sections_count) VALUES (${escapeSqlValue(termId)}, ${year}, ${escapeSqlValue(term)}, 'historical', ${lastSynced}, ${lastSynced}, ${termStats.subjects}, ${termStats.courses}, ${termStats.sections});`;
-  });
-}
-
-export function courseGenedSqlStatements(
-  courseId: string,
-  genEdCategories: CourseGenEdSnapshot[],
-): string[] {
-  return snapshotOperationsSqlStatements(
-    courseGenedPersistenceOperations(courseId, genEdCategories)
-  );
 }

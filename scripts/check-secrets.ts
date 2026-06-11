@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+import { runCli } from './lib/run-cli.ts';
 
 type Finding = {
   file: string;
@@ -17,7 +17,6 @@ const EXCLUDED_PATHS = [
   /^package-lock\.json$/,
   /^apps\/web\/dist\//,
   /^artifacts\//,
-  /^history_chunks\//,
 ];
 
 const SECRET_PATTERNS: SecretPattern[] = [
@@ -84,9 +83,4 @@ async function main(): Promise<void> {
   console.log('Secret scan passed: no committed secret-looking values found.');
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch(error => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
-}
+runCli(import.meta.url, main);

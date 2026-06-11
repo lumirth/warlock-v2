@@ -57,6 +57,19 @@ export const SEARCH_TERM_VALUES = [
 
 export type SearchTermFilter = (typeof SEARCH_TERM_VALUES)[number];
 
+const SEARCH_TERM_CHRONOLOGY = [
+  "winter",
+  "spring",
+  "summer",
+  "fall",
+] as const satisfies readonly SearchTermFilter[];
+
+export function searchTermRank(value: string): number {
+  return SEARCH_TERM_CHRONOLOGY.findIndex(
+    (term) => term === value.toLowerCase(),
+  ) + 1;
+}
+
 export const SEARCH_TIME_VALUES = [
   "early",
   "morning",

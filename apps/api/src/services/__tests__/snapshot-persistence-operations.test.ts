@@ -5,15 +5,10 @@ import {
   subjectSnapshotPersistencePlan,
 } from '../snapshot-persistence-operations.js';
 import {
-  escapeSqlValue,
   prepareSnapshotOperation,
   snapshotOperationStatement,
-  snapshotOperationsSqlStatements,
 } from '../snapshot-persistence-sql.js';
-import {
-  subjectSnapshotSqlStatements,
-  writeSubjectSnapshotToD1,
-} from '../course-snapshot-writer.js';
+import { writeSubjectSnapshotToD1 } from '../course-snapshot-writer.js';
 
 function sampleSnapshot(): SubjectSnapshot {
   return {
@@ -145,18 +140,6 @@ function normalizeSql(sql: string): string {
   return sql.replace(/\s+/g, ' ').trim();
 }
 
-function renderBoundSql(sql: string, params: unknown[]): string {
-  let paramIndex = 0;
-  const rendered = sql.replace(/\?/g, () => {
-    const value = params[paramIndex++];
-    if (typeof value === 'number') return String(value);
-    if (value === null || typeof value === 'string') return escapeSqlValue(value);
-    throw new Error(`Unsupported test SQL param ${String(value)}`);
-  });
-  expect(paramIndex).toBe(params.length);
-  return `${normalizeSql(rendered)};`;
-}
-
 function captureD1PreparedStatements(operations: ReturnType<typeof subjectSnapshotPersistencePlan>['writeOperations']) {
   const prepared: { sql: string; params: unknown[] }[] = [];
   const db = {
@@ -207,23 +190,17 @@ describe('snapshot persistence operations', () => {
     ]);
   });
 
-  it('renders D1 prepared statements and raw SQL from the same operation statements', () => {
+  it('prepares every canonical snapshot operation for D1', () => {
     const plan = subjectSnapshotPersistencePlan(sampleSnapshot());
     const operations = [...plan.writeOperations, ...plan.finalizeOperations];
     const canonicalStatements = operations.map(snapshotOperationStatement);
     const d1Prepared = captureD1PreparedStatements(operations);
-    const rawSql = snapshotOperationsSqlStatements(operations);
 
     expect(d1Prepared).toEqual(
       canonicalStatements.map(statement => ({
         sql: normalizeSql(statement.sql),
         params: statement.params,
       }))
-    );
-    expect(rawSql).toEqual(
-      canonicalStatements.map(statement =>
-        renderBoundSql(statement.sql, statement.params)
-      )
     );
   });
 
@@ -277,15 +254,4 @@ describe('snapshot persistence operations', () => {
     expect(executedSql.slice(0, -1).flat().some(sql => sql.startsWith('DELETE FROM courses'))).toBe(false);
   });
 
-  it('includes subject-level stale cleanup in generated snapshot SQL', () => {
-    const sql = subjectSnapshotSqlStatements(sampleSnapshot());
-
-    expect(sql.slice(-5).map(statement => statement.replace(/\s+/g, ' '))).toEqual([
-      expect.stringContaining('DELETE FROM meeting_instructors WHERE meeting_id IN'),
-      expect.stringContaining('DELETE FROM meetings WHERE section_id IN'),
-      expect.stringContaining('DELETE FROM sections WHERE course_id IN'),
-      expect.stringContaining('DELETE FROM course_gened WHERE course_id IN'),
-      expect.stringContaining('DELETE FROM courses WHERE subject ='),
-    ]);
-  });
 });

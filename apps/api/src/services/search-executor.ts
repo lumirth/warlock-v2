@@ -10,7 +10,8 @@ import {
   type RetrievalPlan,
 } from "./search-retrieval-plan.js";
 import { hybridSearch } from "./search-hybrid.js";
-import { applyFinalOrderingControls, applyTermRankingPolicy } from "./ranking/index.js";
+import { applyFinalOrderingControls } from "./ranking/final-ordering.js";
+import { applyTermRankingPolicy } from "./ranking/term-ordering.js";
 import type { SearchResult } from "./search-types.js";
 import { getCurrentTermStates } from "./term-state.js";
 import {

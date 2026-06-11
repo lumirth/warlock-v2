@@ -1,11 +1,5 @@
+import { searchTermRank } from '@uiuc-course-search/query-types';
 import type { SubjectSyncState, SyncState, TermState } from '../db/types.js';
-
-const TERM_ORDER: Record<string, number> = {
-  winter: 1,
-  spring: 2,
-  summer: 3,
-  fall: 4,
-};
 
 export const FRESHNESS_THRESHOLDS = {
   activeTermMaxAgeSeconds: 36 * 60 * 60,
@@ -106,7 +100,7 @@ function compareTerm(year: number, term: string, currentYear: number, currentTer
     return year - currentYear;
   }
 
-  return (TERM_ORDER[term.toLowerCase()] ?? 0) - (TERM_ORDER[currentTerm.toLowerCase()] ?? 0);
+  return searchTermRank(term) - searchTermRank(currentTerm);
 }
 
 function sortTermsByRecency<T extends { year: number; term: string }>(terms: T[]): T[] {
@@ -120,7 +114,7 @@ function sortTermsByRecency<T extends { year: number; term: string }>(terms: T[]
       return regularTermDelta;
     }
 
-    return (TERM_ORDER[right.term.toLowerCase()] ?? 0) - (TERM_ORDER[left.term.toLowerCase()] ?? 0);
+    return searchTermRank(right.term) - searchTermRank(left.term);
   });
 }
 

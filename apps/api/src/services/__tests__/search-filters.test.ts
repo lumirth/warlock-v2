@@ -16,9 +16,7 @@ describe('buildFilterClauses', () => {
         'm.days LIKE ?',
       ]));
       expect(result.params).toEqual(expect.arrayContaining(['%M%', '%W%', '%F%']));
-      expect(result.joinKeys).toEqual(['sections', 'meetings']);
-      expect(result.joins).toContain('JOIN sections s ON s.course_id = c.id');
-      expect(result.joins).toContain('JOIN meetings m ON m.section_id = s.id');
+      expect(result.joins).toEqual(['sections', 'meetings']);
     });
   });
 
@@ -87,7 +85,7 @@ describe('buildFilterClauses', () => {
     it('generates section-scoped SQL so exact CRN recall cannot bypass hard filters', () => {
       const filters: SearchFilters = { crn: '12345', year: 2026, term: 'fall' };
       const result = buildFilterClauses(filters);
-      expect(result.joinKeys).toContain('sections');
+      expect(result.joins).toContain('sections');
       expect(result.where).toEqual(
         expect.arrayContaining(['s.crn = ?', 'c.year = ?', 'c.term = ?']),
       );
@@ -185,8 +183,7 @@ describe('buildFilterClauses', () => {
     it('deduplicates joins when multiple filters need same table', () => {
       const filters: SearchFilters = { days: 'MWF', time: 'morning', online: true };
       const result = buildFilterClauses(filters);
-      const sectionJoins = result.joins.filter(j => j.includes('sections s'));
-      expect(sectionJoins.length).toBe(1);
+      expect(result.joins.filter(join => join === 'sections')).toHaveLength(1);
     });
   });
 

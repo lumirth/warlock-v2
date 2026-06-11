@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { searchTermRank } from '@uiuc-course-search/query-types';
 import { errorFields, logger } from '../observability/logger.js';
 import { makeTermId } from '../db/ids.js';
 import { upsertTermState } from '../db/term-state-repository.js';
@@ -8,12 +9,6 @@ import { browserFetch } from '../http/browser-fetch.js';
 import { parseEnrollmentStatusesXml, parseSubjectsXml } from '../cisapi/parser.js';
 
 const DEFAULT_FROM_YEAR = 2004;
-const TERM_ORDER: Record<string, number> = {
-  winter: 1,
-  spring: 2,
-  summer: 3,
-  fall: 4,
-};
 const DEFAULT_CLASSIFICATION_SUBJECTS = [
   'CS',
   'MATH',
@@ -105,7 +100,7 @@ export async function discoverAllTerms(
 
   return allTerms.sort((left, right) => {
     if (left.year !== right.year) return left.year - right.year;
-    return (TERM_ORDER[left.term] ?? 0) - (TERM_ORDER[right.term] ?? 0);
+    return searchTermRank(left.term) - searchTermRank(right.term);
   });
 }
 
@@ -217,7 +212,7 @@ function isDefinitelyPast(term: DiscoveredTerm, now: Date): boolean {
       : month <= 8
         ? 'summer'
         : 'fall';
-  return (TERM_ORDER[term.term] ?? 0) < (TERM_ORDER[currentTerm] ?? 0);
+  return searchTermRank(term.term) < searchTermRank(currentTerm);
 }
 
 /**

@@ -153,17 +153,17 @@ export type Hint = {
   }
 }[HintType];
 
-export interface NegationValue {
+interface NegationValue {
   target: HintType | "keyword" | "workload";
   value: string;
 }
 
-export interface CourseCodeValue {
+interface CourseCodeValue {
   subject: string;
   number: string;
 }
 
-export interface TermValue {
+interface TermValue {
   term: SearchTermFilter;
   year: number;
 }

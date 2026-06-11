@@ -3,15 +3,6 @@ import type { SearchResult } from "../search-types.js";
 import { rankingComponentsForResult } from "./components.js";
 import { componentTotal } from "./score-utils.js";
 
-export {
-  applyTermRankingPolicy,
-  buildTermPriorityMap,
-  type RankingTermInfo,
-} from "./term-ordering.js";
-export {
-  applyFinalOrderingControls,
-} from "./final-ordering.js";
-
 export function applyRankingPolicy(
   results: SearchResult[],
   plan: SearchPlan,

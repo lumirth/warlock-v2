@@ -94,10 +94,6 @@ export default [
   },
   {
     files: ['scripts/**/*.{ts,tsx}'],
-    ignores: [
-      'scripts/workflows/historical-sync-workflow.ts',
-      'scripts/__tests__/historical-sync.test.ts',
-    ],
     rules: {
       'no-restricted-imports': ['error', {
         patterns: [{

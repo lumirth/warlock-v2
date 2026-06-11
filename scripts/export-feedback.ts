@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { runCli } from './lib/run-cli.ts';
 import { promisify } from 'node:util';
 import {
   buildFeedbackCandidateReport,
@@ -212,12 +212,4 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch(error => {
-    if (error && typeof error === 'object' && 'stderr' in error && typeof error.stderr === 'string') {
-      console.error(error.stderr);
-    }
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
-}
+runCli(import.meta.url, main);

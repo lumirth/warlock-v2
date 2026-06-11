@@ -3,7 +3,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { pathToFileURL } from 'node:url';
+import { runCli } from './lib/run-cli.ts';
 
 // Configuration
 const CONFIG = {
@@ -222,9 +222,4 @@ function finish(subjects: SubjectRow[]): void {
   console.log(`Generated ${CONFIG.OUTPUT_PATH}`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main().catch(error => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
-}
+runCli(import.meta.url, main);

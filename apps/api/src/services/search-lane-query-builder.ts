@@ -2,6 +2,7 @@ import type { SearchFilters } from "./search-planner-types.js";
 import type { SearchScope } from "@uiuc-course-search/query-types";
 import {
   buildFilterClauses,
+  filterJoinSql,
   type FilterClauseResult,
   type FilterJoinKey,
 } from "./search-filters.js";
@@ -34,14 +35,8 @@ export function buildFilteredCourseQuery(
   }
   return {
     ...clauses,
-    joinSql: clauses.joins.join(" "),
-    joinSqlExcluding(excludedKeys: readonly FilterJoinKey[]) {
-      const excluded = new Set(excludedKeys);
-      return clauses.joinKeys
-        .map((key, index) => excluded.has(key) ? null : clauses.joins[index])
-        .filter((join): join is string => Boolean(join))
-        .join(" ");
-    },
+    joinSql: filterJoinSql(clauses.joins),
+    joinSqlExcluding: (excludedKeys) => filterJoinSql(clauses.joins, excludedKeys),
     whereSql(extraConditions: readonly string[] = []) {
       const allConditions = [...clauses.where, ...extraConditions];
       return allConditions.length > 0

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import { searchTermRank } from '@uiuc-course-search/query-types';
 import { asRecord, type JsonRecord } from './json-shape.ts';
 import {
-  TERM_ORDER,
   normalizeTerm,
   termId,
   type Term,
@@ -44,7 +44,9 @@ export async function discoverAvailableTerms(
     }
   }
 
-  terms.sort((left, right) => left.year - right.year || TERM_ORDER[left.term] - TERM_ORDER[right.term]);
+  terms.sort((left, right) =>
+    left.year - right.year || searchTermRank(left.term) - searchTermRank(right.term)
+  );
   return { terms, warnings };
 }
 

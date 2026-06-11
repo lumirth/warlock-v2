@@ -6,7 +6,11 @@ import {
 } from '@uiuc-course-search/query-types';
 import { discoverAndClassifyTerms } from '../services/term-discovery.js';
 import { MAX_SYNC_SUBJECTS_PER_REQUEST, type SyncBatchRequest } from '../services/sync-batch-contract.js';
-import { parseBoundedIntParam, parseEnumParam } from '../http/params.js';
+import {
+  parseBoundedIntParam,
+  parseEnumParam,
+  type ParsedParam,
+} from '../http/params.js';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 import {
   runActiveTermsSync,
@@ -19,6 +23,30 @@ import {
 } from '../services/sync-operations.js';
 
 export const syncCourseRoutes = new Hono<{ Bindings: SyncRouteBindings }>();
+
+function parseSyncPagination(
+  offset: string | undefined,
+  limit: string | undefined,
+): ParsedParam<{ offset: number; limit: number }> {
+  const parsedOffset = parseBoundedIntParam(offset, 'offset', {
+    min: 0,
+    max: 10000,
+    defaultValue: 0,
+  });
+  if (!parsedOffset.ok) return parsedOffset;
+
+  const parsedLimit = parseBoundedIntParam(limit, 'limit', {
+    min: 1,
+    max: MAX_SYNC_SUBJECTS_PER_REQUEST,
+    defaultValue: MAX_SYNC_SUBJECTS_PER_REQUEST,
+  });
+  if (!parsedLimit.ok) return parsedLimit;
+
+  return {
+    ok: true,
+    value: { offset: parsedOffset.value, limit: parsedLimit.value },
+  };
+}
 
 syncCourseRoutes.post('/internal/sync-batch', async (c) => {
   const runId = createRunId('sync-batch');
@@ -116,19 +144,8 @@ syncCourseRoutes.post('/admin/sync/:year/:term', async (c) => {
   const parsedTerm = parseEnumParam(term, 'term', SEARCH_TERM_VALUES);
   if (!parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
 
-  const parsedOffset = parseBoundedIntParam(c.req.query('offset'), 'offset', {
-    min: 0,
-    max: 10000,
-    defaultValue: 0,
-  });
-  if (!parsedOffset.ok) return c.json({ error: parsedOffset.error }, 400);
-
-  const parsedLimit = parseBoundedIntParam(c.req.query('limit'), 'limit', {
-    min: 1,
-    max: MAX_SYNC_SUBJECTS_PER_REQUEST,
-    defaultValue: MAX_SYNC_SUBJECTS_PER_REQUEST,
-  });
-  if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
+  const pagination = parseSyncPagination(c.req.query('offset'), c.req.query('limit'));
+  if (!pagination.ok) return c.json({ error: pagination.error }, 400);
 
   const requestedStatusRaw = c.req.query('status');
   let requestedStatus: TermStatus | undefined;
@@ -147,8 +164,7 @@ syncCourseRoutes.post('/admin/sync/:year/:term', async (c) => {
     const result = await runManualTermSync(c.env, {
       year: parsedYear.value,
       term: parsedTerm.value,
-      offset: parsedOffset.value,
-      limit: parsedLimit.value,
+      ...pagination.value,
       requestedStatus,
       forceRunningLocks,
     });
@@ -160,23 +176,11 @@ syncCourseRoutes.post('/admin/sync/:year/:term', async (c) => {
 });
 
 syncCourseRoutes.post('/admin/sync-active', async (c) => {
-  const parsedOffset = parseBoundedIntParam(c.req.query('offset'), 'offset', {
-    min: 0,
-    max: 10000,
-    defaultValue: 0,
-  });
-  if (!parsedOffset.ok) return c.json({ error: parsedOffset.error }, 400);
-
-  const parsedLimit = parseBoundedIntParam(c.req.query('limit'), 'limit', {
-    min: 1,
-    max: MAX_SYNC_SUBJECTS_PER_REQUEST,
-    defaultValue: MAX_SYNC_SUBJECTS_PER_REQUEST,
-  });
-  if (!parsedLimit.ok) return c.json({ error: parsedLimit.error }, 400);
+  const pagination = parseSyncPagination(c.req.query('offset'), c.req.query('limit'));
+  if (!pagination.ok) return c.json({ error: pagination.error }, 400);
 
   const result = await runActiveTermsSync(c.env, {
-    offset: parsedOffset.value,
-    limit: parsedLimit.value,
+    ...pagination.value,
   });
 
   if (result.results.length === 0) {

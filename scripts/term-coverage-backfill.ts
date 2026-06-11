@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { runCli } from './lib/run-cli.ts';
 
 import { validateD1BackupEvidence, type D1BackupEvidenceArgs } from './lib/d1-backup-evidence.ts';
 import { asRecord } from './lib/json-shape.ts';
@@ -415,9 +415,4 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch(error => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
-}
+runCli(import.meta.url, main);

@@ -44,4 +44,4 @@ For schema/data rollback, use the current Cloudflare-supported D1 backup mechani
 
 ## Generated Artifacts
 
-Large generated history artifacts are local-only. Restore them from the release's verified backup evidence or regenerate them using the documented historical sync scripts. Do not recommit generated payloads.
+Large generated history artifacts are local-only. Restore them from the release's verified backup evidence. Rebuild retained terms through the backup-gated term and coverage backfill commands in `docs/data-refresh-runbook.md`; do not recommit generated payloads.

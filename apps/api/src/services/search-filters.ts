@@ -36,8 +36,7 @@ const DAY_ALIASES: Record<string, string> = {
 };
 
 export interface FilterClauseResult {
-  joinKeys: FilterJoinKey[];
-  joins: string[];
+  joins: FilterJoinKey[];
   where: string[];
   params: (string | number)[];
 }
@@ -341,11 +340,21 @@ export function buildFilterClauses(
   }
 
   return {
-    joinKeys: Array.from(joinKeys),
-    joins: Array.from(joinKeys).map((key) => FILTER_JOIN_SQL[key]),
+    joins: Array.from(joinKeys),
     where,
     params,
   };
+}
+
+export function filterJoinSql(
+  joinKeys: readonly FilterJoinKey[],
+  excludedKeys: readonly FilterJoinKey[] = [],
+): string {
+  const excluded = new Set(excludedKeys);
+  return joinKeys
+    .filter((key) => !excluded.has(key))
+    .map((key) => FILTER_JOIN_SQL[key])
+    .join(" ");
 }
 
 function canonicalAttributeCodeSql(alias: string): string {

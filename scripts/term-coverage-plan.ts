@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { runCli } from './lib/run-cli.ts';
 import { asRecord, numericOrNull, positiveNumber, recordsFromArray, type JsonRecord } from './lib/json-shape.ts';
 import {
   currentTermFromStatus,
@@ -428,9 +428,4 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch(error => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
-}
+runCli(import.meta.url, main);

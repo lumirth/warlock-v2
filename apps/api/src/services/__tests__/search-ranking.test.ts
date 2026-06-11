@@ -4,11 +4,11 @@ import {
   singleRequirementFilter,
   type CourseRequirementDto,
 } from '@uiuc-course-search/query-types';
+import { applyRankingPolicy } from '../ranking/index.js';
 import {
-  applyRankingPolicy,
   applyTermRankingPolicy,
   buildTermPriorityMap,
-} from '../ranking/index.js';
+} from '../ranking/term-ordering.js';
 import {
   buildRetrievalPlan,
 } from '../search-retrieval-plan.js';

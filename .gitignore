@@ -14,4 +14,3 @@ history_chunks/
 *.sql
 !apps/api/migrations/*.sql
 *.log
-historical-sync-checkpoint.json
