@@ -1,13 +1,13 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import { buildFilteredCourseQuery } from "./search-lane-query-builder.js";
+import type { CandidateSqlQuery } from "./search-lane-query-builder.js";
+import {
+  buildCourseFtsCandidateQuery,
+  buildFilteredCourseCandidateQuery,
+  buildTitleCandidateQuery,
+} from "./search-retrieval-course-lanes.js";
+import type { RetrievalExecutionResult } from "./search-retrieval-lane-executors.js";
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
-import { escapeLike } from "./search-text.js";
-import type { RetrievalLaneResult } from "./search-types.js";
-
-type CandidateQuery = {
-  sql: string;
-  params: (string | number)[];
-};
+import { buildSectionFtsCandidateQuery } from "./search-retrieval-section-lanes.js";
 
 /**
  * Counts the exact union described by the executable retrieval plan. SQL lanes
@@ -17,29 +17,44 @@ type CandidateQuery = {
 export async function countSearchCandidates(
   db: D1Database,
   retrievalPlan: RetrievalPlan,
-  laneResults: RetrievalLaneResult[],
+  execution: RetrievalExecutionResult,
 ): Promise<number> {
-  const enabledLanes = new Set(retrievalPlan.lanes.map(({ lane }) => lane));
-  const candidates: CandidateQuery[] = [];
+  const completedLanes = new Set(execution.successfulLanes);
+  const candidates: CandidateSqlQuery[] = [];
 
-  if (enabledLanes.has("exact") || enabledLanes.has("structured_course")) {
-    candidates.push(filteredCourseCandidates(retrievalPlan));
+  if (completedLanes.has("exact") || completedLanes.has("structured_course")) {
+    candidates.push(buildFilteredCourseCandidateQuery(
+      retrievalPlan.inputs.filters,
+      retrievalPlan.inputs.scope,
+    ));
   }
-  if (enabledLanes.has("official_text")) {
-    candidates.push(courseFtsCandidates(retrievalPlan));
-    if (retrievalPlan.inputs.titleQuery) {
-      candidates.push(titleCandidates(retrievalPlan));
-    }
+  if (completedLanes.has("official_text")) {
+    addCandidate(candidates, buildCourseFtsCandidateQuery(
+      retrievalPlan.inputs.cleanKeywordQuery,
+      retrievalPlan.inputs.filters,
+      retrievalPlan.inputs.scope,
+    ));
+    addCandidate(candidates, buildTitleCandidateQuery(
+      retrievalPlan.inputs.titleQuery,
+      retrievalPlan.inputs.filters,
+      retrievalPlan.inputs.scope,
+    ));
   }
-  if (enabledLanes.has("section_text")) {
-    candidates.push(sectionFtsCandidates(retrievalPlan));
+  if (completedLanes.has("section_text")) {
+    addCandidate(candidates, buildSectionFtsCandidateQuery(
+      retrievalPlan.inputs.cleanKeywordQuery,
+      retrievalPlan.inputs.filters,
+      retrievalPlan.inputs.scope,
+    ));
   }
 
   const semanticIds = [
     ...new Set(
-      laneResults
-        .filter(({ lane }) => lane === "topic_semantic")
-        .map(({ id }) => id),
+      completedLanes.has("topic_semantic")
+        ? execution.laneResults
+          .filter(({ lane }) => lane === "topic_semantic")
+          .map(({ id }) => id)
+        : [],
     ),
   ];
   if (semanticIds.length > 0) {
@@ -66,71 +81,9 @@ export async function countSearchCandidates(
   return result.total;
 }
 
-function filteredCourseCandidates(retrievalPlan: RetrievalPlan): CandidateQuery {
-  const filtered = buildFilteredCourseQuery(
-    retrievalPlan.inputs.filters,
-    retrievalPlan.inputs.scope,
-  );
-  return {
-    sql: `
-      SELECT DISTINCT c.id
-      FROM courses c
-      ${filtered.joinSql}
-      ${filtered.whereSql()}
-    `,
-    params: filtered.bindParams(),
-  };
-}
-
-function titleCandidates(retrievalPlan: RetrievalPlan): CandidateQuery {
-  const filtered = buildFilteredCourseQuery(
-    retrievalPlan.inputs.filters,
-    retrievalPlan.inputs.scope,
-  );
-  return {
-    sql: `
-      SELECT DISTINCT c.id
-      FROM courses c
-      ${filtered.joinSql}
-      ${filtered.whereSql(["LOWER(c.title) LIKE ? ESCAPE '\\'"])}
-    `,
-    params: filtered.bindParams([
-      `%${escapeLike(retrievalPlan.inputs.titleQuery)}%`,
-    ]),
-  };
-}
-
-function courseFtsCandidates(retrievalPlan: RetrievalPlan): CandidateQuery {
-  const filtered = buildFilteredCourseQuery(
-    retrievalPlan.inputs.filters,
-    retrievalPlan.inputs.scope,
-  );
-  return {
-    sql: `
-      SELECT DISTINCT c.id
-      FROM courses_fts fts
-      JOIN courses c ON c.rowid = fts.rowid
-      ${filtered.joinSql}
-      ${filtered.whereSql(["courses_fts MATCH ?"])}
-    `,
-    params: filtered.bindParams([retrievalPlan.inputs.cleanKeywordQuery]),
-  };
-}
-
-function sectionFtsCandidates(retrievalPlan: RetrievalPlan): CandidateQuery {
-  const filtered = buildFilteredCourseQuery(
-    retrievalPlan.inputs.filters,
-    retrievalPlan.inputs.scope,
-  );
-  return {
-    sql: `
-      SELECT DISTINCT c.id
-      FROM sections_fts fts
-      JOIN sections s ON s.rowid = fts.rowid
-      JOIN courses c ON s.course_id = c.id
-      ${filtered.joinSqlExcluding(["sections"])}
-      ${filtered.whereSql(["sections_fts MATCH ?"])}
-    `,
-    params: filtered.bindParams([retrievalPlan.inputs.cleanKeywordQuery]),
-  };
+function addCandidate(
+  candidates: CandidateSqlQuery[],
+  candidate: CandidateSqlQuery | null,
+): void {
+  if (candidate) candidates.push(candidate);
 }

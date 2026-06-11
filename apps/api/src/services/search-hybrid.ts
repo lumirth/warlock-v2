@@ -19,13 +19,14 @@ export async function hybridSearch(
   rankingPlan: SearchPlan,
 ): Promise<{ results: SearchResult[]; totalResults: number }> {
   const { budget } = retrievalPlan;
-  const laneResults = await executeRetrievalLanes({
+  const execution = await executeRetrievalLanes({
     db,
     vectorize,
     ai,
     retrievalPlan,
   });
-  const totalResults = await countSearchCandidates(db, retrievalPlan, laneResults);
+  const { laneResults } = execution;
+  const totalResults = await countSearchCandidates(db, retrievalPlan, execution);
   const scores = fuseRetrievalResults({
     laneResults,
   });

@@ -4,40 +4,50 @@ import type { SearchFilters } from "./search-planner-types.js";
 import {
   buildFilteredCourseQuery,
   hasFilteredCourseConstraints,
+  type CandidateSqlQuery,
 } from "./search-lane-query-builder.js";
 import { chunkValues } from "./search-loaders.js";
 import { rankedLaneRow } from "./search-retrieval-lane-result.js";
-import { sanitizeFtsQuery } from "./search-text.js";
 import type { RetrievalLaneResult } from "./search-types.js";
+
+export function buildSectionFtsCandidateQuery(
+  cleanKeywordQuery: string,
+  filters: SearchFilters,
+  scope: SearchScope = "all",
+): CandidateSqlQuery | null {
+  if (!cleanKeywordQuery.trim()) return null;
+
+  const filtered = buildFilteredCourseQuery(filters, scope);
+  return {
+    sql: `
+      SELECT DISTINCT c.id, bm25(sections_fts) as fts_score
+      FROM sections_fts fts
+      JOIN sections s ON s.rowid = fts.rowid
+      JOIN courses c ON s.course_id = c.id
+      ${filtered.joinSqlExcluding(["sections"])}
+      ${filtered.whereSql(["sections_fts MATCH ?"])}
+    `,
+    params: filtered.bindParams([cleanKeywordQuery]),
+  };
+}
 
 export async function sectionKeywordSearch(
   db: D1Database,
-  keywordQuery: string,
+  cleanKeywordQuery: string,
   filters: SearchFilters,
   limit: number = 50,
   scope: SearchScope = "all",
 ): Promise<RetrievalLaneResult[]> {
-  if (!keywordQuery || !keywordQuery.trim()) {
-    return [];
-  }
+  const candidateQuery = buildSectionFtsCandidateQuery(cleanKeywordQuery, filters, scope);
+  if (!candidateQuery) return [];
 
-  const filtered = buildFilteredCourseQuery(filters, scope);
-  const joinClause = filtered.joinSqlExcluding(["sections"]);
-
-  const sql = `
-    SELECT DISTINCT c.id, bm25(sections_fts) as fts_score
-    FROM sections_fts fts
-    JOIN sections s ON s.rowid = fts.rowid
-    JOIN courses c ON s.course_id = c.id
-    ${joinClause}
-    ${filtered.whereSql(["sections_fts MATCH ?"])}
+  const result = await db.prepare(`
+    SELECT candidates.id, candidates.fts_score
+    FROM (${candidateQuery.sql}) candidates
     ORDER BY fts_score ASC
     LIMIT ?
-  `;
-
-  const escapedQuery = sanitizeFtsQuery(keywordQuery);
-  const result = await db.prepare(sql)
-    .bind(...filtered.bindParams([escapedQuery], [limit]))
+  `)
+    .bind(...candidateQuery.params, limit)
     .all<{ id: string; fts_score: number }>();
 
   return result.results.map((row, index) => rankedLaneRow(
@@ -45,7 +55,7 @@ export async function sectionKeywordSearch(
     row.id,
     index,
     "Section text FTS recall.",
-    { rawScore: row.fts_score, matchedTerms: [escapedQuery] },
+    { rawScore: row.fts_score, matchedTerms: [cleanKeywordQuery] },
   ));
 }
 

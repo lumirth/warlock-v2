@@ -1,7 +1,10 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type { SearchScope } from "@uiuc-course-search/query-types";
 import type { SearchFilters } from "./search-planner-types.js";
-import { buildFilteredCourseQuery } from "./search-lane-query-builder.js";
+import {
+  buildFilteredCourseQuery,
+  type CandidateSqlQuery,
+} from "./search-lane-query-builder.js";
 import { rankedLaneRow } from "./search-retrieval-lane-result.js";
 import { escapeLike } from "./search-text.js";
 import type { RetrievalLaneResult } from "./search-types.js";
@@ -14,22 +17,38 @@ type CourseKeywordLaneInput = {
   scope: SearchScope;
 };
 
+export function buildFilteredCourseCandidateQuery(
+  filters: SearchFilters,
+  scope: SearchScope = "all",
+): CandidateSqlQuery {
+  const filtered = buildFilteredCourseQuery(filters, scope);
+  return {
+    sql: `
+      SELECT DISTINCT c.id
+      FROM courses c
+      ${filtered.joinSql}
+      ${filtered.whereSql()}
+      ${filtered.groupBySql("c.id")}
+    `,
+    params: filtered.bindParams(),
+  };
+}
+
 export async function structuredCourseSearch(
   db: D1Database,
   filters: SearchFilters,
   limit: number = 50,
   scope: SearchScope = "all",
 ): Promise<RetrievalLaneResult[]> {
-  const filtered = buildFilteredCourseQuery(filters, scope);
+  const candidateQuery = buildFilteredCourseCandidateQuery(filters, scope);
   const result = await db.prepare(`
-    SELECT DISTINCT c.id
-    FROM courses c
-    ${filtered.joinSql}
-    ${filtered.whereSql()}
+    SELECT candidates.id
+    FROM (${candidateQuery.sql}) candidates
+    JOIN courses c ON c.id = candidates.id
     ORDER BY c.year DESC, c.subject, c.number
     LIMIT ?
   `)
-    .bind(...filtered.bindParams([limit]))
+    .bind(...candidateQuery.params, limit)
     .all<{ id: string }>();
 
   return result.results.map((row, index) => rankedLaneRow(
@@ -52,18 +71,16 @@ export async function exactCourseSearch(
   const exactTerm = courseCode ?? filters.crn;
   if (!exactTerm) return [];
 
-  const filtered = buildFilteredCourseQuery(filters, scope);
+  const candidateQuery = buildFilteredCourseCandidateQuery(filters, scope);
   const result = await db.prepare(`
-    SELECT DISTINCT c.id
-    FROM courses c
-    ${filtered.joinSql}
-    ${filtered.whereSql()}
-    ${filtered.groupBySql("c.id")}
+    SELECT candidates.id
+    FROM (${candidateQuery.sql}) candidates
+    JOIN courses c ON c.id = candidates.id
     ORDER BY c.year DESC,
       CASE c.term WHEN 'spring' THEN 1 WHEN 'fall' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END
     LIMIT ?
   `)
-    .bind(...filtered.bindParams([limit]))
+    .bind(...candidateQuery.params, limit)
     .all<{ id: string }>();
 
   return result.results.map((row, index) => rankedLaneRow(
@@ -77,42 +94,61 @@ export async function exactCourseSearch(
   ));
 }
 
-async function titleKeywordSearch(
-  db: D1Database,
-  keywordQuery: string,
+export function buildTitleCandidateQuery(
+  titleQuery: string,
   filters: SearchFilters,
-  limit: number = 20,
   scope: SearchScope = "all",
-): Promise<RetrievalLaneResult[]> {
-  const titleNeedle = keywordQuery.replace(/"/g, "").toLowerCase().trim();
-  if (!titleNeedle) return [];
+): CandidateSqlQuery | null {
+  const titleNeedle = titleQuery.replace(/"/g, "").toLowerCase().trim();
+  if (!titleNeedle) return null;
 
   const filtered = buildFilteredCourseQuery(filters, scope);
   const titlePrefix = `${escapeLike(titleNeedle)}%`;
   const titleContains = `%${escapeLike(titleNeedle)}%`;
-  const titleWhere = "LOWER(c.title) LIKE ? ESCAPE '\\'";
+  return {
+    sql: `
+      SELECT c.id,
+        MIN(CASE
+          WHEN LOWER(c.title) = ? THEN 1
+          WHEN LOWER(c.title) LIKE ? ESCAPE '\\' THEN 2
+          ELSE 3
+        END) as title_rank
+      FROM courses c
+      ${filtered.joinSql}
+      ${filtered.whereSql(["LOWER(c.title) LIKE ? ESCAPE '\\'"])}
+      ${filtered.groupBySql("c.id")}
+    `,
+    params: [
+      titleNeedle,
+      titlePrefix,
+      ...filtered.bindParams([titleContains]),
+    ],
+  };
+}
 
-  const sql = `
-    SELECT c.id,
-      MIN(CASE
-        WHEN LOWER(c.title) = ? THEN 1
-        WHEN LOWER(c.title) LIKE ? ESCAPE '\\' THEN 2
-        ELSE 3
-      END) as title_rank
-    FROM courses c
-    ${filtered.joinSql}
-    ${filtered.whereSql([titleWhere])}
-    ${filtered.groupBySql("c.id")}
+async function titleKeywordSearch(
+  db: D1Database,
+  titleQuery: string,
+  filters: SearchFilters,
+  limit: number = 20,
+  scope: SearchScope = "all",
+): Promise<RetrievalLaneResult[]> {
+  const candidateQuery = buildTitleCandidateQuery(titleQuery, filters, scope);
+  if (!candidateQuery) return [];
+  const titleNeedle = titleQuery.replace(/"/g, "").toLowerCase().trim();
+
+  const result = await db.prepare(`
+    SELECT candidates.id, candidates.title_rank
+    FROM (${candidateQuery.sql}) candidates
+    JOIN courses c ON c.id = candidates.id
     ORDER BY title_rank ASC,
       c.year DESC,
       CASE c.term WHEN 'fall' THEN 1 WHEN 'spring' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END,
       c.subject,
       c.number
     LIMIT ?
-  `;
-
-  const result = await db.prepare(sql)
-    .bind(titleNeedle, titlePrefix, ...filtered.bindParams([titleContains], [limit]))
+  `)
+    .bind(...candidateQuery.params, limit)
     .all<{ id: string; title_rank: number }>();
 
   return result.results.map((row, index) => rankedLaneRow(
@@ -124,6 +160,27 @@ async function titleKeywordSearch(
   ));
 }
 
+export function buildCourseFtsCandidateQuery(
+  cleanKeywordQuery: string,
+  filters: SearchFilters,
+  scope: SearchScope = "all",
+): CandidateSqlQuery | null {
+  if (!cleanKeywordQuery.trim()) return null;
+
+  const filtered = buildFilteredCourseQuery(filters, scope);
+  return {
+    sql: `
+      SELECT DISTINCT c.id,
+        bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0) as fts_score
+      FROM courses_fts fts
+      JOIN courses c ON c.rowid = fts.rowid
+      ${filtered.joinSql}
+      ${filtered.whereSql(["courses_fts MATCH ?"])}
+    `,
+    params: filtered.bindParams([cleanKeywordQuery]),
+  };
+}
+
 export async function keywordSearch(
   db: D1Database,
   input: CourseKeywordLaneInput,
@@ -132,24 +189,19 @@ export async function keywordSearch(
   const { filters, keywordQuery, cleanKeywordQuery, titleQuery, scope } = input;
   if (!keywordQuery.trim()) return [];
 
-  const filtered = buildFilteredCourseQuery(filters, scope);
   const titleResults = titleQuery
     ? await titleKeywordSearch(db, titleQuery, filters, limit, scope)
     : [];
-  const ftsMatchCondition = "courses_fts MATCH ?";
+  const candidateQuery = buildCourseFtsCandidateQuery(cleanKeywordQuery, filters, scope);
+  if (!candidateQuery) return titleResults;
 
-  const sql = `
-    SELECT DISTINCT c.id, bm25(courses_fts, 10.0, 10.0, 2.0, 0.5, 1.0, 1.0) as fts_score
-    FROM courses_fts fts
-    JOIN courses c ON c.rowid = fts.rowid
-    ${filtered.joinSql}
-    ${filtered.whereSql([ftsMatchCondition])}
+  const result = await db.prepare(`
+    SELECT candidates.id, candidates.fts_score
+    FROM (${candidateQuery.sql}) candidates
     ORDER BY fts_score ASC
     LIMIT ?
-  `;
-
-  const result = await db.prepare(sql)
-    .bind(...filtered.bindParams([cleanKeywordQuery], [limit]))
+  `)
+    .bind(...candidateQuery.params, limit)
     .all<{ id: string; fts_score: number }>();
 
   const ftsResults = result.results.map((row, index) => rankedLaneRow(

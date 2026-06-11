@@ -6,6 +6,40 @@ import { executeRetrievalLanes } from "../search-retrieval-lane-executors.js";
 import { buildRetrievalPlan } from "../search-retrieval-plan.js";
 
 describe("executeRetrievalLanes", () => {
+  it("reports which lanes completed so later stages do not re-run failed lanes", async () => {
+    const retrievalPlan = buildRetrievalPlan(
+      {
+        filters: {},
+        keywordQuery: "easy ai",
+        semanticQuery: "",
+      },
+      normalizeSearchControls({ scope: "all" }),
+      buildSearchCandidateBudget(),
+    );
+    const db = {
+      prepare: (sql: string) => {
+        if (sql.includes("sections_fts")) {
+          throw new Error("section index unavailable");
+        }
+        return {
+          bind: () => ({
+            all: async () => ({ results: [] }),
+          }),
+        };
+      },
+    } as unknown as D1Database;
+
+    await expect(executeRetrievalLanes({
+      db,
+      vectorize: {} as VectorizeIndex,
+      ai: {} as Ai,
+      retrievalPlan,
+    })).resolves.toEqual({
+      laneResults: [],
+      successfulLanes: ["official_text"],
+    });
+  });
+
   it("fails truthfully when every executable lane fails", async () => {
     const retrievalPlan = buildRetrievalPlan(
       {

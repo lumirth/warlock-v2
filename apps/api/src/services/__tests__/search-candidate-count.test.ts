@@ -36,7 +36,14 @@ describe("countSearchCandidates", () => {
       buildSearchCandidateBudget(20),
     );
 
-    await expect(countSearchCandidates(db, retrievalPlan, [])).resolves.toBe(451);
+    await expect(countSearchCandidates(
+      db,
+      retrievalPlan,
+      {
+        laneResults: [],
+        successfulLanes: ["structured_course"],
+      },
+    )).resolves.toBe(451);
 
     const sql = prepare.mock.calls[0][0];
     expect(sql).toContain("COUNT(DISTINCT id)");
@@ -57,14 +64,21 @@ describe("countSearchCandidates", () => {
       buildSearchCandidateBudget(20),
     );
 
-    await expect(countSearchCandidates(db, retrievalPlan, [
+    await expect(countSearchCandidates(
+      db,
+      retrievalPlan,
       {
-        id: "CS-225-2026-spring",
-        lane: "topic_semantic",
-        rank: 1,
-        reason: "Semantic topic recall.",
+        laneResults: [
+          {
+            id: "CS-225-2026-spring",
+            lane: "topic_semantic",
+            rank: 1,
+            reason: "Semantic topic recall.",
+          },
+        ],
+        successfulLanes: ["official_text", "section_text", "topic_semantic"],
       },
-    ])).resolves.toBe(83);
+    )).resolves.toBe(83);
 
     const sql = prepare.mock.calls[0][0];
     expect(sql).toContain("FROM courses_fts");
@@ -72,5 +86,31 @@ describe("countSearchCandidates", () => {
     expect(sql).toContain("LOWER(c.title) LIKE");
     expect(sql).toContain("SELECT ? AS id");
     expect(sql).not.toContain("LIMIT");
+  });
+
+  it("counts only lanes that completed successfully", async () => {
+    const { db, prepare } = countDb(19);
+    const retrievalPlan = buildRetrievalPlan(
+      {
+        filters: {},
+        keywordQuery: "easy ai",
+        semanticQuery: "easy ai",
+      },
+      normalizeSearchControls({ scope: "all" }),
+      buildSearchCandidateBudget(20),
+    );
+
+    await expect(countSearchCandidates(
+      db,
+      retrievalPlan,
+      {
+        laneResults: [],
+        successfulLanes: ["official_text"],
+      },
+    )).resolves.toBe(19);
+
+    const sql = prepare.mock.calls[0][0];
+    expect(sql).toContain("FROM courses_fts");
+    expect(sql).not.toContain("FROM sections_fts");
   });
 });

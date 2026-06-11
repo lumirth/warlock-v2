@@ -14,6 +14,11 @@ type FilteredCourseQuery = FilterClauseResult & {
   bindParams: (...paramGroups: readonly (readonly (string | number)[])[]) => (string | number)[];
 };
 
+export type CandidateSqlQuery = {
+  sql: string;
+  params: (string | number)[];
+};
+
 export function buildFilteredCourseQuery(
   filters: SearchFilters,
   scope: SearchScope = "all",

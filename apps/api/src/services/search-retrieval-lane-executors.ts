@@ -51,7 +51,7 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
   section_text: ({ db, retrievalPlan }, laneExecution) => {
     return sectionKeywordSearch(
       db,
-      retrievalPlan.inputs.keywordQuery,
+      retrievalPlan.inputs.cleanKeywordQuery,
       retrievalPlan.inputs.filters,
       laneExecution.limit,
       retrievalPlan.inputs.scope,
@@ -85,20 +85,27 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
   },
 };
 
+export type RetrievalExecutionResult = {
+  laneResults: RetrievalLaneResult[];
+  successfulLanes: RetrievalLane[];
+};
+
 export async function executeRetrievalLanes(
   context: RetrievalLaneExecutorContext,
-): Promise<RetrievalLaneResult[]> {
+): Promise<RetrievalExecutionResult> {
   const laneRuns = context.retrievalPlan.lanes.map(async laneExecution => {
     const executor = RETRIEVAL_LANE_EXECUTORS[laneExecution.lane];
     try {
       return {
         failed: false as const,
+        lane: laneExecution.lane,
         rows: await executor(context, laneExecution),
       };
     } catch (err) {
       logger.warn(`search.${laneExecution.lane}.failed`, { ...errorFields(err) });
       return {
         failed: true as const,
+        lane: laneExecution.lane,
         rows: [] as RetrievalLaneResult[],
       };
     }
@@ -108,5 +115,10 @@ export async function executeRetrievalLanes(
   if (runs.length > 0 && runs.every((run) => run.failed)) {
     throw new Error("All search retrieval lanes failed");
   }
-  return runs.flatMap((run) => run.rows);
+  return {
+    laneResults: runs.flatMap((run) => run.rows),
+    successfulLanes: runs
+      .filter((run) => !run.failed)
+      .map((run) => run.lane),
+  };
 }
