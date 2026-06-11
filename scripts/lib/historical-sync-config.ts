@@ -37,7 +37,7 @@ Options:
   --sql-file=PATH    SQL output file (default: historical-data.sql)
   --log-file=PATH    Log output file (default: historical-sync.log)
   --dry-run          Don't output SQL, just show what would be synced
-  --fresh            Ignore checkpoint, start fresh
+  --fresh            Clear resumable progress and start fresh (ignored by --dry-run)
   --allow-partial-output
                     Exit successfully even if some subjects fail
   --help, -h         Show this help message

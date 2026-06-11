@@ -1,3 +1,7 @@
+import { statSync, truncateSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { HistoricalSqlOutputCheckpoint } from './historical-checkpoint.ts';
+
 export type SqlOutputPlan = {
   enabled: boolean;
   flags: 'w' | 'a';
@@ -38,4 +42,32 @@ export function chooseSqlOutputPlan(options: {
 
 export function sqlFileHasCommit(contents: string): boolean {
   return /(?:^|\n)COMMIT;\s*$/i.test(contents.trimEnd());
+}
+
+export function reconcileSqlOutputWithCheckpoint(
+  sqlPath: string,
+  checkpoint: HistoricalSqlOutputCheckpoint | undefined,
+): void {
+  if (!checkpoint) {
+    throw new Error(
+      'Checkpointed items exist, but the checkpoint does not record the SQL artifact position. Re-run with --fresh or restore a checkpoint created by the current script.',
+    );
+  }
+
+  const resolvedSqlPath = resolve(sqlPath);
+  if (resolve(checkpoint.path) !== resolvedSqlPath) {
+    throw new Error(
+      `Checkpoint belongs to ${checkpoint.path}, not ${resolvedSqlPath}. Re-run with the original --sql-file or use --fresh.`,
+    );
+  }
+
+  const currentBytes = statSync(resolvedSqlPath).size;
+  if (currentBytes < checkpoint.committedBytes) {
+    throw new Error(
+      `SQL artifact is ${currentBytes} bytes, shorter than the checkpointed ${checkpoint.committedBytes} bytes. Restore the original artifact or use --fresh.`,
+    );
+  }
+  if (currentBytes > checkpoint.committedBytes) {
+    truncateSync(resolvedSqlPath, checkpoint.committedBytes);
+  }
 }

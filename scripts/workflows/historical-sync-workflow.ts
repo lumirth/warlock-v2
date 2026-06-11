@@ -25,9 +25,10 @@
  *   - Progress is also displayed in the terminal
  *
  * Resume:
- *   The script saves progress to historical-sync-checkpoint.json after each batch.
- *   If interrupted, simply re-run the same command to resume where you left off.
+ *   The script atomically saves progress and the durable SQL byte position after each batch.
+ *   If interrupted, re-run the same command; uncheckpointed SQL is discarded before resuming.
  *   Use --fresh to ignore the checkpoint and start over.
+ *   Dry runs never read, clear, or write resumable progress.
  */
 
 import * as fs from "fs";
@@ -61,6 +62,7 @@ import {
 } from "../lib/historical-sync-config.ts";
 import {
   chooseSqlOutputPlan,
+  reconcileSqlOutputWithCheckpoint,
   sqlFileHasCommit as sqlContentsHaveCommit,
   type SqlOutputPlan,
 } from "../lib/historical-sync-sql-output.ts";
@@ -72,11 +74,7 @@ export type { HistoricalSyncArgs, HistoricalSyncParseResult, SqlOutputPlan };
 export const escapeSQL = escapeSqlValue;
 
 function sqlPathHasCommit(sqlPath: string): boolean {
-  try {
-    return sqlContentsHaveCommit(fs.readFileSync(sqlPath, "utf-8"));
-  } catch {
-    return false;
-  }
+  return sqlContentsHaveCommit(fs.readFileSync(sqlPath, "utf-8"));
 }
 
 function closeWriter(writer: fs.WriteStream): Promise<void> {
@@ -119,6 +117,7 @@ type HistoricalSyncRuntime = {
   openLogWriter: (filePath: string) => void;
   openSqlWriter: (filePath: string, flags: "a" | "w") => void;
   writeSql: (line: string) => void;
+  flushSql: () => { path: string; committedBytes: number } | undefined;
   writeLog: (message: string) => void;
   recordBurstStart: () => void;
   robustFetch: (url: string) => Promise<string>;
@@ -138,14 +137,35 @@ function createHistoricalSyncRuntime(
   startTime: Date,
   cwd = process.cwd(),
 ): HistoricalSyncRuntime {
-  let sqlWriter: fs.WriteStream | null = null;
+  let sqlPath: string | null = null;
+  let sqlBuffer: string[] = [];
   let logWriter: fs.WriteStream | null = null;
   const stats = createSyncStats();
 
   const writeSql = (line: string): void => {
-    if (sqlWriter) {
-      sqlWriter.write(line + "\n");
+    if (sqlPath) {
+      sqlBuffer.push(line);
     }
+  };
+
+  const flushSql = (): { path: string; committedBytes: number } | undefined => {
+    if (!sqlPath) {
+      return undefined;
+    }
+    if (sqlBuffer.length > 0) {
+      const descriptor = fs.openSync(sqlPath, "a");
+      try {
+        fs.writeFileSync(descriptor, `${sqlBuffer.join("\n")}\n`);
+        fs.fsyncSync(descriptor);
+      } finally {
+        fs.closeSync(descriptor);
+      }
+      sqlBuffer = [];
+    }
+    return {
+      path: path.resolve(sqlPath),
+      committedBytes: fs.statSync(sqlPath).size,
+    };
   };
 
   const writeLog = (message: string): void => {
@@ -177,10 +197,9 @@ function createHistoricalSyncRuntime(
   );
 
   const closeFileWriters = async (): Promise<void> => {
-    const writers = [sqlWriter, logWriter].filter(
-      (writer): writer is fs.WriteStream => writer !== null,
-    );
-    sqlWriter = null;
+    flushSql();
+    const writers = [logWriter].filter((writer): writer is fs.WriteStream => writer !== null);
+    sqlPath = null;
     logWriter = null;
     await Promise.all(writers.map(closeWriter));
   };
@@ -268,9 +287,13 @@ function createHistoricalSyncRuntime(
       logWriter = fs.createWriteStream(filePath);
     },
     openSqlWriter: (filePath, flags) => {
-      sqlWriter = fs.createWriteStream(filePath, { flags });
+      if (flags === "w") {
+        fs.writeFileSync(filePath, "");
+      }
+      sqlPath = filePath;
     },
     writeSql,
+    flushSql,
     writeLog,
     recordBurstStart: () => historicalFetcher.recordBurstStart(),
     robustFetch: (url) => historicalFetcher.fetchText(url),
@@ -292,6 +315,12 @@ export async function runHistoricalSyncCli(
   const args = parsedArgs;
   const startTime = new Date();
   const runtime = createHistoricalSyncRuntime(args, startTime);
+  const sqlPath = path.resolve(process.cwd(), args.sqlFile);
+  const checkpointScope = {
+    startYear: args.startYear,
+    endYear: args.endYear,
+    termFilter: args.termFilter,
+  };
   const {
     checkpointStore,
     closeFileWriters,
@@ -301,6 +330,7 @@ export async function runHistoricalSyncCli(
     stats,
     writeLog,
     writeSql,
+    flushSql,
     writeSqlHeader,
     writeTermStateSql,
   } = runtime;
@@ -318,11 +348,14 @@ export async function runHistoricalSyncCli(
     writeLog(`  Fresh Start: ${args.fresh}`);
     writeLog(`  Allow Partial Output: ${args.allowPartialOutput}`);
 
-    // Load or clear checkpoint
-    if (args.fresh) {
-      checkpointStore.clear();
-    } else {
-      checkpointStore.load();
+    // Dry runs inspect the requested source range without mutating resumable progress.
+    if (!args.dryRun) {
+      if (args.fresh) {
+        checkpointStore.clear();
+      } else {
+        checkpointStore.load();
+        checkpointStore.assertCompatible(checkpointScope, sqlPath);
+      }
     }
 
     // PHASE 1: Discover all terms upfront in parallel
@@ -385,8 +418,7 @@ export async function runHistoricalSyncCli(
     );
     const skippedCount = allWorkItems.length - pendingWorkItems.length;
     const termResults = checkpointStore.termResultsFromCheckpoint(allWorkItems);
-    const checkpointedWithoutStats =
-      checkpointStore.checkpointedWithoutStats(allWorkItems);
+    const checkpointedWithoutStats = checkpointStore.checkpointedWithoutStats(allWorkItems);
 
     if (!args.dryRun && checkpointedWithoutStats > 0) {
       throw new Error(
@@ -394,16 +426,19 @@ export async function runHistoricalSyncCli(
       );
     }
 
-    const sqlPath = path.join(process.cwd(), args.sqlFile);
+    const sqlFileExists = fs.existsSync(sqlPath);
     const sqlPlan = chooseSqlOutputPlan({
       dryRun: args.dryRun,
       fresh: args.fresh,
       skippedCount,
-      sqlFileExists: fs.existsSync(sqlPath),
-      sqlFileHasCommit: sqlPathHasCommit(sqlPath),
+      sqlFileExists,
+      sqlFileHasCommit: !args.dryRun && sqlFileExists && sqlPathHasCommit(sqlPath),
     });
 
     if (sqlPlan.enabled) {
+      if (sqlPlan.mode === "resume") {
+        reconcileSqlOutputWithCheckpoint(sqlPath, checkpointStore.getSqlOutput());
+      }
       runtime.openSqlWriter(sqlPath, sqlPlan.flags);
       writeLog(
         `SQL output: ${args.sqlFile} (${sqlPlan.mode === "resume" ? "append resume" : "new file"})`,
@@ -516,12 +551,13 @@ export async function runHistoricalSyncCli(
             writeSql(sql);
           }
 
-          // Mark this item as completed in checkpoint after its SQL has been written.
-          checkpointStore.markCompleted(result, {
-            termId: result.termId,
-            courses: result.coursesCount,
-            sections: result.sectionsCount,
-          });
+          if (!args.dryRun) {
+            checkpointStore.markCompleted(result, {
+              termId: result.termId,
+              courses: result.coursesCount,
+              sections: result.sectionsCount,
+            });
+          }
 
           // Accumulate per-term stats
           const existing = termResults.get(result.termId) || {
@@ -545,16 +581,17 @@ export async function runHistoricalSyncCli(
         }
       }
 
-      // Save checkpoint after each batch
-      checkpointStore.save();
+      if (!args.dryRun) {
+        const sqlOutput = flushSql();
+        if (!sqlOutput) {
+          throw new Error("[CHECKPOINT] Cannot save progress without an open SQL artifact");
+        }
+        checkpointStore.save(checkpointScope, sqlOutput);
+      }
 
       writeLog(
         `[BATCH ${batchNum}/${totalBatches}] Complete: ${batchSuccess} succeeded, ${batchFailed} failed`,
       );
-    }
-
-    if (!args.dryRun) {
-      writeTermStateSql(termResults);
     }
 
     // Copy termResults to stats
@@ -562,7 +599,16 @@ export async function runHistoricalSyncCli(
       stats.termStats.set(termId, termStats);
     }
 
+    if (stats.failedSubjects.length > 0 && !args.allowPartialOutput) {
+      printSummary();
+      await closeFileWriters();
+      throw new Error(
+        `Historical sync failed for ${stats.failedSubjects.length} subject(s). Re-run the same command to retry them, or use --allow-partial-output to accept partial SQL output.`,
+      );
+    }
+
     if (!args.dryRun) {
+      writeTermStateSql(termResults);
       writeSql("COMMIT;");
     }
 
@@ -572,11 +618,6 @@ export async function runHistoricalSyncCli(
     // Close file writers
     await closeFileWriters();
 
-    if (stats.failedSubjects.length > 0 && !args.allowPartialOutput) {
-      throw new Error(
-        `Historical sync failed for ${stats.failedSubjects.length} subject(s). Re-run with --allow-partial-output to accept partial SQL output.`,
-      );
-    }
   } finally {
     await closeFileWriters();
   }
