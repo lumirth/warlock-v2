@@ -249,8 +249,6 @@ export function parseTermCoverageArgs(argv: string[]): TermCoverageArgs {
   return args;
 }
 
-export { discoverAvailableTerms };
-
 async function loadStatus(input?: string): Promise<{ source: string | null; status: JsonRecord | null }> {
   const result = await loadOptionalJsonRecord(
     input,

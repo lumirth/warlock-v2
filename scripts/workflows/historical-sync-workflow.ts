@@ -35,14 +35,11 @@ import * as fs from "fs";
 import * as path from "path";
 import { pathToFileURL } from "url";
 import { parseSubjectCascadeXmlFromString } from "../../apps/api/src/cisapi/parser.ts";
-import { makeCourseId } from "../../apps/api/src/db/ids.ts";
 import { fromSubjectCascade } from "../../apps/api/src/transforms/course.ts";
 import {
-  courseGenedSqlStatements,
   subjectSnapshotSqlStatements,
   termStateSqlStatements,
 } from "../../apps/api/src/services/course-snapshot-writer.ts";
-import { escapeSqlValue } from "../../apps/api/src/services/snapshot-persistence-sql.ts";
 import {
   COURSE_EXPLORER_BROWSER_HEADERS,
   CoordinatedRateLimitFetcher,
@@ -54,24 +51,15 @@ import {
 } from "../lib/historical-term-discovery.ts";
 import {
   HISTORICAL_SYNC_CONFIG as CONFIG,
-  historicalSyncUsage,
   isHistoricalSyncHelp,
   parseHistoricalSyncArgs,
   type HistoricalSyncArgs,
-  type HistoricalSyncParseResult,
 } from "../lib/historical-sync-config.ts";
 import {
   chooseSqlOutputPlan,
   reconcileSqlOutputWithCheckpoint,
   sqlFileHasCommit as sqlContentsHaveCommit,
-  type SqlOutputPlan,
 } from "../lib/historical-sync-sql-output.ts";
-
-export { makeCourseId };
-export { courseGenedSqlStatements };
-export { chooseSqlOutputPlan, historicalSyncUsage, parseHistoricalSyncArgs };
-export type { HistoricalSyncArgs, HistoricalSyncParseResult, SqlOutputPlan };
-export const escapeSQL = escapeSqlValue;
 
 function sqlPathHasCommit(sqlPath: string): boolean {
   return sqlContentsHaveCommit(fs.readFileSync(sqlPath, "utf-8"));

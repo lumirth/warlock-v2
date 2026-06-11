@@ -5,6 +5,7 @@ import {
   type SearchChipDto,
   type SearchRequestFilterKey,
   type SearchRequestFiltersDto,
+  type SearchRequestDto,
   type SearchScope,
   type SearchSort,
   type SortField,
@@ -14,11 +15,11 @@ import {
   searchControllerReducer,
 } from './search-controller-state'
 import { planAdvancedSearchApply } from './advanced-search-planner'
-import { advancedStateFromRequest } from './search-filter-model'
 import {
-  planSearchRequest,
-  type SearchRefinementPlan,
-} from './search-refinement-actions'
+  advancedStateFromRequest,
+  cleanAdvancedFilters,
+  hasSearchableAdvancedFilterValue,
+} from './search-filter-model'
 import {
   nextSortForField,
   normalizeSearchSort,
@@ -51,15 +52,14 @@ export function useSearchController() {
     writeStoredResultViewMode(state.draft.resultViewMode)
   }, [state.draft.resultViewMode])
 
-  const runRefinementPlan = (plan: SearchRefinementPlan) => {
-    if (plan.draft) {
-      dispatch({ type: 'advanced/draft-replaced', value: plan.draft })
-    }
-    if (plan.kind === 'clear') {
+  const runRefinementRequest = (request: SearchRequestDto) => {
+    const draft = cleanAdvancedFilters(advancedStateFromRequest(request))
+    dispatch({ type: 'advanced/draft-replaced', value: draft })
+    if (!request.query.trim() && !hasSearchableAdvancedFilterValue(draft)) {
       dispatch({ type: 'search/cleared' })
       return
     }
-    executeSearch({ type: 'request', mode: 'refine', request: plan.request })
+    executeSearch({ type: 'request', mode: 'refine', request })
   }
 
   const applySort = (sort: SearchSort) => {
@@ -125,9 +125,9 @@ export function useSearchController() {
           value: interpreted ? advancedStateFromRequest(interpreted) : { filters: {} },
         })
       },
-      removeChip: (chip: SearchChipDto) => runRefinementPlan(planSearchRequest(chip.removeRequest)),
+      removeChip: (chip: SearchChipDto) => runRefinementRequest(chip.removeRequest),
       applyAmbiguityAction: (action: SearchAmbiguityActionDto) =>
-        runRefinementPlan(planSearchRequest(action.nextRequest)),
+        runRefinementRequest(action.nextRequest),
       setResultViewMode: (value: ResultViewMode) =>
         dispatch({ type: 'result-view/changed', value }),
       handleSortFieldChange: (field: SortField) =>

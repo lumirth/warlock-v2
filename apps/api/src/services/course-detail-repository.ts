@@ -2,21 +2,17 @@ import type { D1Database } from '@cloudflare/workers-types';
 import type {
   CourseGened,
   InstructorLinkReadRow,
-  Meeting,
   Section,
 } from '../db/types.js';
 import type {
   CourseDetailContext,
   CourseDetailEnrichment,
-  CourseDetailMeetingReadModel,
   CourseDetailMetadata,
   CourseDetailSectionReadModel,
   CourseWithAge,
 } from './course-detail-types.js';
 
-type MeetingRow = Meeting & {
-  instructor_names: string | null;
-};
+type MeetingRow = CourseDetailSectionReadModel['meetings'][number];
 
 export class CourseDetailRepository {
   constructor(private readonly db: D1Database) {}
@@ -123,7 +119,7 @@ export class CourseDetailRepository {
 
   private async loadMeetingsBySection(
     sectionIds: string[],
-  ): Promise<Map<string, CourseDetailMeetingReadModel[]>> {
+  ): Promise<Map<string, MeetingRow[]>> {
     const placeholders = sectionIds.map(() => '?').join(',');
     const meetings = await this.db.prepare(`
       SELECT
@@ -137,13 +133,10 @@ export class CourseDetailRepository {
       ORDER BY m.section_id, m.meeting_index
     `).bind(...sectionIds).all<MeetingRow>();
 
-    const meetingsBySection = new Map<string, CourseDetailMeetingReadModel[]>();
+    const meetingsBySection = new Map<string, MeetingRow[]>();
     for (const meeting of meetings.results) {
-      const meetingWithStats = {
-        ...meeting,
-      };
       const list = meetingsBySection.get(meeting.section_id) ?? [];
-      list.push(meetingWithStats);
+      list.push(meeting);
       meetingsBySection.set(meeting.section_id, list);
     }
 

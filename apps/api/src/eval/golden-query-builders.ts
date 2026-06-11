@@ -1,10 +1,7 @@
 import {
-  GENERIC_REQUIREMENT_CODES,
   requirementFilter as buildRequirementFilter,
   singleRequirementFilter,
 } from '@uiuc-course-search/query-types';
-
-export const ALL_REQUIREMENT_CODES = GENERIC_REQUIREMENT_CODES;
 
 export function requirement(code: string) {
   const filter = singleRequirementFilter(code);

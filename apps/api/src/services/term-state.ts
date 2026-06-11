@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { makeTermId } from '../db/ids.js';
+import { getTermState } from '../db/term-state-repository.js';
 import type { TermStateStatus } from '../db/types.js';
 
 export type TermStatus = TermStateStatus | 'requested' | 'fallback';
@@ -113,13 +114,4 @@ export async function getSearchTermSummary(db: D1Database): Promise<{
     activeTermIds,
     registrableTermIds,
   };
-}
-
-async function getTermState(db: D1Database, termId: string): Promise<TermStateRow | null> {
-  const row = await db.prepare(`
-    SELECT term_id, year, term, status
-    FROM term_state
-    WHERE term_id = ?
-  `).bind(termId).first<TermStateRow>();
-  return row ?? null;
 }

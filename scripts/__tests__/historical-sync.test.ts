@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { parseSubjectCascadeXmlFromString } from '../../apps/api/src/cisapi/parser.js';
-import { subjectSnapshotSqlStatements } from '../../apps/api/src/services/course-snapshot-writer.js';
-import { fromSubjectCascade } from '../../apps/api/src/transforms/course.js';
+import { makeCourseId } from '../../apps/api/src/db/ids.js';
 import {
-  chooseSqlOutputPlan,
   courseGenedSqlStatements,
-  escapeSQL,
-  makeCourseId,
-  parseHistoricalSyncArgs,
-} from '../historical-sync.js';
+  subjectSnapshotSqlStatements,
+} from '../../apps/api/src/services/course-snapshot-writer.js';
+import { escapeSqlValue } from '../../apps/api/src/services/snapshot-persistence-sql.js';
+import { fromSubjectCascade } from '../../apps/api/src/transforms/course.js';
+import { parseHistoricalSyncArgs } from '../lib/historical-sync-config.js';
+import { chooseSqlOutputPlan } from '../lib/historical-sync-sql-output.js';
 
 // Real XML sample from ~/cisapp (trimmed to 1 course with 2 sections)
 const REAL_CS_CASCADE_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -308,20 +308,20 @@ describe('Historical Sync SQL Generation', () => {
 
   it('handles special characters in SQL escaping', async () => {
     // Test single quotes
-    expect(escapeSQL("O'Brien")).toBe("'O''Brien'");
+    expect(escapeSqlValue("O'Brien")).toBe("'O''Brien'");
 
     // Test newlines
-    expect(escapeSQL("Line1\nLine2")).toBe("'Line1 Line2'");
-    expect(escapeSQL("Line1\r\nLine2")).toBe("'Line1 Line2'");
+    expect(escapeSqlValue("Line1\nLine2")).toBe("'Line1 Line2'");
+    expect(escapeSqlValue("Line1\r\nLine2")).toBe("'Line1 Line2'");
 
     // Test backslashes
-    expect(escapeSQL("path\\to\\file")).toBe("'path\\\\to\\\\file'");
+    expect(escapeSqlValue("path\\to\\file")).toBe("'path\\\\to\\\\file'");
 
     // Test null
-    expect(escapeSQL(null)).toBe('NULL');
+    expect(escapeSqlValue(null)).toBe('NULL');
 
     // Test empty string (should NOT be NULL)
-    expect(escapeSQL('')).toBe("''");
+    expect(escapeSqlValue('')).toBe("''");
   });
 
   it('handles meeting_instructors link SQL correctly', async () => {

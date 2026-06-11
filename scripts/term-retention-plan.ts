@@ -298,8 +298,6 @@ export function parseTermRetentionArgs(argv: string[]): TermRetentionArgs {
   return args;
 }
 
-export { discoverAvailableTerms };
-
 export async function buildTermRetentionReport(
   args: TermRetentionArgs,
   options: {

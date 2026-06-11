@@ -71,12 +71,8 @@ export type CourseDetailEnrichment = {
   requirementRows: CourseGened[];
 };
 
-export type CourseDetailMeetingReadModel = Meeting & {
-  instructor_names?: string | null;
-};
-
 export type CourseDetailSectionReadModel = Section & {
-  meetings?: CourseDetailMeetingReadModel[];
+  meetings: Array<Meeting & { instructor_names: string | null }>;
 };
 
 export type StoredDetailOptions =

@@ -1,5 +1,5 @@
 import { errorFields, logger } from '../observability/logger.js';
-import { createCourseDetailContext } from './course-detail-context.js';
+import { makeCourseId } from '../db/ids.js';
 import { CourseDetailLiveSource } from './course-detail-live-source.js';
 import { CourseDetailRepository } from './course-detail-repository.js';
 import {
@@ -14,6 +14,7 @@ import type {
   StaleFallbackOptions,
   StoredDetailOptions,
 } from './course-detail-types.js';
+import { resolveTermContext } from './term-state.js';
 import type { UpstreamBackoff } from './upstream-backoff.js';
 
 export type {
@@ -176,4 +177,28 @@ export class CourseDetailService {
       },
     };
   }
+}
+
+async function createCourseDetailContext(
+  env: CourseDetailServiceEnv,
+  request: CourseDetailRequest
+): Promise<CourseDetailContext> {
+  const resolvedTerm = await resolveTermContext(env.DB, {
+    requestedYear: request.requestedYear,
+    requestedTerm: request.requestedTerm,
+    fallbackYear: env.CURRENT_YEAR,
+    fallbackTerm: env.CURRENT_TERM,
+  });
+  return {
+    subject: request.subject,
+    number: request.number,
+    resolvedTerm,
+    courseId: makeCourseId(
+      request.subject,
+      request.number,
+      resolvedTerm.year,
+      resolvedTerm.term,
+    ),
+    cacheTtlMs: parseInt(env.CLIENT_CACHE_TTL_MS, 10) || 30000,
+  };
 }

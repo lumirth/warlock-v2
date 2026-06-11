@@ -1,6 +1,6 @@
+import { GENERIC_REQUIREMENT_CODES } from '@uiuc-course-search/query-types';
 import type { GoldQuery } from './types.js';
 import {
-  ALL_REQUIREMENT_CODES,
   anyRequirement,
   requirement,
 } from './golden-query-builders.js';
@@ -361,7 +361,7 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
     expected_filters: {
       workload: "easy",
       online: true,
-      requirement: anyRequirement(ALL_REQUIREMENT_CODES)
+      requirement: anyRequirement(GENERIC_REQUIREMENT_CODES)
     },
     expected_intent: {
       queryTypes: ["requirement", "schedule", "subjective_vibe"],
@@ -600,7 +600,7 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
     query: "what's an easy gen ed",
     expected_filters: {
       workload: "easy",
-      requirement: anyRequirement(ALL_REQUIREMENT_CODES)
+      requirement: anyRequirement(GENERIC_REQUIREMENT_CODES)
     },
     expected_results: {
       non_empty: true,

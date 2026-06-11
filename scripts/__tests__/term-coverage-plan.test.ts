@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildTermCoverageReport,
-  discoverAvailableTerms,
   formatTermCoverageReport,
   parseTermCoverageArgs,
   type TermCoverageArgs,
 } from '../term-coverage-plan.ts';
+import { discoverAvailableTerms } from '../lib/term-maintenance.ts';
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
