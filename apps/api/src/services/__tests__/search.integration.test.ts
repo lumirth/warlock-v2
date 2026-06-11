@@ -24,6 +24,9 @@ describe("Worker API integration", () => {
       },
     });
     expect(data.pagination.totalResults).toBe(1);
+    expect(data).not.toHaveProperty("meta.plan");
+    expect(data).not.toHaveProperty("meta.extraction");
+    expect(data).not.toHaveProperty("meta.retrievalPlan");
   });
 
   it("executes natural-language FTS and candidate counting against local D1", async () => {
