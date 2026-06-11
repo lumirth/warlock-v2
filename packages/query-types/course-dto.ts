@@ -1,5 +1,5 @@
-export type InstructorLinkDto = {
-  instructorName: string | null;
+export type CourseInstructorDto = {
+  name: string;
   rmpRating: number | null;
   rmpDifficulty: number | null;
   rmpId: string | null;
@@ -23,8 +23,7 @@ export type CourseSectionMeetingDto = {
   buildingName: string | null;
   roomNumber: string | null;
   dateRangeText: string | null;
-  instructorNames: string[];
-  instructors: InstructorLinkDto[];
+  instructors: CourseInstructorDto[];
 };
 
 export type CourseSectionAvailabilityStatus =
@@ -57,13 +56,6 @@ export type CourseSectionScheduleDto = {
   meetings: CourseSectionMeetingDto[];
 };
 
-export type CourseSectionInstructorsDto = {
-  displayName: string;
-  rmpRating: number | null;
-  avgGpa: number | null;
-  stats: InstructorLinkDto[];
-};
-
 export type CourseSectionSourceFactsDto = {
   sectionTitle: string | null;
   sectionText: string | null;
@@ -80,7 +72,7 @@ export type CourseSectionDto = {
   sectionNumber: string;
   availability: CourseSectionAvailabilityDto;
   schedule: CourseSectionScheduleDto;
-  instructors: CourseSectionInstructorsDto;
+  instructors: CourseInstructorDto[];
   sourceFacts: CourseSectionSourceFactsDto;
   links: CourseSectionLinksDto;
 };
@@ -187,7 +179,6 @@ export type CourseSummaryDto = {
   scheduleNotes: CourseScheduleNotesDto;
   registration: CourseRegistrationDto;
   requirements: CourseRequirementDto[];
-  instructorLinks: Record<string, InstructorLinkDto>;
   links: CourseLinksDto;
 };
 

@@ -1,4 +1,5 @@
 export * from "./course-dto.js";
+export * from "./course-requirement-display.js";
 export * from "./eval-contract.js";
 export * from "./course-policy.js";
 export * from "./requirement-options.js";

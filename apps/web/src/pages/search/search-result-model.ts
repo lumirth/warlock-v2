@@ -1,6 +1,5 @@
 import {
-  canonicalRequirementCode,
-  type CourseRequirementDto,
+  courseRequirementShortLabel,
   type SearchCourseResultDto,
   type CourseSummaryDto,
   type SearchChipDto,
@@ -97,28 +96,11 @@ export function formatTermLabel(term: string, year: number): string {
   return `${term.charAt(0).toUpperCase()}${term.slice(1).toLowerCase()} ${year}`
 }
 
-function requirementLabel(requirement: CourseRequirementDto): string {
-  const category = requirement.categoryName ?? requirement.categoryId
-  if (requirement.attributeName) return `${category}: ${requirement.attributeName}`
-  if (requirement.attributeCode) return `${category}: ${requirement.attributeCode}`
-  return category
-}
-
 export function courseRequirementLabels(course: CourseSummaryDto): string[] {
   if (course.requirements.length > 0) {
-    return course.requirements.map(requirementShortLabel)
+    return course.requirements.map(courseRequirementShortLabel)
   }
   return []
-}
-
-function requirementShortLabel(requirement: CourseRequirementDto): string {
-  const categoryCode = canonicalRequirementCode(requirement.categoryId)
-  const attributeCode = canonicalRequirementCode(requirement.attributeCode)
-
-  if (categoryCode && attributeCode && categoryCode !== attributeCode) {
-    return `${categoryCode}:${attributeCode}`
-  }
-  return attributeCode ?? categoryCode ?? requirementLabel(requirement)
 }
 
 export function formatCourseLevel(course: CourseSummaryDto): string {

@@ -41,13 +41,13 @@ only at named boundaries, and do not let aliases leak past ingress.**
 | Part of term | source part-of-term code | `sections.part_of_term` | Compressed-term schedule signal | `section.schedule.partOfTerm` | Part of term | `partOfTerm`, parser may accept `pot`, `8 week`, `first half`, `second half` at ingress |
 | Section dates | source section date range | `sections.start_date`, `end_date`, `date_range_text` | Section schedule dates | `section.schedule.startDate/endDate/dateRangeText` | Dates | `partOfTerm` and schedule-language aliases at ingress |
 | Section title / text / notes / CAPP area | source section facts | `sections.section_title`, `section_text`, `section_notes`, `capp_area` | Source facts | `section.sourceFacts.*` | Section title / Section notes / Section text / CAPP area | none |
-| Section instructor rollup | source instructor text | `sections.instructor` plus meeting instructors | Instructor display rollup | `section.instructors.displayName`, `section.instructors.stats` | Instructor | `instructor` |
-| GPA and RMP source metrics | GPA/RMP enrichment | `avg_gpa`, `median_gpa`, `quality_score`, `difficulty_score`, RMP fields | Course and instructor metrics | `course.metrics.*`, `InstructorLinkDto.*` | GPA / Quality / Workload / Instructor rating | `gpa`, `quality`, `workload`; parser may accept `difficulty` at ingress |
+| Section and meeting instructors | source instructor text | `sections.instructor` plus meeting instructors | Canonical course instructor profiles | `section.instructors[]`, `meeting.instructors[]` | Instructor | `instructor` |
+| GPA and RMP source metrics | GPA/RMP enrichment | `avg_gpa`, `median_gpa`, `quality_score`, `difficulty_score`, RMP fields | Course and instructor metrics | `course.metrics.*`, `CourseInstructorDto.*` | GPA / Quality / Workload / Instructor rating | `gpa`, `quality`, `workload`; parser may accept `difficulty` at ingress |
 
 ## Canonical Policy Owners
 
-- GenEd option groups, public requirement code normalization, GenEd display
-  labels, and public tier labels live in `packages/query-types`.
+- GenEd option groups, public requirement code normalization, full/compact
+  requirement labels, and public tier labels live in `packages/query-types`.
 - GenEd requirement evidence extraction from snapshots lives in
   `apps/api/src/transforms/course-requirements.ts`.
 - Workload and quality score production lives in

@@ -1,36 +1,11 @@
 import {
-  buildRmpProfessorUrl,
-  buildRmpSearchUrl,
   type CourseSectionAvailabilityStatus,
   type CourseSectionDto,
   type CourseSectionMeetingDto,
-  type InstructorLinkDto,
 } from '@uiuc-course-search/query-types'
 import { formatTime } from '../utils/formatters'
 
 export type SectionTone = 'success' | 'warning' | 'destructive' | 'muted'
-
-export function splitSectionInstructorNames(section: CourseSectionDto): string[] {
-  return section.instructors.displayName
-    ? section.instructors.displayName
-        .split(';')
-        .map((name) => name.trim())
-        .filter(Boolean)
-    : []
-}
-
-export function sectionInstructorStats(
-  section: CourseSectionDto,
-  instructorLinks?: Record<string, InstructorLinkDto>
-): InstructorLinkDto[] {
-  if (section.instructors.stats.length > 0) {
-    return section.instructors.stats
-  }
-
-  return splitSectionInstructorNames(section)
-    .map((name) => instructorLinks?.[name])
-    .filter((stat): stat is InstructorLinkDto => Boolean(stat))
-}
 
 export function sectionAvailabilityTone(
   status: CourseSectionAvailabilityStatus
@@ -77,18 +52,6 @@ export function formatMeetingLocation(meeting: CourseSectionMeetingDto): string 
     .join(' ')
     .trim()
   return location || 'TBA'
-}
-
-export function sectionRmpHref(
-  stat: InstructorLinkDto | undefined,
-  fallbackName: string
-): string | null {
-  return (
-    stat?.rmpUrl ??
-    buildRmpProfessorUrl(stat?.rmpId) ??
-    stat?.rmpSearchUrl ??
-    buildRmpSearchUrl(fallbackName || stat?.instructorName)
-  )
 }
 
 function formatSectionDate(value: string | null): string | null {

@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   CourseDetailDto,
   CourseDetailResponseDto,
+  CourseInstructorDto,
   CourseSectionDto,
 } from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
@@ -37,7 +38,7 @@ type CourseOverride = Omit<
 type SectionOverride = Partial<Omit<CourseSectionDto, 'availability' | 'schedule' | 'instructors' | 'sourceFacts' | 'links'>> & {
   availability?: Partial<CourseSectionDto['availability']>
   schedule?: Partial<CourseSectionDto['schedule']>
-  instructors?: Partial<CourseSectionDto['instructors']>
+  instructors?: CourseSectionDto['instructors']
   sourceFacts?: Partial<CourseSectionDto['sourceFacts']>
   links?: Partial<CourseSectionDto['links']>
 }
@@ -66,12 +67,7 @@ function section(overrides: SectionOverride = {}): CourseSectionDto {
       creditHours: overrides.schedule?.creditHours ?? null,
       meetings: overrides.schedule?.meetings ?? [],
     },
-    instructors: {
-      displayName: overrides.instructors?.displayName ?? 'TBA',
-      rmpRating: overrides.instructors?.rmpRating ?? null,
-      avgGpa: overrides.instructors?.avgGpa ?? null,
-      stats: overrides.instructors?.stats ?? [],
-    },
+    instructors: overrides.instructors ?? [],
     sourceFacts: {
       sectionTitle: overrides.sourceFacts?.sectionTitle ?? null,
       sectionText: overrides.sourceFacts?.sectionText ?? null,
@@ -117,13 +113,33 @@ function course(overrides: CourseOverride = {}): CourseDetailResponseDto {
       approvalCode: overrides.registration?.approvalCode ?? null,
     },
     requirements: overrides.requirements ?? [],
-    instructorLinks: overrides.instructorLinks ?? {},
     links: overrides.links ?? {},
     sections: overrides.sections ?? [],
   }
 
   return {
     course: courseDetail,
+  }
+}
+
+function instructor(
+  name: string,
+  overrides: Partial<Omit<CourseInstructorDto, 'name'>> = {}
+): CourseInstructorDto {
+  return {
+    name,
+    rmpRating: overrides.rmpRating ?? null,
+    rmpDifficulty: overrides.rmpDifficulty ?? null,
+    rmpId: overrides.rmpId ?? null,
+    rmpUrl: overrides.rmpUrl ?? null,
+    rmpSearchUrl: overrides.rmpSearchUrl ?? null,
+    avgGpa: overrides.avgGpa ?? null,
+    medianGpa: overrides.medianGpa ?? null,
+    gpaSampleSize: overrides.gpaSampleSize ?? null,
+    numRatings: overrides.numRatings ?? null,
+    wouldTakeAgainPct: overrides.wouldTakeAgainPct ?? null,
+    topTags: overrides.topTags ?? null,
+    department: overrides.department ?? null,
   }
 }
 
@@ -205,7 +221,7 @@ describe('CoursePage request state', () => {
     consoleError.mockRestore()
   })
 
-  it('renders course scores, rating, GPA, and section stat fallbacks', async () => {
+  it('renders course scores, rating, GPA, and canonical section instructors', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(
       course({
         primaryInstructor: 'Lovelace, A',
@@ -218,24 +234,18 @@ describe('CoursePage request state', () => {
         },
         sections: [
           section({
-            instructors: {
-              displayName: 'Lovelace, A',
-              stats: [
-              {
-                instructorName: 'Lovelace, A',
+            instructors: [
+              instructor('Lovelace, A', {
                 rmpRating: 4.8,
                 rmpDifficulty: 3.1,
                 rmpId: 'ada',
+                rmpSearchUrl:
+                  'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
                 avgGpa: 3.62,
-                medianGpa: null,
                 gpaSampleSize: 820,
                 numRatings: 140,
-                wouldTakeAgainPct: null,
-                topTags: null,
-                department: null,
-              },
+              }),
             ],
-            },
             schedule: {
               meetings: [
               {
@@ -247,8 +257,18 @@ describe('CoursePage request state', () => {
                 buildingName: 'Siebel Center for Computer Science',
                 roomNumber: '1404',
                 dateRangeText: 'Jan 20, 2026 - May 6, 2026',
-                instructorNames: ['Lovelace, A'],
-                instructors: [],
+                instructors: [
+                  instructor('Lovelace, A', {
+                    rmpRating: 4.8,
+                    rmpDifficulty: 3.1,
+                    rmpId: 'ada',
+                    rmpSearchUrl:
+                      'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
+                    avgGpa: 3.62,
+                    gpaSampleSize: 820,
+                    numRatings: 140,
+                  }),
+                ],
               },
             ],
             },
@@ -320,7 +340,7 @@ describe('CoursePage request state', () => {
     expect(layout).not.toHaveClass('xl:grid-cols-[21rem_minmax(0,1fr)]')
   })
 
-  it('renders official Course Explorer links and public instructor link fallbacks', async () => {
+  it('renders official Course Explorer and instructor links', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(
       course({
         links: {
@@ -334,24 +354,17 @@ describe('CoursePage request state', () => {
               courseExplorerUrl:
                 'https://courses.illinois.edu/schedule/2026/fall/CS/225',
             },
-            instructors: {
-              displayName: 'Fagen-Ulmschneider, W',
-              stats: [
-              {
-                instructorName: 'Fagen-Ulmschneider, W',
+            instructors: [
+              instructor('Fagen-Ulmschneider, W', {
                 rmpRating: 4.9,
                 rmpDifficulty: 3.4,
                 rmpId: '85515',
+                rmpUrl: 'https://www.ratemyprofessors.com/professor/85515',
                 avgGpa: 3.45,
-                medianGpa: null,
                 gpaSampleSize: 1200,
                 numRatings: 180,
-                wouldTakeAgainPct: null,
-                topTags: null,
-                department: null,
-              },
+              }),
             ],
-            },
           }),
         ],
       })

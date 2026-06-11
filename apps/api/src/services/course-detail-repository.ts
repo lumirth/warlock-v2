@@ -38,7 +38,7 @@ export class CourseDetailRepository {
   }
 
   async loadInstructorLinkRows(context: CourseDetailContext): Promise<InstructorLinkReadRow[]> {
-    const instructorLinks = await this.db.prepare(`
+    const rows = await this.db.prepare(`
       SELECT
         l.instructor_name,
         r.rating as rmp_rating,
@@ -57,7 +57,7 @@ export class CourseDetailRepository {
       WHERE l.term_id = ? AND l.subject = ? AND l.number = ?
     `).bind(context.resolvedTerm.termId, context.subject, context.number).all();
 
-    return instructorLinks.results;
+    return rows.results;
   }
 
   async loadCourseMedianGpa(subject: string, number: string): Promise<number | null> {

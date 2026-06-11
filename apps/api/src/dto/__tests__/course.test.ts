@@ -10,8 +10,8 @@ import { presentSearchCourseResult } from '../../services/search-result-presenta
 import type { CourseSnapshot } from '../../transforms/course.js';
 import {
   courseSnapshotToCourseDetailResponseDto,
+  toCourseInstructorDto,
   toCourseDto,
-  toInstructorLinkDto,
 } from '../course.js';
 
 const course: Course = {
@@ -320,7 +320,7 @@ describe('search result DTO evidence', () => {
       ...course,
       primary_instructor_rmp: 0,
     });
-    const link = toInstructorLinkDto({
+    const link = toCourseInstructorDto({
       instructor_name: 'Fox, E',
       rmp_rating: 0,
       rmp_difficulty: 0,
@@ -330,7 +330,7 @@ describe('search result DTO evidence', () => {
 
     expect(dto.metrics.primaryInstructorRating).toBeNull();
     expect(link).toMatchObject({
-      instructorName: 'Fox, E',
+      name: 'Fox, E',
       rmpRating: null,
       rmpDifficulty: null,
       rmpId: 'fox',
@@ -341,7 +341,7 @@ describe('search result DTO evidence', () => {
   });
 
   it('surfaces public direct RMP links only for numeric professor IDs', () => {
-    const link = toInstructorLinkDto({
+    const link = toCourseInstructorDto({
       instructor_name: 'Fagen-Ulmschneider, W',
       rmp_rating: 4.9,
       rmp_difficulty: 3.4,
@@ -349,8 +349,8 @@ describe('search result DTO evidence', () => {
       num_ratings: 120,
     });
 
-    expect(link.rmpUrl).toBe('https://www.ratemyprofessors.com/professor/85515');
-    expect(link.rmpSearchUrl).toBe('https://www.ratemyprofessors.com/search/professors/1112?q=Fagen-Ulmschneider%2C%20W');
+    expect(link?.rmpUrl).toBe('https://www.ratemyprofessors.com/professor/85515');
+    expect(link?.rmpSearchUrl).toBe('https://www.ratemyprofessors.com/search/professors/1112?q=Fagen-Ulmschneider%2C%20W');
   });
 
   it('converts fresh course snapshots to the same visible DTO surface as cached rows', () => {
@@ -385,7 +385,7 @@ describe('search result DTO evidence', () => {
           start_time: '09:00',
           end_time: '09:50',
           location: 'Siebel Center 1404',
-          instructor: 'Lovelace, A',
+          instructor: 'Lovelace, A; TBA; Lovelace, A',
           instructor_rmp: null,
           instructor_gpa: null,
           section_title: 'Data Structures Lecture',
@@ -418,14 +418,14 @@ describe('search result DTO evidence', () => {
     };
 
     const dto = courseSnapshotToCourseDetailResponseDto(snapshot, {
-      instructorLinks: {
-        'Lovelace, A': toInstructorLinkDto({
+      instructorMap: {
+        'Lovelace, A': toCourseInstructorDto({
           instructor_name: 'Lovelace, A',
           rmp_rating: 4.8,
           avg_gpa: 3.62,
           gpa_sample_size: 820,
           num_ratings: 12,
-        }),
+        })!,
       },
       medianGpa: 3.6,
     }, {
@@ -458,16 +458,26 @@ describe('search result DTO evidence', () => {
       sourceFacts: {
         sectionNotes: 'Majors first.',
       },
-      instructors: {
+      instructors: [expect.objectContaining({
+        name: 'Lovelace, A',
         rmpRating: 4.8,
         avgGpa: 3.62,
-      },
+      })],
     });
     expect(dto.course.sections[0]?.schedule.meetings[0]).toMatchObject({
       typeCode: 'LEC',
       buildingName: 'Siebel Center',
-      instructorNames: ['Lovelace, A'],
-      instructors: [expect.objectContaining({ instructorName: 'Lovelace, A' })],
+      instructors: [expect.objectContaining({ name: 'Lovelace, A' })],
     });
+
+    const unenriched = courseSnapshotToCourseDetailResponseDto(snapshot);
+    expect(unenriched.course.sections[0]?.instructors).toEqual([
+      expect.objectContaining({
+        name: 'Lovelace, A',
+        rmpRating: null,
+        rmpSearchUrl:
+          'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
+      }),
+    ]);
   });
 });

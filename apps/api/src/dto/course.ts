@@ -10,10 +10,10 @@ import type {
   CourseDetailResponseDto,
   CourseDetailDto,
   CourseExplorerUrlInput,
+  CourseInstructorDto,
   CourseRequirementDto,
   CourseSectionDto,
   CourseSummaryDto,
-  InstructorLinkDto,
 } from '@uiuc-course-search/query-types';
 import {
   buildCourseExplorerCourseUrl,
@@ -53,25 +53,23 @@ type CourseSource = Pick<
   | 'approval_code'
 >>;
 
-type SectionWithStats = Section & {
-  instructor_stats?: InstructorLinkDto[] | null;
-  meetings?: SectionMeetingWithStats[] | null;
+type CourseSectionReadModel = Section & {
+  meetings?: CourseSectionMeetingReadModel[];
 };
 
 type CourseSummaryDtoOptions = {
-  instructorLinks?: Record<string, InstructorLinkDto>;
   requirements?: CourseRequirementDto[];
   medianGpa?: number | null;
 };
 
 type CourseDetailDtoOptions = CourseSummaryDtoOptions & {
   sections?: CourseSectionDto[];
+  instructorMap?: Record<string, CourseInstructorDto>;
 };
 
-type SectionMeetingWithStats = Omit<Meeting, 'id'> & {
+type CourseSectionMeetingReadModel = Omit<Meeting, 'id'> & {
   id?: Meeting['id'];
   instructor_names?: string | null;
-  instructor_stats?: InstructorLinkDto[] | null;
 };
 
 function validRmpMetric(value: number | null | undefined, numRatings?: number | null): number | null {
@@ -80,11 +78,14 @@ function validRmpMetric(value: number | null | undefined, numRatings?: number | 
   return value;
 }
 
-export function toInstructorLinkDto(row: InstructorLinkReadRow | null | undefined): InstructorLinkDto {
+export function toCourseInstructorDto(
+  row: InstructorLinkReadRow | null | undefined,
+): CourseInstructorDto | null {
   const instructorName = row?.instructor_name ?? null;
+  if (!instructorName) return null;
 
   return {
-    instructorName,
+    name: instructorName,
     rmpRating: validRmpMetric(row?.rmp_rating, row?.num_ratings),
     rmpDifficulty: validRmpMetric(row?.rmp_difficulty, row?.num_ratings),
     rmpId: row?.rmp_id ?? null,
@@ -100,17 +101,20 @@ export function toInstructorLinkDto(row: InstructorLinkReadRow | null | undefine
   };
 }
 
-export function toInstructorLinkMap(rows: InstructorLinkReadRow[]): Record<string, InstructorLinkDto> {
+export function toCourseInstructorMap(rows: InstructorLinkReadRow[]): Record<string, CourseInstructorDto> {
   return Object.fromEntries(
     rows
-      .map(toInstructorLinkDto)
-      .filter(link => link.instructorName)
-      .map(link => [link.instructorName as string, link])
+      .map(toCourseInstructorDto)
+      .filter((instructor): instructor is CourseInstructorDto => instructor !== null)
+      .map(instructor => [instructor.name, instructor])
   );
 }
 
-export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto {
-  return {
+export function toCourseSectionDtos(
+  sections: CourseSectionReadModel[],
+  instructorMap: Record<string, CourseInstructorDto>,
+): CourseSectionDto[] {
+  return sections.map((section) => ({
     crn: section.crn,
     sectionNumber: section.section_number ?? '?',
     availability: normalizeSectionAvailability({
@@ -129,14 +133,10 @@ export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto 
       startDate: section.start_date ?? null,
       endDate: section.end_date ?? null,
       creditHours: section.credit_hours ?? null,
-      meetings: (section.meetings ?? []).map(toCourseSectionMeetingDto),
+      meetings: (section.meetings ?? [])
+        .map(meeting => toCourseSectionMeetingDto(meeting, instructorMap)),
     },
-    instructors: {
-      displayName: section.instructor ?? 'TBA',
-      rmpRating: validRmpMetric(section.instructor_rmp),
-      avgGpa: section.instructor_gpa ?? null,
-      stats: section.instructor_stats ?? [],
-    },
+    instructors: instructorsForNames(section.instructor, instructorMap),
     sourceFacts: {
       sectionTitle: section.section_title ?? null,
       sectionText: section.section_text ?? null,
@@ -146,42 +146,13 @@ export function toCourseSectionDto(section: SectionWithStats): CourseSectionDto 
     links: {
       courseExplorerUrl: buildSectionCourseExplorerUrl(section),
     },
-  };
+  }));
 }
 
-export function toCourseSectionDtos(
-  sections: SectionWithStats[],
-  linksMap: Record<string, InstructorLinkDto>,
-): CourseSectionDto[] {
-  return sections.map((section) => {
-    const instructorStats = instructorStatsForNames(section.instructor, linksMap);
-    const primaryStats = instructorStats[0];
-    return toCourseSectionDto({
-      ...section,
-      instructor_stats: instructorStats,
-      instructor_rmp: primaryStats?.rmpRating ?? section.instructor_rmp,
-      instructor_gpa: primaryStats?.avgGpa ?? section.instructor_gpa,
-      meetings: (section.meetings ?? []).map((meeting) => {
-        const instructorNames = meetingInstructorNames(meeting);
-        return {
-          ...meeting,
-          instructor_names: instructorNames.join(';'),
-          instructor_stats: instructorNames
-            .map((name) => linksMap[name])
-            .filter(Boolean),
-        };
-      }),
-    });
-  });
-}
-
-function toCourseSectionMeetingDto(meeting: SectionMeetingWithStats): CourseSectionMeetingDto {
-  const instructorNames = meeting.instructor_names
-    ? meeting.instructor_names.split(';').map(name => name.trim()).filter(Boolean)
-    : (meeting.instructor_stats ?? [])
-      .map(stat => stat.instructorName)
-      .filter((name): name is string => Boolean(name));
-
+function toCourseSectionMeetingDto(
+  meeting: CourseSectionMeetingReadModel,
+  instructorMap: Record<string, CourseInstructorDto>,
+): CourseSectionMeetingDto {
   return {
     typeCode: meeting.type_code ?? null,
     typeName: meeting.type_name ?? null,
@@ -191,8 +162,7 @@ function toCourseSectionMeetingDto(meeting: SectionMeetingWithStats): CourseSect
     buildingName: meeting.building_name ?? null,
     roomNumber: meeting.room_number ?? null,
     dateRangeText: meeting.date_range_text ?? null,
-    instructorNames,
-    instructors: meeting.instructor_stats ?? [],
+    instructors: instructorsForNames(meeting.instructor_names, instructorMap),
   };
 }
 
@@ -231,7 +201,6 @@ export function toCourseDto(
       approvalCode: course.approval_code ?? null,
     },
     requirements: options.requirements ?? [],
-    instructorLinks: options.instructorLinks ?? {},
     links: {
       courseExplorerUrl: buildCourseExplorerCourseUrl(course),
     },
@@ -245,19 +214,18 @@ function courseSnapshotToCourseDto(
   const {
     sections: providedSections,
     requirements: providedRequirements,
-    instructorLinks = {},
+    instructorMap = {},
     ...courseOptions
   } = options;
 
   const summary = toCourseDto(snapshot.course, {
     ...courseOptions,
-    instructorLinks,
     requirements: providedRequirements ?? snapshotRequirementsToDto(snapshot),
   });
 
   return {
     ...summary,
-    sections: providedSections ?? snapshotSectionsToDto(snapshot, instructorLinks),
+    sections: providedSections ?? snapshotSectionsToDto(snapshot, instructorMap),
   };
 }
 
@@ -296,7 +264,7 @@ function snapshotRequirementsToDto(snapshot: CourseSnapshot): CourseRequirementD
 
 function snapshotSectionsToDto(
   snapshot: CourseSnapshot,
-  linksMap: Record<string, InstructorLinkDto>
+  instructorMap: Record<string, CourseInstructorDto>
 ): CourseSectionDto[] {
   return toCourseSectionDtos(
     snapshot.sections.map(({ section, meetings }) => ({
@@ -312,30 +280,41 @@ function snapshotSectionsToDto(
         };
       }),
     })),
-    linksMap,
+    instructorMap,
   );
 }
 
-function instructorStatsForNames(
+function instructorsForNames(
   instructorNames: string | null | undefined,
-  linksMap: Record<string, InstructorLinkDto>
-): InstructorLinkDto[] {
-  const names = instructorNames
-    ? instructorNames.split(';').map(name => name.trim()).filter(Boolean)
-    : [];
-  return names.map(name => linksMap[name]).filter(Boolean);
+  instructorMap: Record<string, CourseInstructorDto>,
+): CourseInstructorDto[] {
+  const names = instructorNames?.split(';') ?? [];
+  return [
+    ...new Set(names.map(name => name.trim()).filter(isNamedInstructor)),
+  ]
+    .map(name => instructorMap[name] ?? emptyCourseInstructor(name));
 }
 
-function meetingInstructorNames(meeting: SectionMeetingWithStats): string[] {
-  if (meeting.instructor_names) {
-    return meeting.instructor_names
-      .split(';')
-      .map((name) => name.trim())
-      .filter(Boolean);
-  }
-  return (meeting.instructor_stats ?? [])
-    .map((stat) => stat.instructorName)
-    .filter((name): name is string => Boolean(name));
+function emptyCourseInstructor(name: string): CourseInstructorDto {
+  return {
+    name,
+    rmpRating: null,
+    rmpDifficulty: null,
+    rmpId: null,
+    rmpUrl: null,
+    rmpSearchUrl: buildRmpSearchUrl(name),
+    avgGpa: null,
+    medianGpa: null,
+    gpaSampleSize: null,
+    numRatings: null,
+    wouldTakeAgainPct: null,
+    topTags: null,
+    department: null,
+  };
+}
+
+function isNamedInstructor(name: string): boolean {
+  return Boolean(name) && !/^(?:tba|arranged|staff|n\/?a)$/i.test(name);
 }
 
 function normalizeTopTags(value: string | string[] | null | undefined): string[] | null {
@@ -377,7 +356,7 @@ function parseCourseId(value: string): CourseExplorerUrlInput | null {
   };
 }
 
-function buildSectionCourseExplorerUrl(section: SectionWithStats): string | undefined {
+function buildSectionCourseExplorerUrl(section: Section): string | undefined {
   const courseParts = parseCourseId(section.course_id);
   if (!courseParts) {
     return undefined;

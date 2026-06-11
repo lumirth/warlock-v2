@@ -43,7 +43,6 @@ describe('ApiClient', () => {
           approvalCode: null,
         },
         requirements: [],
-        instructorLinks: {},
         links: {},
         sections: [
           {
@@ -69,12 +68,7 @@ describe('ApiClient', () => {
               creditHours: null,
               meetings: [],
             },
-            instructors: {
-              displayName: 'TBA',
-              rmpRating: null,
-              avgGpa: null,
-              stats: [],
-            },
+            instructors: [],
             sourceFacts: {
               sectionTitle: null,
               sectionText: null,

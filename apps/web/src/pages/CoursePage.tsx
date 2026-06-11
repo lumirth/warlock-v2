@@ -11,18 +11,11 @@ import { Scorecard } from '../components/Scorecard'
 import { SectionsTable } from '../components/SectionsTable'
 import { FeedbackButton } from '../components/FeedbackButton'
 import { api } from '../lib/api-client'
-import type {
-  CourseDetailDto,
-  CourseDetailResponseDto,
-  CourseRequirementDto,
+import {
+  courseRequirementLabel,
+  type CourseDetailDto,
+  type CourseDetailResponseDto,
 } from '@uiuc-course-search/query-types'
-
-function requirementLabel(requirement: CourseRequirementDto): string {
-  const category = requirement.categoryName ?? requirement.categoryId
-  if (requirement.attributeName) return `${category}: ${requirement.attributeName}`
-  if (requirement.attributeCode) return `${category}: ${requirement.attributeCode}`
-  return category
-}
 
 function detailRows(course: CourseDetailDto): Array<{ label: string; value: string }> {
   return [
@@ -129,7 +122,7 @@ export function CoursePage() {
 
   const course = detail.course
   const details = detailRows(course)
-  const requirementBadges = course.requirements.map(requirementLabel)
+  const requirementBadges = course.requirements.map(courseRequirementLabel)
 
   return (
     <PageContainer className="py-8">
@@ -245,8 +238,6 @@ export function CoursePage() {
                 >
                   <SectionsTable
                     sections={course.sections || []}
-                    instructorLinks={course.instructorLinks}
-                    courseExplorerUrl={course.links.courseExplorerUrl}
                   />
                 </div>
               </CardContent>

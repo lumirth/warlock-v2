@@ -59,7 +59,6 @@ function course(
           attributeName: null,
         },
       ],
-      instructorLinks: {},
       links: {},
       sections: [],
       ...overrides,

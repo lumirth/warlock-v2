@@ -85,7 +85,7 @@ describe('course routes', () => {
               typeCode: string | null;
               buildingName: string | null;
               roomNumber: string | null;
-              instructorNames: string[];
+              instructors: Array<{ name: string }>;
             }>;
           };
         }>;
@@ -112,11 +112,11 @@ describe('course routes', () => {
     const sections = data.course.sections;
     expect(sections[0]).toMatchObject({
       crn: '12345',
-      instructors: {
-        displayName: 'Lovelace, A',
+      instructors: [expect.objectContaining({
+        name: 'Lovelace, A',
         rmpRating: 4.8,
         avgGpa: 3.62,
-      },
+      })],
       links: {
         courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
       },
@@ -125,7 +125,7 @@ describe('course routes', () => {
       typeCode: 'LEC',
       buildingName: 'Siebel Center',
       roomNumber: '1404',
-      instructorNames: ['Lovelace, A'],
+      instructors: [expect.objectContaining({ name: 'Lovelace, A' })],
     });
   });
 

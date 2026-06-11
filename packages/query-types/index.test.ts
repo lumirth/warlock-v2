@@ -14,6 +14,8 @@ import {
   decodeSearchRequestQuery,
   GENED_REQUIREMENT_GROUPS,
   canonicalRequirementCode,
+  courseRequirementLabel,
+  courseRequirementShortLabel,
   resolveRequirementAlias,
   isKnownRequirementCode,
   searchRequestToQueryEntries,
@@ -134,6 +136,19 @@ describe('shared requirement policy', () => {
 
   it('formats public GenEd labels with canonical student-facing codes', () => {
     expect(formatGenEdDisplayLabel(['1US', 'cmp', 'HUM'])).toBe('GenEd US, COMP1, HUM');
+  });
+
+  it('owns full and compact course requirement labels', () => {
+    const requirement = {
+      categoryId: 'CS',
+      categoryName: 'Cultural Studies',
+      attributeCode: '1US',
+      attributeName: 'US Minority Cultures',
+    };
+
+    expect(courseRequirementLabel(requirement))
+      .toBe('Cultural Studies: US Minority Cultures');
+    expect(courseRequirementShortLabel(requirement)).toBe('CS:US');
   });
 });
 

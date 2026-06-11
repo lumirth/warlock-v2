@@ -12,10 +12,9 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import {
+  type CourseInstructorDto,
   type CourseSectionDto,
-  type InstructorLinkDto,
 } from '@uiuc-course-search/query-types'
-import { RMP_THRESHOLDS } from '../config/constants'
 import {
   formatMeetingLocation,
   formatPartOfTerm,
@@ -23,16 +22,11 @@ import {
   formatSectionLocation,
   formatSectionTimeRange,
   sectionAvailabilityTone,
-  sectionInstructorStats,
-  sectionRmpHref,
-  splitSectionInstructorNames,
   type SectionTone,
 } from './section-display-model'
 
 interface SectionsTableProps {
   sections: CourseSectionDto[]
-  instructorLinks?: Record<string, InstructorLinkDto>
-  courseExplorerUrl?: string
 }
 
 function toneClass(tone: SectionTone): string {
@@ -44,29 +38,28 @@ function toneClass(tone: SectionTone): string {
   )
 }
 
-function statSummary(stat: InstructorLinkDto): string[] {
+function statSummary(instructor: CourseInstructorDto): string[] {
   const values: string[] = []
-  if (typeof stat.rmpRating === 'number') {
-    values.push(`${stat.rmpRating.toFixed(1)} rating`)
+  if (typeof instructor.rmpRating === 'number') {
+    values.push(`${instructor.rmpRating.toFixed(1)} rating`)
   }
-  if (typeof stat.rmpDifficulty === 'number') {
-    values.push(`${stat.rmpDifficulty.toFixed(1)} RMP difficulty`)
+  if (typeof instructor.rmpDifficulty === 'number') {
+    values.push(`${instructor.rmpDifficulty.toFixed(1)} RMP difficulty`)
   }
-  if (typeof stat.avgGpa === 'number') {
-    values.push(`${stat.avgGpa.toFixed(2)} avg GPA`)
+  if (typeof instructor.avgGpa === 'number') {
+    values.push(`${instructor.avgGpa.toFixed(2)} avg GPA`)
   }
-  if (typeof stat.medianGpa === 'number') {
-    values.push(`${stat.medianGpa.toFixed(2)} median GPA`)
+  if (typeof instructor.medianGpa === 'number') {
+    values.push(`${instructor.medianGpa.toFixed(2)} median GPA`)
   }
-  if (typeof stat.wouldTakeAgainPct === 'number') {
-    values.push(`${Math.round(stat.wouldTakeAgainPct)}% would take again`)
+  if (typeof instructor.wouldTakeAgainPct === 'number') {
+    values.push(`${Math.round(instructor.wouldTakeAgainPct)}% would take again`)
   }
   return values
 }
 
-function renderInstructorName(name: string, stat?: InstructorLinkDto) {
-  const href = sectionRmpHref(stat, name)
-  const label = stat?.instructorName ?? name
+function renderInstructorName(instructor: CourseInstructorDto) {
+  const href = instructor.rmpUrl ?? instructor.rmpSearchUrl
 
   if (href) {
     return (
@@ -76,66 +69,36 @@ function renderInstructorName(name: string, stat?: InstructorLinkDto) {
         rel="noreferrer"
         className="font-medium underline-offset-4 hover:underline"
       >
-        {label}
+        {instructor.name}
       </a>
     )
   }
 
-  return <span className="font-medium">{label}</span>
+  return <span className="font-medium">{instructor.name}</span>
 }
 
 function InstructorBlock({
-  names,
-  stats,
-  compact = false,
+  instructors,
 }: {
-  names: string[]
-  stats: InstructorLinkDto[]
-  compact?: boolean
+  instructors: CourseInstructorDto[]
 }) {
-  const rows =
-    names.length > 0
-      ? names.map((name) => ({
-          name,
-          stat: stats.find((item) => item.instructorName === name),
-        }))
-      : stats.map((stat) => ({
-          name: stat.instructorName ?? 'Instructor',
-          stat,
-        }))
-
-  if (rows.length === 0) {
+  if (instructors.length === 0) {
     return <span className="text-muted-foreground text-sm">TBA</span>
   }
 
   return (
     <div className="flex min-w-56 flex-col gap-1">
-      {rows.map(({ name, stat }, idx) => {
-        const statsText = stat ? statSummary(stat) : []
-        const ratingTone =
-          typeof stat?.rmpRating === 'number' &&
-          stat.rmpRating > RMP_THRESHOLDS.GOOD
-            ? 'success'
-            : 'warning'
+      {instructors.map((instructor) => {
+        const statsText = statSummary(instructor)
 
         return (
-          <div key={`${name}-${idx}`} className="flex flex-col gap-0.5">
+          <div key={instructor.name} className="flex flex-col gap-0.5">
             <span className="text-sm">
-              {renderInstructorName(name, stat)}
+              {renderInstructorName(instructor)}
             </span>
             {statsText.length > 0 && (
-              <span
-                className={cn(
-                  'text-xs',
-                  compact ? 'text-muted-foreground' : toneClass(ratingTone)
-                )}
-              >
-                {statsText.join(' / ')}
-              </span>
-            )}
-            {!compact && stat?.topTags && stat.topTags.length > 0 && (
               <span className="text-muted-foreground text-xs">
-                Tags: {stat.topTags.slice(0, 3).join(', ')}
+                {statsText.join(' / ')}
               </span>
             )}
           </div>
@@ -156,13 +119,7 @@ function DetailField({ label, value }: { label: string; value: string }) {
   )
 }
 
-function SectionDetails({
-  section,
-  sectionStats,
-}: {
-  section: CourseSectionDto
-  sectionStats: InstructorLinkDto[]
-}) {
+function SectionDetails({ section }: { section: CourseSectionDto }) {
   const detailFields = [
     { label: 'Part of term', value: formatPartOfTerm(section.schedule.partOfTerm) },
     { label: 'Dates', value: formatSectionDateRange(section) },
@@ -282,13 +239,7 @@ function SectionDetails({
                   </TableCell>
                   <TableCell className="whitespace-normal">
                     <InstructorBlock
-                      names={meeting.instructorNames}
-                      stats={
-                        meeting.instructors.length > 0
-                          ? meeting.instructors
-                          : sectionStats
-                      }
-                      compact
+                      instructors={meeting.instructors}
                     />
                   </TableCell>
                 </TableRow>
@@ -305,11 +256,7 @@ function SectionDetails({
   )
 }
 
-export function SectionsTable({
-  sections,
-  instructorLinks,
-  courseExplorerUrl,
-}: SectionsTableProps) {
+export function SectionsTable({ sections }: SectionsTableProps) {
   const [expandedCrns, setExpandedCrns] = useState<Set<string>>(new Set())
 
   if (sections.length === 0) {
@@ -349,9 +296,8 @@ export function SectionsTable({
       </TableHeader>
       <TableBody>
         {sections.map((section) => {
-          const sectionStats = sectionInstructorStats(section, instructorLinks)
           const expanded = expandedCrns.has(section.crn)
-          const officialUrl = section.links.courseExplorerUrl ?? courseExplorerUrl
+          const officialUrl = section.links.courseExplorerUrl
 
           return (
             <Fragment key={section.crn}>
@@ -422,19 +368,14 @@ export function SectionsTable({
                 <TableCell>{formatSectionLocation(section)}</TableCell>
                 <TableCell className="whitespace-normal">
                   <InstructorBlock
-                    names={splitSectionInstructorNames(section)}
-                    stats={sectionStats}
-                    compact
+                    instructors={section.instructors}
                   />
                 </TableCell>
               </TableRow>
               {expanded && (
                 <TableRow>
                   <TableCell colSpan={9} className="bg-muted/30 whitespace-normal">
-                    <SectionDetails
-                      section={section}
-                      sectionStats={sectionStats}
-                    />
+                    <SectionDetails section={section} />
                   </TableCell>
                 </TableRow>
               )}

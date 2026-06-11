@@ -61,7 +61,6 @@ function result(id: string): SearchCourseResultDto {
         approvalCode: null,
       },
       requirements: [],
-      instructorLinks: {},
       links: {},
     },
   }

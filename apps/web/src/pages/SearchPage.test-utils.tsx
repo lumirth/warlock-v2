@@ -103,7 +103,6 @@ export function course(overrides: SearchResultOverride = {}): SearchCourseResult
       approvalCode: overrides.registration?.approvalCode ?? null,
     },
     requirements: overrides.requirements ?? [],
-    instructorLinks: overrides.instructorLinks ?? {},
     links: overrides.links ?? {},
   }
 

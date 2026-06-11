@@ -85,16 +85,17 @@ describe('CourseDetailService', () => {
         },
         sections: [{
           crn: '12345',
-          instructors: {
+          instructors: [expect.objectContaining({
+            name: 'Lovelace, A',
             rmpRating: 4.8,
             avgGpa: 3.62,
-          },
+          })],
           schedule: {
             meetings: [{
               typeCode: 'LEC',
               buildingName: 'Siebel Center',
               roomNumber: '1404',
-              instructorNames: ['Lovelace, A'],
+              instructors: [expect.objectContaining({ name: 'Lovelace, A' })],
             }],
           },
         }],

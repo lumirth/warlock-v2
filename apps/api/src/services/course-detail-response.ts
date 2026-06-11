@@ -1,11 +1,11 @@
-import type { InstructorLinkDto } from '@uiuc-course-search/query-types';
+import type { CourseInstructorDto } from '@uiuc-course-search/query-types';
 import type { InstructorLinkReadRow } from '../db/types.js';
 import { courseRequirementRowsToDto } from '../transforms/course-requirements.js';
 import {
   courseSnapshotToCourseDetailResponseDto,
+  toCourseInstructorMap,
   toCourseDetailResponseDto,
   toCourseSectionDtos,
-  toInstructorLinkMap,
 } from '../dto/course.js';
 import type {
   CourseDetailContext,
@@ -24,13 +24,12 @@ export function buildStoredCourseDetailResponse(
   options: StoredDetailOptions
 ): CourseDetailResponse {
   const isStale = options.state === 'stale';
-  const linksMap = toInstructorLinkMap(enrichment.instructorLinkRows);
+  const instructorMap = toCourseInstructorMap(enrichment.instructorLinkRows);
 
   return {
     status: 200,
     body: toCourseDetailResponseDto(course, {
-      sections: toCourseSectionDtos(enrichment.sections, linksMap),
-      instructorLinks: linksMap,
+      sections: toCourseSectionDtos(enrichment.sections, instructorMap),
       requirements: courseRequirementRowsToDto(enrichment.requirementRows),
       medianGpa: enrichment.medianGpa,
     }, {
@@ -59,7 +58,7 @@ export function buildLiveCourseDetailResponse(
   }
 ): CourseDetailResponse {
   const { instructorLinkRows, existingMetadata, medianGpa } = readModel;
-  const linksMap = toInstructorLinkMap(instructorLinkRows);
+  const instructorMap = toCourseInstructorMap(instructorLinkRows);
 
   return {
     status: 200,
@@ -67,14 +66,14 @@ export function buildLiveCourseDetailResponse(
       ...liveSnapshot.snapshot,
       course: {
         ...liveSnapshot.snapshot.course,
-        avg_gpa: existingMetadata?.avg_gpa ?? firstInstructorMetric(linksMap, 'avgGpa'),
-        gpa_sample_size: existingMetadata?.gpa_sample_size ?? firstInstructorMetric(linksMap, 'gpaSampleSize'),
-        primary_instructor_rmp: existingMetadata?.primary_instructor_rmp ?? firstInstructorMetric(linksMap, 'rmpRating'),
+        avg_gpa: existingMetadata?.avg_gpa ?? firstInstructorMetric(instructorMap, 'avgGpa'),
+        gpa_sample_size: existingMetadata?.gpa_sample_size ?? firstInstructorMetric(instructorMap, 'gpaSampleSize'),
+        primary_instructor_rmp: existingMetadata?.primary_instructor_rmp ?? firstInstructorMetric(instructorMap, 'rmpRating'),
         quality_score: existingMetadata?.quality_score ?? null,
         difficulty_score: existingMetadata?.difficulty_score ?? null,
       },
     }, {
-      instructorLinks: linksMap,
+      instructorMap,
       medianGpa,
     }, {
       cached: false,
@@ -89,9 +88,9 @@ export function buildLiveCourseDetailResponse(
 }
 
 function firstInstructorMetric(
-  linksMap: Record<string, InstructorLinkDto>,
-  metric: keyof Pick<InstructorLinkDto, 'rmpRating' | 'avgGpa' | 'medianGpa' | 'gpaSampleSize'>
+  instructorMap: Record<string, CourseInstructorDto>,
+  metric: keyof Pick<CourseInstructorDto, 'rmpRating' | 'avgGpa' | 'medianGpa' | 'gpaSampleSize'>
 ): number | null {
-  const link = Object.values(linksMap).find((entry) => typeof entry[metric] === 'number');
-  return link?.[metric] ?? null;
+  const instructor = Object.values(instructorMap).find((entry) => typeof entry[metric] === 'number');
+  return instructor?.[metric] ?? null;
 }

@@ -1,6 +1,7 @@
 import { createServer, type ServerResponse } from 'node:http';
 import type {
   CourseDetailResponseDto,
+  CourseInstructorDto,
   CourseSectionDto,
   CourseSummaryDto,
   MatchEvidence,
@@ -12,6 +13,22 @@ import type {
 import { singleRequirementFilter } from '@uiuc-course-search/query-types';
 
 const PORT = Number(process.env.QA_MOCK_API_PORT ?? 8787);
+
+const lovelaceInstructor: CourseInstructorDto = {
+  name: 'Lovelace, A',
+  rmpRating: 4.8,
+  rmpDifficulty: 3.1,
+  rmpId: 'ada',
+  rmpUrl: null,
+  rmpSearchUrl: 'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
+  avgGpa: 3.62,
+  medianGpa: 3.67,
+  gpaSampleSize: 820,
+  numRatings: 140,
+  wouldTakeAgainPct: 92,
+  topTags: ['Clear grading', 'Helpful'],
+  department: 'Computer Science',
+};
 
 type CourseVariantOverride = Partial<CourseSummaryDto> & {
   matchEvidence?: MatchEvidence[];
@@ -56,23 +73,6 @@ const baseCourse: CourseSummaryDto = {
       attributeName: null,
     },
   ],
-  instructorLinks: {
-    'Lovelace, A': {
-      instructorName: 'Lovelace, A',
-      rmpRating: 4.8,
-      rmpDifficulty: 3.1,
-      rmpId: 'ada',
-      rmpUrl: null,
-      rmpSearchUrl: 'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
-      avgGpa: 3.62,
-      medianGpa: 3.67,
-      gpaSampleSize: 820,
-      numRatings: 140,
-      wouldTakeAgainPct: 92,
-      topTags: ['Clear grading', 'Helpful'],
-      department: 'Computer Science',
-    },
-  },
   links: {
     courseExplorerUrl: 'https://courses.illinois.edu/schedule/2026/spring/CS/225',
   },
@@ -119,17 +119,11 @@ const baseSection: CourseSectionDto = {
         buildingName: 'Siebel Center',
         roomNumber: '1404',
         dateRangeText: 'Jan 20, 2026 - May 6, 2026',
-        instructorNames: ['Lovelace, A'],
-        instructors: [baseCourse.instructorLinks['Lovelace, A']!],
+        instructors: [lovelaceInstructor],
       },
     ],
   },
-  instructors: {
-    displayName: 'Lovelace, A',
-    rmpRating: 4.8,
-    avgGpa: 3.62,
-    stats: [baseCourse.instructorLinks['Lovelace, A']!],
-  },
+  instructors: [lovelaceInstructor],
   sourceFacts: {
     sectionTitle: null,
     sectionText: null,
@@ -224,7 +218,6 @@ function courseVariant(overrides: CourseVariantOverride = {}): SearchCourseResul
         ...overrides.scheduleNotes,
       },
       requirements: overrides.requirements ?? course.course.requirements,
-      instructorLinks: overrides.instructorLinks ?? course.course.instructorLinks,
       links: {
         ...course.course.links,
         ...overrides.links,
