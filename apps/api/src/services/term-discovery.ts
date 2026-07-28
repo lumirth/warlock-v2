@@ -193,10 +193,10 @@ function classifyEnrollmentStatuses(statuses: string[]): TermStateStatus {
   if (statuses.some(status => REGISTRABLE_STATUS_PATTERN.test(status))) {
     return 'registrable';
   }
-  if (statuses.some(status => status.trim().toUpperCase() !== 'UNKNOWN')) {
-    return 'active';
-  }
-  return 'historical';
+  // Historical terms are handled by chronology before this function is
+  // reached. A published current/future schedule is therefore active even
+  // when Course Explorer omits section-level enrollmentStatus fields.
+  return 'active';
 }
 
 function isDefinitelyPast(term: DiscoveredTerm, now: Date): boolean {

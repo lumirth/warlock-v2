@@ -157,6 +157,28 @@ describe('term discovery', () => {
       sampleEnrollmentStatuses: ['UNKNOWN', 'Open (Restricted)'],
     });
   });
+
+  it('keeps a published current or future schedule active when enrollment statuses are absent', async () => {
+    vi.mocked(browserFetch)
+      .mockResolvedValueOnce(xmlResponse(
+        '<subjects><subject id="CS"/></subjects>',
+      ))
+      .mockResolvedValueOnce(xmlResponse(
+        '<subject><course id="225"/></subject>',
+      ));
+
+    await expect(classifyTerm({
+      cisapiBase: 'https://cis.example.test',
+    }, {
+      year: 2026,
+      term: 'fall',
+      termId: '2026-fall',
+    })).resolves.toMatchObject({
+      status: 'active',
+      sampledSubjects: ['CS'],
+      sampleEnrollmentStatuses: [],
+    });
+  });
 });
 
 function termListXml(
