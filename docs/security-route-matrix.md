@@ -37,6 +37,13 @@ npm run security:audit
 npm test -w @uiuc-course-search/api -- src/middleware/__tests__/auth.test.ts src/routes/__tests__/debug.test.ts src/routes/__tests__/sync-validation.test.ts
 ```
 
+`security:audit` consumes the raw npm audit JSON and fails on malformed output,
+new advisories, or unexpected vulnerable packages. Its sole temporary exception
+is `GHSA-qwww-vcr4-c8h2`, and only while the web app remains a client-only
+`BrowserRouter` SPA with no React Router server, framework-action, or RSC
+dependencies. A published remediation or architecture change closes the
+exception automatically.
+
 ## CORS Boundary
 
 CORS is applied only to `/api/*` routes. Admin and internal routes are not part of the public browser API surface and remain token-protected regardless of platform WAF/rate-limit settings. Feedback writes additionally require an exact configured `Origin`; non-browser clients can forge that header, so the byte limit and dedicated rate limiter remain the abuse controls.

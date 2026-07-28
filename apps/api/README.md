@@ -76,3 +76,15 @@ Deploy staging explicitly from the repository root:
 ```bash
 npm run deploy:api:staging
 ```
+
+The official production API uses the same guarded release implementation with
+production-specific approvals, backup evidence, and admin credentials:
+
+```bash
+npm run deploy:api:production
+```
+
+The production gate accepts only Worker `uiuc-course-search`, API host
+`uiuc-course-search.lumirth.workers.dev`, and the configured replacement D1
+binding `course-search-db-v2`. The legacy `course-search-db` remains
+rollback-only.

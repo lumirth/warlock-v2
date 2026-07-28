@@ -65,6 +65,19 @@ npm run cloudflare:preflight
 
 This command is expected to fail until real Cloudflare auth and staging evidence are present. The final report must use concrete evidence labels such as `Staging API URL`, `Staging Web URL`, `Pages Project`, `Pages Branch`, `Rate-Limit Namespace IDs` (including search, course, and feedback), `WAF Rule ID` or `Rate-Limit Rule ID`, `Abuse Control Routes`, `Abuse Control Action`, `Abuse Control Thresholds`, `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified`.
 
+Official production deployment is serialized and backup-gated:
+
+```bash
+npm run deploy:production
+```
+
+It releases Worker `uiuc-course-search` against the replacement
+`course-search-db-v2` binding, verifies the rebuilt API, then publishes Pages
+project `uiuc-course-search-web` from branch `main`. See
+`docs/deployment-checklist.md` for the required production-specific backup,
+migration, URL, and admin-token variables. The legacy `course-search-db` is
+rollback-only.
+
 ## Corpus Bootstrap
 
 Generated course-history SQL is not a source artifact or a supported bootstrap path. Bootstrap

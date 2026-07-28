@@ -22,7 +22,7 @@
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint .",
     "bundle:budget": "tsx scripts/check-bundle-budget.ts",
-    "security:audit": "npm audit --audit-level=moderate",
+    "security:audit": "tsx scripts/security-audit.ts",
     "security:secrets": "tsx scripts/check-secrets.ts",
     "d1:preflight": "tsx scripts/d1-backup-preflight.ts",
     "cloudflare:preflight": "tsx scripts/cloudflare-staging-preflight.ts",
@@ -42,12 +42,16 @@
     "qa:mock-api": "tsx scripts/browser-qa-mock-api.ts",
     "deploy:api:staging": "npm run deploy:staging -w @uiuc-course-search/api",
     "deploy:web:staging": "npm run deploy:staging -w @uiuc-course-search/web",
-    "deploy:staging": "npm run deploy:api:staging && npm run deploy:web:staging"
+    "deploy:staging": "npm run deploy:api:staging && npm run deploy:web:staging",
+    "deploy:api:production": "npm run deploy:production -w @uiuc-course-search/api",
+    "deploy:web:production": "npm run deploy:production -w @uiuc-course-search/web",
+    "deploy:production": "npm run deploy:api:production && npm run deploy:web:production"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260728.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.9.1",
-    "concurrently": "^10.0.3",
+    "concurrently": "^10.0.4",
     "eslint": "^10.4.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
@@ -55,6 +59,9 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.8",
-    "wrangler": "^4.59.2"
+    "wrangler": "^4.114.0"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
   }
 }

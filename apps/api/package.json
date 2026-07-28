@@ -14,19 +14,20 @@
     "eval": "npx tsx src/eval/runner.ts",
     "eval:smoke": "tsx scripts/eval-smoke.ts",
     "check": "npm run typecheck && npm run test",
-    "deploy:staging": "tsx ../../scripts/staging-api-release.ts"
+    "deploy:staging": "tsx ../../scripts/staging-api-release.ts",
+    "deploy:production": "tsx ../../scripts/staging-api-release.ts --target production"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.14",
-    "@cloudflare/workers-types": "^4.20260120.0",
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/workers-types": "^5.20260728.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8",
-    "wrangler": "^4.59.2"
+    "wrangler": "^4.114.0"
   },
   "dependencies": {
     "@uiuc-course-search/query-types": "^0.0.1",
     "domhandler": "^5.0.3",
-    "hono": "^4.12.23",
+    "hono": "^4.12.32",
     "htmlparser2": "^10.0.0"
   }
 }

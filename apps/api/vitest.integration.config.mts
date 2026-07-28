@@ -16,9 +16,18 @@ export default defineConfig(async () => {
           d1Databases: ["DB"],
           kvNamespaces: ["GPA_CACHE", "SEARCH_CACHE"],
           ratelimits: {
-            SEARCH_RATE_LIMITER: { simple: { limit: 120, period: 60 } },
-            COURSE_RATE_LIMITER: { simple: { limit: 240, period: 60 } },
-            FEEDBACK_RATE_LIMITER: { simple: { limit: 20, period: 60 } },
+            SEARCH_RATE_LIMITER: {
+              namespace_id: "26060101",
+              simple: { limit: 120, period: 60 },
+            },
+            COURSE_RATE_LIMITER: {
+              namespace_id: "26060102",
+              simple: { limit: 240, period: 60 },
+            },
+            FEEDBACK_RATE_LIMITER: {
+              namespace_id: "26060103",
+              simple: { limit: 20, period: 60 },
+            },
           },
           bindings: {
             TEST_MIGRATIONS: migrations,

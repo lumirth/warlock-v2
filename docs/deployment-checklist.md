@@ -52,9 +52,9 @@ command. A plain `wrangler deploy` is not a valid release: Worker code may
 require the newest schema, and migrations may invalidate regenerable
 enrichment. The release command refuses to continue without restore-tested D1
 backup evidence and explicit approval of the current migration. It then runs
-the API gates, applies remote migrations, deploys the Worker, rebuilds GPA/RMP
-enrichment, republishes every active/registrable course snapshot, and verifies
-sync status:
+the API gates, applies remote migrations, deploys the Worker, republishes every
+active/registrable course snapshot, imports the complete GPA dataset, rebuilds
+GPA/RMP enrichment, and verifies sync status:
 
 ```bash
 D1_BACKUP_REF=<YYYYMMDDTHHMMSSZ> \
@@ -76,7 +76,56 @@ Do not run the web deploy concurrently with this operation. The top-level
 `npm run deploy:staging` deliberately waits for the API migration, deploy, and
 data rebuild to finish before publishing the web build.
 
-Run all local release gates before staging:
+## Official Production Release
+
+The official targets are deliberately fixed:
+
+- Worker: `uiuc-course-search`
+- API origin: `https://uiuc-course-search.lumirth.workers.dev`
+- D1 binding: `course-search-db-v2`
+- Pages project: `uiuc-course-search-web`
+- Pages production branch: `main`
+- Pages origin: `https://uiuc-course-search-web.pages.dev`
+
+The legacy `course-search-db` database is over the free-plan per-database size
+limit and is rollback-only by release policy. Do not migrate, delete, rename,
+or rebind it during a release.
+The production release reads the `DB` binding from `apps/api/wrangler.toml` and
+fails unless it is the allowlisted replacement `course-search-db-v2`.
+
+Confirm Wrangler authentication, the production account, and required Worker
+secret names before releasing. `wrangler secret list` reveals names, not secret
+values; set or rotate values through `wrangler secret put` without writing them
+to the repository or shell history.
+
+After reviewing the latest migration and restore-testing a fresh Time Travel
+backup of `course-search-db-v2`, run:
+
+```bash
+PRODUCTION_D1_BACKUP_REF=<YYYYMMDDTHHMMSSZ> \
+PRODUCTION_D1_BACKUP_EVIDENCE_FILE=artifacts/production-d1-backup-evidence.md \
+PRODUCTION_MIGRATION_APPROVED=<latest-migration-name> \
+PRODUCTION_MIGRATION_SHA256_APPROVED=<reviewed-lowercase-sha256> \
+PRODUCTION_API_BASE_URL=https://uiuc-course-search.lumirth.workers.dev \
+PRODUCTION_ADMIN_TOKEN=<redacted> \
+npm run deploy:production
+```
+
+The production variables are intentionally distinct from staging. Generic
+`D1_BACKUP_REF`, staging approvals, and staging tokens cannot authorize this
+release. `npm run deploy:production` runs the guarded API migration, Worker
+deployment, full data rebuild, and post-release status checks before it builds
+and publishes the web app. GPA import calls are bounded at 1,024 chunks and
+must report successful forward progress until a durable completion key is
+returned; aggregation never runs after an unsuccessful, invalid, stalled, or
+incomplete import. If the API phase fails, the Pages command does not run.
+
+The web command always builds with
+`VITE_API_BASE_URL=https://uiuc-course-search.lumirth.workers.dev` and deploys
+only to project `uiuc-course-search-web` on branch `main`. Do not substitute a
+preview deployment URL as the production API or web origin.
+
+Run all local release gates before any release:
 
 ```bash
 npm run typecheck

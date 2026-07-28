@@ -34,8 +34,8 @@ crons = [
 
 [[d1_databases]]
 binding = "DB"
-database_name = "course-search-db"
-database_id = "ae2bcf8a-c988-4e93-81a7-0c96c089e5d6"
+database_name = "course-search-db-v2"
+database_id = "c44924e5-5ac1-40b9-bf1e-7667083d9126"
 
 [[kv_namespaces]]
 binding = "GPA_CACHE"

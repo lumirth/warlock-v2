@@ -5,13 +5,43 @@ import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { runCli } from './lib/run-cli.ts';
 
-const STAGING_DATABASE = 'course-search-db-staging';
-const STAGING_API_HOST = 'uiuc-course-search-staging.lumirth.workers.dev';
 const ADMIN_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
+const MAX_GPA_SYNC_CALLS = 1024;
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const apiDir = join(repoRoot, 'apps/api');
 
-export type StagingReleaseConfig = {
+export type ReleaseTarget = 'staging' | 'production';
+
+type ReleaseProfile = {
+  target: ReleaseTarget;
+  envPrefix: 'STAGING' | 'PRODUCTION';
+  database?: string;
+  apiHost: string;
+  workerName: string;
+  wranglerEnvironment?: 'staging';
+};
+
+const PRODUCTION_DATABASE_ALLOWLIST = new Set(['course-search-db-v2']);
+
+const RELEASE_PROFILES: Record<ReleaseTarget, ReleaseProfile> = {
+  staging: {
+    target: 'staging',
+    envPrefix: 'STAGING',
+    database: 'course-search-db-staging',
+    apiHost: 'uiuc-course-search-staging.lumirth.workers.dev',
+    workerName: 'uiuc-course-search-staging',
+    wranglerEnvironment: 'staging',
+  },
+  production: {
+    target: 'production',
+    envPrefix: 'PRODUCTION',
+    apiHost: 'uiuc-course-search.lumirth.workers.dev',
+    workerName: 'uiuc-course-search',
+  },
+};
+
+export type ReleaseConfig = Omit<ReleaseProfile, 'database'> & {
+  database: string;
   apiBaseUrl: string;
   adminToken: string;
   backupRef: string;
@@ -20,6 +50,8 @@ export type StagingReleaseConfig = {
   approvedMigrationSha256: string;
 };
 
+export type StagingReleaseConfig = ReleaseConfig;
+
 export type ReleaseCommand = {
   command: string;
   args: string[];
@@ -27,12 +59,19 @@ export type ReleaseCommand = {
   label: string;
 };
 
+export type GpaImportResult = {
+  calls: number;
+  rowsProcessed: number;
+  completionKey: string;
+};
+
 function requiredEnv(
   env: NodeJS.ProcessEnv,
   name: string,
+  target: ReleaseTarget,
 ): string {
   const value = env[name]?.trim();
-  if (!value) throw new Error(`${name} is required for a staging API release.`);
+  if (!value) throw new Error(`${name} is required for a ${target} API release.`);
   return value;
 }
 
@@ -58,14 +97,57 @@ export function latestMigrationSha256(
     .digest('hex');
 }
 
-export function stagingReleaseConfig(
+export function productionDatabaseFromWrangler(
+  source = readFileSync(join(apiDir, 'wrangler.toml'), 'utf8'),
+): string {
+  const productionSource = source.split(/\n\[env\./, 1)[0] ?? '';
+  const databaseBlocks = productionSource.match(
+    /\[\[d1_databases\]\][\s\S]*?(?=\n\[\[|\n\[|$)/g,
+  ) ?? [];
+  const dbBlock = databaseBlocks.find(block => (
+    /\bbinding\s*=\s*["']DB["']/.test(block)
+  ));
+  const database = dbBlock?.match(
+    /\bdatabase_name\s*=\s*["']([^"']+)["']/,
+  )?.[1];
+  if (!database) {
+    throw new Error(
+      'apps/api/wrangler.toml must define the production DB binding.',
+    );
+  }
+  if (!PRODUCTION_DATABASE_ALLOWLIST.has(database)) {
+    throw new Error(
+      'Production releases require the replacement D1 database '
+      + 'course-search-db-v2; legacy course-search-db is rollback-only.',
+    );
+  }
+  return database;
+}
+
+function environmentVariable(profile: ReleaseProfile, suffix: string): string {
+  return `${profile.envPrefix}_${suffix}`;
+}
+
+export function releaseConfig(
+  target: ReleaseTarget,
   env: NodeJS.ProcessEnv = process.env,
-): StagingReleaseConfig {
-  const apiBaseUrl = requiredEnv(env, 'STAGING_API_BASE_URL').replace(/\/+$/, '');
+  wranglerConfigSource?: string,
+): ReleaseConfig {
+  const baseProfile = RELEASE_PROFILES[target];
+  const database = target === 'production'
+    ? productionDatabaseFromWrangler(wranglerConfigSource)
+    : baseProfile.database;
+  if (!database) {
+    throw new Error(`No D1 database is configured for ${target}.`);
+  }
+  const profile = { ...baseProfile, database };
+  const apiBaseUrlVariable = environmentVariable(profile, 'API_BASE_URL');
+  const apiBaseUrl = requiredEnv(env, apiBaseUrlVariable, target)
+    .replace(/\/+$/, '');
   const parsedUrl = new URL(apiBaseUrl);
   if (
     parsedUrl.protocol !== 'https:'
-    || parsedUrl.hostname !== STAGING_API_HOST
+    || parsedUrl.hostname !== profile.apiHost
     || parsedUrl.port
     || parsedUrl.username
     || parsedUrl.password
@@ -74,45 +156,89 @@ export function stagingReleaseConfig(
     || parsedUrl.hash
   ) {
     throw new Error(
-      `STAGING_API_BASE_URL must be exactly https://${STAGING_API_HOST}.`,
+      `${apiBaseUrlVariable} must be exactly https://${profile.apiHost}.`,
     );
   }
 
-  const approvedMigration = requiredEnv(env, 'STAGING_MIGRATION_APPROVED');
+  const migrationApprovalVariable = environmentVariable(
+    profile,
+    'MIGRATION_APPROVED',
+  );
+  const approvedMigration = requiredEnv(
+    env,
+    migrationApprovalVariable,
+    target,
+  );
   const latestMigration = latestMigrationName();
   if (approvedMigration !== latestMigration) {
     throw new Error(
-      `STAGING_MIGRATION_APPROVED must equal the current migration ${latestMigration}.`,
+      `${migrationApprovalVariable} must equal the current migration ${latestMigration}.`,
     );
   }
+  const migrationShaApprovalVariable = environmentVariable(
+    profile,
+    'MIGRATION_SHA256_APPROVED',
+  );
   const approvedMigrationSha256 = requiredEnv(
     env,
-    'STAGING_MIGRATION_SHA256_APPROVED',
+    migrationShaApprovalVariable,
+    target,
   );
   const migrationSha256 = latestMigrationSha256(latestMigration);
   if (approvedMigrationSha256 !== migrationSha256) {
     throw new Error(
-      'STAGING_MIGRATION_SHA256_APPROVED must equal the SHA-256 of '
+      `${migrationShaApprovalVariable} must equal the SHA-256 of `
       + `${latestMigration}.sql: ${migrationSha256}.`,
     );
   }
 
   return {
+    ...profile,
     apiBaseUrl,
-    adminToken: requiredEnv(env, 'STAGING_ADMIN_TOKEN'),
-    backupRef: requiredEnv(env, 'D1_BACKUP_REF'),
+    adminToken: requiredEnv(
+      env,
+      environmentVariable(profile, 'ADMIN_TOKEN'),
+      target,
+    ),
+    backupRef: requiredEnv(
+      env,
+      target === 'production' ? 'PRODUCTION_D1_BACKUP_REF' : 'D1_BACKUP_REF',
+      target,
+    ),
     backupEvidenceFile: resolve(
       repoRoot,
-      requiredEnv(env, 'D1_BACKUP_EVIDENCE_FILE'),
+      requiredEnv(
+        env,
+        target === 'production'
+          ? 'PRODUCTION_D1_BACKUP_EVIDENCE_FILE'
+          : 'D1_BACKUP_EVIDENCE_FILE',
+        target,
+      ),
     ),
     approvedMigration,
     approvedMigrationSha256,
   };
 }
 
+export function stagingReleaseConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): StagingReleaseConfig {
+  return releaseConfig('staging', env);
+}
+
+export function productionReleaseConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  wranglerConfigSource?: string,
+): ReleaseConfig {
+  return releaseConfig('production', env, wranglerConfigSource);
+}
+
 export function releaseCommands(
-  config: StagingReleaseConfig,
+  config: ReleaseConfig,
 ): ReleaseCommand[] {
+  const environmentArgs = config.wranglerEnvironment
+    ? ['--env', config.wranglerEnvironment]
+    : [];
   return [
     {
       command: 'npm',
@@ -133,7 +259,7 @@ export function releaseCommands(
         'd1:preflight',
         '--',
         '--database',
-        STAGING_DATABASE,
+        config.database,
         '--backup-ref',
         config.backupRef,
         '--evidence-file',
@@ -150,9 +276,8 @@ export function releaseCommands(
         'd1',
         'migrations',
         'apply',
-        STAGING_DATABASE,
-        '--env',
-        'staging',
+        config.database,
+        ...environmentArgs,
         '--remote',
       ],
       cwd: apiDir,
@@ -160,9 +285,11 @@ export function releaseCommands(
     },
     {
       command: 'npx',
-      args: ['wrangler', 'deploy', '--env', 'staging'],
+      args: config.target === 'production'
+        ? ['wrangler', 'deploy', '--name', config.workerName]
+        : ['wrangler', 'deploy', ...environmentArgs],
       cwd: apiDir,
-      label: 'deploy staging Worker',
+      label: `deploy ${config.target} Worker`,
     },
   ];
 }
@@ -189,7 +316,7 @@ async function runCommand(step: ReleaseCommand): Promise<void> {
 }
 
 async function requestJson(
-  config: StagingReleaseConfig,
+  config: ReleaseConfig,
   path: string,
   options: { method?: 'GET' | 'POST'; admin?: boolean } = {},
 ): Promise<Record<string, unknown>> {
@@ -211,6 +338,90 @@ async function requestJson(
     throw new Error(`${options.method ?? 'GET'} ${path} returned invalid JSON.`);
   }
   return parsed as Record<string, unknown>;
+}
+
+function assertGpaSyncChunk(
+  payload: Record<string, unknown>,
+  call: number,
+): {
+  rowsProcessed: number;
+  isComplete: boolean;
+  completionKey: string | null;
+} {
+  if (payload.success !== true) {
+    throw new Error(`GPA import chunk ${call} was unsuccessful.`);
+  }
+  if (
+    !Number.isSafeInteger(payload.rowsProcessed)
+    || (payload.rowsProcessed as number) < 0
+    || typeof payload.isComplete !== 'boolean'
+    || typeof payload.message !== 'string'
+    || payload.message.trim().length === 0
+  ) {
+    throw new Error(`GPA import chunk ${call} returned an invalid payload.`);
+  }
+
+  const rowsProcessed = payload.rowsProcessed as number;
+  if (payload.isComplete) {
+    if (
+      typeof payload.completionKey !== 'string'
+      || payload.completionKey.trim().length === 0
+    ) {
+      throw new Error(
+        `GPA import chunk ${call} completed without a completion key.`,
+      );
+    }
+    return {
+      rowsProcessed,
+      isComplete: true,
+      completionKey: payload.completionKey,
+    };
+  }
+
+  if (payload.completionKey !== null) {
+    throw new Error(
+      `GPA import chunk ${call} returned a premature completion key.`,
+    );
+  }
+  if (rowsProcessed === 0) {
+    throw new Error(
+      `GPA import chunk ${call} made no progress before completion.`,
+    );
+  }
+  return {
+    rowsProcessed,
+    isComplete: false,
+    completionKey: null,
+  };
+}
+
+export async function syncGpaUntilComplete(
+  requestChunk: () => Promise<Record<string, unknown>>,
+  maxCalls = MAX_GPA_SYNC_CALLS,
+): Promise<GpaImportResult> {
+  if (!Number.isSafeInteger(maxCalls) || maxCalls <= 0) {
+    throw new Error('GPA import call limit must be a positive integer.');
+  }
+
+  let rowsProcessed = 0;
+  for (let call = 1; call <= maxCalls; call += 1) {
+    const chunk = assertGpaSyncChunk(await requestChunk(), call);
+    rowsProcessed += chunk.rowsProcessed;
+    if (!Number.isSafeInteger(rowsProcessed)) {
+      throw new Error('GPA import row count exceeded the safe integer range.');
+    }
+    if (chunk.isComplete && chunk.completionKey) {
+      return {
+        calls: call,
+        rowsProcessed,
+        completionKey: chunk.completionKey,
+      };
+    }
+  }
+
+  throw new Error(
+    `GPA import did not complete within ${maxCalls} chunk requests.`,
+  );
 }
 
 export function assertFullCourseSyncResult(
@@ -301,31 +512,45 @@ export function assertCourseSyncStatus(
   }
 }
 
-async function rebuildRegenerableData(config: StagingReleaseConfig): Promise<void> {
+export async function rebuildRegenerableData(
+  config: ReleaseConfig,
+  request: typeof requestJson = requestJson,
+): Promise<void> {
   console.log('\n==> verify deployed Worker health');
-  await requestJson(config, '/health');
+  await request(config, '/health');
 
   console.log('\n==> discover current term state');
-  await requestJson(config, '/admin/discover-terms', {
+  await request(config, '/admin/discover-terms', {
     method: 'POST',
     admin: true,
   });
 
   console.log('\n==> republish active and registrable course snapshots');
-  const fullSync = await requestJson(config, '/admin/sync-active/full', {
+  const fullSync = await request(config, '/admin/sync-active/full', {
     method: 'POST',
     admin: true,
   });
   const syncedTermIds = assertFullCourseSyncResult(fullSync);
 
+  console.log('\n==> import complete GPA dataset');
+  const gpaImport = await syncGpaUntilComplete(() => request(
+    config,
+    '/admin/sync-gpa',
+    { method: 'POST', admin: true },
+  ));
+  console.log(
+    `Imported ${gpaImport.rowsProcessed} GPA rows across `
+    + `${gpaImport.calls} chunk request(s).`,
+  );
+
   console.log('\n==> rebuild GPA aggregates');
-  await requestJson(config, '/admin/enrich-gpa', {
+  await request(config, '/admin/enrich-gpa', {
     method: 'POST',
     admin: true,
   });
 
   console.log('\n==> repopulate RMP cache, links, and public scores');
-  const rmp = await requestJson(config, '/admin/sync-rmp', {
+  const rmp = await request(config, '/admin/sync-rmp', {
     method: 'POST',
     admin: true,
   });
@@ -334,7 +559,7 @@ async function rebuildRegenerableData(config: StagingReleaseConfig): Promise<voi
   }
 
   console.log('\n==> verify post-release sync status');
-  const syncStatus = await requestJson(
+  const syncStatus = await request(
     config,
     '/admin/sync/status',
     { admin: true },
@@ -342,14 +567,23 @@ async function rebuildRegenerableData(config: StagingReleaseConfig): Promise<voi
   assertCourseSyncStatus(syncStatus, syncedTermIds);
 }
 
+export function releaseTargetFromArgv(argv: string[]): ReleaseTarget {
+  if (argv.length === 0) return 'staging';
+  if (argv.length === 2 && argv[0] === '--target') {
+    if (argv[1] === 'staging' || argv[1] === 'production') return argv[1];
+  }
+  throw new Error('Usage: staging-api-release.ts [--target staging|production]');
+}
+
 async function main(): Promise<void> {
-  const config = stagingReleaseConfig();
+  const target = releaseTargetFromArgv(process.argv.slice(2));
+  const config = releaseConfig(target);
   for (const command of releaseCommands(config)) {
     await runCommand(command);
   }
   await rebuildRegenerableData(config);
   console.log(
-    `\nStaging API release completed through ${config.approvedMigration}; run staging smoke and eval gates next.`,
+    `\n${config.target === 'production' ? 'Production' : 'Staging'} API release completed through ${config.approvedMigration}.`,
   );
 }
 

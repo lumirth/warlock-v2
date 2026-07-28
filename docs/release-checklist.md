@@ -57,11 +57,14 @@ npm run cloudflare:preflight
 ```
 
 The API release applies D1 migrations before the new Worker is published, then
-immediately republishes every active/registrable course snapshot and rebuilds
-GPA aggregates, the RMP cache, instructor links, and public scores. If any
-migration, deploy, rebuild, or status check fails, stop and use the recorded
-Time Travel bookmark; do not publish the web build against a partially released
-API.
+immediately republishes every active/registrable course snapshot, imports the
+complete GPA dataset, and rebuilds GPA aggregates, the RMP cache, instructor
+links, and public scores. The GPA import is capped at 1,024 chunk requests and
+fails on an unsuccessful, invalid, or non-progressing response; GPA aggregation
+does not begin until the importer reports completion with a durable completion
+key. If any migration, deploy, rebuild, or status check fails, stop and use the
+recorded Time Travel bookmark; do not publish the web build against a partially
+released API.
 
 Review the latest SQL migration itself, compute its SHA-256 with
 `shasum -a 256 apps/api/migrations/<latest-migration-name>.sql`, and paste the
@@ -70,6 +73,45 @@ checks both against the current checkout so a reviewed filename cannot approve
 later-edited SQL.
 
 Do not paste or commit token values. Record only token names and command exit status in the final report.
+
+## Production Release
+
+Production is a separate, fail-closed release, not a staging command with
+different environment values. Its fixed targets are Worker
+`uiuc-course-search`, API
+`https://uiuc-course-search.lumirth.workers.dev`, D1
+`course-search-db-v2`, and Pages project `uiuc-course-search-web` branch
+`main`.
+
+The legacy `course-search-db` is rollback-only by release policy because it
+exceeds the free-plan per-database size limit. The release gate reads the
+production `DB` binding from
+`apps/api/wrangler.toml` and rejects the legacy database or any unreviewed
+replacement name.
+
+Verify Wrangler identity and required production secret names, then create and
+restore-test a fresh backup of `course-search-db-v2`. Use production-specific
+evidence and approvals:
+
+```bash
+npx wrangler whoami
+npx wrangler secret list --name uiuc-course-search
+PRODUCTION_D1_BACKUP_REF=<YYYYMMDDTHHMMSSZ> \
+PRODUCTION_D1_BACKUP_EVIDENCE_FILE=artifacts/production-d1-backup-evidence.md \
+PRODUCTION_MIGRATION_APPROVED=<latest-migration-name> \
+PRODUCTION_MIGRATION_SHA256_APPROVED=<reviewed-lowercase-sha256> \
+PRODUCTION_API_BASE_URL=https://uiuc-course-search.lumirth.workers.dev \
+PRODUCTION_ADMIN_TOKEN=<redacted> \
+npm run deploy:production
+```
+
+`PRODUCTION_ADMIN_TOKEN` must match the production Worker’s `ADMIN_TOKEN`
+secret. Never paste the value into documentation or commit it. The top-level
+command serializes `deploy:api:production` before `deploy:web:production`; the
+web phase therefore cannot publish if migration, Worker deployment, data
+rebuild, or post-release API verification fails. The web build pins
+`VITE_API_BASE_URL` to the official Worker and publishes Pages project
+`uiuc-course-search-web` branch `main`.
 
 Record deployment target evidence with these labels before the final preflight:
 

@@ -94,6 +94,33 @@ describe("active documentation", () => {
     );
     expect(rootPackage.scripts["deploy:staging"]).not.toContain("concurrently");
   });
+
+  it("serializes the guarded production API release before the official web release", () => {
+    const rootPackage = JSON.parse(readFileSync("package.json", "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const apiPackage = JSON.parse(
+      readFileSync("apps/api/package.json", "utf8"),
+    ) as { scripts: Record<string, string> };
+    const webPackage = JSON.parse(
+      readFileSync("apps/web/package.json", "utf8"),
+    ) as { scripts: Record<string, string> };
+
+    expect(apiPackage.scripts["deploy:production"]).toBe(
+      "tsx ../../scripts/staging-api-release.ts --target production",
+    );
+    expect(webPackage.scripts["deploy:production"]).toBe(
+      "VITE_API_BASE_URL=https://uiuc-course-search.lumirth.workers.dev "
+      + "npm run build && wrangler pages deploy dist "
+      + "--project-name uiuc-course-search-web --branch main",
+    );
+    expect(rootPackage.scripts["deploy:production"]).toBe(
+      "npm run deploy:api:production && npm run deploy:web:production",
+    );
+    expect(rootPackage.scripts["deploy:production"]).not.toContain(
+      "concurrently",
+    );
+  });
 });
 
 function routeMatrixEntries(source: string): string[] {
