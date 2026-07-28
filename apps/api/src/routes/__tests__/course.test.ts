@@ -101,7 +101,7 @@ describe('course routes', () => {
           gpaSampleSize: 820,
           primaryInstructorRating: 4.8,
           qualityScore: 88,
-          workloadScore: 42,
+          instructorDifficultyScore: 42,
         },
       },
       cache: {
@@ -113,7 +113,7 @@ describe('course routes', () => {
     expect(sections[0]).toMatchObject({
       crn: '12345',
       instructors: [expect.objectContaining({
-        name: 'Lovelace, A',
+        name: 'Lovelace, Ada',
         rmpRating: 4.8,
         avgGpa: 3.62,
       })],
@@ -125,7 +125,7 @@ describe('course routes', () => {
       typeCode: 'LEC',
       buildingName: 'Siebel Center',
       roomNumber: '1404',
-      instructors: [expect.objectContaining({ name: 'Lovelace, A' })],
+      instructors: [expect.objectContaining({ name: 'Lovelace, Ada' })],
     });
   });
 
@@ -192,7 +192,7 @@ function fakeDb(options: { existingCourse?: boolean } = {}) {
                 term: 'spring',
                 avg_gpa: 3.62,
                 gpa_sample_size: 820,
-                primary_instructor: 'Lovelace, A',
+                primary_instructor: 'Lovelace, Ada',
                 primary_instructor_rmp: 4.8,
                 quality_score: 88,
                 difficulty_score: 42,
@@ -221,7 +221,7 @@ function fakeDb(options: { existingCourse?: boolean } = {}) {
           if (sql.includes('FROM instructor_course_links')) {
             return {
               results: [{
-                instructor_name: 'Lovelace, A',
+                instructor_name: 'Lovelace, Ada',
                 rmp_rating: 4.8,
                 rmp_difficulty: 3.1,
                 rmp_id: 'ada',

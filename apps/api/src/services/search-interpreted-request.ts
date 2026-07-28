@@ -52,7 +52,7 @@ function publicFiltersFromPlan(
     time: filters.time,
     online: filters.online,
     status: filters.status,
-    workload: filters.workload,
+    instructorDifficulty: filters.instructorDifficulty,
     level: filters.level,
     partOfTerm: filters.partOfTerm,
   });

@@ -15,7 +15,7 @@ Examples:
 - `Subject CS`
 - `Course CS 225`
 - `Online`
-- `3 credits`
+- `3 exact credits`
 - `GenEd HUM`
 - `Any GenEd`
 
@@ -31,14 +31,15 @@ user request.
 
 Examples:
 
-- `Easy workload`
 - `Low writing preferred`
 - `Low exam load preferred`
 - `No listed prerequisite preferred`
 - `Avoid math-heavy courses`
 
-Show only one chip for one user request. If `easy` already produced `Easy
-workload`, do not also show `Low workload preferred`.
+Generic words such as `easy`, `chill`, and `GPA booster` remain topic text.
+They do not become an instructor-difficulty filter or an undocumented ranking
+preference. Instructor difficulty is available only through its explicit
+structured filter or sort.
 
 ### Topic Chips
 
@@ -104,10 +105,9 @@ The resolver uses this priority order:
   `subject:CS` and `computer science` mean the Computer Science subject.
 - Explicit requirement phrases win the requirement bucket: `cs gened`,
   `gened cs`, and `cultural studies` mean the Cultural Studies GenEd bucket.
-- Broad requirement-shopping language such as `easy`, `chill`,
-  `grade booster`, or `low workload` biases overloaded short codes toward
-  requirement shopping. `easy cs` therefore defaults to Cultural Studies, with
-  Computer Science offered as a correction.
+- Generic subjective language does not change an overloaded code's meaning.
+  `easy CS` stays a Computer Science subject search and keeps `easy` as topic
+  text; `CS gened` explicitly selects the Cultural Studies requirement.
 - Avoidance constraints alone do not flip an overloaded code. `no exams CS`
   still means the Computer Science subject because exam avoidance can apply to
   a department search.
@@ -127,10 +127,10 @@ Do:
 - `Any GenEd: QR`
 - `GenEd HUM`
 - `Online delivery`
-- `Easier workload fit`
+- `Lower instructor-rated difficulty`
 
 Do not:
 
 - `Requirement lane match` on a course with no requirement mapping
-- duplicate `Easy workload` and `Low workload preferred`
+- describe generic `easy` or `chill` language as measured instructor difficulty
 - show ranking explanations as removable filters

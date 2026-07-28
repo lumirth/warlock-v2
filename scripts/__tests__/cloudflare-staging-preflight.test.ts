@@ -11,6 +11,9 @@ const VALID_STAGING_CONFIG = `
 [env.staging]
 name = "uiuc-course-search-staging"
 
+[env.staging.vars]
+FEEDBACK_ALLOWED_ORIGINS = "https://staging.uiuc-course-search-web.pages.dev"
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "course-search-db-staging"
@@ -34,6 +37,14 @@ namespace_id = "26060112"
 
   [env.staging.ratelimits.simple]
   limit = 240
+  period = 60
+
+[[env.staging.ratelimits]]
+name = "FEEDBACK_RATE_LIMITER"
+namespace_id = "26060113"
+
+  [env.staging.ratelimits.simple]
+  limit = 20
   period = 60
 
 [[env.staging.vectorize]]
@@ -89,10 +100,10 @@ describe('Cloudflare staging preflight', () => {
       'Staging Web URL: https://staging.uiuc-course-search.pages.dev',
       'Pages Project: uiuc-course-search-web',
       'Pages Branch: staging',
-      'Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=26060111, COURSE_RATE_LIMITER=26060112',
-      'Abuse Control Routes: /api/search*, /api/course/*',
+      'Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=26060111, COURSE_RATE_LIMITER=26060112, FEEDBACK_RATE_LIMITER=26060113',
+      'Abuse Control Routes: /api/search*, /api/course/*, /api/feedback',
       'Abuse Control Action: Worker Rate Limiting returns 429 JSON block response',
-      'Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP',
+      'Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP, /api/feedback=20 requests/min/IP',
       'D1 Backup Ref: 20260601T170000Z',
       'D1 Backup Mechanism: Cloudflare D1 Time Travel',
       'D1 Backup Location: Cloudflare D1 Time Travel bookmark 00000007-00000000-0000507d-803e9baeab336cc69be070cd8a1df251 for ref 20260601T170000Z',
@@ -118,7 +129,7 @@ describe('Cloudflare staging preflight', () => {
     expect(checkEvidenceReportText(missingWebUrl).find(result => result.name === 'staging web URL evidence')?.ok).toBe(false);
 
     const weakRuleEvidence = validEvidence.replace(
-      'Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=26060111, COURSE_RATE_LIMITER=26060112',
+      'Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=26060111, COURSE_RATE_LIMITER=26060112, FEEDBACK_RATE_LIMITER=26060113',
       'Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=1'
     );
     expect(checkEvidenceReportText(weakRuleEvidence).find(result => result.name === 'WAF or rate-limit rule evidence')?.ok).toBe(false);
@@ -133,7 +144,7 @@ describe('Cloudflare staging preflight', () => {
     expect(checkEvidenceReportText(proseOnlyRestoreVerified).find(result => result.name === 'D1 restore verification evidence')?.ok).toBe(false);
 
     const missingRouteCoverage = validEvidence.replace(
-      'Abuse Control Routes: /api/search*, /api/course/*',
+      'Abuse Control Routes: /api/search*, /api/course/*, /api/feedback',
       'Abuse Control Routes: /api/search*'
     );
     expect(checkEvidenceReportText(missingRouteCoverage).find(result => result.name === 'WAF or rate-limit route coverage evidence')?.ok).toBe(false);
@@ -157,7 +168,7 @@ describe('Cloudflare staging preflight', () => {
     expect(checkEvidenceReportText(monitorOnlyAction).find(result => result.name === 'WAF or rate-limit action evidence')?.ok).toBe(false);
 
     const weakThresholds = validEvidence.replace(
-      'Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP',
+      'Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP, /api/feedback=20 requests/min/IP',
       'Abuse Control Thresholds: /api/search*=120 requests/min/IP'
     );
     expect(checkEvidenceReportText(weakThresholds).find(result => result.name === 'WAF or rate-limit threshold evidence')?.ok).toBe(false);
@@ -166,6 +177,7 @@ describe('Cloudflare staging preflight', () => {
   it('requires every staging environment variable by name', () => {
     const results = checkRequiredEnv({
       STAGING_API_BASE_URL: 'https://example.com',
+      STAGING_WEB_ORIGIN: 'https://web.example.com',
       STAGING_ADMIN_TOKEN: 'redacted',
       STAGING_INTERNAL_TOKEN: 'redacted',
       EVAL_BASE_URL: 'https://example.com',

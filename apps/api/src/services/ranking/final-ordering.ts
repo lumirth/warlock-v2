@@ -95,8 +95,8 @@ function sortFieldLabel(field: SearchSort['field']): string {
       return 'Avg GPA';
     case 'quality':
       return 'Quality tier';
-    case 'workload':
-      return 'Workload tier';
+    case 'instructor_difficulty':
+      return 'Instructor difficulty tier';
     case 'instructor_rating':
       return 'Instructor rating';
     case 'level':

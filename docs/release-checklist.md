@@ -43,12 +43,31 @@ These require valid Cloudflare auth through Wrangler or `CLOUDFLARE_API_TOKEN`/a
 
 ```bash
 npx wrangler whoami
+D1_BACKUP_REF=<YYYYMMDDTHHMMSSZ> \
+D1_BACKUP_EVIDENCE_FILE=artifacts/d1-backup-evidence.md \
+STAGING_MIGRATION_APPROVED=<latest-migration-name> \
+STAGING_MIGRATION_SHA256_APPROVED=<reviewed-lowercase-sha256> \
+STAGING_API_BASE_URL=https://<staging-worker-host> \
+STAGING_ADMIN_TOKEN=<redacted> \
 npm run deploy:api:staging
 VITE_API_BASE_URL=https://<staging-worker-host> npm run deploy:web:staging
-STAGING_API_BASE_URL=https://<staging-worker-host> STAGING_ADMIN_TOKEN=<redacted> STAGING_INTERNAL_TOKEN=<redacted> npm run test:staging
+STAGING_API_BASE_URL=https://<staging-worker-host> STAGING_WEB_ORIGIN=https://<staging-pages-host> STAGING_ADMIN_TOKEN=<redacted> STAGING_INTERNAL_TOKEN=<redacted> npm run test:staging
 EVAL_BASE_URL=https://<staging-worker-host> npm run eval:staging
 npm run cloudflare:preflight
 ```
+
+The API release applies D1 migrations before the new Worker is published, then
+immediately republishes every active/registrable course snapshot and rebuilds
+GPA aggregates, the RMP cache, instructor links, and public scores. If any
+migration, deploy, rebuild, or status check fails, stop and use the recorded
+Time Travel bookmark; do not publish the web build against a partially released
+API.
+
+Review the latest SQL migration itself, compute its SHA-256 with
+`shasum -a 256 apps/api/migrations/<latest-migration-name>.sql`, and paste the
+literal filename and digest into the two approval variables. The release gate
+checks both against the current checkout so a reviewed filename cannot approve
+later-edited SQL.
 
 Do not paste or commit token values. Record only token names and command exit status in the final report.
 
@@ -67,14 +86,15 @@ Before a public demo, configure Cloudflare Workers Rate Limiting bindings or equ
 
 - `GET /api/search*`: start at 120 requests/minute/IP.
 - `GET /api/course/*`: start at 240 requests/minute/IP.
+- `POST /api/feedback`: start at 20 requests/minute/IP and require an exact configured frontend origin.
 
 Record the rule IDs, expressions, thresholds, action, and observed dashboard state in the final report. Use these labels so `npm run cloudflare:preflight` can verify the control shape:
 
 ```text
-Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=<integer>, COURSE_RATE_LIMITER=<integer>
-Abuse Control Routes: /api/search*, /api/course/*
+Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=<integer>, COURSE_RATE_LIMITER=<integer>, FEEDBACK_RATE_LIMITER=<integer>
+Abuse Control Routes: /api/search*, /api/course/*, /api/feedback
 Abuse Control Action: Worker Rate Limiting returns 429 JSON block response before public route handlers
-Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP
+Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP, /api/feedback=20 requests/min/IP
 ```
 
 ## Data Safety

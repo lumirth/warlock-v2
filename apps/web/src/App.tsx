@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Routes, Route } from 'react-router-dom'
-import { useLocation } from 'react-router-dom'
-import { Code2Icon, HomeIcon, MoonIcon, SunIcon } from 'lucide-react'
-import courseSearchLogo from './assets/course-search-logo.png'
+import { useEffect, useRef, useState } from 'react'
+import { Link, Route, Routes, useLocation } from 'react-router-dom'
+import { Code2Icon, MoonIcon, SunIcon } from 'lucide-react'
+import courseSearchLogo from './assets/course-search-logo.svg'
 import { SearchPage } from './pages/SearchPage'
 import { CoursePage } from './pages/CoursePage'
 import { buttonVariants } from '@/components/ui/button'
@@ -21,7 +20,9 @@ const THEME_STORAGE_KEY = 'uiuc-course-search-theme'
 function readStoredTheme(): ThemeMode | null {
   try {
     const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
-    return storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : null
+    return storedTheme === 'light' || storedTheme === 'dark'
+      ? storedTheme
+      : null
   } catch {
     return null
   }
@@ -57,6 +58,7 @@ function getInitialTheme(): ThemeMode {
 function App() {
   const location = useLocation()
   const isSearchPage = location.pathname === '/'
+  const mainRef = useRef<HTMLElement>(null)
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme)
   const nextThemeMode = themeMode === 'dark' ? 'light' : 'dark'
 
@@ -67,13 +69,27 @@ function App() {
     writeStoredTheme(themeMode)
   }, [themeMode])
 
+  useEffect(() => {
+    mainRef.current?.focus({ preventScroll: true })
+    if (window.scrollY !== 0) {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }, [location.pathname])
+
   return (
     <div className="bg-background text-foreground min-h-screen">
+      <a
+        href="#main-content"
+        className="bg-background text-foreground focus:ring-ring fixed top-2 left-2 z-50 -translate-y-20 rounded-md border px-3 py-2 text-sm font-medium shadow-sm focus:translate-y-0 focus:ring-3 focus:outline-none"
+      >
+        Skip to main content
+      </a>
       <header className="bg-card sticky top-0 z-40 border-b">
         <PageContainer className="flex h-[60px] items-center gap-3">
-          <a
-            href="/"
+          <Link
+            to="/"
             className="text-foreground flex min-w-0 items-center gap-2 no-underline"
+            aria-label="UIUC Course Search home"
           >
             <img
               src={courseSearchLogo}
@@ -90,7 +106,7 @@ function App() {
                 UIUC Course Search
               </span>
             )}
-          </a>
+          </Link>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -113,22 +129,7 @@ function App() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <a
-                  href="/"
-                  aria-label="Home"
-                  className={buttonVariants({
-                    variant: 'ghost',
-                    size: 'icon-sm',
-                  })}
-                >
-                  <HomeIcon aria-hidden />
-                </a>
-              </TooltipTrigger>
-              <TooltipContent>Home</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <a
-                  href="https://github.com/lewisblack/uiuc-course-search"
+                  href="https://github.com/lumirth/uiuc-course-search"
                   target="_blank"
                   rel="noreferrer"
                   aria-label="GitHub"
@@ -146,13 +147,48 @@ function App() {
         </PageContainer>
       </header>
 
-      <main>
+      <main id="main-content" ref={mainRef} tabIndex={-1}>
         <Routes>
           <Route path="/" element={<SearchPage includeH1={false} />} />
           <Route path="/course/:subject/:number" element={<CoursePage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
+      <footer className="mt-8 border-t">
+        <PageContainer className="text-muted-foreground flex flex-wrap justify-between gap-2 py-5 text-xs">
+          <p>Unofficial planning tool. Confirm details before registering.</p>
+          <a
+            href="https://courses.illinois.edu/"
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium underline"
+          >
+            Official Course Explorer
+          </a>
+        </PageContainer>
+      </footer>
     </div>
+  )
+}
+
+function NotFoundPage() {
+  useEffect(() => {
+    document.title = 'Page not found · UIUC Course Search'
+  }, [])
+
+  return (
+    <PageContainer className="py-16">
+      <div className="mx-auto max-w-xl">
+        <p className="text-primary text-sm font-semibold">404</p>
+        <h1 className="mt-2 text-3xl font-semibold">Page not found</h1>
+        <p className="text-muted-foreground mt-3 leading-7">
+          That address does not match a search or course page.
+        </p>
+        <Button asChild className="mt-6">
+          <Link to="/">Return to course search</Link>
+        </Button>
+      </div>
+    </PageContainer>
   )
 }
 

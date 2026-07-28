@@ -49,7 +49,7 @@ describe('search plan transforms', () => {
       filters: {},
       keywordQuery: 'sort by gpa film',
       semanticQuery: 'sort by gpa film',
-      softPreferences: { lowWorkload: 0.8 },
+      softPreferences: { fun: 0.8 },
     };
 
     const result = compileSortIntent(basePlan, 'sort by gpa film');
@@ -58,7 +58,7 @@ describe('search plan transforms', () => {
     expect(result.plan).not.toBe(basePlan);
     expect(result.inferredSort).toEqual({ field: 'gpa', direction: 'desc' });
     expect(result.plan.softPreferences).toMatchObject({
-      lowWorkload: 0.8,
+      fun: 0.8,
       inferredSort: { field: 'gpa', direction: 'desc' },
     });
     expect(result.plan.keywordQuery).toBe('film');
@@ -69,7 +69,7 @@ describe('search plan transforms', () => {
       filters: {},
       keywordQuery: 'sort by gpa film',
       semanticQuery: 'sort by gpa film',
-      softPreferences: { lowWorkload: 0.8 },
+      softPreferences: { fun: 0.8 },
     });
   });
 

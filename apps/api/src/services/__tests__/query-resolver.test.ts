@@ -114,18 +114,14 @@ describe('resolveQuery', () => {
     expect(plan.semanticQuery).toBe('easy');
   });
 
-  it('uses shopping context to resolve ambiguous CS shorthand as Cultural Studies', async () => {
+  it('does not let generic subjective language flip a subject into a GenEd', async () => {
     mockSubjectLookup('CS', 'Computer Science');
 
     const plan = await resolve('easy cs', [hint('subject', 'CS', 'cs')], 'easy');
 
-    expect(plan.filters.subject).toBeUndefined();
-    expect(plan.filters.requirement).toEqual({ mode: 'single', codes: ['CS'] });
-    expect(plan.ambiguities).toEqual([{
-      term: 'cs',
-      chosen: { type: 'requirement', value: 'CS', label: 'Cultural Studies' },
-      alternatives: [{ type: 'subject', value: 'CS', label: 'Computer Science' }],
-    }]);
+    expect(plan.filters.subject).toBe('CS');
+    expect(plan.filters.requirement).toBeUndefined();
+    expect(plan.semanticQuery).toBe('easy');
   });
 
   it('keeps explicit Computer Science language as the subject', async () => {
@@ -152,7 +148,6 @@ describe('resolveQuery', () => {
       hint('credits', 3),
       hint('online', false),
       hint('status', 'open'),
-      hint('workload', 'easy'),
     ]);
 
     expect(plan.filters).toMatchObject({
@@ -165,7 +160,6 @@ describe('resolveQuery', () => {
       credits: 3,
       online: false,
       status: 'open',
-      workload: 'easy',
     });
   });
 

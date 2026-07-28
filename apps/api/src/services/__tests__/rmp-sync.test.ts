@@ -10,16 +10,36 @@ type SyncStateRow = {
   etag: string | null;
 };
 
-function createDb(previous: SyncStateRow | null = null) {
+function createDb(
+  previous: SyncStateRow | null = null,
+  options: {
+    leaseChanges?: number;
+    leaseRenewChanges?: number[];
+  } = {},
+) {
   const stateWrites: unknown[][] = [];
+  let leaseRenewIndex = 0;
 
   const db = {
     prepare: vi.fn((sql: string) => ({
       bind: vi.fn((...args: unknown[]) => ({
         first: vi.fn(async () => sql.includes('SELECT * FROM sync_state') ? previous : null),
         run: vi.fn(async () => {
-          stateWrites.push(args);
-          return {};
+          if (args[0] === 'rmp') stateWrites.push(args);
+          const isLeaseClaim = sql.includes('INSERT INTO sync_state')
+            && args[0] === 'rmp-sync-lease';
+          const isLeaseRenew = sql.includes('SET last_sync = unixepoch()')
+            && !sql.includes("last_status = 'complete'")
+            && args[0] === 'rmp-sync-lease';
+          return {
+            meta: {
+              changes: isLeaseClaim
+                ? options.leaseChanges ?? 1
+                : isLeaseRenew
+                  ? options.leaseRenewChanges?.[leaseRenewIndex++] ?? 1
+                  : 1,
+            },
+          };
         }),
       })),
     })),
@@ -78,6 +98,44 @@ describe('coordinateRmpSync', () => {
       rmpAuthToken: 'Basic public-token',
     })).rejects.toThrow('RMP sync is already running.');
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('uses one atomic D1 write to reject an overlapping coordinator', async () => {
+    const { db } = createDb(null, { leaseChanges: 0 });
+    const selfBinding = { fetch: vi.fn() };
+    mockRmpResponse('new-cursor');
+
+    await expect(coordinateRmpSync(
+      db as unknown as D1Database,
+      selfBinding as unknown as Fetcher,
+      { rmpAuthToken: 'Basic public-token' },
+    )).rejects.toThrow('RMP sync is already running.');
+
+    const claimSql = String(vi.mocked(db.prepare).mock.calls[0]?.[0] ?? '');
+    expect(claimSql).toContain('ON CONFLICT(id) DO UPDATE SET');
+    expect(claimSql).toContain("sync_state.last_status != 'running'");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(selfBinding.fetch).not.toHaveBeenCalled();
+  });
+
+  it('refuses to dispatch a fetched page after lease ownership changes', async () => {
+    const { db } = createDb(null, {
+      // Initial state publication, pre-fetch heartbeat, then post-fetch fence.
+      leaseRenewChanges: [1, 1, 0, 0],
+    });
+    const selfBinding = {
+      fetch: vi.fn(async () => new Response(null, { status: 200 })),
+    };
+    mockRmpResponse('new-cursor');
+
+    await expect(coordinateRmpSync(
+      db as unknown as D1Database,
+      selfBinding as unknown as Fetcher,
+      { rmpAuthToken: 'Basic public-token' },
+    )).rejects.toThrow('refusing stale failure checkpoint');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(selfBinding.fetch).not.toHaveBeenCalled();
   });
 
   it('resumes an expired running lock from the stored cursor', async () => {
@@ -186,14 +244,12 @@ describe('coordinateRmpSync', () => {
 });
 
 describe('processRmpBatch', () => {
-  it('propagates ratings only to instructors in the processed batch', async () => {
-    const updates: Array<{ sql: string; args: unknown[] }> = [];
+  it('stores distinct full identities by stable RMP id without direct propagation', async () => {
+    const boundRows: unknown[][] = [];
     const db = {
-      prepare: vi.fn((sql: string) => ({
+      prepare: vi.fn((_sql: string) => ({
         bind: vi.fn((...args: unknown[]) => {
-          if (sql.includes('UPDATE instructors') || sql.includes('UPDATE courses')) {
-            updates.push({ sql, args });
-          }
+          boundRows.push(args);
           return { run: vi.fn(async () => ({})) };
         }),
       })),
@@ -229,12 +285,23 @@ describe('processRmpBatch', () => {
 
     await processRmpBatch(db as unknown as D1Database, teachers);
 
-    expect(updates).toHaveLength(2);
-    expect(updates.map(update => update.args)).toEqual([
-      ['Lovelace, A', 'Hopper, G'],
-      ['Lovelace, A', 'Hopper, G'],
+    expect(db.batch).toHaveBeenCalledTimes(1);
+    expect(db.prepare).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(db.prepare).mock.calls.every(([sql]) =>
+      sql.includes('ON CONFLICT(rmp_id)')
+    )).toBe(true);
+    expect(boundRows[0].slice(0, 4)).toEqual([
+      'Lovelace, Ada',
+      'Ada',
+      'Lovelace',
+      'Teacher-1',
     ]);
-    expect(updates.every(update => !update.sql.includes('fetched_at'))).toBe(true);
+    expect(boundRows[1].slice(0, 4)).toEqual([
+      'Hopper, Grace',
+      'Grace',
+      'Hopper',
+      'Teacher-2',
+    ]);
     expect(teachers[0].teacherRatingTags.map(tag => tag.tagName)).toEqual([
       'Helpful',
       'Clear',

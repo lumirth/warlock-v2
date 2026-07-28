@@ -7,8 +7,8 @@ import {
 import {
   getQualityLabel,
   getQualityTone,
-  getWorkloadLabel,
-  getWorkloadTone,
+  getInstructorDifficultyLabel,
+  getInstructorDifficultyTone,
   isFiniteMetric,
   type MetricTone,
 } from '../../utils/grading'
@@ -21,6 +21,13 @@ type CourseResultMetric = {
   value: string
   tone?: Tone
   title?: string
+}
+
+export type RegistrationSummaryDisplay = {
+  primary: string
+  detail: string
+  tone: 'success' | 'warning' | 'destructive' | 'muted'
+  updated: string | null
 }
 
 export function getCourseKey(course: CourseSummaryDto): string {
@@ -39,12 +46,16 @@ export function getCoursePath(course: CourseSummaryDto): string {
 }
 
 export function isHistoricalResult(result: SearchCourseResultDto): boolean {
-  return result.warnings?.some((warning) => warning.kind === 'historical') ?? false
+  return (
+    result.warnings?.some((warning) => warning.kind === 'historical') ?? false
+  )
 }
 
-export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[] {
+export function getCourseMetrics(
+  course: CourseSummaryDto
+): CourseResultMetric[] {
   const qualityScore = course.metrics.qualityScore
-  const workloadScore = course.metrics.workloadScore
+  const instructorDifficultyScore = course.metrics.instructorDifficultyScore
   const primaryInstructorRmp = course.metrics.primaryInstructorRating
   const avgGpa = course.metrics.avgGpa
   const stats: CourseResultMetric[] = []
@@ -52,24 +63,34 @@ export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[]
   if (isFiniteMetric(qualityScore)) {
     const qualityLabel = getQualityLabel(qualityScore)
     stats.push({
-      label: 'Quality',
+      label: 'Quality signal',
       value: qualityLabel,
       tone: getQualityTone(qualityLabel),
       title:
         typeof course.metrics.gpaSampleSize === 'number'
-          ? `Based on ${course.metrics.gpaSampleSize.toLocaleString()} records`
-          : undefined,
+          ? `Evidence-limited GPA and linked RMP composite; ${course.metrics.gpaSampleSize.toLocaleString()} GPA records`
+          : 'Evidence-limited GPA and linked RMP composite',
     })
   }
-  if (isFiniteMetric(workloadScore)) {
+  if (isFiniteMetric(instructorDifficultyScore)) {
+    const difficultyLabel = getInstructorDifficultyLabel(
+      instructorDifficultyScore
+    )
     stats.push({
-      label: 'Workload',
-      value: getWorkloadLabel(workloadScore),
-      tone: getWorkloadTone(getWorkloadLabel(workloadScore)),
+      label: 'Instructor difficulty',
+      value: difficultyLabel,
+      tone: getInstructorDifficultyTone(difficultyLabel),
+      title:
+        'Linked RMP instructor difficulty; not a measure of assigned work.',
     })
   }
   if (isFiniteMetric(primaryInstructorRmp)) {
-    stats.push({ label: 'Instructor', value: primaryInstructorRmp.toFixed(1) })
+    stats.push({
+      label: 'RMP rating',
+      value: `${primaryInstructorRmp.toFixed(1)} / 5`,
+      title:
+        'Rate My Professors rating; review the source and sample size before deciding.',
+    })
   }
   if (isFiniteMetric(avgGpa)) {
     stats.push({
@@ -88,7 +109,7 @@ export function getCourseMetrics(course: CourseSummaryDto): CourseResultMetric[]
 export function getChipClass(chip: SearchChipDto): string {
   return cn(
     'border-border bg-secondary text-secondary-foreground',
-    chip.type === 'semantic' && 'text-muted-foreground',
+    chip.type === 'semantic' && 'text-muted-foreground'
   )
 }
 
@@ -118,6 +139,70 @@ export function formatNumber(
   return isFiniteMetric(value) ? value.toFixed(digits) : '-'
 }
 
-export function formatCredits(value: number | null): string {
-  return isFiniteMetric(value) ? String(value) : '-'
+export function formatCredits(
+  exact: number | null,
+  officialText?: string | null
+): string {
+  const text = officialText?.trim()
+  if (text) {
+    return /\b(?:credits?|hours?|hrs?)\b/i.test(text)
+      ? text
+      : `${text} ${text === '1' ? 'credit' : 'credits'}`
+  }
+  if (!isFiniteMetric(exact)) return 'Not available'
+  return `${exact} ${exact === 1 ? 'credit' : 'credits'}`
+}
+
+export function registrationSummaryDisplay(
+  course: CourseSummaryDto
+): RegistrationSummaryDisplay | null {
+  const summary = course.registrationSummary
+  if (!summary || summary.total === 0) return null
+
+  const available = summary.open + summary.restricted
+  let primary = `${summary.total} sections`
+  let detail = 'Status unavailable'
+  let tone: RegistrationSummaryDisplay['tone'] = 'muted'
+
+  if (summary.open > 0) {
+    primary = `${summary.open} open`
+    detail =
+      summary.restricted > 0
+        ? `${summary.restricted} restricted · ${summary.total} total`
+        : `${summary.total} total sections`
+    tone = 'success'
+  } else if (available > 0) {
+    primary = `${summary.restricted} restricted`
+    detail = `${summary.total} total sections`
+    tone = 'warning'
+  } else if (summary.waitlisted > 0) {
+    primary = `${summary.waitlisted} waitlisted`
+    detail = `${summary.total} total sections`
+    tone = 'warning'
+  } else if (summary.closed + summary.cancelled === summary.total) {
+    primary = 'No open sections'
+    detail = `${summary.total} closed or cancelled`
+    tone = 'destructive'
+  }
+
+  return {
+    primary,
+    detail,
+    tone,
+    updated:
+      typeof summary.lastSynced === 'number'
+        ? formatSnapshotTime(summary.lastSynced)
+        : 'Freshness not fully known',
+  }
+}
+
+function formatSnapshotTime(timestampSeconds: number): string {
+  const date = new Date(timestampSeconds * 1000)
+  if (Number.isNaN(date.getTime())) return 'Update time unavailable'
+  return `All checked since ${date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`
 }

@@ -32,8 +32,11 @@ describe('parseQuery', () => {
     });
 
     it('extracts multiple field:value pairs', () => {
-      const result = parseQuery('gened:HUM difficulty:easy');
-      expect(result.filters).toHaveLength(2);
+      const result = parseQuery('gened:HUM instructor_difficulty:lower');
+      expect(result.filters).toEqual([
+        { field: 'requirement', value: 'HUM' },
+        { field: 'instructor_difficulty', value: 'lower' },
+      ]);
     });
 
     it('extracts supported schedule and term fields', () => {

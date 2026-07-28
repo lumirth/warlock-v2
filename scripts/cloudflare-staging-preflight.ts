@@ -23,6 +23,7 @@ const DEFAULT_API_DIR = 'apps/api';
 
 const REQUIRED_STAGING_ENV = [
   'STAGING_API_BASE_URL',
+  'STAGING_WEB_ORIGIN',
   'STAGING_ADMIN_TOKEN',
   'STAGING_INTERNAL_TOKEN',
   'EVAL_BASE_URL',
@@ -114,8 +115,17 @@ function isRealCloudflareRuleId(value: string | null): boolean {
 
 function hasRealRateLimitNamespaceIds(value: string | null): boolean {
   if (!value || isPlaceholder(value)) return false;
-  const ids = value.match(/\b[1-9][0-9]{3,}\b/g) ?? [];
-  return ids.length >= 2 && new Set(ids).size >= 2;
+  const ids = [
+    'SEARCH_RATE_LIMITER',
+    'COURSE_RATE_LIMITER',
+    'FEEDBACK_RATE_LIMITER',
+  ].map((binding) => {
+    const escaped = binding.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`${escaped}\\s*=\\s*([1-9][0-9]{3,})`, 'i')
+      .exec(value)?.[1] ?? null;
+  });
+  return ids.every((id): id is string => id !== null)
+    && new Set(ids).size === ids.length;
 }
 
 function isTimestampBackupRef(value: string | null): boolean {
@@ -129,10 +139,12 @@ function isRealBackupLocation(value: string | null, backupRef: string | null): b
     && value!.includes(backupRef!);
 }
 
-function hasPublicReadRoutes(value: string | null): boolean {
+function hasPublicRateLimitedRoutes(value: string | null): boolean {
   if (!value || isPlaceholder(value)) return false;
   const normalized = value.toLowerCase();
-  return normalized.includes('/api/search') && normalized.includes('/api/course');
+  return normalized.includes('/api/search')
+    && normalized.includes('/api/course')
+    && normalized.includes('/api/feedback');
 }
 
 function hasEnforcingAction(value: string | null): boolean {
@@ -149,10 +161,10 @@ function hasEnforcingAction(value: string | null): boolean {
 }
 
 function hasThresholdEvidence(value: string | null): boolean {
-  if (!value || isPlaceholder(value) || !hasPublicReadRoutes(value)) return false;
+  if (!value || isPlaceholder(value) || !hasPublicRateLimitedRoutes(value)) return false;
   const normalized = value.toLowerCase();
   const thresholdMentions = normalized.match(/\d+\s*(?:(?:requests?)?\s*\/\s*)?(?:minute|min)/g) ?? [];
-  return thresholdMentions.length >= 2 && normalized.includes('ip');
+  return thresholdMentions.length >= 3 && normalized.includes('ip');
 }
 
 function stripAnsi(text: string): string {
@@ -196,16 +208,24 @@ export function checkWranglerAuth(apiDir: string = DEFAULT_API_DIR): CheckResult
 
 export function checkStagingConfigText(text: string): CheckResult[] {
   const stagingBlock = blockFor(text, '[env.staging]');
+  const stagingVarsBlock = blockFor(text, '[env.staging.vars]');
   const d1Block = blockFor(text, '[[env.staging.d1_databases]]');
   const kvBlock = blockFor(text, '[[env.staging.kv_namespaces]]');
   const vectorizeBlock = blockFor(text, '[[env.staging.vectorize]]');
   const serviceBlock = blockFor(text, '[[env.staging.services]]');
   const hasSearchRateLimit = has(text, /\[\[env\.staging\.ratelimits\]\][\s\S]*?name\s*=\s*"SEARCH_RATE_LIMITER"[\s\S]*?namespace_id\s*=\s*"[1-9][0-9]{3,}"[\s\S]*?\[env\.staging\.ratelimits\.simple\][\s\S]*?limit\s*=\s*120[\s\S]*?period\s*=\s*60/m);
   const hasCourseRateLimit = has(text, /\[\[env\.staging\.ratelimits\]\][\s\S]*?name\s*=\s*"COURSE_RATE_LIMITER"[\s\S]*?namespace_id\s*=\s*"[1-9][0-9]{3,}"[\s\S]*?\[env\.staging\.ratelimits\.simple\][\s\S]*?limit\s*=\s*240[\s\S]*?period\s*=\s*60/m);
+  const hasFeedbackRateLimit = has(text, /\[\[env\.staging\.ratelimits\]\][\s\S]*?name\s*=\s*"FEEDBACK_RATE_LIMITER"[\s\S]*?namespace_id\s*=\s*"[1-9][0-9]{3,}"[\s\S]*?\[env\.staging\.ratelimits\.simple\][\s\S]*?limit\s*=\s*20[\s\S]*?period\s*=\s*60/m);
 
   return [
     result('wrangler env.staging block', stagingBlock.length > 0, 'requires [env.staging]'),
     result('staging worker name', stringValue(stagingBlock, 'name') === 'uiuc-course-search-staging', 'requires uiuc-course-search-staging'),
+    result(
+      'staging feedback origin',
+      stringValue(stagingVarsBlock, 'FEEDBACK_ALLOWED_ORIGINS')
+        === 'https://staging.uiuc-course-search-web.pages.dev',
+      'requires exact staging Pages origin in FEEDBACK_ALLOWED_ORIGINS',
+    ),
     result('staging D1 binding', d1Block.length > 0, 'requires env.staging.d1_databases'),
     result('staging D1 database', stringValue(d1Block, 'database_name') === 'course-search-db-staging', 'requires course-search-db-staging'),
     result('staging D1 id', isRealUuid(stringValue(d1Block, 'database_id')), 'requires real non-secret D1 id'),
@@ -218,6 +238,7 @@ export function checkStagingConfigText(text: string): CheckResult[] {
     result('staging SELF service name', stringValue(serviceBlock, 'service') === 'uiuc-course-search-staging', 'requires staging SELF service target'),
     result('staging search rate-limit binding', hasSearchRateLimit, 'requires SEARCH_RATE_LIMITER 120/60s staging binding'),
     result('staging course rate-limit binding', hasCourseRateLimit, 'requires COURSE_RATE_LIMITER 240/60s staging binding'),
+    result('staging feedback rate-limit binding', hasFeedbackRateLimit, 'requires FEEDBACK_RATE_LIMITER 20/60s staging binding'),
   ];
 }
 
@@ -318,8 +339,8 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
     ),
     result(
       'WAF or rate-limit route coverage evidence',
-      hasPublicReadRoutes(abuseRoutes),
-      'requires Abuse Control Routes covering /api/search and /api/course'
+      hasPublicRateLimitedRoutes(abuseRoutes),
+      'requires Abuse Control Routes covering /api/search, /api/course, and /api/feedback'
     ),
     result(
       'WAF or rate-limit action evidence',
@@ -329,7 +350,7 @@ export function checkEvidenceReportText(text: string): CheckResult[] {
     result(
       'WAF or rate-limit threshold evidence',
       hasThresholdEvidence(abuseThresholds),
-      'requires per-IP minute thresholds for /api/search and /api/course'
+      'requires per-IP minute thresholds for /api/search, /api/course, and /api/feedback'
     ),
     result(
       'D1 backup ref evidence',

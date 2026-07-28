@@ -11,6 +11,7 @@ import type {
   CourseDetailDto,
   CourseExplorerUrlInput,
   CourseInstructorDto,
+  CourseRegistrationSummaryDto,
   CourseRequirementDto,
   CourseSectionDto,
   CourseSummaryDto,
@@ -33,6 +34,7 @@ type CourseSource = Pick<
   | 'title'
   | 'description'
   | 'credit_hours'
+  | 'credit_hours_text'
   | 'year'
   | 'term'
   | 'avg_gpa'
@@ -60,6 +62,7 @@ type CourseSectionReadModel = Section & {
 type CourseSummaryDtoOptions = {
   requirements?: CourseRequirementDto[];
   medianGpa?: number | null;
+  registrationSummary?: CourseRegistrationSummaryDto;
 };
 
 type CourseDetailDtoOptions = CourseSummaryDtoOptions & {
@@ -177,6 +180,7 @@ export function toCourseDto(
     title: course.title,
     description: course.description ?? null,
     creditHours: course.credit_hours ?? null,
+    creditHoursText: course.credit_hours_text ?? null,
     year: course.year,
     term: course.term,
     primaryInstructor: course.primary_instructor ?? null,
@@ -186,7 +190,7 @@ export function toCourseDto(
       medianGpa: options.medianGpa ?? course.median_gpa ?? null,
       gpaSampleSize: course.gpa_sample_size ?? null,
       qualityScore: course.quality_score ?? null,
-      workloadScore: course.difficulty_score ?? null,
+      instructorDifficultyScore: course.difficulty_score ?? null,
     },
     catalog: {
       courseInfo: course.course_info ?? null,
@@ -200,6 +204,9 @@ export function toCourseDto(
       registrationNotes: course.registration_notes ?? null,
       approvalCode: course.approval_code ?? null,
     },
+    ...(options.registrationSummary
+      ? { registrationSummary: options.registrationSummary }
+      : {}),
     requirements: options.requirements ?? [],
     links: {
       courseExplorerUrl: buildCourseExplorerCourseUrl(course),

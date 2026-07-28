@@ -157,11 +157,17 @@ Default thresholds:
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/discover-terms"
 ```
 
-2. If an active or upcoming term is stale, trigger the bounded active-term sync:
+2. If an active or upcoming term is stale, trigger the full coordinated
+active-term sync. It dispatches bounded internal batches, but only publishes
+term freshness and prunes subjects removed from Course Explorer after every
+authoritative subject succeeds:
 
 ```bash
-curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-active"
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-active/full"
 ```
+
+`POST /admin/sync-active?offset=...&limit=...` remains a bounded diagnostic or
+repair tool. Its pages are intentionally partial and do not finalize a term.
 
 3. If a retained current, upcoming, or historical term needs a complete subject-by-subject backfill, use the paginated backfill runner after creating and restore-verifying a D1 Time Travel backup:
 
@@ -185,7 +191,7 @@ Use `--max-pages 1` for a bounded smoke page or `--start-offset <n>` to resume f
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-gpa"
 ```
 
-5. If RMP is stale and `RMP_AUTH_TOKEN` is configured, dispatch RMP sync. The admin RMP sync waits for RMP batches to write to D1 and then rebuilds active/registrable instructor links and public quality/workload scores:
+5. If RMP is stale and `RMP_AUTH_TOKEN` is configured, dispatch RMP sync. The admin RMP sync waits for RMP batches to write to D1 and then rebuilds active/registrable instructor links and public quality/instructor-difficulty scores:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/sync-rmp"
@@ -198,7 +204,7 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admi
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$STAGING_API_BASE_URL/admin/enrich-scoring"
 ```
 
-`enrich-gpa` propagates course-level GPA aggregates across every retained term, and `enrich-scoring` rebuilds instructor GPA/RMP links for every active or registrable term before recomputing public quality/workload scores.
+`enrich-gpa` propagates course-level GPA aggregates across every retained term, and `enrich-scoring` rebuilds instructor GPA/RMP links for every active or registrable term before recomputing public quality/instructor-difficulty scores.
 
 7. After broad term backfills or embedding metadata changes, rebuild semantic-search embeddings. Repeat with `offset` increased by the response's `processed` count until `hasMore` is false:
 

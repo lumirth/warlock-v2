@@ -112,10 +112,6 @@ export async function resolveQuery(
         plan.filters.status = hint.value;
         break;
 
-      case 'workload':
-        plan.filters.workload = hint.value;
-        break;
-
       case 'negation': {
         const negValue = hint.value;
         plan.filters.not = plan.filters.not || {};

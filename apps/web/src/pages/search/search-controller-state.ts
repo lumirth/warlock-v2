@@ -30,6 +30,7 @@ type SearchSessionState = {
   loadingMore: boolean
   error: string | null
   sort: SearchSort
+  committedSort: SearchSort
 }
 
 export type SearchControllerState = {
@@ -85,6 +86,7 @@ const INITIAL_SEARCH_SESSION_STATE: SearchSessionState = {
   loadingMore: false,
   error: null,
   sort: DEFAULT_SEARCH_SORT,
+  committedSort: DEFAULT_SEARCH_SORT,
 }
 
 export const INITIAL_SEARCH_CONTROLLER_STATE: SearchControllerState = {
@@ -139,13 +141,22 @@ export function searchControllerReducer(
         sort:
           action.mode === 'append'
             ? state.session.sort
-            : action.response.meta.nextRequest.sort ?? action.requestSort,
+            : (action.response.meta.nextRequest.sort ?? action.requestSort),
+        committedSort:
+          action.mode === 'append'
+            ? state.session.committedSort
+            : (action.response.meta.nextRequest.sort ?? action.requestSort),
       })
     case 'search/failed':
       return updateSession(
         state,
         action.mode === 'append' || action.mode === 'refresh'
-          ? { error: action.message }
+          ? {
+              error: action.message,
+              ...(action.mode === 'refresh'
+                ? { sort: state.session.committedSort }
+                : {}),
+            }
           : {
               error: action.message,
               meta: null,
@@ -172,6 +183,8 @@ export function searchControllerReducer(
           error: null,
           loading: false,
           loadingMore: false,
+          sort: DEFAULT_SEARCH_SORT,
+          committedSort: DEFAULT_SEARCH_SORT,
         },
       }
   }
@@ -191,12 +204,14 @@ function searchStartedState(
     sort: action.sort,
   })
 
-  if (action.mode === 'replace') {
-    nextState = updateDraft(nextState, { query: action.request.query })
+  if (action.mode === 'replace' || action.mode === 'refine') {
+    nextState = updateDraft(nextState, {
+      query: action.request.query,
+      inputDirty: false,
+    })
   }
 
   if (!isAppend) {
-    nextState = updateDraft(nextState, { inputDirty: false })
     nextState = updateSession(nextState, {
       activeRequest: withoutPaginationOffset(action.request),
     })

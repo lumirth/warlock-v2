@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
 import { feedbackRoutes } from '../feedback.js';
+import {
+  FEEDBACK_BODY_MAX_BYTES,
+  FEEDBACK_METADATA_MAX_ENTRIES,
+} from '@uiuc-course-search/query-types';
 
 type FeedbackRouteBindings = {
   DB: D1Database;
@@ -107,10 +111,61 @@ describe('Feedback Routes', () => {
         page: 'course',
         subject: 'CS',
         number: '374',
+        message: 'The score shown does not match the evidence.',
       }),
     }, { DB: db });
 
     expect(res.status).toBe(500);
     await expect(res.json()).resolves.toEqual({ error: 'feedback could not be saved' });
+  });
+
+  it('rejects oversized bodies before parsing or writing', async () => {
+    const { db, prepare } = createDb();
+    const app = createApp();
+
+    const res = await app.request('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'other',
+        issue: 'other',
+        page: 'search',
+        message: 'x'.repeat(FEEDBACK_BODY_MAX_BYTES),
+      }),
+    }, { DB: db });
+
+    expect(res.status).toBe(413);
+    await expect(res.json()).resolves.toEqual({
+      error: `feedback body must be at most ${FEEDBACK_BODY_MAX_BYTES} bytes`,
+    });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('rejects metadata entry floods before writing', async () => {
+    const { db, prepare } = createDb();
+    const app = createApp();
+    const metadata = Object.fromEntries(
+      Array.from(
+        { length: FEEDBACK_METADATA_MAX_ENTRIES + 1 },
+        (_, index) => [`key-${index}`, index],
+      ),
+    );
+
+    const res = await app.request('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'other',
+        issue: 'other',
+        page: 'search',
+        metadata,
+      }),
+    }, { DB: db });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({
+      error: `metadata must contain at most ${FEEDBACK_METADATA_MAX_ENTRIES} entries`,
+    });
+    expect(prepare).not.toHaveBeenCalled();
   });
 });

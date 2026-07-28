@@ -2,7 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { searchTermRank } from '@uiuc-course-search/query-types';
 import { errorFields, logger } from '../observability/logger.js';
 import { makeTermId } from '../db/ids.js';
-import { upsertTermState } from '../db/term-state-repository.js';
+import { upsertDiscoveredTermState } from '../db/term-state-repository.js';
 import type { TermStateStatus } from '../db/types.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
@@ -225,6 +225,7 @@ export async function discoverAndClassifyTerms(
   const terms = await discoverAllTerms(config);
   const classifications: TermClassification[] = [];
   const now = config.now ?? new Date();
+  const checkedAt = Math.floor(now.getTime() / 1000);
 
   for (const term of terms) {
     try {
@@ -238,18 +239,16 @@ export async function discoverAndClassifyTerms(
         : await classifyTerm(config, term);
       classifications.push(classification);
 
-      // Update term_state in database
-      await upsertTermState(db, {
+      await upsertDiscoveredTermState(db, {
         term_id: term.termId,
         year: term.year,
         term: term.term,
         status: classification.status,
-        last_checked: Math.floor(Date.now() / 1000),
-        last_synced: null,
-        subjects_count: null,
-        courses_count: null,
-        sections_count: null,
-        sync_errors: null,
+        last_checked: checkedAt,
+      }, {
+        // Retention owns which historical terms remain materialized. Discovery
+        // may reclassify an existing row but must not recreate a pruned one.
+        allowInsert: classification.status !== 'historical',
       });
     } catch (error) {
       logger.error('termDiscovery.classifyTerm.failed', { termId: term.termId, ...errorFields(error) });

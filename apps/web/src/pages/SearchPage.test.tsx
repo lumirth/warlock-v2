@@ -1,10 +1,4 @@
-import {
-  act,
-  fireEvent,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { SearchResponseDto } from '@uiuc-course-search/query-types'
 import {
@@ -23,13 +17,16 @@ import {
 describe('SearchPage request state', () => {
   it('shows quiet example queries before the first search and runs them on click', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse([
-        course({
-          id: 'CS-225-2026-spring',
-          number: '225',
-          title: 'Data Structures',
-        }),
-      ], 'CS 225')
+      searchResponse(
+        [
+          course({
+            id: 'CS-225-2026-spring',
+            number: '225',
+            title: 'Data Structures',
+          }),
+        ],
+        'CS 225'
+      )
     )
 
     renderSearchPage()
@@ -115,14 +112,17 @@ describe('SearchPage request state', () => {
 
     await act(async () => {
       second.resolve(
-        searchResponse([
-          course({
-            id: 'STAT-100-2026-spring',
-            subject: 'STAT',
-            number: '100',
-            title: 'Statistics',
-          }),
-        ], 'second')
+        searchResponse(
+          [
+            course({
+              id: 'STAT-100-2026-spring',
+              subject: 'STAT',
+              number: '100',
+              title: 'Statistics',
+            }),
+          ],
+          'second'
+        )
       )
       await second.promise
     })
@@ -131,13 +131,16 @@ describe('SearchPage request state', () => {
 
     await act(async () => {
       first.resolve(
-        searchResponse([
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-          }),
-        ], 'first')
+        searchResponse(
+          [
+            course({
+              id: 'CS-225-2026-spring',
+              number: '225',
+              title: 'Data Structures',
+            }),
+          ],
+          'first'
+        )
       )
       await first.promise
     })
@@ -148,21 +151,24 @@ describe('SearchPage request state', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('submits the primary search through the form without a standalone search button', async () => {
+  it('offers a labeled button for submitting the primary search', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse([
-        course({
-          id: 'CS-225-2026-spring',
-          number: '225',
-          title: 'Data Structures',
-        }),
-      ], 'cs 225')
+      searchResponse(
+        [
+          course({
+            id: 'CS-225-2026-spring',
+            number: '225',
+            title: 'Data Structures',
+          }),
+        ],
+        'cs 225'
+      )
     )
 
     renderSearchPage()
 
     setQuery('cs 225')
-    submitSearch()
+    fireEvent.click(screen.getByRole('button', { name: /search courses/i }))
 
     await screen.findByText(/CS 225: Data Structures/i)
     expectSearchCalledWithRequest({
@@ -170,8 +176,8 @@ describe('SearchPage request state', () => {
       pagination: { limit: 20, offset: 0 },
     })
     expect(
-      screen.queryByRole('button', { name: /^search$/i })
-    ).not.toBeInTheDocument()
+      screen.getByRole('button', { name: /search courses/i })
+    ).toBeInTheDocument()
   })
 
   it('clears stale results when a new search fails', async () => {
@@ -181,13 +187,16 @@ describe('SearchPage request state', () => {
 
     vi.mocked(api.search)
       .mockResolvedValueOnce(
-        searchResponse([
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-          }),
-        ], 'cs 225')
+        searchResponse(
+          [
+            course({
+              id: 'CS-225-2026-spring',
+              number: '225',
+              title: 'Data Structures',
+            }),
+          ],
+          'cs 225'
+        )
       )
       .mockRejectedValueOnce(new Error('Search failed'))
 
@@ -215,29 +224,32 @@ describe('SearchPage request state', () => {
 
   it('renders public match evidence chips for search results', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse([
-        course({
-          id: 'CS-225-2026-spring',
-          number: '225',
-          title: 'Data Structures',
-          matchEvidence: [
-            {
-              kind: 'course_code',
-              label: 'Course CS 225',
-              source: 'filter',
-              weight: 'hard',
-              value: 'CS 225',
-            },
-            {
-              kind: 'keyword',
-              label: 'Strong keyword match',
-              source: 'keyword',
-              weight: 'rank',
-              value: '1',
-            },
-          ],
-        }),
-      ], 'cs 225')
+      searchResponse(
+        [
+          course({
+            id: 'CS-225-2026-spring',
+            number: '225',
+            title: 'Data Structures',
+            matchEvidence: [
+              {
+                kind: 'course_code',
+                label: 'Course CS 225',
+                source: 'filter',
+                weight: 'hard',
+                value: 'CS 225',
+              },
+              {
+                kind: 'keyword',
+                label: 'Strong keyword match',
+                source: 'keyword',
+                weight: 'rank',
+                value: '1',
+              },
+            ],
+          }),
+        ],
+        'cs 225'
+      )
     )
 
     renderSearchPage()
@@ -253,22 +265,25 @@ describe('SearchPage request state', () => {
     expect(screen.queryByText(/Match 0\./i)).not.toBeInTheDocument()
   })
 
-  it('surfaces quality, workload, instructor rating, and GPA on result cards', async () => {
+  it('surfaces evidence-limited quality, difficulty, rating, and GPA signals', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(
-        searchResponse([
+      searchResponse(
+        [
           course({
             id: 'CS-225-2026-spring',
             number: '225',
             title: 'Data Structures',
             metrics: {
               qualityScore: 88,
-              workloadScore: 42,
+              instructorDifficultyScore: 42,
               primaryInstructorRating: 4.8,
               avgGpa: 3.62,
               gpaSampleSize: 820,
             },
           }),
-      ], 'cs 225')
+        ],
+        'cs 225'
+      )
     )
 
     renderSearchPage()
@@ -278,51 +293,134 @@ describe('SearchPage request state', () => {
 
     const title = await screen.findByText(/CS 225: Data Structures/i)
     const card = title.closest('a')
-    expect(within(card!).getByText('Quality')).toBeInTheDocument()
+    expect(within(card!).getByText('Quality signal')).toBeInTheDocument()
     expect(within(card!).getByText('Excellent')).toBeInTheDocument()
     expect(within(card!).queryByText('B+')).not.toBeInTheDocument()
-    expect(within(card!).getByText('Workload')).toBeInTheDocument()
-    expect(within(card!).getByText('Easy')).toBeInTheDocument()
-    expect(within(card!).getByText('Instructor')).toBeInTheDocument()
-    expect(within(card!).getByText('4.8')).toBeInTheDocument()
+    expect(within(card!).getByText('Instructor difficulty')).toBeInTheDocument()
+    expect(within(card!).getByText('Lower')).toBeInTheDocument()
+    expect(within(card!).getByText('RMP rating')).toBeInTheDocument()
+    expect(within(card!).getByText('4.8 / 5')).toBeInTheDocument()
     expect(within(card!).getByText('Avg GPA')).toBeInTheDocument()
     expect(within(card!).getByText('3.62')).toBeInTheDocument()
     expect(
-      within(card!).getAllByTitle('Based on 820 records').length
+      within(card!).getAllByTitle(
+        'Evidence-limited GPA and linked RMP composite; 820 GPA records'
+      ).length
     ).toBeGreaterThanOrEqual(1)
     expect(
       within(card!).getAllByTitle('Based on 820 GPA records').length
     ).toBeGreaterThanOrEqual(1)
   })
 
+  it('warns when degraded retrieval makes the result set incomplete', async () => {
+    const response = searchResponse([course()], 'cs 225')
+    response.meta.retrieval = { degraded: true }
+    response.pagination.totalResults = 1
+    response.pagination.countIsComplete = false
+    vi.mocked(api.search).mockResolvedValueOnce(response)
+
+    renderSearchPage()
+    setQuery('cs 225')
+    submitSearch()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/partial search results/i)
+    expect(alert).toHaveTextContent(/results may be incomplete/i)
+    expect(screen.getByText('At least 1 result')).toBeInTheDocument()
+    expect(screen.getByText('Showing 1 of at least 1')).toBeInTheDocument()
+  })
+
+  it('discloses when a sort only orders the bounded semantic match window', async () => {
+    const response = searchResponse(
+      [course()],
+      {
+        query: 'machine learning',
+        sort: { field: 'gpa', direction: 'desc' },
+      }
+    )
+    response.meta.retrieval = {
+      degraded: false,
+      sortLimitedToRetrievedWindow: true,
+    }
+    vi.mocked(api.search).mockResolvedValueOnce(response)
+
+    renderSearchPage()
+    setQuery('machine learning')
+    submitSearch()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/sorted within retrieved topic matches/i)
+    expect(alert).toHaveTextContent(/not every course in the catalog/i)
+  })
+
+  it('surfaces section availability and conservative freshness on result cards', async () => {
+    vi.mocked(api.search).mockResolvedValueOnce(
+      searchResponse(
+        [
+          course({
+            registrationSummary: {
+              total: 6,
+              open: 2,
+              restricted: 1,
+              waitlisted: 0,
+              closed: 3,
+              cancelled: 0,
+              unknown: 0,
+              lastSynced: 1780358400,
+            },
+          }),
+        ],
+        'cs 225'
+      )
+    )
+
+    renderSearchPage()
+    setQuery('cs 225')
+    submitSearch()
+
+    const title = await screen.findByText(/CS 225: Data Structures/i)
+    const card = title.closest('a')
+    expect(within(card!).getByText('2 open')).toBeInTheDocument()
+    expect(
+      within(card!).getByText(/1 restricted · 6 total/i)
+    ).toBeInTheDocument()
+    expect(within(card!).getByText(/all checked since/i)).toBeInTheDocument()
+  })
+
   it('switches to table view and refetches when a sortable table header is clicked', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce(
-        searchResponse([
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-            metrics: {
-              qualityScore: 88,
-              workloadScore: 42,
-              primaryInstructorRating: 4.8,
-              avgGpa: 3.62,
-              gpaSampleSize: 820,
-            },
-          }),
-        ], 'online stats class')
+        searchResponse(
+          [
+            course({
+              id: 'CS-225-2026-spring',
+              number: '225',
+              title: 'Data Structures',
+              metrics: {
+                qualityScore: 88,
+                instructorDifficultyScore: 42,
+                primaryInstructorRating: 4.8,
+                avgGpa: 3.62,
+                gpaSampleSize: 820,
+              },
+            }),
+          ],
+          'online stats class'
+        )
       )
       .mockResolvedValueOnce(
-        searchResponse([
-          course({
-            id: 'STAT-100-2026-spring',
-            subject: 'STAT',
-            number: '100',
-            title: 'Statistics',
-            metrics: { avgGpa: 3.82 },
-          }),
-        ], 'online stats class')
+        searchResponse(
+          [
+            course({
+              id: 'STAT-100-2026-spring',
+              subject: 'STAT',
+              number: '100',
+              title: 'Statistics',
+              metrics: { avgGpa: 3.82 },
+            }),
+          ],
+          'online stats class'
+        )
       )
 
     renderSearchPage()
@@ -356,13 +454,16 @@ describe('SearchPage request state', () => {
 
   it('persists the result view preference across renders', async () => {
     vi.mocked(api.search).mockResolvedValue(
-      searchResponse([
-        course({
-          id: 'CS-225-2026-spring',
-          number: '225',
-          title: 'Data Structures',
-        }),
-      ], 'cs 225')
+      searchResponse(
+        [
+          course({
+            id: 'CS-225-2026-spring',
+            number: '225',
+            title: 'Data Structures',
+          }),
+        ],
+        'cs 225'
+      )
     )
 
     const rendered = renderSearchPage()
@@ -385,14 +486,19 @@ describe('SearchPage request state', () => {
 
   it('de-emphasizes historical result cards and places the status next to the term', async () => {
     vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse([
-        course({
-          id: 'CS-225-2026-spring',
-          number: '225',
-          title: 'Data Structures',
-          warnings: [{ kind: 'historical', message: 'Historical term result' }],
-        }),
-      ], 'cs 225')
+      searchResponse(
+        [
+          course({
+            id: 'CS-225-2026-spring',
+            number: '225',
+            title: 'Data Structures',
+            warnings: [
+              { kind: 'historical', message: 'Historical term result' },
+            ],
+          }),
+        ],
+        'cs 225'
+      )
     )
 
     renderSearchPage()

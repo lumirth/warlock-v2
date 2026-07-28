@@ -162,6 +162,7 @@ export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promis
   const baseUrl = requiredEnv(env, 'STAGING_API_BASE_URL');
   const adminToken = requiredEnv(env, 'STAGING_ADMIN_TOKEN');
   const internalToken = requiredEnv(env, 'STAGING_INTERNAL_TOKEN');
+  const webOrigin = requiredEnv(env, 'STAGING_WEB_ORIGIN');
   const smokeSubject = env.STAGING_SMOKE_SUBJECT ?? 'CS';
   const smokeNumber = env.STAGING_SMOKE_NUMBER ?? '225';
   const smokeTerm = env.STAGING_SMOKE_TERM ?? 'spring';
@@ -230,23 +231,17 @@ export async function runStagingSmoke(options: StagingSmokeOptions = {}): Promis
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Origin: webOrigin,
         'User-Agent': 'uiuc-course-search-staging-smoke',
       },
-      body: JSON.stringify({
-        kind: 'search_results',
-        issue: 'expected_different_results',
-        page: 'search',
-        query: 'professor fagen algorithms',
-        expected: 'CS 225 with Wade Fagen-Ulmschneider',
-        message: `automated staging smoke ${smokeRunId}`,
-        anonymousSessionId: smokeRunId,
-        metadata: { smoke: true },
-      }),
+      // Exercise the origin and validation boundary without polluting the
+      // production feedback corpus with a synthetic row.
+      body: JSON.stringify({ smokeRunId }),
     }),
     fetcher,
     (response, body) => {
-      if (response.status !== 202) return `expected 202, got ${response.status}`;
-      if (body?.status !== 'accepted') return 'expected accepted feedback response';
+      if (response.status !== 400) return `expected validation 400, got ${response.status}`;
+      if (typeof body?.error !== 'string') return 'expected validation error response';
       return null;
     }
   ));

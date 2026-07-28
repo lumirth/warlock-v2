@@ -36,11 +36,35 @@ describe("Worker API integration", () => {
 
     expect(response.status).toBe(200);
     const data = await response.json() as {
-      results: Array<{ course: { id: string } }>;
+      results: Array<{
+        course: {
+          id: string;
+          registrationSummary?: {
+            total: number;
+            open: number;
+            restricted: number;
+            waitlisted: number;
+            closed: number;
+            cancelled: number;
+            unknown: number;
+            lastSynced: number | null;
+          };
+        };
+      }>;
       pagination: { totalResults: number };
     };
     expect(data.results[0]?.course.id).toBe(COURSE_ID);
     expect(data.pagination.totalResults).toBe(1);
+    expect(data.results[0]?.course.registrationSummary).toEqual({
+      total: 1,
+      open: 1,
+      restricted: 0,
+      waitlisted: 0,
+      closed: 0,
+      cancelled: 0,
+      unknown: 0,
+      lastSynced: expect.any(Number),
+    });
   });
 
   it("executes filter-only requirement search against local D1", async () => {
@@ -57,6 +81,43 @@ describe("Worker API integration", () => {
     expect(data.pagination.totalResults).toBe(1);
   });
 
+  it("sorts structured results in D1 before applying the result limit", async () => {
+    const response = await SELF.fetch(
+      "http://local.test/api/search?subject=MATH&sort=gpa&direction=desc&limit=1&scope=all",
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json() as {
+      results: Array<{ course: { id: string } }>;
+      pagination: { totalResults: number };
+    };
+    expect(data.results.map(({ course }) => course.id))
+      .toEqual(["MATH-102-2026-spring"]);
+    expect(data.pagination.totalResults).toBe(2);
+  });
+
+  it("applies section-code precedence when registration codes conflict", async () => {
+    const openResponse = await SELF.fetch(
+      "http://local.test/api/search?subject=MATH&status=open&year=2026&term=spring&scope=all",
+    );
+    const closedResponse = await SELF.fetch(
+      "http://local.test/api/search?subject=MATH&status=closed&year=2026&term=spring&scope=all",
+    );
+
+    expect(openResponse.status).toBe(200);
+    expect(closedResponse.status).toBe(200);
+    const openData = await openResponse.json() as {
+      results: Array<{ course: { id: string } }>;
+    };
+    const closedData = await closedResponse.json() as {
+      results: Array<{ course: { id: string } }>;
+    };
+    expect(openData.results.map(({ course }) => course.id))
+      .toEqual(["MATH-102-2026-spring"]);
+    expect(closedData.results.map(({ course }) => course.id))
+      .toEqual(["MATH-101-2026-spring"]);
+  });
+
   it("preserves public search validation", async () => {
     const response = await SELF.fetch(
       "http://local.test/api/search?q=CS&limit=999999",
@@ -66,6 +127,32 @@ describe("Worker API integration", () => {
     await expect(response.json()).resolves.toEqual({
       error: "limit must be between 1 and 50",
     });
+  });
+
+  it("restricts feedback writes to the configured frontend origin", async () => {
+    const payload = JSON.stringify({
+      kind: "search_results",
+      issue: "expected_different_results",
+      page: "search",
+      query: "data structures",
+      expected: "More relevant data structures results",
+    });
+    const blocked = await SELF.fetch("http://local.test/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    });
+    expect(blocked.status).toBe(403);
+
+    const accepted = await SELF.fetch("http://local.test/api/feedback", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://local.test",
+      },
+      body: payload,
+    });
+    expect(accepted.status).toBe(202);
   });
 
   it("serves cached course detail through local D1", async () => {
@@ -84,7 +171,7 @@ describe("Worker API integration", () => {
           gpaSampleSize: number | null;
           primaryInstructorRating: number | null;
           qualityScore: number | null;
-          workloadScore: number | null;
+          instructorDifficultyScore: number | null;
         };
         sections?: Array<{
           crn: string;
@@ -107,7 +194,7 @@ describe("Worker API integration", () => {
           gpaSampleSize: 100,
           primaryInstructorRating: null,
           qualityScore: 88,
-          workloadScore: 42,
+          instructorDifficultyScore: 42,
         },
       },
       cache: {
@@ -128,6 +215,10 @@ async function seedSearchFixture(): Promise<void> {
     testEnv.DB.prepare(`
       INSERT INTO subjects (id, name, last_synced)
       VALUES ('CS', 'Computer Science', ?)
+    `).bind(now),
+    testEnv.DB.prepare(`
+      INSERT INTO subjects (id, name, last_synced)
+      VALUES ('MATH', 'Mathematics', ?)
     `).bind(now),
     testEnv.DB.prepare(`
       INSERT INTO term_state (
@@ -160,5 +251,27 @@ async function seedSearchFixture(): Promise<void> {
       )
       VALUES (?, 'QR', 'Quantitative Reasoning', 'QR1', 'Quantitative Reasoning I')
     `).bind(COURSE_ID),
+    testEnv.DB.prepare(`
+      INSERT INTO courses (
+        id, subject, number, title, description, credit_hours, subject_id,
+        year, term, avg_gpa, last_synced
+      )
+      VALUES
+        ('MATH-101-2026-spring', 'MATH', '101', 'Closed by section code',
+          'Conflicting registration codes.', 3, 'MATH', 2026, 'spring', 2.1, ?),
+        ('MATH-102-2026-spring', 'MATH', '102', 'Open by section code',
+          'Conflicting registration codes.', 3, 'MATH', 2026, 'spring', 3.9, ?)
+    `).bind(now, now),
+    testEnv.DB.prepare(`
+      INSERT INTO sections (
+        id, crn, course_id, term_id, section_number, status,
+        section_status_code, status_code, last_synced
+      )
+      VALUES
+        ('2026-spring-22345', '22345', 'MATH-101-2026-spring', '2026-spring',
+          'A', 'Unknown', 'C', 'A', ?),
+        ('2026-spring-22346', '22346', 'MATH-102-2026-spring', '2026-spring',
+          'A', 'Unknown', 'A', 'C', ?)
+    `).bind(now, now),
   ]);
 }

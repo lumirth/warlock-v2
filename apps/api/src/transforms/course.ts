@@ -39,15 +39,35 @@ export function formatInstructorName(
   instructor: { firstName: string; lastName: string } | undefined
 ): string | null {
   if (!instructor) return null;
-  const first = instructor.firstName?.charAt(0);
+  const first = instructor.firstName?.trim();
+  const last = instructor.lastName?.trim();
+  if (!last) return null;
   return first
-    ? `${instructor.lastName}, ${first}`
-    : instructor.lastName;
+    ? `${last}, ${first}`
+    : last;
 }
 
 function formatInstructors(instructors: string[]): string | null {
   if (instructors.length === 0) return null;
   return instructors.join('; ');
+}
+
+export function parseCourseCreditHours(
+  value: string | null | undefined,
+): { exact: number | null; text: string | null } {
+  const text = value?.replace(/\s+/g, ' ').trim() || null;
+  if (!text) return { exact: null, text: null };
+
+  const exactMatch = text.match(
+    /^(\d+(?:\.\d+)?)\s*(?:(?:credit\s*)?(?:hours?|hrs?))?\.?$/i,
+  );
+  if (!exactMatch) return { exact: null, text };
+
+  const exact = Number(exactMatch[1]);
+  return {
+    exact: Number.isFinite(exact) && exact > 0 ? exact : null,
+    text,
+  };
 }
 
 export function fromSubjectCascade(
@@ -157,6 +177,7 @@ function transformCourseExplorerCourseToSnapshot({
     : Array.from(allInstructors);
 
   const genEdCategories = flattenGenEdCategories(course);
+  const courseCredits = parseCourseCreditHours(course.creditHours);
 
   return {
     course: {
@@ -165,7 +186,8 @@ function transformCourseExplorerCourseToSnapshot({
       number: courseNumber,
       title: course.label,
       description: course.description || null,
-      credit_hours: parseInt(course.creditHours, 10) || null,
+      credit_hours: courseCredits.exact,
+      credit_hours_text: courseCredits.text,
       year,
       term,
       primary_instructor: formatInstructors(primaryInstructors),

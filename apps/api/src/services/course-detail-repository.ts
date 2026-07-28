@@ -13,6 +13,7 @@ import type {
 } from './course-detail-types.js';
 
 type MeetingRow = CourseDetailSectionReadModel['meetings'][number];
+const MEETING_SECTION_ID_CHUNK_SIZE = 80;
 
 export class CourseDetailRepository {
   constructor(private readonly db: D1Database) {}
@@ -49,6 +50,7 @@ export class CourseDetailRepository {
         g.sample_size as gpa_sample_size
       FROM instructor_course_links l
       LEFT JOIN rmp_cache r ON l.rmp_id = r.rmp_id
+        AND r.expires_at > unixepoch()
       LEFT JOIN gpa_stats g ON l.gpa_id = g.id
       WHERE l.term_id = ? AND l.subject = ? AND l.number = ?
     `).bind(context.resolvedTerm.termId, context.subject, context.number).all();
@@ -120,24 +122,34 @@ export class CourseDetailRepository {
   private async loadMeetingsBySection(
     sectionIds: string[],
   ): Promise<Map<string, MeetingRow[]>> {
-    const placeholders = sectionIds.map(() => '?').join(',');
-    const meetings = await this.db.prepare(`
-      SELECT
-        m.*,
-        GROUP_CONCAT(i.display_name, ';') as instructor_names
-      FROM meetings m
-      LEFT JOIN meeting_instructors mi ON mi.meeting_id = m.id
-      LEFT JOIN instructors i ON i.id = mi.instructor_id
-      WHERE m.section_id IN (${placeholders})
-      GROUP BY m.id
-      ORDER BY m.section_id, m.meeting_index
-    `).bind(...sectionIds).all<MeetingRow>();
-
     const meetingsBySection = new Map<string, MeetingRow[]>();
-    for (const meeting of meetings.results) {
-      const list = meetingsBySection.get(meeting.section_id) ?? [];
-      list.push(meeting);
-      meetingsBySection.set(meeting.section_id, list);
+    for (
+      let offset = 0;
+      offset < sectionIds.length;
+      offset += MEETING_SECTION_ID_CHUNK_SIZE
+    ) {
+      const chunk = sectionIds.slice(
+        offset,
+        offset + MEETING_SECTION_ID_CHUNK_SIZE,
+      );
+      const placeholders = chunk.map(() => '?').join(',');
+      const meetings = await this.db.prepare(`
+        SELECT
+          m.*,
+          GROUP_CONCAT(i.display_name, ';') as instructor_names
+        FROM meetings m
+        LEFT JOIN meeting_instructors mi ON mi.meeting_id = m.id
+        LEFT JOIN instructors i ON i.id = mi.instructor_id
+        WHERE m.section_id IN (${placeholders})
+        GROUP BY m.id
+        ORDER BY m.section_id, m.meeting_index
+      `).bind(...chunk).all<MeetingRow>();
+
+      for (const meeting of meetings.results) {
+        const list = meetingsBySection.get(meeting.section_id) ?? [];
+        list.push(meeting);
+        meetingsBySection.set(meeting.section_id, list);
+      }
     }
 
     return meetingsBySection;

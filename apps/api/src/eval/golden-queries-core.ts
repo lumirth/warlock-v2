@@ -80,7 +80,7 @@ export const CORE_GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 11,
     query: "easy humanities gen ed",
-    expected_filters: { workload: "easy", requirement: requirement("HUM") },
+    expected_filters: { requirement: requirement("HUM") },
     invariants: { requirement: "HUM" },
     category: "structured",
     notes: "Residual should NOT contain 'gen ed'"
@@ -155,7 +155,7 @@ export const CORE_GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 22,
     query: "easy humanities MWF afternoon",
-    expected_filters: { workload: "easy", requirement: requirement("HUM"), days: "MWF", time: "afternoon" },
+    expected_filters: { requirement: requirement("HUM"), days: "MWF", time: "afternoon" },
     invariants: { requirement: "HUM" },
     category: "structured"
   },
@@ -225,7 +225,7 @@ export const CORE_GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 32,
     query: "gened:HUM easy",
-    expected_filters: { requirement: requirement("HUM"), workload: "easy" },
+    expected_filters: { requirement: requirement("HUM") },
     category: "power_syntax"
   },
   {
@@ -339,16 +339,16 @@ export const CORE_GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 47,
     query: "easy online gen ed",
-    expected_filters: { workload: "easy", online: true },
+    expected_filters: { online: true },
     category: "structured",
     notes: "Residual should NOT contain 'gen ed'"
   },
   {
     id: 48,
     query: "gpa booster",
-    expected_filters: { workload: "easy" },
-    category: "structured",
-    notes: "Should not leave 'booster' in residual"
+    expected_filters: {},
+    category: "semantic",
+    notes: "Subjective language remains searchable and does not imply instructor difficulty"
   },
   {
     id: 49,

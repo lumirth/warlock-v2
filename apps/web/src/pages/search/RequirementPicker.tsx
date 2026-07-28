@@ -11,17 +11,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { Field, FieldLabel } from '@/components/ui/field'
-import type { SelectOption } from './search-options'
-
-export const REQUIREMENT_MATCH_OPTIONS = [
-  { value: 'all', label: 'All selected' },
-  { value: 'any', label: 'Any selected' },
-] as const satisfies SelectOption[]
 
 export function requirementMatchMode(
   requirement: SearchRequestFiltersDto['requirement']
 ): Extract<RequirementFilterMode, 'any' | 'all'> {
-  return requirement?.mode === 'any' ? 'any' : 'all'
+  return requirement?.mode === 'all' ? 'all' : 'any'
 }
 
 export function requirementFilterFromCodes(
@@ -56,7 +50,7 @@ export function RequirementPicker({
   }
 
   return (
-    <Field className="rounded-md border bg-background px-3 py-3">
+    <Field className="bg-background rounded-md border px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <FieldLabel asChild>
@@ -87,6 +81,27 @@ export function RequirementPicker({
       </div>
       <Collapsible open={open}>
         <CollapsibleContent id="advanced-requirement-options">
+          {selectedCodes.size > 1 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-b pb-3">
+              <FieldLabel htmlFor="advanced-requirement-mode">Match</FieldLabel>
+              <select
+                id="advanced-requirement-mode"
+                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border bg-transparent px-2.5 text-sm outline-none focus-visible:ring-3"
+                value={mode}
+                onChange={(event) =>
+                  onChange(
+                    requirementFilterFromCodes(
+                      [...selectedCodes],
+                      event.currentTarget.value === 'all' ? 'all' : 'any'
+                    )
+                  )
+                }
+              >
+                <option value="any">Any selected category</option>
+                <option value="all">Every selected category</option>
+              </select>
+            </div>
+          ) : null}
           <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {GENED_REQUIREMENT_GROUPS.map((group) => (
               <div key={group.code} className="flex min-w-0 flex-col gap-2">
@@ -133,14 +148,14 @@ function RequirementOptionCheckbox({
   return (
     <label
       htmlFor={id}
-      className="flex min-w-0 cursor-pointer items-start gap-2 rounded-sm px-1 py-0.5 text-sm leading-5 hover:bg-muted/60"
+      className="hover:bg-muted/60 flex min-h-8 min-w-0 cursor-pointer items-start gap-2 rounded-sm px-1 py-1.5 text-sm leading-5"
     >
       <input
         id={id}
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(code, event.currentTarget.checked)}
-        className="mt-0.5 size-4 rounded-[var(--radius-sm)] border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="border-border text-primary accent-primary focus-visible:ring-ring focus-visible:ring-offset-background size-5 rounded-[var(--radius-sm)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       />
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>

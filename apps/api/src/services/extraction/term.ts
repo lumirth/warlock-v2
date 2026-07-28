@@ -3,19 +3,7 @@ import { isSearchTermFilter } from '@uiuc-course-search/query-types';
 import { createMetadata, maskMatches, type TextMatch } from './text.js';
 
 export function extractQuestionScaffolding(text: string): string {
-  const hasDifficultyQuestion =
-    /\b(?:is|are|was|were)\b.+\b(?:hard|easy|difficult|challenging|tough)\b/i.test(text)
-    || /\bhow\s+(?:hard|easy|difficult|challenging|tough)\s+(?:is|are|was|were)\b/i.test(text);
-
-  if (!hasDifficultyQuestion) {
-    return text;
-  }
-
-  return text
-    .replace(/\bhow\s+(?:hard|easy|difficult|challenging|tough)\s+(?:is|are|was|were)\b/gi, ' ')
-    .replace(/\b(?:is|are|was|were)\b/gi, ' ')
-    .replace(/\b(?:hard|easy|difficult|challenging|tough)\b/gi, ' ')
-    .replace(/\s+/g, ' ');
+  return text;
 }
 
 export function extractTerms(text: string, hints: Hint[]): string {

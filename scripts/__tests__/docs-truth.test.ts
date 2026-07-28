@@ -43,6 +43,24 @@ describe("active documentation", () => {
     expect(documented).toEqual(mounted);
   });
 
+  it("keeps top-level route documentation aligned with the public surface", () => {
+    const readme = readFileSync("README.md", "utf8");
+    const claude = readFileSync("CLAUDE.md", "utf8");
+    const publicRoutes = [
+      "/",
+      "/health",
+      "/api/search",
+      "/api/course/:subject/:number",
+      "/api/terms",
+      "/api/feedback",
+    ];
+
+    for (const route of publicRoutes) {
+      expect(readme, `README is missing ${route}`).toContain(route);
+      expect(claude, `CLAUDE.md is missing ${route}`).toContain(route);
+    }
+  });
+
   it("documents canonical term statuses and the sync-batch owner", () => {
     const apiReadme = readFileSync("apps/api/README.md", "utf8");
     for (const status of TERM_STATUS_VALUES) {
@@ -58,6 +76,23 @@ describe("active documentation", () => {
         /\b(?:search|course|api)[-_ ]?cache\s+(?:version\s+)?v\d+\b/i,
       );
     }
+  });
+
+  it("keeps staging deployment behind the migration and rebuild release gate", () => {
+    const rootPackage = JSON.parse(readFileSync("package.json", "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const apiPackage = JSON.parse(
+      readFileSync("apps/api/package.json", "utf8"),
+    ) as { scripts: Record<string, string> };
+
+    expect(apiPackage.scripts["deploy:staging"]).toBe(
+      "tsx ../../scripts/staging-api-release.ts",
+    );
+    expect(rootPackage.scripts["deploy:staging"]).toContain(
+      "deploy:api:staging && npm run deploy:web:staging",
+    );
+    expect(rootPackage.scripts["deploy:staging"]).not.toContain("concurrently");
   });
 });
 

@@ -35,6 +35,7 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
       retrievalPlan.inputs.filters,
       laneExecution.limit,
       retrievalPlan.inputs.scope,
+      retrievalPlan.inputs.sort,
     );
   },
   official_text: ({ db, retrievalPlan }, laneExecution) => {
@@ -46,6 +47,7 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
       retrievalPlan.inputs.filters,
       laneExecution.limit,
       retrievalPlan.inputs.scope,
+      retrievalPlan.inputs.sort,
     );
   },
   section_text: ({ db, retrievalPlan }, laneExecution) => {
@@ -55,6 +57,7 @@ const RETRIEVAL_LANE_EXECUTORS: Record<RetrievalLane, RetrievalLaneExecutor> = {
       retrievalPlan.inputs.filters,
       laneExecution.limit,
       retrievalPlan.inputs.scope,
+      retrievalPlan.inputs.sort,
     );
   },
   topic_semantic: async ({ db, vectorize, ai, retrievalPlan }, laneExecution) => {

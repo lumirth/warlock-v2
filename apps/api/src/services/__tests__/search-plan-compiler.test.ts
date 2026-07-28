@@ -59,8 +59,8 @@ describe("createSearchPlan", () => {
 
     expect(planning.plan.filters).toMatchObject({ subject: "CS", number: "225" });
     expect(planning.plan).not.toHaveProperty("rawQuery");
-    expect(planning.plan.filters.workload).toBeUndefined();
-    expect(planning.queryResidual).toBe("");
+    expect(planning.plan.filters.instructorDifficulty).toBeUndefined();
+    expect(planning.queryResidual).toBe("hard");
     expect(planning.compilerEvents.map((event) => event.type)).toEqual(
       expect.arrayContaining([
         "query_language",
@@ -84,30 +84,21 @@ describe("createSearchPlan", () => {
 
     expect(planning.plan.filters.subject).toBeUndefined();
     expect(planning.plan.filters).toMatchObject({
-      workload: "easy",
-      requirement: { mode: "single", codes: ["NAT"] },
       not: { subjects: ["MATH"] },
     });
+    expect(planning.plan.filters.requirement).toBeUndefined();
+    expect(planning.plan.filters.instructorDifficulty).toBeUndefined();
     expect(planning.plan.softPreferences).toMatchObject({
       lowMath: 0.86,
-      lowWorkload: expect.any(Number),
     });
-    expect(planning.queryResidual).toBe("");
+    expect(planning.queryResidual).toBe("easy science");
   });
 
-  it("uses context to resolve ambiguous subject/gened shorthand", async () => {
-    const culturalStudies = await createSearchPlan(db(), "easy cs");
-    expect(culturalStudies.plan.filters.subject).toBeUndefined();
-    expect(culturalStudies.plan.filters.requirement).toEqual({
-      mode: "single",
-      codes: ["CS"],
-    });
-    expect(culturalStudies.plan.ambiguities?.[0]).toMatchObject({
-      chosen: { type: "requirement", value: "CS", label: "Cultural Studies" },
-      alternatives: [
-        { type: "subject", value: "CS", label: "Computer Science" },
-      ],
-    });
+  it("keeps generic subjective language from changing subject meaning", async () => {
+    const subjective = await createSearchPlan(db(), "easy cs");
+    expect(subjective.plan.filters.subject).toBe("CS");
+    expect(subjective.plan.filters.requirement).toBeUndefined();
+    expect(subjective.queryResidual).toBe("easy");
 
     const computerScience = await createSearchPlan(db(), "computer science class");
     expect(computerScience.plan.filters.subject).toBe("CS");

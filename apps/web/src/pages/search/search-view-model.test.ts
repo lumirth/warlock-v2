@@ -11,9 +11,7 @@ type StateOverrides = {
   session?: Partial<SearchControllerState['session']>
 }
 
-function state(
-  overrides: StateOverrides = {}
-): SearchControllerState {
+function state(overrides: StateOverrides = {}): SearchControllerState {
   return {
     ...INITIAL_SEARCH_CONTROLLER_STATE,
     draft: {
@@ -37,6 +35,7 @@ function result(id: string): SearchCourseResultDto {
       title: `${subject} ${number}`,
       description: null,
       creditHours: null,
+      creditHoursText: null,
       year: 2026,
       term: 'spring',
       primaryInstructor: null,
@@ -46,7 +45,7 @@ function result(id: string): SearchCourseResultDto {
         medianGpa: null,
         gpaSampleSize: null,
         qualityScore: null,
-        workloadScore: null,
+        instructorDifficultyScore: null,
       },
       catalog: {
         courseInfo: null,
@@ -127,9 +126,38 @@ describe('buildSearchViewModel', () => {
     expect(model.showingResultsLabel).toBe('Showing top 1 of 4,509')
   })
 
+  it('labels a degraded result count as a lower bound', () => {
+    const model = buildSearchViewModel(
+      state({
+        session: {
+          results: [result('STAT-100')],
+          meta: {
+            nextRequest: { query: 'statistics' },
+            interpretedRequest: { query: 'statistics' },
+            ui: { chips: [], ambiguityActions: [] },
+            retrieval: { degraded: true },
+          },
+          pagination: {
+            totalResults: 41,
+            countIsComplete: false,
+            browseableResults: 20,
+            limit: 20,
+            offset: 0,
+            hasMore: true,
+            nextOffset: 20,
+          },
+        },
+      })
+    )
+
+    expect(model.resultCountLabel).toBe('At least 41 results')
+    expect(model.showingResultsLabel).toBe('Showing 1 of at least 41')
+  })
+
   it('distinguishes initial skeletons from result refreshes', () => {
     expect(
-      buildSearchViewModel(state({ session: { loading: true } })).showInitialSkeleton
+      buildSearchViewModel(state({ session: { loading: true } }))
+        .showInitialSkeleton
     ).toBe(true)
 
     const refreshing = buildSearchViewModel(

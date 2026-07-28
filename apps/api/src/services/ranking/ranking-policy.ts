@@ -33,15 +33,7 @@ export const RANKING_POLICY = {
       },
     },
     nullSubjectiveEvidencePenalty: -0.35,
-    easyIntent: {
-      minQualityTierRank: 3,
-      preferredWorkloadTier: "Easy",
-      minAverageGpa: 3.5,
-      boosts: {
-        qualityTier: 0.25,
-        workloadTier: 0.3,
-        averageGpa: 0.2,
-      },
+    accessibilityIntent: {
       level: {
         level100: 0.55,
         level200: 0.35,
@@ -168,17 +160,16 @@ export const RANKING_POLICY = {
     ],
   },
   filters: {
-    workload: {
-      easy: {
+    instructorDifficulty: {
+      lower: {
         maxScoreInclusive: 45,
-        fallbackMinGpa: 3.5,
       },
-      hard: {
+      higher: {
         minScoreExclusive: 75,
-        fallbackMaxGpa: 3.0,
       },
     },
   },
 } as const;
 
-export const WORKLOAD_FILTER_THRESHOLDS = RANKING_POLICY.filters.workload;
+export const INSTRUCTOR_DIFFICULTY_FILTER_THRESHOLDS =
+  RANKING_POLICY.filters.instructorDifficulty;

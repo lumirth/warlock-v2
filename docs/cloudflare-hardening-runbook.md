@@ -20,7 +20,7 @@ Recommended names:
 - D1: `course-search-db-staging`
 - KV: `GPA_CACHE` staging namespace
 - Vectorize: `course-embeddings-staging`
-- Worker rate limits: `SEARCH_RATE_LIMITER`, `COURSE_RATE_LIMITER`
+- Worker rate limits: `SEARCH_RATE_LIMITER`, `COURSE_RATE_LIMITER`, `FEEDBACK_RATE_LIMITER`
 
 After creating staging resources, add real non-secret IDs to `apps/api/wrangler.toml` under an explicit `env.staging` block. D1/KV/Vectorize bindings must point at staging resources, not production resources.
 
@@ -44,6 +44,7 @@ npm run deploy:api:staging
 VITE_API_BASE_URL=https://<staging-worker-host> npm run deploy:web:staging
 
 STAGING_API_BASE_URL=https://<staging-worker-host> \
+STAGING_WEB_ORIGIN=https://<staging-pages-host> \
 STAGING_ADMIN_TOKEN=<redacted> \
 STAGING_INTERNAL_TOKEN=<redacted> \
 npm run test:staging
@@ -68,16 +69,17 @@ Use Cloudflare Workers Rate Limiting bindings for the current `workers.dev` stag
 | --- | --- | --- | --- |
 | `/api/search*` | `SEARCH_RATE_LIMITER` key `search:<cf-connecting-ip>` | 120 requests/minute/IP | 429 JSON before handler |
 | `/api/course/*` | `COURSE_RATE_LIMITER` key `course:<cf-connecting-ip>` | 240 requests/minute/IP | 429 JSON before handler |
+| `/api/feedback` | `FEEDBACK_RATE_LIMITER` key `feedback:<cf-connecting-ip>` plus exact configured origin | 20 requests/minute/IP | 403 for disallowed origin; 429 before handler when limited |
 
 Admin/internal token checks remain mandatory regardless of WAF rules.
 
 Record the verified rule shape in the evidence file passed to `npm run cloudflare:preflight` using these labels:
 
 ```text
-Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=<integer>, COURSE_RATE_LIMITER=<integer>
-Abuse Control Routes: /api/search*, /api/course/*
+Rate-Limit Namespace IDs: SEARCH_RATE_LIMITER=<integer>, COURSE_RATE_LIMITER=<integer>, FEEDBACK_RATE_LIMITER=<integer>
+Abuse Control Routes: /api/search*, /api/course/*, /api/feedback
 Abuse Control Action: Worker Rate Limiting returns 429 JSON block response before public route handlers
-Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP
+Abuse Control Thresholds: /api/search*=120 requests/min/IP, /api/course/*=240 requests/min/IP, /api/feedback=20 requests/min/IP
 ```
 
 Non-destructive smoke:

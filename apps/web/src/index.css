@@ -79,7 +79,7 @@
   --destructive-foreground: oklch(0.984 0.004 251.663);
   --success: oklch(0.527 0.154 150.069);
   --success-foreground: oklch(0.984 0.004 251.663);
-  --warning: oklch(0.666 0.179 58.318);
+  --warning: oklch(0.493 0.145 52.5);
   --warning-foreground: var(--foreground);
   --border: oklch(0.869 0.02 253.494);
   --input: oklch(0.869 0.02 253.494);
@@ -161,5 +161,22 @@
 
   a {
     text-underline-offset: 4px;
+  }
+
+  [data-slot='table-container']:focus-visible {
+    border-radius: var(--radius);
+    outline: 3px solid color-mix(in oklch, var(--ring) 45%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

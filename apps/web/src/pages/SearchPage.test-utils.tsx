@@ -1,9 +1,4 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-} from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, vi } from 'vitest'
 import type {
@@ -21,10 +16,12 @@ import { SearchPage } from './SearchPage'
 const apiMock = vi.hoisted(() => ({
   api: {
     search: vi.fn(),
-    getTermOptions: vi.fn(async (): Promise<SearchTermOptionsDto> => ({
-      terms: [],
-      years: [],
-    })),
+    getTermOptions: vi.fn(
+      async (): Promise<SearchTermOptionsDto> => ({
+        terms: [],
+        years: [],
+      })
+    ),
   },
 }))
 
@@ -68,14 +65,22 @@ type SearchResultOverride = Omit<
   warnings?: ResultWarning[]
 }
 
-export function course(overrides: SearchResultOverride = {}): SearchCourseResultDto {
+export function course(
+  overrides: SearchResultOverride = {}
+): SearchCourseResultDto {
   const summary: CourseSummaryDto = {
     id: overrides.id ?? 'CS-225-2026-spring',
     subject: overrides.subject ?? 'CS',
     number: overrides.number ?? '225',
     title: overrides.title ?? 'Data Structures',
-    description: overrides.description ?? 'A course',
-    creditHours: overrides.creditHours ?? 4,
+    description:
+      overrides.description === undefined ? 'A course' : overrides.description,
+    creditHours:
+      overrides.creditHours === undefined ? 4 : overrides.creditHours,
+    creditHoursText:
+      overrides.creditHoursText === undefined
+        ? '4 hours.'
+        : overrides.creditHoursText,
     year: overrides.year ?? 2026,
     term: overrides.term ?? 'spring',
     primaryInstructor: overrides.primaryInstructor ?? null,
@@ -86,7 +91,8 @@ export function course(overrides: SearchResultOverride = {}): SearchCourseResult
       medianGpa: overrides.metrics?.medianGpa ?? null,
       gpaSampleSize: overrides.metrics?.gpaSampleSize ?? null,
       qualityScore: overrides.metrics?.qualityScore ?? null,
-      workloadScore: overrides.metrics?.workloadScore ?? null,
+      instructorDifficultyScore:
+        overrides.metrics?.instructorDifficultyScore ?? null,
     },
     catalog: {
       courseInfo: overrides.catalog?.courseInfo ?? null,
@@ -100,6 +106,7 @@ export function course(overrides: SearchResultOverride = {}): SearchCourseResult
       registrationNotes: overrides.registration?.registrationNotes ?? null,
       approvalCode: overrides.registration?.approvalCode ?? null,
     },
+    registrationSummary: overrides.registrationSummary,
     requirements: overrides.requirements ?? [],
     links: overrides.links ?? {},
   }
@@ -133,14 +140,18 @@ export function searchResponse(
   }
 }
 
-export function renderSearchPage() {
+export function renderSearchPage(initialEntry = '/') {
   return render(
     <TestUiProvider>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <SearchPage />
       </MemoryRouter>
     </TestUiProvider>
   )
+}
+
+export function searchPageElement() {
+  return <SearchPage />
 }
 
 export function setQuery(value: string) {

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { requirementFilter } from '@uiuc-course-search/query-types';
 import { buildFilterClauses, TIME_RANGES } from '../search-filters.js';
 import { buildFilteredCourseQuery } from '../search-lane-query-builder.js';
-import { WORKLOAD_FILTER_THRESHOLDS } from '../ranking/ranking-policy.js';
+import {
+  INSTRUCTOR_DIFFICULTY_FILTER_THRESHOLDS,
+} from '../ranking/ranking-policy.js';
 import type { SearchFilters } from '../search-planner-types.js';
 
 describe('buildFilterClauses', () => {
@@ -117,7 +119,23 @@ describe('buildFilterClauses', () => {
       const filters: SearchFilters = { status: 'available' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('s.status'))).toBe(true);
-      expect(result.params).toEqual(['Open', 'Restricted']);
+      expect(result.where.join(" ")).toContain("s.section_status_code");
+      expect(result.where.join(" ")).toContain("s.status_code");
+      expect(result.where.join(" ")).toContain("IN ('open', 'restricted')");
+      expect(result.params).toEqual([]);
+    });
+
+    it('preserves raw, section-code, then generic-code precedence for conflicts', () => {
+      const sql = buildFilterClauses({ status: 'closed' }).where.join(" ");
+      const rawPosition = sql.indexOf("COALESCE(s.status, '')");
+      const sectionCodePosition = sql.indexOf("COALESCE(s.section_status_code, '')");
+      const genericCodePosition = sql.indexOf("COALESCE(s.status_code, '')");
+
+      expect(rawPosition).toBeGreaterThanOrEqual(0);
+      expect(sectionCodePosition).toBeGreaterThan(rawPosition);
+      expect(genericCodePosition).toBeGreaterThan(sectionCodePosition);
+      expect(sql).toContain("NULLIF(");
+      expect(sql).not.toContain("section_status_code, ''))) = 'c' OR");
     });
   });
 
@@ -139,21 +157,25 @@ describe('buildFilterClauses', () => {
     });
   });
 
-  describe('workload filter', () => {
-    it('generates workload-only SQL for workload=easy', () => {
-      const filters: SearchFilters = { workload: 'easy' };
+  describe('instructor-difficulty filter', () => {
+    it('generates score-only SQL for lower instructor difficulty', () => {
+      const filters: SearchFilters = { instructorDifficulty: 'lower' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
       expect(result.where.some(w => w.includes('c.difficulty_score <= ?'))).toBe(true);
-      expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.easy.maxScoreInclusive);
+      expect(result.params).toContain(
+        INSTRUCTOR_DIFFICULTY_FILTER_THRESHOLDS.lower.maxScoreInclusive,
+      );
     });
 
-    it('generates workload-only SQL for workload=hard', () => {
-      const filters: SearchFilters = { workload: 'hard' };
+    it('generates score-only SQL for higher instructor difficulty', () => {
+      const filters: SearchFilters = { instructorDifficulty: 'higher' };
       const result = buildFilterClauses(filters);
       expect(result.where.some(w => w.includes('quality_score'))).toBe(false);
       expect(result.where.some(w => w.includes('c.difficulty_score > ?'))).toBe(true);
-      expect(result.params).toContain(WORKLOAD_FILTER_THRESHOLDS.hard.minScoreExclusive);
+      expect(result.params).toContain(
+        INSTRUCTOR_DIFFICULTY_FILTER_THRESHOLDS.higher.minScoreExclusive,
+      );
     });
   });
 

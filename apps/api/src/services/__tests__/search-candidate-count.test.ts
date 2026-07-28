@@ -6,17 +6,24 @@ import { buildSearchCandidateBudget } from "../search-budget.js";
 import { normalizeSearchControls } from "../search-controls.js";
 import { buildRetrievalPlan } from "../search-retrieval-plan.js";
 
-function countDb(total: number) {
+function countDb(totals: number | number[]) {
+  const values = Array.isArray(totals) ? totals : [totals];
+  let callIndex = 0;
+  const bindings: unknown[][] = [];
   const prepare = vi.fn((sql: string) => ({
-    bind: vi.fn((...params: unknown[]) => ({
-      first: vi.fn(async () => ({ total })),
-      sql,
-      params,
-    })),
+    bind: vi.fn((...params: unknown[]) => {
+      bindings.push(params);
+      return {
+        first: vi.fn(async () => ({ total: values[callIndex++] })),
+        sql,
+        params,
+      };
+    }),
   }));
   return {
     db: { prepare } as unknown as D1Database,
     prepare,
+    bindings,
   };
 }
 
@@ -54,7 +61,7 @@ describe("countSearchCandidates", () => {
   });
 
   it("counts the union of official text, section text, and concrete semantic matches", async () => {
-    const { db, prepare } = countDb(83);
+    const { db, prepare } = countDb([82, 0]);
     const retrievalPlan = buildRetrievalPlan(
       {
         filters: {},
@@ -82,7 +89,7 @@ describe("countSearchCandidates", () => {
       },
     )).resolves.toBe(83);
 
-    const sql = prepare.mock.calls[0][0];
+    const sql = prepare.mock.calls.map(([statement]) => statement).join("\n");
     expect(sql).toContain("FROM courses_fts");
     expect(sql).toContain("FROM sections_fts");
     expect(sql).toContain("LOWER(c.title) LIKE");
@@ -115,5 +122,38 @@ describe("countSearchCandidates", () => {
     const sql = prepare.mock.calls[0][0];
     expect(sql).toContain("FROM courses_fts");
     expect(sql).not.toContain("FROM sections_fts");
+  });
+
+  it("keeps every D1 count statement within the binding limit", async () => {
+    const { db, bindings } = countDb([50, 20, 10]);
+    const retrievalPlan = buildRetrievalPlan(
+      {
+        filters: { subject: "CS" },
+        keywordQuery: "data structures",
+        semanticQuery: "data structures",
+      },
+      normalizeSearchControls({ scope: "all" }),
+      buildSearchCandidateBudget(20),
+    );
+    const laneResults = Array.from({ length: 100 }, (_, index) => ({
+      id: `CS-${100 + index}-2026-spring`,
+      lane: "topic_semantic" as const,
+      rank: index + 1,
+      reason: "Semantic topic recall.",
+    }));
+
+    await expect(countSearchCandidates(
+      db,
+      retrievalPlan,
+      {
+        laneResults,
+        successfulLanes: ["official_text", "section_text", "topic_semantic"],
+        failedLanes: [],
+      },
+    )).resolves.toBe(120);
+
+    expect(bindings.length).toBeGreaterThan(1);
+    expect(Math.max(...bindings.map((params) => params.length)))
+      .toBeLessThanOrEqual(100);
   });
 });

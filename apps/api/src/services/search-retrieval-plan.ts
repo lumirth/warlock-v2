@@ -1,6 +1,7 @@
 import type { SearchScope } from "@uiuc-course-search/query-types";
 import type { SearchFilters, SearchPlan } from "./search-planner-types.js";
 import type { SearchCandidateBudget } from "./search-budget.js";
+import { MAX_RETRIEVAL_LANE_RESULTS } from "./search-budget.js";
 import type { AppliedSearchControls } from "./search-controls.js";
 import type { RetrievalLane } from "./search-types.js";
 import { sanitizeFtsQuery, titleLaneQuery } from "./search-text.js";
@@ -18,6 +19,7 @@ type RetrievalPlanInputs = {
   semanticQuery: string;
   scope: SearchScope;
   semanticTermIds: string[];
+  sort: AppliedSearchControls['sort'];
 };
 
 export type RetrievalPlan = {
@@ -40,21 +42,25 @@ export function buildRetrievalPlan(
     (plan.filters.subject && plan.filters.number) ||
       plan.filters.crn,
   );
+  const boundedLaneLimit = Math.min(
+    budget.browseableResultLimit,
+    MAX_RETRIEVAL_LANE_RESULTS,
+  );
   const lanes: RetrievalLaneExecution[] = [];
-  addLane(lanes, "exact", budget.browseableResultLimit, isNavigational);
+  addLane(lanes, "exact", boundedLaneLimit, isNavigational);
   addLane(
     lanes,
     "official_text",
-    budget.browseableResultLimit,
+    boundedLaneLimit,
     hasKeywordQuery && !isNavigational,
   );
   addLane(
     lanes,
     "structured_course",
-    budget.browseableResultLimit,
+    boundedLaneLimit,
     !hasKeywordQuery && !isNavigational,
   );
-  addLane(lanes, "section_text", budget.browseableResultLimit, hasKeywordQuery);
+  addLane(lanes, "section_text", boundedLaneLimit, hasKeywordQuery);
   addLane(
     lanes,
     "topic_semantic",
@@ -76,6 +82,7 @@ export function buildRetrievalPlan(
           ? "active"
           : "all",
       semanticTermIds: semanticTermIds(plan.filters, controls.scope, currentTermIds),
+      sort: controls.sort,
     },
   };
 }

@@ -98,7 +98,9 @@ export function extractInstructors(text: string, hints: Hint[]): string {
     let match;
     while ((match = patternCopy.exec(residual)) !== null) {
       const rawInstructorName = match[1].trim();
-      const instructorName = trimTrailingSubjectCode(rawInstructorName);
+      const instructorName = trimTrailingInstructorStopWords(
+        trimTrailingSubjectCode(rawInstructorName),
+      );
       if (!looksLikeInstructorName(instructorName)) {
         continue;
       }
@@ -158,6 +160,19 @@ const INSTRUCTOR_STOP_WORDS = new Set([
   'tuesday',
   'wednesday',
 ]);
+
+function trimTrailingInstructorStopWords(value: string): string {
+  const tokens = value.trim().split(/\s+/);
+  while (
+    tokens.length > 1
+    && INSTRUCTOR_STOP_WORDS.has(
+      tokens[tokens.length - 1].toLowerCase().replace(/[^a-z'-]/g, ''),
+    )
+  ) {
+    tokens.pop();
+  }
+  return tokens.join(' ');
+}
 
 function looksLikeInstructorName(value: string): boolean {
   const tokens = value

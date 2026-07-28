@@ -42,6 +42,7 @@ const baseCourse: CourseSummaryDto = {
   title: 'Data Structures',
   description: 'Data abstractions: elementary data structures and their implementation using an object-oriented programming language.',
   creditHours: 4,
+  creditHoursText: '4 hours.',
   year: 2026,
   term: 'spring',
   primaryInstructor: 'Lovelace, A; Hopper, G',
@@ -51,7 +52,7 @@ const baseCourse: CourseSummaryDto = {
     medianGpa: 3.67,
     gpaSampleSize: 820,
     qualityScore: 88,
-    workloadScore: 42,
+    instructorDifficultyScore: 42,
   },
   catalog: {
     courseInfo: 'Credit is not given for both CS 225 and ECE 220.',
@@ -183,6 +184,8 @@ function courseVariant(overrides: CourseVariantOverride = {}): SearchCourseResul
       title: overrides.title ?? course.course.title,
       description: overrides.description ?? course.course.description,
       creditHours: overrides.creditHours ?? course.course.creditHours,
+      creditHoursText:
+        overrides.creditHoursText ?? course.course.creditHoursText,
       year: overrides.year ?? course.course.year,
       term: overrides.term ?? course.course.term,
       primaryInstructor: overrides.primaryInstructor ?? course.course.primaryInstructor,
@@ -201,9 +204,9 @@ function courseVariant(overrides: CourseVariantOverride = {}): SearchCourseResul
         qualityScore:
           overrides.metrics?.qualityScore ??
           course.course.metrics.qualityScore,
-        workloadScore:
-          overrides.metrics?.workloadScore ??
-          course.course.metrics.workloadScore,
+        instructorDifficultyScore:
+          overrides.metrics?.instructorDifficultyScore ??
+          course.course.metrics.instructorDifficultyScore,
       },
       registration: {
         ...course.course.registration,

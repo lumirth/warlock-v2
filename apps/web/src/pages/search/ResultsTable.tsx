@@ -19,8 +19,8 @@ import {
 import {
   getQualityLabel,
   getQualityTone,
-  getWorkloadLabel,
-  getWorkloadTone,
+  getInstructorDifficultyLabel,
+  getInstructorDifficultyTone,
   isFiniteMetric,
   metricToneTextClass,
 } from '../../utils/grading'
@@ -34,6 +34,7 @@ import {
   getCourseKey,
   getCoursePath,
   isHistoricalResult,
+  registrationSummaryDisplay,
 } from './search-result-model'
 import { sortButtonLabel } from './search-sort-model'
 
@@ -41,16 +42,19 @@ export function CourseResultsTable({
   results,
   sort,
   onSort,
+  returnTo,
 }: {
   results: SearchCourseResultDto[]
   sort: SearchSort
   onSort: (field: Exclude<SortField, 'relevance'>) => void
+  returnTo: string
 }) {
   return (
-    <Table className="min-w-[880px]">
+    <Table scrollAreaLabel="Course search results" className="min-w-[1040px]">
       <TableHeader>
         <TableRow>
           <TableHead scope="col">Course</TableHead>
+          <TableHead scope="col">Registration</TableHead>
           <TableHead scope="col">Term</TableHead>
           {TABLE_SORT_COLUMNS.map((column) => (
             <SortableTableHead
@@ -66,14 +70,17 @@ export function CourseResultsTable({
         {results.map((result) => {
           const { course } = result
           const isHistorical = isHistoricalResult(result)
-          const qualityLabel =
-            isFiniteMetric(course.metrics.qualityScore)
-              ? getQualityLabel(course.metrics.qualityScore)
-              : null
-          const workloadLabel =
-            isFiniteMetric(course.metrics.workloadScore)
-              ? getWorkloadLabel(course.metrics.workloadScore)
-              : null
+          const registration = registrationSummaryDisplay(course)
+          const qualityLabel = isFiniteMetric(course.metrics.qualityScore)
+            ? getQualityLabel(course.metrics.qualityScore)
+            : null
+          const instructorDifficultyLabel = isFiniteMetric(
+            course.metrics.instructorDifficultyScore
+          )
+            ? getInstructorDifficultyLabel(
+                course.metrics.instructorDifficultyScore
+              )
+            : null
 
           return (
             <TableRow
@@ -84,6 +91,7 @@ export function CourseResultsTable({
               <TableCell className="max-w-80 whitespace-normal">
                 <Link
                   to={getCoursePath(course)}
+                  state={{ fromSearch: true, returnTo }}
                   className="font-medium underline-offset-4 hover:underline"
                 >
                   {course.subject} {course.number}
@@ -91,6 +99,34 @@ export function CourseResultsTable({
                 <div className="text-muted-foreground mt-1 line-clamp-2 text-xs leading-5">
                   {course.title}
                 </div>
+                {course.primaryInstructor ? (
+                  <div className="text-muted-foreground mt-1 text-xs">
+                    {course.primaryInstructor}
+                  </div>
+                ) : null}
+              </TableCell>
+              <TableCell>
+                {registration ? (
+                  <div className="flex flex-col">
+                    <span
+                      className={cn(
+                        'font-semibold',
+                        registration.tone === 'success' && 'text-success',
+                        registration.tone === 'warning' && 'text-warning',
+                        registration.tone === 'destructive' &&
+                          'text-destructive',
+                        registration.tone === 'muted' && 'text-muted-foreground'
+                      )}
+                    >
+                      {registration.primary}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      {registration.updated ?? registration.detail}
+                    </span>
+                  </div>
+                ) : (
+                  <MissingValue />
+                )}
               </TableCell>
               <TableCell>
                 <div className="flex flex-col gap-1">
@@ -98,7 +134,7 @@ export function CourseResultsTable({
                   {isHistorical && (
                     <Badge
                       variant="outline"
-                      className="w-fit text-muted-foreground"
+                      className="text-muted-foreground w-fit"
                     >
                       Historical
                     </Badge>
@@ -116,21 +152,25 @@ export function CourseResultsTable({
                     {qualityLabel}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">-</span>
+                  <MissingValue />
                 )}
               </TableCell>
               <TableCell>
-                {workloadLabel ? (
+                {instructorDifficultyLabel ? (
                   <span
                     className={cn(
                       'font-semibold',
-                      metricToneTextClass(getWorkloadTone(workloadLabel))
+                      metricToneTextClass(
+                        getInstructorDifficultyTone(
+                          instructorDifficultyLabel
+                        )
+                      )
                     )}
                   >
-                    {workloadLabel}
+                    {instructorDifficultyLabel}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">-</span>
+                  <MissingValue />
                 )}
               </TableCell>
               <TableCell className="tabular-nums">
@@ -143,13 +183,22 @@ export function CourseResultsTable({
                 {formatCourseLevel(course)}
               </TableCell>
               <TableCell className="tabular-nums">
-                {formatCredits(course.creditHours)}
+                {formatCredits(course.creditHours, course.creditHoursText)}
               </TableCell>
             </TableRow>
           )
         })}
       </TableBody>
     </Table>
+  )
+}
+
+function MissingValue() {
+  return (
+    <span className="text-muted-foreground">
+      <span aria-hidden>—</span>
+      <span className="sr-only">Not available</span>
+    </span>
   )
 }
 
@@ -171,7 +220,11 @@ function SortableTableHead({
     <TableHead
       scope="col"
       aria-sort={
-        isActive ? (direction === 'asc' ? 'ascending' : 'descending') : undefined
+        isActive
+          ? direction === 'asc'
+            ? 'ascending'
+            : 'descending'
+          : undefined
       }
       className={column.className}
     >

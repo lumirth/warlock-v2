@@ -56,7 +56,8 @@ export function buildRequestFilterChips(
     chips.push(...requirementChips(request, filters.requirement));
   }
   if (filters.credits !== undefined) {
-    chips.push(filterChip(request, "credits", `${filters.credits} credits`, String(filters.credits), {
+    const unit = filters.credits === 1 ? "credit" : "credits";
+    chips.push(filterChip(request, "credits", `${filters.credits} exact ${unit}`, String(filters.credits), {
       credits: filters.credits,
     }));
   }
@@ -85,10 +86,17 @@ export function buildRequestFilterChips(
       status: filters.status,
     }));
   }
-  if (filters.workload) {
-    chips.push(filterChip(request, "workload", `${capitalize(filters.workload)} workload`, filters.workload, {
-      workload: filters.workload,
-    }));
+  if (filters.instructorDifficulty) {
+    const label = filters.instructorDifficulty === "lower"
+      ? "Lower instructor-rated difficulty"
+      : "Higher instructor-rated difficulty";
+    chips.push(filterChip(
+      request,
+      "instructorDifficulty",
+      label,
+      filters.instructorDifficulty,
+      { instructorDifficulty: filters.instructorDifficulty },
+    ));
   }
   if (filters.level !== undefined) {
     chips.push(filterChip(request, "level", `${filters.level} level`, String(filters.level), {

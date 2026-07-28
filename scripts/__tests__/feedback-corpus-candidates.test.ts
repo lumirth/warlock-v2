@@ -124,7 +124,7 @@ describe('feedback corpus candidates', () => {
         subject: 'CS',
         number: '225',
         score_field: 'difficulty',
-        message: 'This workload score looks far too easy.',
+        message: 'This instructor difficulty score looks too low.',
       },
     ], 'inline', new Date('2026-06-02T06:00:00Z'));
 
@@ -132,7 +132,7 @@ describe('feedback corpus candidates', () => {
       target: 'score_audit',
       priority: 'high',
       query: 'CS 225',
-      scoreField: 'workload',
+      scoreField: 'instructor_difficulty',
       suggestedFailureClasses: ['course_code_navigation', 'score_quality', 'subject_alias'],
     });
     expect(report.candidates[0].suggestedGoldQuery).toBeUndefined();

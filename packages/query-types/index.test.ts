@@ -6,8 +6,8 @@ import {
   buildRmpSearchUrl,
   getQualityTierLabel,
   getQualityTierRank,
-  getWorkloadTierLabel,
-  getWorkloadTierRank,
+  getInstructorDifficultyTierLabel,
+  getInstructorDifficultyTierRank,
   formatGenEdDisplayLabel,
   requirementFilter,
   normalizeSearchRequestDto,
@@ -19,6 +19,7 @@ import {
   resolveRequirementAlias,
   isKnownRequirementCode,
   searchRequestToQueryEntries,
+  SEARCH_QUERY_MAX_LENGTH,
 } from './index.js';
 
 describe('shared external link builders', () => {
@@ -71,18 +72,18 @@ describe('shared course score tiers', () => {
     expect(getQualityTierRank(undefined)).toBeNull();
   });
 
-  it('maps workload scores to displayed word-label tiers', () => {
-    expect(getWorkloadTierLabel(20)).toBe('Easy');
-    expect(getWorkloadTierLabel(58)).toBe('Moderate');
-    expect(getWorkloadTierLabel(82)).toBe('Hard');
-    expect(getWorkloadTierLabel(null)).toBeNull();
+  it('maps instructor-difficulty scores to truthful display tiers', () => {
+    expect(getInstructorDifficultyTierLabel(20)).toBe('Lower');
+    expect(getInstructorDifficultyTierLabel(58)).toBe('Moderate');
+    expect(getInstructorDifficultyTierLabel(82)).toBe('Higher');
+    expect(getInstructorDifficultyTierLabel(null)).toBeNull();
   });
 
-  it('exposes coarse workload ranks for easiest-first sorting', () => {
-    expect(getWorkloadTierRank(20)).toBe(1);
-    expect(getWorkloadTierRank(58)).toBe(2);
-    expect(getWorkloadTierRank(82)).toBe(3);
-    expect(getWorkloadTierRank(undefined)).toBeNull();
+  it('exposes coarse instructor-difficulty ranks for lower-first sorting', () => {
+    expect(getInstructorDifficultyTierRank(20)).toBe(1);
+    expect(getInstructorDifficultyTierRank(58)).toBe(2);
+    expect(getInstructorDifficultyTierRank(82)).toBe(3);
+    expect(getInstructorDifficultyTierRank(undefined)).toBeNull();
   });
 
   it('normalizes out-of-range scores while assigning public tiers', () => {
@@ -91,11 +92,11 @@ describe('shared course score tiers', () => {
     expect(getQualityTierLabel(Number.NaN)).toBeNull();
   });
 
-  it('keeps workload filters aligned with displayed workload tiers', () => {
-    expect(getWorkloadTierLabel(45)).toBe('Easy');
-    expect(getWorkloadTierLabel(46)).toBe('Moderate');
-    expect(getWorkloadTierLabel(75)).toBe('Moderate');
-    expect(getWorkloadTierLabel(76)).toBe('Hard');
+  it('keeps instructor-difficulty filters aligned with displayed tiers', () => {
+    expect(getInstructorDifficultyTierLabel(45)).toBe('Lower');
+    expect(getInstructorDifficultyTierLabel(46)).toBe('Moderate');
+    expect(getInstructorDifficultyTierLabel(75)).toBe('Moderate');
+    expect(getInstructorDifficultyTierLabel(76)).toBe('Higher');
   });
 });
 
@@ -194,8 +195,24 @@ describe('shared public search contract', () => {
     })).toThrow('limit must be an integer between 1 and 50');
     expect(() => searchRequestToQueryEntries({
       query: 'history',
-      pagination: { offset: -1 },
-    })).toThrow('offset must be an integer between 0 and 1150');
+      pagination: { offset: 400 },
+    })).toThrow('offset must be an integer between 0 and 399');
+    expect(() => searchRequestToQueryEntries({
+      query: 'history',
+      pagination: { limit: 50, offset: 351 },
+    })).toThrow('pagination window must not exceed 400 results');
+    expect(() => normalizeSearchRequestDto({
+      query: 'x'.repeat(SEARCH_QUERY_MAX_LENGTH + 1),
+    })).toThrow(`query must be ${SEARCH_QUERY_MAX_LENGTH} characters or fewer`);
+  });
+
+  it('rejects overlong public query parameters before planning', () => {
+    expect(decodeSearchRequestQuery(paramReader([
+      ['q', 'x'.repeat(SEARCH_QUERY_MAX_LENGTH + 1)],
+    ]))).toEqual({
+      ok: false,
+      error: `q must be ${SEARCH_QUERY_MAX_LENGTH} characters or fewer`,
+    });
   });
 
   it('serializes and decodes search URL params through the canonical codec', () => {
@@ -205,7 +222,7 @@ describe('shared public search contract', () => {
         subject: ' stat ',
         requirement: requirementFilter('any', [' hum ', 'us ']),
         online: true,
-        workload: 'easy',
+        instructorDifficulty: 'lower',
       },
       sort: { field: 'gpa', direction: 'desc' },
       scope: 'all',
@@ -220,7 +237,7 @@ describe('shared public search contract', () => {
       ['requirement', 'HUM,US'],
       ['requirementMode', 'any'],
       ['online', 'true'],
-      ['workload', 'easy'],
+      ['instructor_difficulty', 'lower'],
       ['scope', 'all'],
       ['sort', 'gpa'],
       ['direction', 'desc'],
@@ -236,7 +253,7 @@ describe('shared public search contract', () => {
             subject: 'STAT',
             requirement: { mode: 'any', codes: ['HUM', 'US'] },
             online: true,
-            workload: 'easy',
+            instructorDifficulty: 'lower',
           },
           sort: { field: 'gpa', direction: 'desc' },
           scope: 'all',
@@ -252,7 +269,7 @@ describe('shared public search contract', () => {
       ['sort', 'not-real'],
     ]))).toEqual({
       ok: false,
-      error: 'sort must be one of: relevance, gpa, quality, workload, instructor_rating, level, credits',
+      error: 'sort must be one of: relevance, gpa, quality, instructor_difficulty, instructor_rating, level, credits',
     });
 
     expect(decodeSearchRequestQuery(paramReader([

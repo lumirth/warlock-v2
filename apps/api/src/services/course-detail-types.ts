@@ -1,4 +1,4 @@
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
 import type {
   CourseDetailResponseDto,
 } from '@uiuc-course-search/query-types';
@@ -21,6 +21,7 @@ export type CourseDetailServiceEnv = {
   BACKOFF_MAX_MS: string;
   MAX_RETRIES: string;
   CLIENT_CACHE_TTL_MS: string;
+  SEARCH_CACHE?: KVNamespace;
 };
 
 export type CourseDetailRequest = {
@@ -52,7 +53,7 @@ export type CourseDetailContext = {
 };
 
 export type CourseWithAge = Course & {
-  age_seconds: number;
+  age_seconds: number | null;
 };
 
 export type CourseDetailMetadata = Pick<

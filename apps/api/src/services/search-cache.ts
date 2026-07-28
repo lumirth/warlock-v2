@@ -6,7 +6,7 @@ import type {
 } from "./search-plan-compiler.js";
 
 // Bump whenever cached internal plan or pipeline-result shapes change.
-const SEARCH_CACHE_VERSION = "v15";
+const SEARCH_CACHE_VERSION = "v16";
 const SEARCH_PLAN_TTL_SECONDS = 5 * 60;
 const SEARCH_RESULT_TTL_SECONDS = 60;
 
@@ -24,9 +24,11 @@ export async function getCachedSearchPlan(
   kv: KVNamespace | undefined,
   request: NormalizedSearchRequestDto,
 ): Promise<SearchPlanningResult | null> {
+  const payload = searchPlanRequestCachePayload(request);
   return getJson<SearchPlanningResult>(
     kv,
-    searchPlanCacheKey(request),
+    cacheKey("plan", payload),
+    stableJson(payload),
   );
 }
 
@@ -35,9 +37,11 @@ export function cacheSearchPlan(
   request: NormalizedSearchRequestDto,
   planning: SearchPlanningResult,
 ): Promise<void> {
+  const payload = searchPlanRequestCachePayload(request);
   return putJson(
     kv,
-    searchPlanCacheKey(request),
+    cacheKey("plan", payload),
+    stableJson(payload),
     planning,
     SEARCH_PLAN_TTL_SECONDS,
   );
@@ -47,9 +51,11 @@ export async function getCachedSearchResult(
   kv: KVNamespace | undefined,
   request: NormalizedSearchRequestDto,
 ): Promise<SearchPipelineResult | null> {
+  const payload = searchRequestCachePayload(request);
   return getJson<SearchPipelineResult>(
     kv,
-    searchResultCacheKey(request),
+    cacheKey("result", payload),
+    stableJson(payload),
   );
 }
 
@@ -61,9 +67,11 @@ export function cacheSearchResult(
   if (result.meta.retrievalExecution.failedLanes.length > 0) {
     return Promise.resolve();
   }
+  const payload = searchRequestCachePayload(request);
   return putJson(
     kv,
-    searchResultCacheKey(request),
+    cacheKey("result", payload),
+    stableJson(payload),
     result,
     SEARCH_RESULT_TTL_SECONDS,
   );
@@ -132,19 +140,45 @@ function stableJson(value: unknown): string {
 async function getJson<T>(
   kv: KVNamespace | undefined,
   key: string,
+  expectedIdentity: string,
 ): Promise<T | null> {
   if (!kv) return null;
   const value = await kv.get(key, "text");
   if (!value) return null;
-  return JSON.parse(value) as T;
+  const parsed = JSON.parse(value) as unknown;
+  if (
+    !parsed
+    || typeof parsed !== "object"
+    || Array.isArray(parsed)
+  ) {
+    return null;
+  }
+  const envelope = parsed as Partial<CacheEnvelope<T>>;
+  if (
+    envelope.identity !== expectedIdentity
+    || !Object.prototype.hasOwnProperty.call(envelope, "value")
+  ) {
+    return null;
+  }
+  return envelope.value ?? null;
 }
 
 async function putJson(
   kv: KVNamespace | undefined,
   key: string,
+  identity: string,
   value: unknown,
   expirationTtl: number,
 ): Promise<void> {
   if (!kv) return;
-  await kv.put(key, JSON.stringify(value), { expirationTtl });
+  await kv.put(
+    key,
+    JSON.stringify({ identity, value } satisfies CacheEnvelope<unknown>),
+    { expirationTtl },
+  );
 }
+
+type CacheEnvelope<T> = {
+  identity: string;
+  value: T;
+};

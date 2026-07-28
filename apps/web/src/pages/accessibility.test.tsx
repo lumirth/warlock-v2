@@ -37,7 +37,7 @@ function course(
         medianGpa: null,
         gpaSampleSize: 820,
         qualityScore: 88,
-        workloadScore: 42,
+        instructorDifficultyScore: 42,
       },
       catalog: {
         courseInfo: null,
@@ -62,16 +62,16 @@ function course(
       links: {},
       sections: [],
       ...overrides,
+      creditHoursText:
+        overrides.creditHoursText === undefined
+          ? '4 hours.'
+          : overrides.creditHoursText,
     },
   }
 }
 
 async function expectNoA11yViolations(container: HTMLElement): Promise<void> {
-  const result = await axe.run(container, {
-    rules: {
-      'color-contrast': { enabled: false },
-    },
-  })
+  const result = await axe.run(container)
   expect(result.violations.map((violation) => violation.id)).toEqual([])
 }
 

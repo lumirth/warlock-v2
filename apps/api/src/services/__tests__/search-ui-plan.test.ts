@@ -52,42 +52,34 @@ describe('buildSearchUiPlan', () => {
         value: 'fagen',
         metadata: { source: 'nlp', confidence: 0.8, raw: 'professor fagen' },
       },
-      {
-        type: 'workload',
-        value: 'hard',
-        metadata: { source: 'alias', confidence: 0.9, raw: 'hard' },
-      },
     ];
 
     const plan = buildUiPlan(hints, {
       filters: {
         subject: 'CS',
         number: '225',
-        workload: 'hard',
         instructor_ids: [1],
       },
       keywordQuery: 'systems',
       semanticQuery: 'systems',
-    }, 'systems', request('CS 225 professor fagen hard systems'));
+    }, 'systems', request('CS 225 professor fagen systems'));
 
     expect(plan.chips.map(chip => chip.label)).toEqual([
       'Course CS 225',
       'Instructor fagen',
-      'Hard workload',
       'Topic: systems',
     ]);
     expectRemovableChipActionsChangeRequest(
       plan,
-      request('CS 225 professor fagen hard systems'),
+      request('CS 225 professor fagen systems'),
     );
-    expect(plan.chips[0].removeRequest.query).toBe('professor fagen hard systems');
+    expect(plan.chips[0].removeRequest.query).toBe('professor fagen systems');
     expect(buildInterpretedSearchRequest(
       hints,
       {
         filters: {
           subject: 'CS',
           number: '225',
-          workload: 'hard',
           instructor_ids: [1],
         },
         keywordQuery: 'systems',
@@ -101,7 +93,6 @@ describe('buildSearchUiPlan', () => {
         subject: 'CS',
         number: '225',
         instructor: 'fagen',
-        workload: 'hard',
       },
     });
   });
@@ -131,13 +122,8 @@ describe('buildSearchUiPlan', () => {
     }]);
   });
 
-  it('renders subject shorthand as a GenEd chip when the resolver chose the requirement meaning', () => {
+  it('renders explicit GenEd shorthand as a GenEd chip when the resolver chose the requirement meaning', () => {
     const hints: Hint[] = [
-      {
-        type: 'workload',
-        value: 'easy',
-        metadata: { source: 'alias', confidence: 0.9, raw: 'easy' },
-      },
       {
         type: 'subject',
         value: 'CS',
@@ -145,7 +131,7 @@ describe('buildSearchUiPlan', () => {
       },
     ];
     const plan: SearchPlan = {
-      filters: { workload: 'easy', requirement: singleRequirementFilter('CS') },
+      filters: { requirement: singleRequirementFilter('CS') },
       keywordQuery: '',
       semanticQuery: '',
       ambiguities: [{
@@ -155,17 +141,16 @@ describe('buildSearchUiPlan', () => {
       }],
     };
 
-    const ui = buildUiPlan(hints, plan, '', request('easy cs'));
+    const ui = buildUiPlan(hints, plan, '', request('cs gened'));
 
-    expect(ui.chips.map(chip => chip.label)).toEqual(['Easy workload', 'GenEd CS']);
-    expect(ui.chips[1].removeRequest.query).toBe('easy');
-    expect(buildInterpretedSearchRequest(hints, plan, '', request('easy cs')).filters).toMatchObject({
+    expect(ui.chips.map(chip => chip.label)).toEqual(['GenEd CS']);
+    expect(ui.chips[0].removeRequest.query).toBe('');
+    expect(buildInterpretedSearchRequest(hints, plan, '', request('cs gened')).filters).toMatchObject({
       requirement: singleRequirementFilter('CS'),
-      workload: 'easy',
     });
     expect(ui.ambiguityActions[0].nextRequest).toMatchObject({
       query: '',
-      filters: { subject: 'CS', workload: 'easy' },
+      filters: { subject: 'CS' },
     });
   });
 
@@ -297,27 +282,37 @@ describe('buildSearchUiPlan', () => {
     ]);
   });
 
-  it('shows one workload chip for one workload intent', () => {
-    const plan = buildUiPlan([{
-      type: 'workload',
-      value: 'easy',
-      metadata: { source: 'alias', confidence: 0.9, raw: 'easy' },
-    }], {
-      filters: { workload: 'easy' },
+  it('shows one explicit instructor-difficulty chip for one manual filter', () => {
+    const executableRequest = request('', { instructorDifficulty: 'lower' });
+    const plan = buildUiPlan([], {
+      filters: { instructorDifficulty: 'lower' },
       keywordQuery: '',
       semanticQuery: '',
-      intent: {
-        queryTypes: ['subjective_vibe'],
-        negativeTerms: [],
-        topicTerms: [],
-        expandedTerms: [],
-        warnings: [],
-        confidence: 0.74,
-      },
-    }, '', request('easy'));
+    }, '', executableRequest);
 
     expect(plan.chips).toEqual([
-      expect.objectContaining({ type: 'workload', label: 'Easy workload', removeRequest: expect.any(Object) }),
+      expect.objectContaining({
+        type: 'instructorDifficulty',
+        label: 'Lower instructor-rated difficulty',
+        removeRequest: expect.any(Object),
+      }),
+    ]);
+  });
+
+  it('labels numeric credit constraints as exact', () => {
+    const executableRequest = request('', { credits: 3 });
+    const plan = buildUiPlan([], {
+      filters: { credits: 3 },
+      keywordQuery: '',
+      semanticQuery: '',
+    }, '', executableRequest);
+
+    expect(plan.chips).toEqual([
+      expect.objectContaining({
+        type: 'credits',
+        label: '3 exact credits',
+        removeRequest: expect.any(Object),
+      }),
     ]);
   });
 

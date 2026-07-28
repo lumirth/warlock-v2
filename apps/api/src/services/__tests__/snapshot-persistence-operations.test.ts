@@ -40,6 +40,7 @@ function sampleSnapshot(): SubjectSnapshot {
           title: 'Intro Asian American Studies',
           description: 'Culture and history.',
           credit_hours: 3,
+          credit_hours_text: '3 hours.',
           year: 2026,
           term: 'spring',
           avg_gpa: 3.62,
@@ -173,7 +174,6 @@ describe('snapshot persistence operations', () => {
       'course.upsert',
       'course_gened.upsert',
       'course_gened.upsert',
-      'course_gened.prune_stale',
       'section.upsert',
       'meeting.upsert',
       'meeting.upsert',
@@ -187,6 +187,30 @@ describe('snapshot persistence operations', () => {
       'subject.prune_stale_sections',
       'subject.prune_stale_course_geneds',
       'subject.prune_stale_courses',
+    ]);
+
+    const reconciliation = plan.finalizeOperations.find(
+      operation => operation.kind === 'subject.prune_stale_meetings'
+    );
+    const manifest = reconciliation?.manifest;
+    expect(manifest).toBeDefined();
+    expect(JSON.parse(manifest?.meetingKeysJson ?? '[]')).toEqual([
+      { sectionId: '2026-spring-12345', meetingIndex: 0 },
+      { sectionId: '2026-spring-12345', meetingIndex: 1 },
+    ]);
+    expect(JSON.parse(manifest?.meetingInstructorKeysJson ?? '[]')).toEqual([
+      {
+        sectionId: '2026-spring-12345',
+        meetingIndex: 0,
+        lastName: 'Lee',
+        firstName: 'Ada',
+      },
+      {
+        sectionId: '2026-spring-12345',
+        meetingIndex: 1,
+        lastName: 'Lee',
+        firstName: 'Ada',
+      },
     ]);
   });
 
@@ -250,8 +274,87 @@ describe('snapshot persistence operations', () => {
 
     expect(executedSql.length).toBeGreaterThan(2);
     expect(executedSql.at(-1)).toHaveLength(5);
-    expect(executedSql.at(-1)?.every(sql => sql.startsWith('DELETE FROM'))).toBe(true);
+    expect(
+      executedSql.at(-1)?.every(sql => sql.trimStart().startsWith('DELETE FROM'))
+    ).toBe(true);
     expect(executedSql.slice(0, -1).flat().some(sql => sql.startsWith('DELETE FROM courses'))).toBe(false);
+  });
+
+  it('fences and renews every large-subject batch without exceeding the batch limit', async () => {
+    const executedSql: string[][] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn(() => ({ sql: normalizeSql(sql) })),
+      })),
+      batch: vi.fn(async (statements: Array<{ sql: string }>) => {
+        executedSql.push(statements.map(statement => statement.sql));
+        return [];
+      }),
+    } as unknown as D1Database;
+
+    await writeSubjectSnapshotToD1(db, sampleSnapshot(), {
+      batchSize: 8,
+      publicationFence: {
+        termId: '2026-spring',
+        subject: 'AAS',
+        ownerToken: 'subject:current-owner',
+      },
+    });
+
+    expect(executedSql.length).toBeGreaterThan(2);
+    for (const transaction of executedSql) {
+      expect(transaction.length).toBeLessThanOrEqual(8);
+      expect(transaction[0]).toContain('INSERT INTO subject_sync_publication_fences');
+      expect(transaction[1]).toContain('UPDATE subject_sync_state');
+      expect(transaction.at(-1)).toContain('DELETE FROM subject_sync_publication_fences');
+    }
+    expect(
+      executedSql.at(-1)?.some(sql => sql.startsWith('DELETE FROM courses'))
+    ).toBe(true);
+  });
+
+  it('does not run destructive finalization after a fenced write batch loses ownership', async () => {
+    const executedSql: string[][] = [];
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn(() => ({ sql: normalizeSql(sql) })),
+      })),
+      batch: vi.fn(async (statements: Array<{ sql: string }>) => {
+        executedSql.push(statements.map(statement => statement.sql));
+        if (executedSql.length === 2) {
+          throw new Error('FOREIGN KEY constraint failed');
+        }
+        return [];
+      }),
+    } as unknown as D1Database;
+
+    await expect(writeSubjectSnapshotToD1(db, sampleSnapshot(), {
+      batchSize: 8,
+      publicationFence: {
+        termId: '2026-spring',
+        subject: 'AAS',
+        ownerToken: 'subject:stale-owner',
+      },
+    })).rejects.toThrow('FOREIGN KEY constraint failed');
+
+    expect(executedSql).toHaveLength(2);
+    expect(
+      executedSql.flat().some(sql => sql.startsWith('DELETE FROM courses'))
+    ).toBe(false);
+  });
+
+  it('refuses an empty snapshot before preparing or publishing statements', async () => {
+    const db = {
+      prepare: vi.fn(),
+      batch: vi.fn(),
+    } as unknown as D1Database;
+    const snapshot = sampleSnapshot();
+    snapshot.courses = [];
+
+    await expect(writeSubjectSnapshotToD1(db, snapshot))
+      .rejects.toThrow('snapshot contains no courses');
+    expect(db.prepare).not.toHaveBeenCalled();
+    expect(db.batch).not.toHaveBeenCalled();
   });
 
 });

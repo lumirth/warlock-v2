@@ -10,10 +10,11 @@ CURRENT_TERM = "fall"
 # API endpoints
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 FRONTEND_BASE = "https://courses.illinois.edu"
+FEEDBACK_ALLOWED_ORIGINS = "https://uiuc-course-search-web.pages.dev"
 
 # Sync settings
 SYNC_CONCURRENCY = "25"
-SYNC_EMBEDDINGS = "false"
+SYNC_EMBEDDINGS = "true"
 
 # Rate limiting
 BACKOFF_BASE_MS = "5000"
@@ -26,6 +27,7 @@ CLIENT_CACHE_TTL_MS = "30000"
 [triggers]
 crons = [
   "0 10,22 * * *",
+  "30 10,22 * * *",
   "0 8 * * SUN",
   "*/5 * * * *"
 ]
@@ -61,6 +63,14 @@ namespace_id = "26060102"
   limit = 240
   period = 60
 
+[[ratelimits]]
+name = "FEEDBACK_RATE_LIMITER"
+namespace_id = "26060103"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
 [[vectorize]]
 binding = "VECTORIZE"
 index_name = "course-embeddings"
@@ -85,8 +95,9 @@ CURRENT_YEAR = "2026"
 CURRENT_TERM = "fall"
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 FRONTEND_BASE = "https://courses.illinois.edu"
+FEEDBACK_ALLOWED_ORIGINS = "https://staging.uiuc-course-search-web.pages.dev"
 SYNC_CONCURRENCY = "25"
-SYNC_EMBEDDINGS = "false"
+SYNC_EMBEDDINGS = "true"
 BACKOFF_BASE_MS = "5000"
 BACKOFF_MAX_MS = "60000"
 MAX_RETRIES = "3"
@@ -119,6 +130,14 @@ namespace_id = "26060112"
 
   [env.staging.ratelimits.simple]
   limit = 240
+  period = 60
+
+[[env.staging.ratelimits]]
+name = "FEEDBACK_RATE_LIMITER"
+namespace_id = "26060113"
+
+  [env.staging.ratelimits.simple]
+  limit = 20
   period = 60
 
 [[env.staging.vectorize]]

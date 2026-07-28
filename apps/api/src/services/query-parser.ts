@@ -1,10 +1,10 @@
 import {
   isKnownRequirementCode,
+  isSearchInstructorDifficultyFilter,
   isSearchLevelFilter,
   isSearchStatusFilter,
   isSearchTermFilter,
   isSearchTimeFilter,
-  isSearchWorkloadFilter,
 } from '@uiuc-course-search/query-types';
 import type { ParsedQuery, FieldFilter } from './search-planner-types.js';
 
@@ -20,7 +20,7 @@ const SUPPORTED_FIELD_FILTERS = new Set([
   'time',
   'term',
   'partofterm',
-  'workload',
+  'instructor_difficulty',
 ]);
 
 /**
@@ -162,8 +162,8 @@ function isValidFieldFilter(field: string, rawValue: string): boolean {
     }
     case 'partofterm':
       return /^[A-Z0-9]$/i.test(value);
-    case 'workload':
-      return isSearchWorkloadFilter(value.toLowerCase());
+    case 'instructor_difficulty':
+      return isSearchInstructorDifficultyFilter(value.toLowerCase());
     default:
       return false;
   }
@@ -172,7 +172,6 @@ function isValidFieldFilter(field: string, rawValue: string): boolean {
 function normalizeFieldName(field: string): string {
   const normalized = field.toLowerCase().replace(/-/g, '_');
   if (normalized === 'gened') return 'requirement';
-  if (normalized === 'difficulty') return 'workload';
   if (normalized === 'part_of_term' || normalized === 'pot') return 'partofterm';
   return normalized;
 }

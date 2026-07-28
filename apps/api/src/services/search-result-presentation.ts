@@ -1,7 +1,6 @@
 import {
   ANY_GENED_DISPLAY_LABEL,
   formatGenEdDisplayLabel,
-  getQualityTierLabel,
   isGenericAnyRequirementFilter,
   type MatchEvidence,
   type MatchEvidenceKind,
@@ -31,19 +30,19 @@ export function presentSearchCourseResult(
   return {
     course: toCourseDto(result.course, {
       requirements: result.requirements,
+      registrationSummary: result.registrationSummary,
     }),
     matchEvidence: context ? buildMatchEvidence(result, context) : undefined,
     warnings: buildResultWarnings(result),
   };
 }
 
-function qualityEvidenceLabel(score: number): string {
-  const label = getQualityTierLabel(score);
-  return label ? `${label} quality tier` : 'Course quality signal';
-}
-
-function workloadEvidenceLabel(workload: 'easy' | 'hard'): string {
-  return workload === 'easy' ? 'Easier workload fit' : 'Harder workload fit';
+function instructorDifficultyEvidenceLabel(
+  difficulty: 'lower' | 'higher',
+): string {
+  return difficulty === 'lower'
+    ? 'Lower instructor-rated difficulty'
+    : 'Higher instructor-rated difficulty';
 }
 
 function normalizeText(value: string | null | undefined): string {
@@ -161,11 +160,16 @@ function buildMatchEvidence(
     addEvidence(evidence, seen, 'instructor', 'Instructor match', 'filter', 'hard', course.primary_instructor ?? undefined);
   }
 
-  if (filters.workload) {
-    addEvidence(evidence, seen, 'workload', workloadEvidenceLabel(filters.workload), 'filter', 'soft', filters.workload);
-    if (typeof course.quality_score === 'number') {
-      addEvidence(evidence, seen, 'quality', qualityEvidenceLabel(course.quality_score), 'metadata', 'soft', course.quality_score.toFixed(0));
-    }
+  if (filters.instructorDifficulty) {
+    addEvidence(
+      evidence,
+      seen,
+      'instructor_difficulty',
+      instructorDifficultyEvidenceLabel(filters.instructorDifficulty),
+      'filter',
+      'hard',
+      filters.instructorDifficulty,
+    );
   }
 
   if (softPreferences?.levelBoost && context.plan.introductoryGateway === true) {

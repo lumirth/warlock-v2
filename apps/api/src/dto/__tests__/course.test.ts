@@ -21,11 +21,12 @@ const course: Course = {
   title: 'Data Structures',
   description: 'Data abstractions and algorithms.',
   credit_hours: 4,
+  credit_hours_text: '4 hours.',
   year: 2026,
   term: 'spring',
   avg_gpa: 3.5,
   gpa_sample_size: 100,
-  primary_instructor: 'Lovelace, A',
+  primary_instructor: 'Lovelace, Ada',
   primary_instructor_rmp: 4.8,
   difficulty_score: 22,
   quality_score: 91,
@@ -76,7 +77,7 @@ describe('search result DTO evidence', () => {
           days: 'MWF',
           time: 'morning',
           online: true,
-          workload: 'easy',
+          instructorDifficulty: 'lower',
           term: 'spring',
           year: 2026,
         },
@@ -94,16 +95,17 @@ describe('search result DTO evidence', () => {
       'schedule',
       'delivery',
       'instructor',
-      'workload',
-      'quality',
+      'instructor_difficulty',
       'topic',
       'term',
       'keyword',
       'semantic',
     ]));
     expect(evidence.find(item => item.kind === 'course_code')).toMatchObject({ weight: 'hard' });
-    expect(evidence.find(item => item.kind === 'workload')?.label).toBe('Easier workload fit');
-    expect(evidence.find(item => item.kind === 'quality')?.label).toBe('Excellent quality tier');
+    expect(
+      evidence.find(item => item.kind === 'instructor_difficulty')?.label,
+    ).toBe('Lower instructor-rated difficulty');
+    expect(evidence.find(item => item.kind === 'quality')).toBeUndefined();
     expect(evidence.find(item => item.kind === 'semantic')).toMatchObject({ source: 'semantic' });
     expect(evidence.find(item => item.kind === 'keyword')?.label).toBe('Strong keyword match');
     expect(evidence.find(item => item.kind === 'semantic')?.label).toBe('Related topic match');
@@ -159,7 +161,7 @@ describe('search result DTO evidence', () => {
     expect(dto.course.metrics.gpaSampleSize).toBe(100);
     expect(dto.course.metrics.primaryInstructorRating).toBe(4.8);
     expect(dto.course.metrics.qualityScore).toBe(91);
-    expect(dto.course.metrics.workloadScore).toBe(22);
+    expect(dto.course.metrics.instructorDifficultyScore).toBe(22);
     expect(dto.course.links.courseExplorerUrl).toBe('https://courses.illinois.edu/schedule/2026/spring/CS/225');
   });
 
@@ -178,7 +180,6 @@ describe('search result DTO evidence', () => {
       plan: {
         filters: {
           subject: 'CS',
-          workload: 'easy',
           requirement: requirementFilter('any', GENERIC_REQUIREMENT_CODES),
         },
         keywordQuery: '',
@@ -320,7 +321,7 @@ describe('search result DTO evidence', () => {
           start_time: '09:00',
           end_time: '09:50',
           location: 'Siebel Center 1404',
-          instructor: 'Lovelace, A; TBA; Lovelace, A',
+          instructor: 'Lovelace, Ada; TBA; Lovelace, Ada',
           instructor_rmp: null,
           instructor_gpa: null,
           section_title: 'Data Structures Lecture',
@@ -354,8 +355,8 @@ describe('search result DTO evidence', () => {
 
     const dto = courseSnapshotToCourseDetailResponseDto(snapshot, {
       instructorMap: {
-        'Lovelace, A': toCourseInstructorDto({
-          instructor_name: 'Lovelace, A',
+        'Lovelace, Ada': toCourseInstructorDto({
+          instructor_name: 'Lovelace, Ada',
           rmp_rating: 4.8,
           avg_gpa: 3.62,
           gpa_sample_size: 820,
@@ -394,7 +395,7 @@ describe('search result DTO evidence', () => {
         sectionNotes: 'Majors first.',
       },
       instructors: [expect.objectContaining({
-        name: 'Lovelace, A',
+        name: 'Lovelace, Ada',
         rmpRating: 4.8,
         avgGpa: 3.62,
       })],
@@ -402,16 +403,16 @@ describe('search result DTO evidence', () => {
     expect(dto.course.sections[0]?.schedule.meetings[0]).toMatchObject({
       typeCode: 'LEC',
       buildingName: 'Siebel Center',
-      instructors: [expect.objectContaining({ name: 'Lovelace, A' })],
+      instructors: [expect.objectContaining({ name: 'Lovelace, Ada' })],
     });
 
     const unenriched = courseSnapshotToCourseDetailResponseDto(snapshot);
     expect(unenriched.course.sections[0]?.instructors).toEqual([
       expect.objectContaining({
-        name: 'Lovelace, A',
+        name: 'Lovelace, Ada',
         rmpRating: null,
         rmpSearchUrl:
-          'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
+          'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20Ada',
       }),
     ]);
   });

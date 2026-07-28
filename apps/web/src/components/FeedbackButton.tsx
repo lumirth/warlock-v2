@@ -21,6 +21,10 @@ import type {
   FeedbackKind,
   FeedbackSubmitDto,
 } from '@uiuc-course-search/query-types'
+import {
+  FEEDBACK_EXPECTED_MAX_LENGTH,
+  FEEDBACK_MESSAGE_MAX_LENGTH,
+} from '@uiuc-course-search/query-types'
 import { api } from '../lib/api-client'
 
 type FeedbackContext = Omit<
@@ -59,9 +63,14 @@ export function FeedbackButton({
   const [error, setError] = useState<string | null>(null)
   const expectedId = useId()
   const messageId = useId()
+  const hasFeedback = Boolean(expected.trim() || message.trim())
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!hasFeedback) {
+      setError('Add a short note before sending feedback.')
+      return
+    }
     setSubmitting(true)
     setError(null)
 
@@ -99,7 +108,13 @@ export function FeedbackButton({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (!nextOpen) setError(null)
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           variant={buttonVariant}
@@ -114,34 +129,42 @@ export function FeedbackButton({
         <DialogHeader>
           <DialogTitle>What looked wrong?</DialogTitle>
           <DialogDescription>
-            Send a short note about the result set without leaving this search.
+            {page === 'search'
+              ? 'Tell us what the result set missed without leaving this search.'
+              : 'Tell us which course signal or source looks wrong.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit}>
           <FieldGroup className="gap-3">
             <Field>
-              <FieldLabel htmlFor={expectedId} className="sr-only">
-                Expected result
-              </FieldLabel>
+              <FieldLabel htmlFor={expectedId}>What did you expect?</FieldLabel>
               <Input
                 id={expectedId}
                 autoComplete="off"
+                maxLength={FEEDBACK_EXPECTED_MAX_LENGTH}
                 placeholder={expectedPlaceholder}
                 value={expected}
                 onChange={(event) => setExpected(event.currentTarget.value)}
               />
+              <p className="text-muted-foreground text-right text-xs">
+                {expected.length.toLocaleString()} /{' '}
+                {FEEDBACK_EXPECTED_MAX_LENGTH.toLocaleString()}
+              </p>
             </Field>
             <Field>
-              <FieldLabel htmlFor={messageId} className="sr-only">
-                Feedback note
-              </FieldLabel>
+              <FieldLabel htmlFor={messageId}>Additional context</FieldLabel>
               <Textarea
                 id={messageId}
                 placeholder={messagePlaceholder}
                 rows={2}
+                maxLength={FEEDBACK_MESSAGE_MAX_LENGTH}
                 value={message}
                 onChange={(event) => setMessage(event.currentTarget.value)}
               />
+              <p className="text-muted-foreground text-right text-xs">
+                {message.length.toLocaleString()} /{' '}
+                {FEEDBACK_MESSAGE_MAX_LENGTH.toLocaleString()}
+              </p>
             </Field>
             {error && (
               <Alert variant="destructive">
@@ -149,13 +172,17 @@ export function FeedbackButton({
               </Alert>
             )}
             <DialogFooter>
-              <Button size="xs" type="submit" disabled={submitting}>
+              <Button
+                size="xs"
+                type="submit"
+                disabled={submitting || !hasFeedback}
+              >
                 {submitting ? (
                   <Spinner data-icon="inline-start" aria-hidden />
                 ) : (
                   <SendIcon data-icon="inline-start" aria-hidden />
                 )}
-                Send feedback
+                {submitting ? 'Sending feedback' : 'Send feedback'}
               </Button>
             </DialogFooter>
           </FieldGroup>

@@ -1,5 +1,12 @@
 name: CI
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   pull_request:
@@ -10,6 +17,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Check out
@@ -48,7 +56,7 @@ jobs:
       - name: Dependency audit
         run: npm run security:audit
 
-      - name: Search smoke eval
+      - name: Search planning smoke eval
         run: npm run eval:smoke
 
       - name: Upload eval smoke report

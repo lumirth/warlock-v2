@@ -10,7 +10,6 @@ import {
 } from './parallel-sync.js';
 import {
   readTermAggregateCounts,
-  refreshedSubjectCount,
   resolveManualSyncTermStatus,
   syncEmbeddingsEnabled,
   type SyncRouteBindings,
@@ -67,14 +66,6 @@ export async function runSubjectSyncBatch(
     embeddingAi(env)
   );
 
-  await recordTermSyncResult(env.DB, {
-    year: command.year,
-    term: command.term,
-    result,
-    requestedStatus: command.requestedStatus,
-    totalSubjects: command.totalSubjects ?? undefined,
-  });
-
   return result;
 }
 
@@ -98,6 +89,7 @@ export async function runManualTermSync(
     result,
     requestedStatus: command.requestedStatus,
     totalSubjects: result.pagination?.total ?? result.successfulSubjects + result.failedSubjects,
+    fullCorpus: isFullCorpusResult(result),
   });
 
   return {
@@ -135,6 +127,7 @@ export async function runActiveTermsSync(
       totalSubjects: result.pagination?.total
         ?? termState.subjects_count
         ?? result.successfulSubjects + result.failedSubjects,
+      fullCorpus: isFullCorpusResult(result),
     });
 
     results.push({ ...result, warnings: validateSyncResult(result) });
@@ -150,7 +143,49 @@ type RecordTermSyncOptions = {
   requestedStatus?: TermStateStatus;
   existingTerm?: TermState | null;
   totalSubjects?: number;
+  fullCorpus: boolean;
 };
+
+export async function recordCoordinatedTermSyncResult(
+  db: D1Database,
+  options: {
+    termState: TermState;
+    result: TermSyncResult;
+    totalSubjects: number;
+  }
+): Promise<void> {
+  await recordTermSyncResult(db, {
+    year: options.termState.year,
+    term: options.termState.term,
+    result: options.result,
+    existingTerm: options.termState,
+    totalSubjects: options.totalSubjects,
+    fullCorpus: true,
+  });
+}
+
+export async function recordCoordinatedTermSyncFailure(
+  db: D1Database,
+  termState: TermState,
+  error: string
+): Promise<void> {
+  await upsertTermState(db, {
+    term_id: termState.term_id,
+    year: termState.year,
+    term: termState.term,
+    status: termState.status,
+    last_checked: Math.floor(Date.now() / 1000),
+    last_synced: termState.last_synced,
+    subjects_count: termState.subjects_count,
+    courses_count: termState.courses_count,
+    sections_count: termState.sections_count,
+    sync_errors: JSON.stringify({
+      complete: false,
+      coverage: 'coordinator',
+      error,
+    }),
+  });
+}
 
 async function recordTermSyncResult(
   db: D1Database,
@@ -169,6 +204,18 @@ async function recordTermSyncResult(
       ?? options.result.successfulSubjects + options.result.failedSubjects
   );
   const now = Math.floor(Date.now() / 1000);
+  const expectedSubjects = options.totalSubjects
+    ?? options.result.pagination?.total
+    ?? options.result.subjectResults.length;
+  const skippedSubjects = options.result.subjectResults.filter(subject => subject.skipped).length;
+  const fullySuccessful = (
+    options.fullCorpus
+    && expectedSubjects > 0
+    && options.result.subjectResults.length === expectedSubjects
+    && options.result.successfulSubjects === expectedSubjects
+    && options.result.failedSubjects === 0
+    && skippedSubjects === 0
+  );
 
   await upsertTermState(db, {
     ...(existingTerm ?? {
@@ -182,19 +229,50 @@ async function recordTermSyncResult(
     term: options.term,
     status: resolveManualSyncTermStatus(existingTerm, options.requestedStatus),
     last_checked: now,
-    last_synced: refreshedSubjectCount(options.result) > 0
-      ? now
-      : existingTerm?.last_synced ?? null,
+    last_synced: fullySuccessful ? now : existingTerm?.last_synced ?? null,
     subjects_count: aggregateCounts.subjectsCount,
     courses_count: aggregateCounts.coursesCount,
     sections_count: aggregateCounts.sectionsCount,
-    sync_errors: syncErrors(options.result),
+    sync_errors: syncErrors(options.result, {
+      fullySuccessful,
+      fullCorpus: options.fullCorpus,
+      expectedSubjects,
+      skippedSubjects,
+    }),
   });
 }
 
-function syncErrors(result: TermSyncResult): string | null {
-  if (result.failedSubjects === 0) return null;
-  return JSON.stringify(result.subjectResults.filter(subject => !subject.success).map(subject => subject.error));
+function syncErrors(
+  result: TermSyncResult,
+  summary: {
+    fullySuccessful: boolean;
+    fullCorpus: boolean;
+    expectedSubjects: number;
+    skippedSubjects: number;
+  }
+): string | null {
+  if (summary.fullySuccessful) return null;
+  return JSON.stringify({
+    complete: false,
+    coverage: summary.fullCorpus ? 'full' : 'partial',
+    expectedSubjects: summary.expectedSubjects,
+    attemptedSubjects: result.subjectResults.length,
+    failedSubjects: result.failedSubjects,
+    skippedSubjects: summary.skippedSubjects,
+    errors: result.subjectResults
+      .filter(subject => !subject.success)
+      .map(subject => ({ subject: subject.subject, error: subject.error ?? 'unknown failure' })),
+  });
+}
+
+function isFullCorpusResult(result: TermSyncResult): boolean {
+  const pagination = result.pagination;
+  return Boolean(
+    pagination
+    && pagination.offset === 0
+    && pagination.hasMore === false
+    && result.subjectResults.length === pagination.total
+  );
 }
 
 function syncConfig(

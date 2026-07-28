@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
 import { parseCourseDetailHttpRequest } from '../http/course-detail-request.js';
 import { errorFields, logger } from '../observability/logger.js';
 import { CourseDetailService } from '../services/course-detail-service.js';
@@ -19,6 +19,7 @@ type Bindings = {
 
   // Caching
   CLIENT_CACHE_TTL_MS: string;
+  SEARCH_CACHE?: KVNamespace;
 };
 
 export const courseRoutes = new Hono<{ Bindings: Bindings }>();

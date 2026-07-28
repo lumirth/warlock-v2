@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { formatInstructorName, fromCourseDetail, fromSubjectCascade } from '../course.js';
+import {
+  formatInstructorName,
+  fromCourseDetail,
+  fromSubjectCascade,
+  parseCourseCreditHours,
+} from '../course.js';
 import type { ParsedSubjectCascade } from '../../cisapi/parser.js';
 import type { CourseExplorerCourse } from '../../cisapi/types.js';
 
 describe('formatInstructorName', () => {
-  it('formats full name as "LastName, F"', () => {
+  it('preserves the full source name instead of collapsing identity to an initial', () => {
     const result = formatInstructorName({ firstName: 'Wade', lastName: 'Fagen-Ulmschneider' });
-    expect(result).toBe('Fagen-Ulmschneider, W');
+    expect(result).toBe('Fagen-Ulmschneider, Wade');
   });
 
   it('handles missing firstName', () => {
@@ -17,6 +22,30 @@ describe('formatInstructorName', () => {
   it('returns null for undefined instructor', () => {
     const result = formatInstructorName(undefined);
     expect(result).toBeNull();
+  });
+});
+
+describe('parseCourseCreditHours', () => {
+  it('returns an exact value only for a single catalog value', () => {
+    expect(parseCourseCreditHours('4 hours.')).toEqual({
+      exact: 4,
+      text: '4 hours.',
+    });
+    expect(parseCourseCreditHours('0.5 credit hour')).toEqual({
+      exact: 0.5,
+      text: '0.5 credit hour',
+    });
+  });
+
+  it('preserves variable-credit wording without inventing an exact value', () => {
+    expect(parseCourseCreditHours('1 to 4 hours.')).toEqual({
+      exact: null,
+      text: '1 to 4 hours.',
+    });
+    expect(parseCourseCreditHours('Approved for S/U grading only.')).toEqual({
+      exact: null,
+      text: 'Approved for S/U grading only.',
+    });
   });
 });
 
@@ -138,6 +167,8 @@ describe('fromSubjectCascade', () => {
     const cs225 = result.courses[0];
     expect(cs225.course.id).toBe('CS-225-2026-spring');
     expect(cs225.course.title).toBe('Data Structures');
+    expect(cs225.course.credit_hours).toBe(4);
+    expect(cs225.course.credit_hours_text).toBe('4');
 
     // Verify new course fields
     expect(cs225.course.course_info).toBe('Prerequisite: CS 173.');
@@ -151,7 +182,7 @@ describe('fromSubjectCascade', () => {
 
   it('sets primary_instructor from first lecture section', () => {
     const result = fromSubjectCascade(sampleParsed, 2026, 'spring');
-    expect(result.courses[0].course.primary_instructor).toBe('Fagen, W');
+    expect(result.courses[0].course.primary_instructor).toBe('Fagen, Wade');
   });
 
   it('keeps gen-ed categories even when the source has no sub-attributes', () => {
@@ -249,8 +280,8 @@ describe('fromSubjectCascade', () => {
     const course = result.courses[0].course;
     const section = result.courses[0].sections[0].section;
 
-    expect(course.primary_instructor).toBe('Fagen, W; Challen, G');
-    expect(section.instructor).toBe('Fagen, W; Challen, G');
+    expect(course.primary_instructor).toBe('Fagen, Wade; Challen, Geoffrey');
+    expect(section.instructor).toBe('Fagen, Wade; Challen, Geoffrey');
   });
 
   it('transforms all sections with new fields', () => {
@@ -328,7 +359,9 @@ describe('fromCourseDetail', () => {
 
     expect(snapshot.course).toMatchObject({
       id: 'CS-225-2026-spring',
-      primary_instructor: 'Lovelace, A',
+      credit_hours: 4,
+      credit_hours_text: '4 hours.',
+      primary_instructor: 'Lovelace, Ada',
       course_info: 'Prerequisite: CS 173.',
       registration_notes: 'Restricted to majors.',
       approval_code: 'Department Approval Required',
@@ -344,7 +377,7 @@ describe('fromCourseDetail', () => {
       id: '2026-spring-12345',
       section_title: 'Lecture 1',
       part_of_term: '1',
-      instructor: 'Lovelace, A',
+      instructor: 'Lovelace, Ada',
     });
     expect(snapshot.sections[0].meetings[0]).toMatchObject({
       type_code: 'LEC',

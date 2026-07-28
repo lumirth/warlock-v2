@@ -6,8 +6,8 @@ import type {
   SubjectSnapshot,
 } from '../transforms/course.js';
 import type {
-  GenEdCleanup,
   SnapshotPersistenceOperation,
+  SubjectSnapshotManifest,
 } from './snapshot-persistence-operations.js';
 
 type SnapshotSqlParam = string | number | null;
@@ -35,8 +35,6 @@ export function snapshotOperationStatement(
       return courseUpsertStatement(operation.course);
     case 'course_gened.upsert':
       return courseGenedUpsertStatement(operation.gened);
-    case 'course_gened.prune_stale':
-      return courseGenedPruneStaleStatement(operation.cleanup);
     case 'section.upsert':
       return sectionUpsertStatement(operation.section);
     case 'instructor.upsert':
@@ -54,30 +52,15 @@ export function snapshotOperationStatement(
         ],
       };
     case 'subject.prune_stale_meeting_instructors':
-      return staleSubjectStatement(
-        'DELETE FROM meeting_instructors WHERE meeting_id IN (SELECT m.id FROM meetings m JOIN sections s ON s.id = m.section_id JOIN courses c ON c.id = s.course_id WHERE c.subject = ? AND c.year = ? AND c.term = ? AND (s.last_synced IS NULL OR s.last_synced != ?))',
-        operation
-      );
+      return staleMeetingInstructorStatement(operation.manifest);
     case 'subject.prune_stale_meetings':
-      return staleSubjectStatement(
-        'DELETE FROM meetings WHERE section_id IN (SELECT s.id FROM sections s JOIN courses c ON c.id = s.course_id WHERE c.subject = ? AND c.year = ? AND c.term = ? AND (s.last_synced IS NULL OR s.last_synced != ?))',
-        operation
-      );
+      return staleMeetingStatement(operation.manifest);
     case 'subject.prune_stale_sections':
-      return staleSubjectStatement(
-        'DELETE FROM sections WHERE course_id IN (SELECT id FROM courses WHERE subject = ? AND year = ? AND term = ?) AND (last_synced IS NULL OR last_synced != ?)',
-        operation
-      );
+      return staleSectionStatement(operation.manifest);
     case 'subject.prune_stale_course_geneds':
-      return staleSubjectStatement(
-        'DELETE FROM course_gened WHERE course_id IN (SELECT id FROM courses WHERE subject = ? AND year = ? AND term = ? AND (last_synced IS NULL OR last_synced != ?))',
-        operation
-      );
+      return staleCourseGenEdStatement(operation.manifest);
     case 'subject.prune_stale_courses':
-      return staleSubjectStatement(
-        'DELETE FROM courses WHERE subject = ? AND year = ? AND term = ? AND (last_synced IS NULL OR last_synced != ?)',
-        operation
-      );
+      return staleCourseStatement(operation.manifest);
   }
 }
 
@@ -104,7 +87,7 @@ function subjectUpsertStatement(subject: SubjectSnapshot['subject']): SnapshotSq
 
 function courseUpsertStatement(course: CourseSnapshot['course']): SnapshotSqlStatement {
   return {
-    sql: 'INSERT INTO courses (id, subject, number, title, description, credit_hours, subject_id, course_info, degree_attributes, class_schedule_info, date_range_text, registration_notes, approval_code, year, term, avg_gpa, gpa_sample_size, primary_instructor, primary_instructor_rmp, difficulty_score, quality_score, last_synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title, description = excluded.description, credit_hours = excluded.credit_hours, subject_id = excluded.subject_id, course_info = excluded.course_info, degree_attributes = excluded.degree_attributes, class_schedule_info = excluded.class_schedule_info, date_range_text = excluded.date_range_text, registration_notes = excluded.registration_notes, approval_code = excluded.approval_code, primary_instructor = excluded.primary_instructor, last_synced = excluded.last_synced, updated_at = unixepoch()',
+    sql: 'INSERT INTO courses (id, subject, number, title, description, credit_hours, credit_hours_text, subject_id, course_info, degree_attributes, class_schedule_info, date_range_text, registration_notes, approval_code, year, term, avg_gpa, gpa_sample_size, primary_instructor, primary_instructor_rmp, difficulty_score, quality_score, last_synced) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title, description = excluded.description, credit_hours = excluded.credit_hours, credit_hours_text = excluded.credit_hours_text, subject_id = excluded.subject_id, course_info = excluded.course_info, degree_attributes = excluded.degree_attributes, class_schedule_info = excluded.class_schedule_info, date_range_text = excluded.date_range_text, registration_notes = excluded.registration_notes, approval_code = excluded.approval_code, primary_instructor = excluded.primary_instructor, last_synced = excluded.last_synced, updated_at = unixepoch()',
     params: [
       course.id,
       course.subject,
@@ -112,6 +95,7 @@ function courseUpsertStatement(course: CourseSnapshot['course']): SnapshotSqlSta
       course.title,
       course.description,
       course.credit_hours,
+      course.credit_hours_text,
       course.subject_id,
       course.course_info,
       course.degree_attributes,
@@ -141,29 +125,6 @@ function courseGenedUpsertStatement(gened: Omit<CourseGened, 'id'>): SnapshotSql
       gened.category_name,
       gened.attribute_code,
       gened.attribute_name,
-    ],
-  };
-}
-
-function courseGenedPruneStaleStatement(cleanup: GenEdCleanup): SnapshotSqlStatement {
-  if (cleanup.currentKeys.length === 0) {
-    return {
-      sql: 'DELETE FROM course_gened WHERE course_id = ?',
-      params: [cleanup.courseId],
-    };
-  }
-
-  const keepClauses = cleanup.currentKeys
-    .map(() => '(category_id = ? AND attribute_code = ?)')
-    .join(' OR ');
-  return {
-    sql: `DELETE FROM course_gened WHERE course_id = ? AND NOT (${keepClauses})`,
-    params: [
-      cleanup.courseId,
-      ...cleanup.currentKeys.flatMap(key => [
-        key.categoryId,
-        key.attributeCode ?? '',
-      ]),
     ],
   };
 }
@@ -237,22 +198,133 @@ function meetingUpsertStatement(
   };
 }
 
-function staleSubjectStatement(
-  sql: string,
-  operation: {
-    subjectId: string;
-    year: number;
-    term: string;
-    syncTimestamp: number;
-  }
+function subjectScopeParams(
+  manifest: SubjectSnapshotManifest
+): SnapshotSqlParam[] {
+  return [
+    manifest.subjectId,
+    manifest.year,
+    manifest.term,
+  ];
+}
+
+function staleMeetingInstructorStatement(
+  manifest: SubjectSnapshotManifest
 ): SnapshotSqlStatement {
   return {
-    sql,
+    sql: `
+      DELETE FROM meeting_instructors
+      WHERE meeting_id IN (
+        SELECT m.id
+        FROM meetings m
+        JOIN sections s ON s.id = m.section_id
+        JOIN courses c ON c.id = s.course_id
+        WHERE c.subject = ? AND c.year = ? AND c.term = ?
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM meetings current_meeting
+        JOIN instructors current_instructor
+          ON current_instructor.id = meeting_instructors.instructor_id,
+          json_each(?) current_link
+        WHERE current_meeting.id = meeting_instructors.meeting_id
+          AND json_extract(current_link.value, '$.sectionId') = current_meeting.section_id
+          AND CAST(json_extract(current_link.value, '$.meetingIndex') AS INTEGER)
+            = current_meeting.meeting_index
+          AND json_extract(current_link.value, '$.lastName') = current_instructor.last_name
+          AND json_extract(current_link.value, '$.firstName') = current_instructor.first_name
+      )
+    `,
     params: [
-      operation.subjectId,
-      operation.year,
-      operation.term,
-      operation.syncTimestamp,
+      ...subjectScopeParams(manifest),
+      manifest.meetingInstructorKeysJson,
+    ],
+  };
+}
+
+function staleMeetingStatement(
+  manifest: SubjectSnapshotManifest
+): SnapshotSqlStatement {
+  return {
+    sql: `
+      DELETE FROM meetings
+      WHERE section_id IN (
+        SELECT s.id
+        FROM sections s
+        JOIN courses c ON c.id = s.course_id
+        WHERE c.subject = ? AND c.year = ? AND c.term = ?
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM json_each(?) current_meeting
+        WHERE json_extract(current_meeting.value, '$.sectionId') = meetings.section_id
+          AND CAST(json_extract(current_meeting.value, '$.meetingIndex') AS INTEGER)
+            = meetings.meeting_index
+      )
+    `,
+    params: [
+      ...subjectScopeParams(manifest),
+      manifest.meetingKeysJson,
+    ],
+  };
+}
+
+function staleSectionStatement(
+  manifest: SubjectSnapshotManifest
+): SnapshotSqlStatement {
+  return {
+    sql: `
+      DELETE FROM sections
+      WHERE course_id IN (
+        SELECT id FROM courses
+        WHERE subject = ? AND year = ? AND term = ?
+      )
+      AND id NOT IN (SELECT value FROM json_each(?))
+    `,
+    params: [
+      ...subjectScopeParams(manifest),
+      manifest.sectionIdsJson,
+    ],
+  };
+}
+
+function staleCourseGenEdStatement(
+  manifest: SubjectSnapshotManifest
+): SnapshotSqlStatement {
+  return {
+    sql: `
+      DELETE FROM course_gened
+      WHERE course_id IN (
+        SELECT id FROM courses
+        WHERE subject = ? AND year = ? AND term = ?
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM json_each(?) current_gened
+        WHERE json_extract(current_gened.value, '$.courseId') = course_gened.course_id
+          AND json_extract(current_gened.value, '$.categoryId') = course_gened.category_id
+          AND json_extract(current_gened.value, '$.attributeCode') = course_gened.attribute_code
+      )
+    `,
+    params: [
+      ...subjectScopeParams(manifest),
+      manifest.genEdKeysJson,
+    ],
+  };
+}
+
+function staleCourseStatement(
+  manifest: SubjectSnapshotManifest
+): SnapshotSqlStatement {
+  return {
+    sql: `
+      DELETE FROM courses
+      WHERE subject = ? AND year = ? AND term = ?
+        AND id NOT IN (SELECT value FROM json_each(?))
+    `,
+    params: [
+      ...subjectScopeParams(manifest),
+      manifest.courseIdsJson,
     ],
   };
 }

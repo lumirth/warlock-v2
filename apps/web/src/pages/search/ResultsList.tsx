@@ -1,3 +1,4 @@
+import { AlertCircleIcon, InfoIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import type {
@@ -13,6 +14,7 @@ import type {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
@@ -21,11 +23,13 @@ import { CourseResultsTable } from './ResultsTable'
 import { ResultsToolbar } from './ResultsToolbar'
 import {
   courseRequirementLabels,
+  formatCredits,
   formatTermLabel,
   getCourseKey,
   getCourseMetrics,
   getCoursePath,
   isHistoricalResult,
+  registrationSummaryDisplay,
 } from './search-result-model'
 import { metricToneTextClass } from '../../utils/grading'
 import type { ResultViewMode } from './search-sort-model'
@@ -49,6 +53,7 @@ export function ResultsList({
   onRemoveChip,
   onLoadMore,
   feedbackAction,
+  returnTo,
 }: {
   meta: SearchMetaDto | null
   results: SearchCourseResultDto[]
@@ -62,6 +67,7 @@ export function ResultsList({
   resultsHeadingLabel: string
   showingResultsLabel: string
   feedbackAction?: ReactNode
+  returnTo: string
   onSortFieldChange: (field: SortField) => void
   onDirectionToggle: () => void
   onViewChange: (view: ResultViewMode) => void
@@ -69,15 +75,44 @@ export function ResultsList({
   onRemoveChip: (chip: SearchChipDto) => void
   onLoadMore: () => void
 }) {
+  const searchIsDegraded =
+    meta?.retrieval?.degraded === true || pagination?.countIsComplete === false
+
   return (
-    <div aria-busy={loading} className="flex flex-col gap-3">
+    <div aria-busy={loading || loadingMore} className="flex flex-col gap-3">
+      <p className="sr-only" role="status" aria-live="polite">
+        {loadingMore
+          ? 'Loading more course results'
+          : loading
+            ? 'Updating course results'
+            : `${results.length.toLocaleString()} course results shown`}
+      </p>
+      {searchIsDegraded && !showInitialSkeleton ? (
+        <Alert className="border-warning/50 bg-warning/5 py-1.5">
+          <AlertCircleIcon className="text-warning" aria-hidden />
+          <AlertTitle>Partial search results</AlertTitle>
+          <AlertDescription>
+            Some search sources did not respond, so these results may be
+            incomplete. Try again later for the full set.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {meta?.retrieval?.sortLimitedToRetrievedWindow &&
+      !showInitialSkeleton ? (
+        <Alert className="border-border bg-muted/40 py-1.5">
+          <InfoIcon className="text-muted-foreground" aria-hidden />
+          <AlertTitle>Sorted within retrieved topic matches</AlertTitle>
+          <AlertDescription>
+            Semantic search retrieves a bounded set of relevant courses. This
+            sort orders that retrieved set, not every course in the catalog.
+            Refine the search to narrow the comparison.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {!meta && !loading ? null : showInitialSkeleton ? (
         <ResultsSkeleton />
       ) : results.length === 0 && meta ? (
-        <EmptyResults
-          meta={meta}
-          onRemoveChip={onRemoveChip}
-        />
+        <EmptyResults meta={meta} onRemoveChip={onRemoveChip} />
       ) : (
         <div className="flex flex-col gap-3">
           {meta && (
@@ -109,12 +144,14 @@ export function ResultsList({
               results={results}
               sort={sort}
               onSort={onTableSort}
+              returnTo={returnTo}
             />
           ) : (
             results.map((result) => (
               <CourseResultCard
                 key={getCourseKey(result.course)}
                 result={result}
+                returnTo={returnTo}
               />
             ))
           )}
@@ -128,7 +165,7 @@ export function ResultsList({
                 {loadingMore && (
                   <Spinner data-icon="inline-start" aria-hidden />
                 )}
-                Show more results
+                {loadingMore ? 'Loading more results' : 'Show more results'}
               </Button>
             </div>
           )}
@@ -146,22 +183,6 @@ function ResultsSkeleton() {
       aria-label="Searching courses"
       className="flex flex-col gap-3"
     >
-      <Card>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-3 w-20" />
-            </div>
-            <Skeleton className="h-7 w-32" />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Skeleton className="h-5 w-20" />
-            <Skeleton className="h-5 w-24" />
-            <Skeleton className="h-5 w-28" />
-          </div>
-        </CardContent>
-      </Card>
       {[0, 1, 2].map((index) => (
         <Card key={index}>
           <CardContent className="flex flex-col gap-3">
@@ -176,13 +197,21 @@ function ResultsSkeleton() {
   )
 }
 
-function CourseResultCard({ result }: { result: SearchCourseResultDto }) {
+function CourseResultCard({
+  result,
+  returnTo,
+}: {
+  result: SearchCourseResultDto
+  returnTo: string
+}) {
   const { course } = result
   const isHistorical = isHistoricalResult(result)
+  const registration = registrationSummaryDisplay(course)
 
   return (
     <Link
       to={getCoursePath(course)}
+      state={{ fromSearch: true, returnTo }}
       className="text-foreground block no-underline"
     >
       <Card
@@ -213,7 +242,15 @@ function CourseResultCard({ result }: { result: SearchCourseResultDto }) {
                   Historical term
                 </Badge>
               )}
-              <span>{course.creditHours} credits</span>
+              {course.creditHoursText ||
+              typeof course.creditHours === 'number' ? (
+                <span>
+                  {formatCredits(
+                    course.creditHours,
+                    course.creditHoursText
+                  )}
+                </span>
+              ) : null}
               {course.primaryInstructor && (
                 <span className="border-l pl-2">
                   {course.primaryInstructor}
@@ -223,15 +260,40 @@ function CourseResultCard({ result }: { result: SearchCourseResultDto }) {
                 <span key={label}>{label}</span>
               ))}
             </div>
+            {registration ? (
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t pt-3 text-sm">
+                <span
+                  className={cn(
+                    'font-semibold',
+                    registration.tone === 'success' && 'text-success',
+                    registration.tone === 'warning' && 'text-warning',
+                    registration.tone === 'destructive' && 'text-destructive',
+                    registration.tone === 'muted' && 'text-muted-foreground'
+                  )}
+                >
+                  {registration.primary}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {registration.detail}
+                </span>
+                {registration.updated ? (
+                  <span className="text-muted-foreground text-xs">
+                    · {registration.updated}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             <ScoreSummary course={course} />
-            <p
-              className={cn(
-                'text-muted-foreground mt-2 line-clamp-3 max-w-3xl text-sm leading-6',
-                isHistorical && 'opacity-80'
-              )}
-            >
-              {course.description}
-            </p>
+            {course.description ? (
+              <p
+                className={cn(
+                  'text-muted-foreground mt-2 line-clamp-3 max-w-3xl text-sm leading-6',
+                  isHistorical && 'opacity-80'
+                )}
+              >
+                {course.description}
+              </p>
+            ) : null}
             <MatchEvidence evidence={result.matchEvidence} />
           </div>
         </CardContent>
@@ -270,7 +332,7 @@ function MatchEvidence({
 }) {
   const labels =
     evidence
-      ?.slice(0, 5)
+      ?.slice(0, 3)
       .map((item) => item.label)
       .filter(Boolean) ?? []
 

@@ -54,6 +54,10 @@ function course(overrides: Partial<Course>): Course {
     created_at: 0,
     updated_at: 0,
     ...overrides,
+    credit_hours_text:
+      overrides.credit_hours_text === undefined
+        ? '3 hours.'
+        : overrides.credit_hours_text,
   };
 }
 
@@ -347,7 +351,7 @@ describe('decision-search ranking policy', () => {
     ]));
   });
 
-  it('prefers evidence-backed low-workload requirement matches over unsupported topical matches', () => {
+  it('prefers evidence-backed requirement matches over unsupported topical matches', () => {
     const results: SearchResult[] = [
       {
         course: course({
@@ -388,18 +392,18 @@ describe('decision-search ranking policy', () => {
         warnings: [],
         confidence: 0.82,
       },
-      softPreferences: { lowWriting: 0.9, lowWorkload: 0.84 },
+      softPreferences: { lowWriting: 0.9 },
     });
 
     expect(reranked[0].course.id).toBe('FILM-120');
     expect(reranked[0].score).toBeGreaterThan(reranked[1].score);
     expect(reranked[0].scoreComponents).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'requirement_match' }),
-      expect.objectContaining({ name: 'workload_preference' }),
+      expect.objectContaining({ name: 'quality_tier' }),
     ]));
   });
 
-  it('penalizes graduate seminars for easy/non-major-friendly workload intent', () => {
+  it('penalizes graduate seminars for explicit non-major-friendly intent', () => {
     const results: SearchResult[] = [
       {
         course: course({
@@ -426,10 +430,10 @@ describe('decision-search ranking policy', () => {
     ];
 
     const reranked = applyRankingPolicy(results, {
-      filters: { subject: 'PHYS', workload: 'easy' },
+      filters: { subject: 'PHYS' },
       semanticQuery: 'physics for non majors',
       keywordQuery: 'physics for non majors',
-      softPreferences: { lowWorkload: 0.84, nonMajorFriendly: 0.72 },
+      softPreferences: { nonMajorFriendly: 0.72 },
     });
 
     expect(reranked[0].course.id).toBe('PHYS-100');
@@ -479,12 +483,11 @@ describe('explainable ranking policy', () => {
     ], {
       filters: {
         requirement: singleRequirementFilter('NAT'),
-        workload: 'easy',
         not: { subjects: ['MATH'] },
       },
       semanticQuery: 'easy science but no math',
       keywordQuery: 'easy science but no math',
-      softPreferences: { lowMath: 0.86, lowWorkload: 0.84 },
+      softPreferences: { lowMath: 0.86 },
       intent: {
         queryTypes: ['requirement', 'subjective_vibe', 'avoidance'],
         negativeTerms: ['math_heavy'],
@@ -499,7 +502,6 @@ describe('explainable ranking policy', () => {
     expect(reranked.find(result => result.course.id === 'MATH-540')?.scoreComponents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'negative_preference_penalty' }),
-        expect.objectContaining({ name: 'level_accessibility', value: -1.25 }),
       ]),
     );
   });
@@ -530,10 +532,10 @@ describe('explainable ranking policy', () => {
         score: 0.6,
       },
     ], {
-      filters: { subject: 'PHYS', workload: 'easy' },
+      filters: { subject: 'PHYS' },
       semanticQuery: 'physics for non majors',
       keywordQuery: 'physics for non majors',
-      softPreferences: { lowWorkload: 0.84, nonMajorFriendly: 0.72 },
+      softPreferences: { nonMajorFriendly: 0.72 },
     });
 
     expect(reranked.map(result => result.course.id)).toEqual(['PHYS-100', 'PHYS-595']);

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { syncSubjects } from '../parallel-sync.js';
 import { browserFetch } from '../../http/browser-fetch.js';
 import { parseSubjectCascadeXml } from '../../cisapi/parser.js';
@@ -6,6 +6,7 @@ import { writeSubjectSnapshotToD1 } from '../course-snapshot-writer.js';
 import { deleteCourseEmbeddings, upsertCourseEmbeddingsInBatches } from '../embeddings.js';
 import { fromSubjectCascade } from '../../transforms/course.js';
 import type { Ai, D1Database, VectorizeIndex } from '@cloudflare/workers-types';
+import type { SyncRunStatus } from '../../db/types.js';
 
 vi.mock('../../http/browser-fetch.js', () => ({
   browserFetch: vi.fn(),
@@ -28,6 +29,9 @@ vi.mock('../../transforms/course.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../transforms/course.js')>()),
   fromSubjectCascade: vi.fn(),
 }));
+vi.mock('../validation.js', () => ({
+  assertPublishableSubjectSnapshot: vi.fn(),
+}));
 
 function successfulSyncDb(existingCourseIds: string[] = []) {
   const writes: unknown[][] = [];
@@ -41,7 +45,7 @@ function successfulSyncDb(existingCourseIds: string[] = []) {
         })),
         run: vi.fn(async () => {
           writes.push([sql.replace(/\s+/g, ' ').trim(), ...args]);
-          return {};
+          return { meta: { changes: 1 } };
         }),
       })),
     })),
@@ -66,14 +70,16 @@ function prepareSuccessfulSubjectSync() {
 }
 
 describe('syncSubjects', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('skips a subject when a fresh running sync lock already exists', async () => {
     const db = {
-      prepare: vi.fn((sql: string) => ({
+      prepare: vi.fn((_sql: string) => ({
         bind: vi.fn(() => ({
-          first: vi.fn(async () => sql.includes('SELECT last_sync')
-            ? { last_sync: Math.floor(Date.now() / 1000), status: 'running' }
-            : null),
-          run: vi.fn(async () => ({})),
+          first: vi.fn(async () => null),
+          run: vi.fn(async () => ({ meta: { changes: 0 } })),
         })),
       })),
     };
@@ -104,12 +110,10 @@ describe('syncSubjects', () => {
     const db = {
       prepare: vi.fn((sql: string) => ({
         bind: vi.fn((...args: unknown[]) => ({
-          first: vi.fn(async () => sql.includes('SELECT last_sync')
-            ? { last_sync: Math.floor(Date.now() / 1000), status: 'running' }
-            : null),
+          first: vi.fn(async () => null),
           run: vi.fn(async () => {
             writes.push([sql.replace(/\s+/g, ' ').trim(), ...args]);
-            return {};
+            return { meta: { changes: 1 } };
           }),
         })),
       })),
@@ -137,7 +141,7 @@ describe('syncSubjects', () => {
     expect(writes.some(write => String(write[0]).includes('INSERT INTO subject_sync_state'))).toBe(true);
   });
 
-  it('batches semantic writes, prunes stale vectors, and only then completes the subject', async () => {
+  it('publishes D1 before upserting current vectors and pruning stale vectors', async () => {
     prepareSuccessfulSubjectSync();
     const { db, writes } = successfulSyncDb([
       'CS-124-2026-spring',
@@ -159,16 +163,27 @@ describe('syncSubjects', () => {
       expect.anything(),
       ['CS-125-2026-spring']
     );
-    expect(vi.mocked(deleteCourseEmbeddings).mock.invocationCallOrder[0])
-      .toBeLessThan(vi.mocked(writeSubjectSnapshotToD1).mock.invocationCallOrder[0]);
     expect(vi.mocked(writeSubjectSnapshotToD1).mock.invocationCallOrder[0])
       .toBeLessThan(vi.mocked(upsertCourseEmbeddingsInBatches).mock.invocationCallOrder[0]);
+    expect(vi.mocked(upsertCourseEmbeddingsInBatches).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(deleteCourseEmbeddings).mock.invocationCallOrder[0]);
     expect(result.failedSubjects).toBe(0);
+    expect(writeSubjectSnapshotToD1).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      {
+        publicationFence: {
+          termId: '2026-spring',
+          subject: 'CS',
+          ownerToken: expect.stringMatching(/^subject:/),
+        },
+      }
+    );
     expect(writes.at(-1)).toEqual(expect.arrayContaining([
-      expect.stringContaining('INSERT INTO subject_sync_state'),
+      expect.stringContaining('UPDATE subject_sync_state'),
+      'complete',
       '2026-spring',
       'CS',
-      'complete',
     ]));
   });
 
@@ -193,10 +208,122 @@ describe('syncSubjects', () => {
       error: 'vector write failed',
     }));
     expect(writes.at(-1)).toEqual(expect.arrayContaining([
-      expect.stringContaining('INSERT INTO subject_sync_state'),
+      expect.stringContaining('UPDATE subject_sync_state'),
+      'failed',
       '2026-spring',
       'CS',
-      'failed',
     ]));
+  });
+
+  it('fences a stale worker after a forced takeover and preserves the new owner status', async () => {
+    let resolveFirstParse: ((parsed: { subjectId: string }) => void) | undefined;
+    const firstParse = new Promise<{ subjectId: string }>(resolve => {
+      resolveFirstParse = resolve;
+    });
+    vi.mocked(browserFetch)
+      .mockResolvedValueOnce(new Response('<xml/>', { status: 200 }))
+      .mockResolvedValueOnce(new Response('', { status: 404 }));
+    vi.mocked(parseSubjectCascadeXml).mockReturnValueOnce(firstParse as never);
+    vi.mocked(fromSubjectCascade).mockReturnValueOnce({
+      subject: { id: 'CS' },
+      courses: [{ course: { id: 'CS-124-2026-spring' } }],
+    } as never);
+
+    const state: {
+      ownerToken: string | null;
+      status: SyncRunStatus | null;
+      error: string | null;
+    } = {
+      ownerToken: null,
+      status: null,
+      error: null,
+    };
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn((...args: unknown[]) => ({
+          run: vi.fn(async () => {
+            const normalized = sql.replace(/\s+/g, ' ').trim();
+            if (normalized.startsWith('INSERT INTO subject_sync_state')) {
+              const requestedOwner = String(args[2]);
+              const force = args[3] === 1;
+              if (state.ownerToken === null || force) {
+                state.ownerToken = requestedOwner;
+                state.status = 'running';
+                state.error = null;
+                return { meta: { changes: 1 } };
+              }
+              return { meta: { changes: 0 } };
+            }
+
+            if (
+              normalized.startsWith('UPDATE subject_sync_state')
+              && normalized.includes('status = ?')
+            ) {
+              const requestedOwner = String(args[6]);
+              if (state.ownerToken !== requestedOwner || state.status !== 'running') {
+                return { meta: { changes: 0 } };
+              }
+              state.status = args[0] as SyncRunStatus;
+              state.error = args[3] === null ? null : String(args[3]);
+              state.ownerToken = null;
+              return { meta: { changes: 1 } };
+            }
+
+            if (normalized.startsWith('UPDATE subject_sync_state')) {
+              const requestedOwner = String(args[2]);
+              return {
+                meta: {
+                  changes: state.ownerToken === requestedOwner
+                    && state.status === 'running'
+                    ? 1
+                    : 0,
+                },
+              };
+            }
+            return { meta: { changes: 0 } };
+          }),
+        })),
+      })),
+    };
+
+    const staleRun = syncSubjects(
+      db as unknown as D1Database,
+      { cisapiBase: 'https://example.invalid', concurrency: 1 },
+      2026,
+      'spring',
+      ['CS']
+    );
+    await vi.waitFor(() => {
+      expect(parseSubjectCascadeXml).toHaveBeenCalledTimes(1);
+    });
+
+    const takeoverRun = syncSubjects(
+      db as unknown as D1Database,
+      { cisapiBase: 'https://example.invalid', concurrency: 1 },
+      2026,
+      'spring',
+      ['CS'],
+      undefined,
+      undefined,
+      { lockMode: 'force' }
+    );
+    const takeoverResult = await takeoverRun;
+    resolveFirstParse?.({ subjectId: 'CS' });
+    const staleResult = await staleRun;
+
+    expect(takeoverResult.subjectResults[0]).toEqual(expect.objectContaining({
+      success: false,
+      error: 'HTTP 404 for CS',
+    }));
+    expect(staleResult.subjectResults[0]).toEqual(expect.objectContaining({
+      success: false,
+      error: 'Subject sync lease ownership changed; refusing stale data publication',
+    }));
+    expect(writeSubjectSnapshotToD1).not.toHaveBeenCalled();
+    expect(state).toEqual({
+      ownerToken: null,
+      status: 'failed',
+      error: 'HTTP 404 for CS',
+    });
   });
 });

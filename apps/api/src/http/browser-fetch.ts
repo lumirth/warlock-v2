@@ -68,9 +68,13 @@ export async function browserFetch(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
+      if (fetchOptions.signal?.aborted) {
+        break;
+      }
+
       if (attempt < retries) {
         logger.warn('browserFetch.retryableFailure', { attempt: attempt + 1, ...errorFields(lastError) });
-        await sleep(retryDelay * (attempt + 1));
+        await sleep(retryDelay * (attempt + 1), fetchOptions.signal);
         continue;
       }
     }
@@ -87,8 +91,26 @@ function isWafChallenge(response: Response): boolean {
   return wafAction === 'challenge' || wafAction === 'captcha';
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal | null): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(abortError(signal.reason));
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(abortError(signal?.reason));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function abortError(reason: unknown): Error {
+  return reason instanceof Error ? reason : new Error(String(reason ?? 'Fetch aborted'));
 }
 
 function fetchWithTimeout(

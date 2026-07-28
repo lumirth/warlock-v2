@@ -16,6 +16,7 @@ import type {
   LiveCourseDetailSnapshot,
   StoredDetailOptions,
 } from './course-detail-types.js';
+import { LIVE_DETAIL_CACHE_TTL_SECONDS } from './course-detail-live-cache.js';
 
 export function buildStoredCourseDetailResponse(
   context: CourseDetailContext,
@@ -33,16 +34,17 @@ export function buildStoredCourseDetailResponse(
       requirements: courseRequirementRowsToDto(enrichment.requirementRows),
       medianGpa: enrichment.medianGpa,
     }, {
-      cached: !isStale,
+      cached: true,
       stale: isStale,
       staleReason: isStale ? options.staleReason : undefined,
-      ageSeconds: course.age_seconds,
+      ageSeconds: finiteNonnegativeOrNull(course.age_seconds),
+      fetchedAt: finiteNonnegativeOrNull(course.last_synced),
       termStatus: context.resolvedTerm.status,
     }),
     headers: isStale
       ? { 'X-Cache': 'STALE' }
       : {
-        'Cache-Control': `max-age=${Math.floor(context.cacheTtlMs / 1000)}`,
+        'Cache-Control': cacheControl(context),
         'X-Cache': 'HIT',
       },
   };
@@ -55,7 +57,10 @@ export function buildLiveCourseDetailResponse(
     instructorLinkRows: InstructorLinkReadRow[];
     existingMetadata: CourseDetailMetadata | null;
     medianGpa: number | null;
-  }
+  },
+  options: {
+    cacheHit: boolean;
+  },
 ): CourseDetailResponse {
   const { instructorLinkRows, existingMetadata, medianGpa } = readModel;
   const instructorMap = toCourseInstructorMap(instructorLinkRows);
@@ -76,15 +81,25 @@ export function buildLiveCourseDetailResponse(
       instructorMap,
       medianGpa,
     }, {
-      cached: false,
+      cached: options.cacheHit,
       fetchedAt: liveSnapshot.fetchedAt,
       termStatus: context.resolvedTerm.status,
     }),
     headers: {
-      'Cache-Control': `max-age=${Math.floor(context.cacheTtlMs / 1000)}`,
-      'X-Cache': 'MISS',
+      'Cache-Control': cacheControl(context),
+      'X-Cache': options.cacheHit ? 'LIVE-HIT' : 'MISS',
     },
   };
+}
+
+function cacheControl(context: CourseDetailContext): string {
+  const browserSeconds = Math.max(0, Math.floor(context.cacheTtlMs / 1000));
+  return [
+    'public',
+    `max-age=${browserSeconds}`,
+    `s-maxage=${LIVE_DETAIL_CACHE_TTL_SECONDS}`,
+    `stale-while-revalidate=${LIVE_DETAIL_CACHE_TTL_SECONDS}`,
+  ].join(', ');
 }
 
 function firstInstructorMetric(
@@ -93,4 +108,10 @@ function firstInstructorMetric(
 ): number | null {
   const instructor = Object.values(instructorMap).find((entry) => typeof entry[metric] === 'number');
   return instructor?.[metric] ?? null;
+}
+
+function finiteNonnegativeOrNull(value: number | null): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }

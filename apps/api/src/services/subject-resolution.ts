@@ -136,11 +136,10 @@ function chooseSubjectOrRequirementInterpretation(context: {
   const requirementScore = interpretationScore([
     [mentionsRequirementCodeAlias(context.subject, raw), 5],
     [hasRequirementCue(raw), 3],
-    [hasStudentShoppingCue(raw), 2],
   ]);
 
   const subjectScore = interpretationScore([
-    [hasSubjectBrowseCue(raw) && !hasStudentShoppingCue(raw), 3],
+    [hasSubjectBrowseCue(raw), 3],
     [isBareUppercaseSubjectCode(context.subject, raw), 1],
   ]);
 
@@ -183,10 +182,6 @@ function mentionsRequirementCodeAlias(subject: string, rawQuery: string): boolea
 
 function hasRequirementCue(rawQuery: string): boolean {
   return /\b(?:requirement|gen\s*-?\s*ed|requirements?|fulfills?|counts?|category|bucket)\b/i.test(rawQuery);
-}
-
-function hasStudentShoppingCue(rawQuery: string): boolean {
-  return /\b(?:easy|chill|gpa\s+booster|grade\s+booster|easy\s+a|low\s+workload)\b/i.test(rawQuery);
 }
 
 function hasSubjectBrowseCue(rawQuery: string): boolean {

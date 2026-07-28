@@ -13,7 +13,7 @@ export type SearchChipType =
   | "credits"
   | "online"
   | "status"
-  | "workload"
+  | "instructorDifficulty"
   | "requirement"
   | "term"
   | "partOfTerm"
@@ -34,20 +34,41 @@ export type SearchMetaDto = {
    */
   interpretedRequest: SearchRequestDto;
   ui: SearchUiPlanDto;
+  retrieval?: {
+    /** True when one or more retrieval lanes failed and the response is partial. */
+    degraded: boolean;
+    /**
+     * True when an attribute sort includes semantic matches. Semantic recall is
+     * bounded, so the requested attribute only orders the retrieved match
+     * window rather than every potentially relevant course in the catalog.
+     */
+    sortLimitedToRetrievedWindow?: boolean;
+  };
 };
 
 export type SearchResponseDto = {
   results: SearchCourseResultDto[];
   meta: SearchMetaDto;
   pagination: {
-    /** Exact number of courses matched by the executable retrieval plan. */
+    /** Exact union count for the retrieval lanes that completed successfully. */
     totalResults: number;
+    /** False when `totalResults` excludes one or more failed retrieval lanes. */
+    countIsComplete?: boolean;
     /** Number of top-ranked matches available through bounded pagination. */
     browseableResults: number;
     limit: number;
     offset: number;
     hasMore?: boolean;
     nextOffset?: number | null;
+    /**
+     * Describes the bounded pre-hydration window. `totalResults` remains the
+     * exact match count even when only the strongest candidates are hydrated.
+     */
+    candidateWindow?: {
+      retrievedCandidates: number;
+      hydrationLimit: number;
+      truncated: boolean;
+    };
   };
 };
 

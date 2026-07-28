@@ -152,9 +152,9 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
     case 'partofterm':
       plan.filters.partOfTerm = filter.value.toUpperCase();
       break;
-    case 'workload':
-      if (filter.value === 'easy' || filter.value === 'hard') {
-        plan.filters.workload = filter.value;
+    case 'instructor_difficulty':
+      if (filter.value === 'lower' || filter.value === 'higher') {
+        plan.filters.instructorDifficulty = filter.value;
       }
       break;
   }
@@ -162,7 +162,7 @@ function applyFieldFilter(filter: FieldFilter, plan: SearchPlan): void {
 
 function applyNegationToken(token: string, plan: SearchPlan): void {
   const normalized = token.toLowerCase();
-  const fieldMatch = /^(subject|requirement|keyword|workload):(.+)$/.exec(normalized);
+  const fieldMatch = /^(subject|requirement|keyword):(.+)$/.exec(normalized);
   if (fieldMatch) {
     applyStructuredNegation(fieldMatch[1], fieldMatch[2], plan);
     return;

@@ -51,7 +51,8 @@ export function inferFailureClasses(
   }
 
   if (
-    /\b(professor|prof|instructor|taught by|with|dr\.?)\b/i.test(haystack)
+    /\b(professor|prof|taught by|with|dr\.?)\b/i.test(haystack)
+    || /\binstructor\s+(?!difficulty\b|rating\b)/i.test(haystack)
     || candidate.instructorName
   ) {
     classes.add('instructor_name');
@@ -124,7 +125,7 @@ export function buildReviewChecklist(target: PromotionTarget): string[] {
   }
   if (target === 'score_audit') {
     return [
-      'Inspect the course score inputs for GPA, RMP, quality, and workload.',
+      'Inspect the course score inputs for GPA, RMP, quality, and instructor difficulty.',
       'Compare displayed score copy with the source rows and sample sizes.',
       'Add or update a score DTO/UI test if the report is valid.',
     ];

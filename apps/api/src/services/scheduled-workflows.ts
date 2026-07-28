@@ -1,6 +1,17 @@
-import type { D1Database, Fetcher, KVNamespace } from '@cloudflare/workers-types';
-import { coordinateEnrichment, enrichCoursesWithGpa, enrichCoursesWithScores } from './enrichment.js';
-import { resumeGpaSync, resetGpaSync } from './gpa-sync.js';
+import type {
+  D1Database,
+  Fetcher,
+  KVNamespace,
+  VectorizeIndex,
+} from '@cloudflare/workers-types';
+import { coordinateEnrichment, enrichCoursesWithGpa } from './enrichment.js';
+import {
+  claimGpaCompletionPublication,
+  finishGpaCompletionEnrichment,
+  releaseGpaMutationLease,
+  resumeGpaSync,
+  resetGpaSync,
+} from './gpa-sync.js';
 import { coordinateRmpSync } from './rmp-sync.js';
 import { coordinateCourseSync, type CourseSyncTrigger } from './sync-coordinator.js';
 import { discoverAndClassifyTerms } from './term-discovery.js';
@@ -9,18 +20,19 @@ import { createRunId, errorFields, logger } from '../observability/logger.js';
 type ScheduledWorkflowEnv = {
   DB: D1Database;
   SELF: Fetcher;
+  VECTORIZE?: VectorizeIndex;
   GPA_CACHE: KVNamespace;
   CISAPI_BASE: string;
   FRONTEND_BASE: string;
   SYNC_CONCURRENCY: string;
+  SYNC_EMBEDDINGS?: string;
   INTERNAL_TOKEN?: string;
   RMP_AUTH_TOKEN?: string;
 };
 
 type ScheduledWorkflow =
   | { name: 'term_discovery'; trigger: 'daily_term_discovery' }
-  | { name: 'weekly_gpa_reset'; trigger: 'weekly_maintenance' }
-  | { name: 'weekly_rmp_enrichment'; trigger: 'weekly_maintenance' }
+  | { name: 'weekly_maintenance'; trigger: 'weekly_maintenance' }
   | { name: 'gpa_resume'; trigger: 'gpa_resume_cron' }
   | { name: 'course_sync'; trigger: CourseSyncTrigger };
 
@@ -36,7 +48,8 @@ type ScheduledWorkflowDispatch = {
 };
 
 const TERM_DISCOVERY_CRON = '0 10,22 * * *';
-const WEEKLY_MAINTENANCE_CRON = '0 8 * * 0';
+const COURSE_SYNC_CRON = '30 10,22 * * *';
+const WEEKLY_MAINTENANCE_CRON = '0 8 * * SUN';
 const GPA_RESUME_CRON = '*/5 * * * *';
 
 export function planScheduledWorkflows(cron: string): ScheduledWorkflowPlan {
@@ -50,26 +63,27 @@ export function planScheduledWorkflows(cron: string): ScheduledWorkflowPlan {
   if (cron === WEEKLY_MAINTENANCE_CRON) {
     return {
       cron,
-      workflows: [
-        { name: 'weekly_gpa_reset', trigger: 'weekly_maintenance' },
-        { name: 'weekly_rmp_enrichment', trigger: 'weekly_maintenance' },
-      ],
+      workflows: [{ name: 'weekly_maintenance', trigger: 'weekly_maintenance' }],
     };
   }
 
   if (cron === GPA_RESUME_CRON) {
     return {
       cron,
-      workflows: [
-        { name: 'gpa_resume', trigger: 'gpa_resume_cron' },
-        { name: 'course_sync', trigger: 'gpa_resume_fallthrough' },
-      ],
+      workflows: [{ name: 'gpa_resume', trigger: 'gpa_resume_cron' }],
+    };
+  }
+
+  if (cron === COURSE_SYNC_CRON) {
+    return {
+      cron,
+      workflows: [{ name: 'course_sync', trigger: 'scheduled_course_sync' }],
     };
   }
 
   return {
     cron,
-    workflows: [{ name: 'course_sync', trigger: 'default_cron' }],
+    workflows: [],
   };
 }
 
@@ -95,10 +109,8 @@ async function runScheduledWorkflow(
   switch (workflow.name) {
     case 'term_discovery':
       return handleTermDiscovery(env, runId, cron);
-    case 'weekly_gpa_reset':
-      return handleWeeklyGpaReset(env, runId, cron);
-    case 'weekly_rmp_enrichment':
-      return handleWeeklyRmpEnrichment(env, runId, cron);
+    case 'weekly_maintenance':
+      return handleWeeklyMaintenance(env, runId, cron);
     case 'gpa_resume':
       return handleGpaResume(env, runId, cron);
     case 'course_sync':
@@ -128,17 +140,16 @@ async function handleTermDiscovery(env: ScheduledWorkflowEnv, runId: string, cro
   }
 }
 
-async function handleWeeklyGpaReset(env: ScheduledWorkflowEnv, runId: string, cron: string): Promise<void> {
+async function handleWeeklyMaintenance(env: ScheduledWorkflowEnv, runId: string, cron: string): Promise<void> {
+  let gpaResetResult: string | null = null;
   logger.info('cron.weekly.gpaReset.start', { runId, cron });
   try {
-    await resetGpaSync(env.DB, env.GPA_CACHE);
-    logger.info('cron.weekly.gpaReset.complete', { runId });
+    gpaResetResult = await resetGpaSync(env.DB, env.GPA_CACHE);
+    logger.info('cron.weekly.gpaReset.complete', { runId, result: gpaResetResult });
   } catch (err) {
     logger.error('cron.weekly.gpaReset.failed', { runId, ...errorFields(err) });
   }
-}
 
-async function handleWeeklyRmpEnrichment(env: ScheduledWorkflowEnv, runId: string, cron: string): Promise<void> {
   logger.info('cron.weekly.rmp.start', { runId, cron });
   try {
     const rmpResult = await coordinateRmpSync(env.DB, env.SELF, {
@@ -146,9 +157,15 @@ async function handleWeeklyRmpEnrichment(env: ScheduledWorkflowEnv, runId: strin
       internalToken: env.INTERNAL_TOKEN,
     });
     logger.info('cron.weekly.rmp.complete', { runId, ...rmpResult });
-    logger.info('cron.weekly.rmp.enrichment.start', { runId });
-    const enrichment = await coordinateEnrichment(env.DB);
-    logger.info('cron.weekly.rmp.enrichment.complete', { runId, ...enrichment });
+
+    // A newly reset GPA generation will perform this once at completion. If
+    // GPA did not change (or the reset check failed), publish the fresh RMP
+    // data now instead of racing a concurrent GPA reset.
+    if (gpaResetResult === null || gpaResetResult === 'skipped_no_changes') {
+      logger.info('cron.weekly.rmp.enrichment.start', { runId });
+      const enrichment = await coordinateEnrichment(env.DB);
+      logger.info('cron.weekly.rmp.enrichment.complete', { runId, ...enrichment });
+    }
   } catch (err) {
     logger.error('cron.weekly.rmp.failed', { runId, ...errorFields(err) });
   }
@@ -164,12 +181,30 @@ async function handleGpaResume(env: ScheduledWorkflowEnv, runId: string, cron: s
       isComplete: result.isComplete,
     });
 
-    if (result.isComplete) {
+    if (result.isComplete && result.completionKey) {
+      const publicationLease = await claimGpaCompletionPublication(env.DB, result.completionKey);
+      if (!publicationLease) {
+        logger.info('cron.gpaResume.enrichment.alreadyHandled', {
+          runId,
+          completionKey: result.completionKey,
+        });
+        return;
+      }
+
       logger.info('cron.gpaResume.enrichment.start', { runId });
-      await enrichCoursesWithGpa(env.DB);
-      await enrichCoursesWithScores(env.DB);
-      await coordinateEnrichment(env.DB);
-      logger.info('cron.gpaResume.enrichment.dispatched', { runId });
+      try {
+        try {
+          await enrichCoursesWithGpa(env.DB);
+          await coordinateEnrichment(env.DB);
+          await finishGpaCompletionEnrichment(env.DB, result.completionKey, 'complete');
+          logger.info('cron.gpaResume.enrichment.complete', { runId });
+        } catch (error) {
+          await finishGpaCompletionEnrichment(env.DB, result.completionKey, 'failed');
+          throw error;
+        }
+      } finally {
+        await releaseGpaMutationLease(env.DB, publicationLease);
+      }
     }
   } catch (err) {
     logger.error('cron.gpaResume.failed', { runId, ...errorFields(err) });

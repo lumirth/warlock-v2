@@ -21,11 +21,7 @@ export function extractPositiveNoNotAliases(text: string, hints: Hint[]): string
     let match;
     while ((match = pattern.exec(residual)) !== null) {
       const metadata = createMetadata('alias', match[0], 0.88);
-      if (alias.type === 'workload') {
-        hints.push({ type: 'workload', value: alias.value, metadata });
-      } else {
-        hints.push({ type: 'status', value: alias.value, metadata });
-      }
+      hints.push({ type: 'status', value: alias.value, metadata });
       matches.push({ index: match.index, length: match[0].length });
     }
 

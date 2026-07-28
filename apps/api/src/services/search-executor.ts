@@ -10,6 +10,7 @@ import {
   type RetrievalPlan,
 } from "./search-retrieval-plan.js";
 import { hybridSearch } from "./search-hybrid.js";
+import type { SearchCandidateWindow } from "./search-hybrid.js";
 import { applyFinalOrderingControls } from "./ranking/final-ordering.js";
 import { applyTermRankingPolicy } from "./ranking/term-ordering.js";
 import type { SearchResult } from "./search-types.js";
@@ -24,6 +25,7 @@ type SearchExecutionResult = {
   totalResults: number;
   retrievalPlan: RetrievalPlan;
   retrievalExecution: RetrievalExecutionSummary;
+  candidateWindow?: SearchCandidateWindow;
 };
 
 export async function executeSearchPlan(
@@ -62,5 +64,6 @@ export async function executeSearchPlan(
     totalResults: retrieval.totalResults,
     retrievalPlan,
     retrievalExecution: summarizeRetrievalExecution(retrieval.retrievalExecution),
+    candidateWindow: retrieval.candidateWindow,
   };
 }

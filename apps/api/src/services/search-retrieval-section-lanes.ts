@@ -1,14 +1,18 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { SearchScope } from "@uiuc-course-search/query-types";
+import {
+  DEFAULT_SEARCH_SORT,
+  type SearchScope,
+  type SearchSort,
+} from "@uiuc-course-search/query-types";
 import type { SearchFilters } from "./search-planner-types.js";
 import {
   buildFilteredCourseQuery,
-  hasFilteredCourseConstraints,
   type CandidateSqlQuery,
 } from "./search-lane-query-builder.js";
 import { chunkValues } from "./search-loaders.js";
 import { rankedLaneRow } from "./search-retrieval-lane-result.js";
 import type { RetrievalLaneResult } from "./search-types.js";
+import { courseSqlOrderBy } from "./search-sql-sort.js";
 
 export function buildSectionFtsCandidateQuery(
   cleanKeywordQuery: string,
@@ -37,6 +41,7 @@ export async function sectionKeywordSearch(
   filters: SearchFilters,
   limit: number = 50,
   scope: SearchScope = "all",
+  sort: SearchSort = DEFAULT_SEARCH_SORT,
 ): Promise<RetrievalLaneResult[]> {
   const candidateQuery = buildSectionFtsCandidateQuery(cleanKeywordQuery, filters, scope);
   if (!candidateQuery) return [];
@@ -44,7 +49,8 @@ export async function sectionKeywordSearch(
   const result = await db.prepare(`
     SELECT candidates.id, candidates.fts_score
     FROM (${candidateQuery.sql}) candidates
-    ORDER BY fts_score ASC
+    JOIN courses c ON c.id = candidates.id
+    ORDER BY ${courseSqlOrderBy(sort, "fts_score ASC")}
     LIMIT ?
   `)
     .bind(...candidateQuery.params, limit)
@@ -67,15 +73,7 @@ export async function postFilterSemanticResults(
 ): Promise<{ id: string; score: number }[]> {
   if (semanticResults.length === 0) return [];
 
-  const hasActiveFilters = Object.values(filters).some((value) => {
-    if (value === undefined || value === null) return false;
-    return Array.isArray(value) ? value.length > 0 : true;
-  });
-  if (!hasActiveFilters && scope === "all") return semanticResults;
-
   const filtered = buildFilteredCourseQuery(filters, scope);
-
-  if (!hasFilteredCourseConstraints(filtered)) return semanticResults;
 
   const courseIds = semanticResults.map((row) => row.id);
   const validIdSet = new Set<string>();

@@ -91,9 +91,10 @@ describe('extract', () => {
       expect(result.hints).toContainEqual(expect.objectContaining({ type: 'time', value: 'morning' }));
     });
 
-    it('extracts difficulty "easy"', () => {
+    it('keeps subjective "easy" language as text instead of inventing a difficulty filter', () => {
       const result = extract('easy class');
-      expect(result.hints).toContainEqual(expect.objectContaining({ type: 'workload', value: 'easy' }));
+      expect(result.hints.map(hint => hint.type)).not.toContain('instructorDifficulty');
+      expect(result.residual).toContain('easy');
     });
 
     describe('intro as boost', () => {
@@ -242,10 +243,7 @@ describe('extract', () => {
       expect(timeHints).toHaveLength(0);
     });
 
-    it('extracts positive no/not aliases before generic negation masking', () => {
-      expect(extract('not hard').hints).toContainEqual(
-        expect.objectContaining({ type: 'workload', value: 'easy' })
-      );
+    it('extracts positive availability aliases before generic negation masking', () => {
       expect(extract('not full').hints).toContainEqual(
         expect.objectContaining({ type: 'status', value: 'open' })
       );
@@ -284,12 +282,10 @@ describe('extract', () => {
           value: expect.objectContaining({ target: 'subject', value: 'MATH' }),
         })
       );
-      expect(result.hints).toContainEqual(
-        expect.objectContaining({ type: 'requirement', value: 'NAT' })
-      );
       expect(result.hints).not.toContainEqual(
         expect.objectContaining({ type: 'subject', value: 'MATH' })
       );
+      expect(result.residual).toContain('science');
     });
 
     it('keeps connector text after a negation available for requirement parsing', () => {
@@ -325,9 +321,7 @@ describe('extract', () => {
       expect(orgo.hints).toContainEqual(
         expect.objectContaining({ type: 'subject', value: 'CHEM' })
       );
-      expect(orgo.hints).not.toContainEqual(
-        expect.objectContaining({ type: 'workload', value: 'hard' })
-      );
+      expect(orgo.hints.map(hint => hint.type)).not.toContain('instructorDifficulty');
       expect(orgo.residual).toContain('organic');
 
       const diffeq = extract('diffeq');
@@ -339,11 +333,11 @@ describe('extract', () => {
   });
 
   describe('residual handling', () => {
-    it('removes extracted hints from residual', () => {
+    it('removes structured hints but preserves subjective text in the residual', () => {
       const result = extract('CS 225 with Fagen easy');
       expect(result.residual).not.toContain('CS 225');
       expect(result.residual).not.toContain('Fagen');
-      expect(result.residual).not.toContain('easy');
+      expect(result.residual).toContain('easy');
     });
 
     it('keeps unmatched text in residual', () => {
@@ -362,7 +356,7 @@ describe('extract', () => {
     it('removes "gen ed" from residual', () => {
       const result = extract('easy humanities gen ed');
       expect(result.residual).not.toContain('gen ed');
-      expect(result.residual.trim()).toBe('');
+      expect(result.residual.trim()).toBe('easy');
     });
 
     it('removes "sections" from residual', () => {

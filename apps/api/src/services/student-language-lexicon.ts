@@ -33,10 +33,6 @@ type ContextualRequirementRule = {
 
 type PositiveNoNotAlias = {
   pattern: RegExp;
-  type: "workload";
-  value: "easy";
-} | {
-  pattern: RegExp;
   type: "status";
   value: "open";
 };
@@ -45,7 +41,6 @@ type StudentLanguageAliasKind =
   | "requirement"
   | "delivery"
   | "status"
-  | "workload"
   | "days"
   | "time";
 
@@ -70,8 +65,6 @@ const NON_REQUIREMENT_ALIAS_ENTRIES: StudentLanguageAliasEntry[] = [
   { kind: "time", canonical: "midday", aliases: ["midday", "mid day", "around noon"] },
   { kind: "time", canonical: "afternoon", aliases: ["afternoon", "after noon", "after lunch"] },
   { kind: "time", canonical: "evening", aliases: ["evening", "night", "after 5"] },
-  { kind: "workload", canonical: "easy", aliases: ["easy", "simple", "chill", "low workload", "grade booster", "gpa booster", "easy a", "not hard"] },
-  { kind: "workload", canonical: "hard", aliases: ["hard", "difficult", "challenging", "tough"] },
   { kind: "status", canonical: "open", aliases: ["open", "available", "has seats", "not full", "no waitlist"] },
   { kind: "status", canonical: "closed", aliases: ["closed", "full", "waitlist"] },
   { kind: "delivery", canonical: "true", aliases: ["online", "remote", "virtual", "asynchronous", "async"] },
@@ -328,7 +321,7 @@ export const CONTEXTUAL_REQUIREMENT_RULES: ContextualRequirementRule[] = [
   },
   {
     code: "NAT",
-    pattern: /\b(?:natural\s+sciences?|nat\s+sci|science\s+(?:class|course|requirement|gen\s*-?\s*ed|requirement)|(?:easy|chill|need|counts?\s+for|fulfills?)\s+science)\b/gi,
+    pattern: /\b(?:natural\s+sciences?|nat\s+sci|science\s+(?:class|course|requirement|gen\s*-?\s*ed|requirement)|(?:need|counts?\s+for|fulfills?)\s+science)\b/gi,
     confidence: 0.84,
   },
   {
@@ -344,7 +337,6 @@ export const CONTEXTUAL_REQUIREMENT_RULES: ContextualRequirementRule[] = [
 ];
 
 export const POSITIVE_NO_NOT_ALIASES: PositiveNoNotAlias[] = [
-  { pattern: /\bnot\s+hard\b/gi, type: "workload", value: "easy" },
   { pattern: /\bnot\s+full\b/gi, type: "status", value: "open" },
   { pattern: /\bno\s+waitlist\b/gi, type: "status", value: "open" },
 ];
@@ -438,12 +430,6 @@ export const STUDENT_LANGUAGE_INTENT_RULES: StudentLanguageIntentRule[] = [
     negativeTerms: ["prerequisites", "restricted_access"],
     softPreferences: { noListedPrereq: true },
     warnings: [warning("prereq_evidence_incomplete", "Prerequisite and restriction text can be incomplete or term-specific.", 0.7)],
-  },
-  {
-    queryTypes: ["subjective_vibe"],
-    patterns: [/\b(?:easy|chill|gpa\s+booster|grade\s+booster|easy\s+a|low\s+workload)\b/i],
-    softPreferences: { lowWorkload: 0.84 },
-    warnings: [warning("workload_evidence_incomplete", "Workload is estimated from scores and available evidence, not guaranteed.", 0.72)],
   },
   {
     queryTypes: ["subjective_vibe"],

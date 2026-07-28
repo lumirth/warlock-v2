@@ -35,30 +35,30 @@ export function getQualityTierRank(
   return null;
 }
 
-const WORKLOAD_TIER_THRESHOLDS = {
-  HARD: 75,
+const INSTRUCTOR_DIFFICULTY_TIER_THRESHOLDS = {
+  HIGHER: 75,
   MODERATE: 45,
 } as const;
 
-export type WorkloadTierLabel = "Easy" | "Moderate" | "Hard";
+export type InstructorDifficultyTierLabel = "Lower" | "Moderate" | "Higher";
 
-export function getWorkloadTierLabel(
+export function getInstructorDifficultyTierLabel(
   score: number | null | undefined,
-): WorkloadTierLabel | null {
+): InstructorDifficultyTierLabel | null {
   const normalized = toNormalizedScore(score);
   if (normalized === null) return null;
-  if (normalized > WORKLOAD_TIER_THRESHOLDS.HARD) return "Hard";
-  if (normalized > WORKLOAD_TIER_THRESHOLDS.MODERATE) return "Moderate";
-  return "Easy";
+  if (normalized > INSTRUCTOR_DIFFICULTY_TIER_THRESHOLDS.HIGHER) return "Higher";
+  if (normalized > INSTRUCTOR_DIFFICULTY_TIER_THRESHOLDS.MODERATE) return "Moderate";
+  return "Lower";
 }
 
-export function getWorkloadTierRank(
+export function getInstructorDifficultyTierRank(
   score: number | null | undefined,
 ): number | null {
-  const label = getWorkloadTierLabel(score);
-  if (label === "Easy") return 1;
+  const label = getInstructorDifficultyTierLabel(score);
+  if (label === "Lower") return 1;
   if (label === "Moderate") return 2;
-  if (label === "Hard") return 3;
+  if (label === "Higher") return 3;
   return null;
 }
 

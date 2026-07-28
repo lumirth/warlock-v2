@@ -1,6 +1,10 @@
 {
   "name": "uiuc-course-search-monorepo",
   "private": true,
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -38,7 +42,7 @@
     "qa:mock-api": "tsx scripts/browser-qa-mock-api.ts",
     "deploy:api:staging": "npm run deploy:staging -w @uiuc-course-search/api",
     "deploy:web:staging": "npm run deploy:staging -w @uiuc-course-search/web",
-    "deploy:staging": "concurrently \"npm run deploy:api:staging\" \"npm run deploy:web:staging\""
+    "deploy:staging": "npm run deploy:api:staging && npm run deploy:web:staging"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

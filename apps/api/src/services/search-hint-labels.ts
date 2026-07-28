@@ -67,13 +67,11 @@ function formatHintLabel(hint: Hint, residual = ""): string {
       }
       return `${formatHintValue(hint.value)} level preference`;
     case "credits":
-      return `${formatHintValue(hint.value)} credits`;
+      return formatExactCreditLabel(hint.value);
     case "online":
       return hint.value ? "Online" : "In person";
     case "status":
       return `${capitalize(formatHintValue(hint.value))} sections`;
-    case "workload":
-      return `${capitalize(formatHintValue(hint.value))} workload`;
     case "requirement":
       return formatGenEdDisplayLabel(formatHintValue(hint.value));
     case "term":
@@ -113,8 +111,6 @@ function filterFromHint(
       return { online: hint.value };
     case "status":
       return { status: hint.value };
-    case "workload":
-      return { workload: hint.value };
     case "requirement":
       return { requirement: singleRequirementFilter(formatHintValue(hint.value)) };
     case "term":
@@ -184,4 +180,8 @@ function capitalize(value: string): string {
   }
 
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function formatExactCreditLabel(value: number): string {
+  return `${value} exact ${value === 1 ? "credit" : "credits"}`;
 }

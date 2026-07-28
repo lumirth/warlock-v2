@@ -41,13 +41,25 @@ function toneClass(tone: SectionTone): string {
 function statSummary(instructor: CourseInstructorDto): string[] {
   const values: string[] = []
   if (typeof instructor.rmpRating === 'number') {
-    values.push(`${instructor.rmpRating.toFixed(1)} rating`)
+    values.push(
+      `RMP ${instructor.rmpRating.toFixed(1)} / 5${
+        typeof instructor.numRatings === 'number'
+          ? ` (${instructor.numRatings.toLocaleString()} ratings)`
+          : ''
+      }`
+    )
   }
   if (typeof instructor.rmpDifficulty === 'number') {
-    values.push(`${instructor.rmpDifficulty.toFixed(1)} RMP difficulty`)
+    values.push(`${instructor.rmpDifficulty.toFixed(1)} / 5 RMP difficulty`)
   }
   if (typeof instructor.avgGpa === 'number') {
-    values.push(`${instructor.avgGpa.toFixed(2)} avg GPA`)
+    values.push(
+      `${instructor.avgGpa.toFixed(2)} avg GPA${
+        typeof instructor.gpaSampleSize === 'number'
+          ? ` (${instructor.gpaSampleSize.toLocaleString()} records)`
+          : ''
+      }`
+    )
   }
   if (typeof instructor.medianGpa === 'number') {
     values.push(`${instructor.medianGpa.toFixed(2)} median GPA`)
@@ -93,9 +105,7 @@ function InstructorBlock({
 
         return (
           <div key={instructor.name} className="flex flex-col gap-0.5">
-            <span className="text-sm">
-              {renderInstructorName(instructor)}
-            </span>
+            <span className="text-sm">{renderInstructorName(instructor)}</span>
             {statsText.length > 0 && (
               <span className="text-muted-foreground text-xs">
                 {statsText.join(' / ')}
@@ -121,7 +131,10 @@ function DetailField({ label, value }: { label: string; value: string }) {
 
 function SectionDetails({ section }: { section: CourseSectionDto }) {
   const detailFields = [
-    { label: 'Part of term', value: formatPartOfTerm(section.schedule.partOfTerm) },
+    {
+      label: 'Part of term',
+      value: formatPartOfTerm(section.schedule.partOfTerm),
+    },
     { label: 'Dates', value: formatSectionDateRange(section) },
     { label: 'Credit hours', value: section.schedule.creditHours },
     {
@@ -205,7 +218,10 @@ function SectionDetails({ section }: { section: CourseSectionDto }) {
       {section.schedule.meetings.length > 0 ? (
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold">Meeting details</h3>
-          <Table className="min-w-[780px]">
+          <Table
+            scrollAreaLabel={`Meeting details for CRN ${section.crn}`}
+            className="min-w-[780px]"
+          >
             <TableHeader>
               <TableRow>
                 <TableHead>Type</TableHead>
@@ -235,12 +251,12 @@ function SectionDetails({ section }: { section: CourseSectionDto }) {
                   </TableCell>
                   <TableCell>{formatMeetingLocation(meeting)}</TableCell>
                   <TableCell>
-                    {meeting.dateRangeText || formatSectionDateRange(section) || '-'}
+                    {meeting.dateRangeText ||
+                      formatSectionDateRange(section) ||
+                      '-'}
                   </TableCell>
                   <TableCell className="whitespace-normal">
-                    <InstructorBlock
-                      instructors={meeting.instructors}
-                    />
+                    <InstructorBlock instructors={meeting.instructors} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -261,7 +277,7 @@ export function SectionsTable({ sections }: SectionsTableProps) {
 
   if (sections.length === 0) {
     return (
-      <p className="text-muted-foreground text-sm italic">
+      <p className="text-muted-foreground p-5 text-sm">
         No sections found for this term.
       </p>
     )
@@ -280,7 +296,7 @@ export function SectionsTable({ sections }: SectionsTableProps) {
   }
 
   return (
-    <Table className="min-w-[1050px]">
+    <Table scrollAreaLabel="Course sections" className="min-w-[1050px]">
       <TableHeader>
         <TableRow>
           <TableHead className="w-14">Detail</TableHead>
@@ -325,7 +341,9 @@ export function SectionsTable({ sections }: SectionsTableProps) {
                     variant="outline"
                     className={cn(
                       'font-semibold',
-                      toneClass(sectionAvailabilityTone(section.availability.status))
+                      toneClass(
+                        sectionAvailabilityTone(section.availability.status)
+                      )
                     )}
                   >
                     {section.availability.label}
@@ -367,14 +385,15 @@ export function SectionsTable({ sections }: SectionsTableProps) {
                 <TableCell>{section.schedule.days || 'Arranged'}</TableCell>
                 <TableCell>{formatSectionLocation(section)}</TableCell>
                 <TableCell className="whitespace-normal">
-                  <InstructorBlock
-                    instructors={section.instructors}
-                  />
+                  <InstructorBlock instructors={section.instructors} />
                 </TableCell>
               </TableRow>
               {expanded && (
                 <TableRow>
-                  <TableCell colSpan={9} className="bg-muted/30 whitespace-normal">
+                  <TableCell
+                    colSpan={9}
+                    className="bg-muted/30 whitespace-normal"
+                  >
                     <SectionDetails section={section} />
                   </TableCell>
                 </TableRow>

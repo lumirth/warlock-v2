@@ -19,6 +19,7 @@ describe('ApiClient', () => {
         title: 'Data Structures',
         description: null,
         creditHours: 4,
+        creditHoursText: '4 hours.',
         year: 2026,
         term: 'spring',
         primaryInstructor: null,
@@ -28,7 +29,7 @@ describe('ApiClient', () => {
           medianGpa: null,
           gpaSampleSize: null,
           qualityScore: null,
-          workloadScore: null,
+          instructorDifficultyScore: null,
         },
         catalog: {
           courseInfo: null,
@@ -176,7 +177,7 @@ describe('ApiClient', () => {
         time: 'morning',
         online: true,
         status: 'open',
-        workload: 'easy',
+        instructorDifficulty: 'lower',
         level: 400,
       },
       scope: 'all',
@@ -184,7 +185,7 @@ describe('ApiClient', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.example.test/api/search?q=algorithms&limit=20&offset=0&subject=CS&number=225&instructor=Fagen&term=spring&year=2026&requirement=HUM&credits=4&days=MWF&time=morning&online=true&status=open&workload=easy&level=400&scope=all&sort=gpa&direction=desc',
+      'https://api.example.test/api/search?q=algorithms&limit=20&offset=0&subject=CS&number=225&instructor=Fagen&term=spring&year=2026&requirement=HUM&credits=4&days=MWF&time=morning&online=true&status=open&instructor_difficulty=lower&level=400&scope=all&sort=gpa&direction=desc',
       { signal: undefined }
     )
   })

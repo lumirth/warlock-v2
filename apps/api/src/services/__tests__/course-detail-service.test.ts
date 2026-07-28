@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { KVNamespace } from '@cloudflare/workers-types';
 import { browserFetch } from '../../http/browser-fetch.js';
 import { CourseDetailService, type CourseDetailServiceEnv } from '../course-detail-service.js';
+import { resetCourseDetailInFlightRequests } from '../course-detail-live-source.js';
 import { getUpstreamBackoff, resetUpstreamBackoff } from '../upstream-backoff.js';
 
 vi.mock('../../http/browser-fetch.js', () => ({
@@ -11,6 +13,7 @@ describe('CourseDetailService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetUpstreamBackoff();
+    resetCourseDetailInFlightRequests();
   });
 
   it('returns a fresh cached detail without calling upstream', async () => {
@@ -38,8 +41,24 @@ describe('CourseDetailService', () => {
       cache: {
         cached: true,
         ageSeconds: 2,
+        fetchedAt: 1_800_000_000,
       },
     });
+  });
+
+  it.each([
+    ['unknown', null],
+    ['negative', -1],
+    ['non-finite', Number.POSITIVE_INFINITY],
+  ] as const)('does not treat a %s stored age as fresh', async (_label, ageSeconds) => {
+    vi.mocked(browserFetch).mockResolvedValueOnce(new Response(courseXml(), { status: 200 }));
+    const service = new CourseDetailService(env({ existingCourse: true, ageSeconds }));
+
+    const result = await service.loadCourseDetail(request());
+
+    expect(result.status).toBe(200);
+    expect(result.headers).toMatchObject({ 'X-Cache': 'MISS' });
+    expect(browserFetch).toHaveBeenCalledTimes(1);
   });
 
   it('returns stale fallback while upstream backoff is active', async () => {
@@ -60,7 +79,9 @@ describe('CourseDetailService', () => {
         id: 'CS-225-2026-spring',
       },
       cache: {
+        cached: true,
         stale: true,
+        fetchedAt: 1_800_000_000,
       },
     });
   });
@@ -73,6 +94,15 @@ describe('CourseDetailService', () => {
 
     expect(result.status).toBe(200);
     expect(result.headers).toMatchObject({ 'X-Cache': 'MISS' });
+    expect(result.headers?.['Cache-Control']).toContain('s-maxage=300');
+    expect(browserFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/schedule/2026/spring/CS/225.xml'),
+      expect.objectContaining({
+        retries: 1,
+        timeoutMs: 10_000,
+        signal: expect.any(Object),
+      }),
+    );
     expect(result.body).toMatchObject({
       course: {
         id: 'CS-225-2026-spring',
@@ -81,12 +111,12 @@ describe('CourseDetailService', () => {
           gpaSampleSize: 820,
           primaryInstructorRating: 4.8,
           qualityScore: 88,
-          workloadScore: 42,
+          instructorDifficultyScore: 42,
         },
         sections: [{
           crn: '12345',
           instructors: [expect.objectContaining({
-            name: 'Lovelace, A',
+            name: 'Lovelace, Ada',
             rmpRating: 4.8,
             avgGpa: 3.62,
           })],
@@ -95,7 +125,7 @@ describe('CourseDetailService', () => {
               typeCode: 'LEC',
               buildingName: 'Siebel Center',
               roomNumber: '1404',
-              instructors: [expect.objectContaining({ name: 'Lovelace, A' })],
+              instructors: [expect.objectContaining({ name: 'Lovelace, Ada' })],
             }],
           },
         }],
@@ -103,6 +133,111 @@ describe('CourseDetailService', () => {
       cache: {
         cached: false,
         termStatus: 'active',
+      },
+    });
+  });
+
+  it('reuses a verified live snapshot instead of refetching after 30 seconds', async () => {
+    vi.mocked(browserFetch).mockResolvedValue(new Response(courseXml(), { status: 200 }));
+    const searchCache = memoryKv();
+    const sharedEnv = env({ searchCache });
+    const firstNow = 1_800_000_000_000;
+
+    const first = await new CourseDetailService(sharedEnv, () => firstNow)
+      .loadCourseDetail(request());
+    const second = await new CourseDetailService(
+      sharedEnv,
+      () => firstNow + 31_000,
+    )
+      .loadCourseDetail(request());
+
+    expect(first.headers).toMatchObject({ 'X-Cache': 'MISS' });
+    expect(second.headers).toMatchObject({ 'X-Cache': 'LIVE-HIT' });
+    expect(second.body).toMatchObject({
+      cache: {
+        cached: true,
+        fetchedAt: expect.any(Number),
+      },
+    });
+    expect(browserFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('deduplicates concurrent live fetches inside a Worker isolate', async () => {
+    vi.mocked(browserFetch).mockResolvedValue(new Response(courseXml(), { status: 200 }));
+    const sharedEnv = env();
+
+    const [first, second] = await Promise.all([
+      new CourseDetailService(sharedEnv).loadCourseDetail(request()),
+      new CourseDetailService(sharedEnv).loadCourseDetail(request()),
+    ]);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(browserFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a successful HTML challenge as upstream failure and serves stale data', async () => {
+    vi.mocked(browserFetch).mockResolvedValueOnce(
+      new Response('<HTML><title>Challenge</title></HTML>', { status: 200 }),
+    );
+    const service = new CourseDetailService(env({ existingCourse: true }));
+
+    const result = await service.loadCourseDetail(request({ bypassCache: true }));
+
+    expect(result.status).toBe(200);
+    expect(result.headers).toMatchObject({
+      'X-Cache': 'STALE',
+      'X-Stale-Reason': 'upstream-unavailable',
+    });
+    expect(result.body).toMatchObject({
+      cache: {
+        stale: true,
+        staleReason: 'upstream returned 200',
+      },
+    });
+  });
+
+  it('bounds a response body that never finishes and serves stale data', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(browserFetch).mockResolvedValueOnce(new Response(
+        new ReadableStream<Uint8Array>({ start() {} }),
+        { status: 200 },
+      ));
+      const service = new CourseDetailService(env({ existingCourse: true }));
+
+      const resultPromise = service.loadCourseDetail(request({ bypassCache: true }));
+      await vi.advanceTimersByTimeAsync(10_001);
+      const result = await resultPromise;
+
+      expect(result.status).toBe(200);
+      expect(result.headers).toMatchObject({
+        'X-Cache': 'STALE',
+        'X-Stale-Reason': 'upstream-unavailable',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a mismatched upstream course identity and serves stale data', async () => {
+    vi.mocked(browserFetch).mockResolvedValueOnce(
+      new Response(courseXml().replace('id="CS 225"', 'id="CS 226"'), { status: 200 }),
+    );
+    const service = new CourseDetailService(env({ existingCourse: true }));
+
+    const result = await service.loadCourseDetail(request({ bypassCache: true }));
+
+    expect(result.status).toBe(200);
+    expect(result.headers).toMatchObject({
+      'X-Cache': 'STALE',
+      'X-Stale-Reason': 'upstream-unavailable',
+    });
+    expect(result.body).toMatchObject({
+      cache: {
+        cached: true,
+        stale: true,
+        staleReason: 'upstream returned 502',
       },
     });
   });
@@ -153,7 +288,11 @@ function request(overrides: Partial<{ bypassCache: boolean }> = {}) {
   };
 }
 
-function env(options: { existingCourse?: boolean; ageSeconds?: number } = {}): CourseDetailServiceEnv {
+function env(options: {
+  existingCourse?: boolean;
+  ageSeconds?: number | null;
+  searchCache?: KVNamespace;
+} = {}): CourseDetailServiceEnv {
   return {
     DB: fakeDb(options),
     CURRENT_YEAR: '2026',
@@ -163,12 +302,23 @@ function env(options: { existingCourse?: boolean; ageSeconds?: number } = {}): C
     BACKOFF_BASE_MS: '1',
     BACKOFF_MAX_MS: '1',
     MAX_RETRIES: '1',
+    SEARCH_CACHE: options.searchCache,
   } as CourseDetailServiceEnv;
 }
 
-function fakeDb(options: { existingCourse?: boolean; ageSeconds?: number } = {}) {
+function memoryKv(): KVNamespace {
+  const values = new Map<string, string>();
+  return {
+    get: vi.fn(async (key: string) => values.get(key) ?? null),
+    put: vi.fn(async (key: string, value: string) => {
+      values.set(key, value);
+    }),
+  } as unknown as KVNamespace;
+}
+
+function fakeDb(options: { existingCourse?: boolean; ageSeconds?: number | null } = {}) {
   const existingCourse = options.existingCourse ?? false;
-  const ageSeconds = options.ageSeconds ?? 999999;
+  const ageSeconds = options.ageSeconds === undefined ? 999999 : options.ageSeconds;
 
   return {
     prepare(sql: string) {
@@ -216,7 +366,7 @@ function fakeDb(options: { existingCourse?: boolean; ageSeconds?: number } = {})
           if (sql.includes('FROM instructor_course_links')) {
             return {
               results: [{
-                instructor_name: 'Lovelace, A',
+                instructor_name: 'Lovelace, Ada',
                 rmp_rating: 4.8,
                 rmp_difficulty: 3.1,
                 rmp_id: 'ada',
@@ -241,7 +391,7 @@ function fakeDb(options: { existingCourse?: boolean; ageSeconds?: number } = {})
                 start_time: '09:00',
                 end_time: '09:50',
                 location: 'Siebel Center 1404',
-                instructor: 'Lovelace, A',
+                instructor: 'Lovelace, Ada',
                 instructor_rmp: null,
                 instructor_gpa: null,
                 last_synced: null,
@@ -274,7 +424,7 @@ function fakeDb(options: { existingCourse?: boolean; ageSeconds?: number } = {})
                 building_name: 'Siebel Center',
                 room_number: '1404',
                 date_range_text: '03/16/2026 - 05/06/2026',
-                instructor_names: 'Lovelace, A',
+                instructor_names: 'Lovelace, Ada',
               }],
             };
           }
@@ -298,7 +448,7 @@ function fakeDb(options: { existingCourse?: boolean; ageSeconds?: number } = {})
   } as unknown as CourseDetailServiceEnv['DB'];
 }
 
-function storedCourse(ageSeconds: number) {
+function storedCourse(ageSeconds: number | null) {
   return {
     id: 'CS-225-2026-spring',
     subject: 'CS',
@@ -310,7 +460,7 @@ function storedCourse(ageSeconds: number) {
     term: 'spring',
     avg_gpa: 3.62,
     gpa_sample_size: 820,
-    primary_instructor: 'Lovelace, A',
+    primary_instructor: 'Lovelace, Ada',
     primary_instructor_rmp: 4.8,
     quality_score: 88,
     difficulty_score: 42,
@@ -320,6 +470,9 @@ function storedCourse(ageSeconds: number) {
     date_range_text: null,
     registration_notes: null,
     approval_code: null,
+    last_synced: 1_800_000_000,
+    created_at: 1_800_000_000,
+    updated_at: 1_800_000_000,
     age_seconds: ageSeconds,
   };
 }

@@ -40,6 +40,13 @@ export async function runGpaEnrichment(db: D1Database) {
 }
 
 export async function resetGpaCursor(db: D1Database, cache: KVNamespace) {
-  await resetGpaSync(db, cache);
-  return { message: 'GPA sync cursor reset to 0.' };
+  const result = await resetGpaSync(db, cache);
+  return {
+    result,
+    message: result === 'reset_initiated'
+      ? 'GPA sync cursor reset to 0.'
+      : result === 'skipped_no_changes'
+        ? 'GPA dataset is already current.'
+        : 'GPA reset skipped because another GPA mutation is in progress.',
+  };
 }

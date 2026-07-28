@@ -35,7 +35,12 @@ type CourseOverride = Omit<
   sections?: CourseSectionDto[]
 }
 
-type SectionOverride = Partial<Omit<CourseSectionDto, 'availability' | 'schedule' | 'instructors' | 'sourceFacts' | 'links'>> & {
+type SectionOverride = Partial<
+  Omit<
+    CourseSectionDto,
+    'availability' | 'schedule' | 'instructors' | 'sourceFacts' | 'links'
+  >
+> & {
   availability?: Partial<CourseSectionDto['availability']>
   schedule?: Partial<CourseSectionDto['schedule']>
   instructors?: CourseSectionDto['instructors']
@@ -86,8 +91,16 @@ function course(overrides: CourseOverride = {}): CourseDetailResponseDto {
     subject: overrides.subject ?? 'CS',
     number: overrides.number ?? '225',
     title: overrides.title ?? 'Data Structures',
-    description: overrides.description ?? 'A course',
-    creditHours: overrides.creditHours ?? 4,
+    description:
+      overrides.description === undefined ? 'A course' : overrides.description,
+    creditHours:
+      overrides.creditHours === undefined ? 4 : overrides.creditHours,
+    creditHoursText:
+      overrides.creditHoursText === undefined
+        ? overrides.creditHours === null
+          ? null
+          : '4 hours.'
+        : overrides.creditHoursText,
     year: overrides.year ?? 2026,
     term: overrides.term ?? 'spring',
     primaryInstructor: overrides.primaryInstructor ?? null,
@@ -98,7 +111,8 @@ function course(overrides: CourseOverride = {}): CourseDetailResponseDto {
       medianGpa: overrides.metrics?.medianGpa ?? null,
       gpaSampleSize: overrides.metrics?.gpaSampleSize ?? null,
       qualityScore: overrides.metrics?.qualityScore ?? null,
-      workloadScore: overrides.metrics?.workloadScore ?? null,
+      instructorDifficultyScore:
+        overrides.metrics?.instructorDifficultyScore ?? null,
     },
     catalog: {
       courseInfo: overrides.catalog?.courseInfo ?? null,
@@ -143,7 +157,9 @@ function instructor(
   }
 }
 
-function renderCoursePage(initialEntry: string) {
+function renderCoursePage(
+  initialEntry: string | { pathname: string; search?: string; state?: unknown }
+) {
   const router = createMemoryRouter(
     [
       { path: '/course/:subject/:number', element: <CoursePage /> },
@@ -167,6 +183,71 @@ afterEach(() => {
 })
 
 describe('CoursePage request state', () => {
+  it('preserves the exact search URL for the return action', async () => {
+    vi.mocked(api.getCourse).mockResolvedValueOnce(course())
+
+    renderCoursePage({
+      pathname: '/course/CS/225',
+      search: '?term=spring&year=2026',
+      state: {
+        fromSearch: true,
+        returnTo: '/?q=data+structures&subject=CS&view=table',
+      },
+    })
+
+    expect(
+      await screen.findByRole('link', { name: /back to search results/i })
+    ).toHaveAttribute('href', '/?q=data+structures&subject=CS&view=table')
+    expect(document.title).toBe('CS 225: Data Structures · UIUC Course Search')
+  })
+
+  it('makes stale cached detail unmistakable', async () => {
+    const response = course()
+    response.cache = {
+      cached: true,
+      stale: true,
+      staleReason: 'upstream unavailable',
+      fetchedAt: 1780358400,
+      termStatus: 'registrable',
+    }
+    vi.mocked(api.getCourse).mockResolvedValueOnce(response)
+
+    renderCoursePage('/course/CS/225?term=spring&year=2026')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/saved course data may be out of date/i)
+    expect(alert).toHaveTextContent(/verify section status/i)
+  })
+
+  it('renders honest fallbacks for nullable catalog fields', async () => {
+    vi.mocked(api.getCourse).mockResolvedValueOnce(
+      course({ description: null, creditHours: null })
+    )
+
+    renderCoursePage('/course/CS/225?term=spring&year=2026')
+
+    expect(
+      await screen.findByText(/credit hours not listed/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/no catalog description is available/i)
+    ).toBeInTheDocument()
+  })
+
+  it('shows official variable-credit wording without inventing an exact value', async () => {
+    vi.mocked(api.getCourse).mockResolvedValueOnce(
+      course({
+        creditHours: null,
+        creditHoursText: '1 to 4 hours.',
+      })
+    )
+
+    renderCoursePage('/course/CS/225?term=spring&year=2026')
+
+    expect(await screen.findByText('1 to 4 hours.')).toBeInTheDocument()
+    expect(screen.queryByText('1 credit hour')).not.toBeInTheDocument()
+  })
+
   it('refetches when only term or year query params change', async () => {
     vi.mocked(api.getCourse)
       .mockResolvedValueOnce(course({ id: 'CS-225-2026-fall', term: 'fall' }))
@@ -221,6 +302,27 @@ describe('CoursePage request state', () => {
     consoleError.mockRestore()
   })
 
+  it('retries a failed course request without reloading the page', async () => {
+    vi.mocked(api.getCourse)
+      .mockRejectedValueOnce(new Error('Course API unavailable'))
+      .mockResolvedValueOnce(course())
+
+    renderCoursePage('/course/CS/225?term=fall&year=2026')
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: /try loading this course again/i,
+      })
+    )
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'CS 225: Data Structures',
+      })
+    ).toBeInTheDocument()
+    expect(api.getCourse).toHaveBeenCalledTimes(2)
+  })
+
   it('renders course scores, rating, GPA, and canonical section instructors', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(
       course({
@@ -230,7 +332,7 @@ describe('CoursePage request state', () => {
           avgGpa: 3.62,
           gpaSampleSize: 820,
           qualityScore: 88,
-          workloadScore: 42,
+          instructorDifficultyScore: 42,
         },
         sections: [
           section({
@@ -248,29 +350,29 @@ describe('CoursePage request state', () => {
             ],
             schedule: {
               meetings: [
-              {
-                typeCode: 'LCD',
-                typeName: 'Lecture-Discussion',
-                days: 'MWF',
-                startTime: '09:00',
-                endTime: '09:50',
-                buildingName: 'Siebel Center for Computer Science',
-                roomNumber: '1404',
-                dateRangeText: 'Jan 20, 2026 - May 6, 2026',
-                instructors: [
-                  instructor('Lovelace, A', {
-                    rmpRating: 4.8,
-                    rmpDifficulty: 3.1,
-                    rmpId: 'ada',
-                    rmpSearchUrl:
-                      'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
-                    avgGpa: 3.62,
-                    gpaSampleSize: 820,
-                    numRatings: 140,
-                  }),
-                ],
-              },
-            ],
+                {
+                  typeCode: 'LCD',
+                  typeName: 'Lecture-Discussion',
+                  days: 'MWF',
+                  startTime: '09:00',
+                  endTime: '09:50',
+                  buildingName: 'Siebel Center for Computer Science',
+                  roomNumber: '1404',
+                  dateRangeText: 'Jan 20, 2026 - May 6, 2026',
+                  instructors: [
+                    instructor('Lovelace, A', {
+                      rmpRating: 4.8,
+                      rmpDifficulty: 3.1,
+                      rmpId: 'ada',
+                      rmpSearchUrl:
+                        'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A',
+                      avgGpa: 3.62,
+                      gpaSampleSize: 820,
+                      numRatings: 140,
+                    }),
+                  ],
+                },
+              ],
             },
           }),
         ],
@@ -279,21 +381,23 @@ describe('CoursePage request state', () => {
 
     renderCoursePage('/course/CS/225?term=spring&year=2026')
 
-    const scorecard = (await screen.findByText('Course scores')).closest(
-      '[data-slot="card"]'
-    ) as HTMLElement
+    const scorecard = (
+      await screen.findByText('Evidence-limited signals')
+    ).closest('[data-slot="card"]') as HTMLElement
     expect(within(scorecard!).getByText('Excellent')).toBeInTheDocument()
     expect(within(scorecard!).queryByText('B+')).not.toBeInTheDocument()
-    expect(within(scorecard!).getByText('Easy')).toBeInTheDocument()
-    expect(within(scorecard!).getByText('4.8')).toBeInTheDocument()
+    expect(within(scorecard!).getByText('Lower')).toBeInTheDocument()
+    expect(within(scorecard!).getByText('4.8 / 5')).toBeInTheDocument()
     expect(within(scorecard!).getByText('3.62')).toBeInTheDocument()
-    expect(within(scorecard!).getByText('820 records')).toBeInTheDocument()
+    expect(within(scorecard!).getByText('820 GPA records')).toBeInTheDocument()
     expect(
-      within(scorecard!).getByText('Based on 820 records')
+      within(scorecard!).getByText(/at least 30 GPA records and 5 RMP ratings/i)
     ).toBeInTheDocument()
     expect(
-      within(scorecard!).queryByText(/composite quality score/i)
-    ).not.toBeInTheDocument()
+      within(scorecard!).getByText(
+        'Instructor difficulty comes from linked RMP data; it does not measure assigned work.'
+      )
+    ).toBeInTheDocument()
     expect(screen.queryByText('Rating 4.8')).not.toBeInTheDocument()
     expect(
       screen.queryByText('Avg GPA 3.62 from 820 records')
@@ -302,42 +406,55 @@ describe('CoursePage request state', () => {
       'href',
       'https://www.ratemyprofessors.com/search/professors/1112?q=Lovelace%2C%20A'
     )
-    expect(screen.getByText(/4\.8 rating/)).toBeInTheDocument()
-    expect(screen.getByText(/3\.62 avg GPA/)).toBeInTheDocument()
     expect(
-      screen.getByLabelText('Sections table with horizontal scrolling')
-    ).toHaveClass('overflow-x-auto')
+      screen.getByText(/RMP 4\.8 \/ 5 \(140 ratings\)/)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/3\.62 avg GPA \(820 records\)/)
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Course sections')).toHaveClass(
+      'overflow-x-auto'
+    )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show details for CRN 12345' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show details for CRN 12345' })
+    )
     expect(screen.getByText('Meeting details')).toBeInTheDocument()
     expect(screen.getByText('Lecture-Discussion')).toBeInTheDocument()
-    expect(screen.getByText('Siebel Center for Computer Science 1404')).toBeInTheDocument()
+    expect(
+      screen.getByText('Siebel Center for Computer Science 1404')
+    ).toBeInTheDocument()
   })
 
-  it('uses a course score sidebar at laptop widths, not only extra-wide screens', async () => {
+  it('places registration content before a secondary signal sidebar', async () => {
     vi.mocked(api.getCourse).mockResolvedValueOnce(
       course({
         metrics: {
           avgGpa: 3.62,
           gpaSampleSize: 820,
           qualityScore: 88,
-          workloadScore: 42,
+          instructorDifficultyScore: 42,
         },
       })
     )
 
     renderCoursePage('/course/CS/225?term=spring&year=2026')
 
-    const scorecard = (await screen.findByText('Course scores')).closest(
-      '[data-slot="card"]'
-    ) as HTMLElement
+    const scorecard = (
+      await screen.findByText('Evidence-limited signals')
+    ).closest('[data-slot="card"]') as HTMLElement
     const sidebar = scorecard.closest('aside')
     const layout = sidebar?.parentElement
+    const sectionsHeading = screen.getByRole('heading', {
+      name: /sections and instructors/i,
+    })
 
-    expect(sidebar).toHaveClass('md:sticky')
-    expect(layout).toHaveClass('md:grid-cols-[17rem_minmax(0,1fr)]')
-    expect(layout).toHaveClass('xl:grid-cols-[18rem_minmax(0,1fr)]')
-    expect(layout).not.toHaveClass('xl:grid-cols-[21rem_minmax(0,1fr)]')
+    expect(sidebar).toHaveClass('lg:sticky')
+    expect(layout).toHaveClass('lg:grid-cols-[minmax(0,1fr)_18rem]')
+    expect(
+      sectionsHeading.compareDocumentPosition(scorecard) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
   })
 
   it('renders official Course Explorer and instructor links', async () => {
@@ -373,7 +490,9 @@ describe('CoursePage request state', () => {
     renderCoursePage('/course/CS/225?term=fall&year=2026')
 
     expect(
-      await screen.findByRole('link', { name: 'Course Explorer' })
+      await screen.findByRole('link', {
+        name: 'View official course listing',
+      })
     ).toHaveAttribute(
       'href',
       'https://courses.illinois.edu/schedule/2026/fall/CS/225'

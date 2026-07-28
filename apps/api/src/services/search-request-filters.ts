@@ -9,8 +9,15 @@ export async function resolveSearchRequestFilters(
 ): Promise<Partial<SearchFilters> | undefined> {
   if (!requestFilters) return undefined;
 
-  const { instructor, ...publicFilters } = requestFilters;
-  const filters: Partial<SearchFilters> = { ...publicFilters };
+  const {
+    instructor,
+    instructorDifficulty,
+    ...publicFilters
+  } = requestFilters;
+  const filters: Partial<SearchFilters> = {
+    ...publicFilters,
+    instructorDifficulty,
+  };
   if (instructor !== undefined) {
     filters.instructor_ids = await resolveInstructorIds(db, instructor);
   }

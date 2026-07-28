@@ -4,7 +4,8 @@ This project is pre-alpha, so deployment should stay small and explicit. Do not 
 
 ## Route Classes
 
-- Public: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`, `/api/feedback`.
+- Public reads: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`, `/api/terms`.
+- Public write: `POST /api/feedback`, restricted to `FEEDBACK_ALLOWED_ORIGINS`.
 - Admin: `/admin/*`. Requires `Authorization: Bearer $ADMIN_TOKEN`.
 - Internal: `/internal/*`. Requires `Authorization: Bearer $INTERNAL_TOKEN`.
 - Admin diagnostics: `/admin/debug/subjects/:year/:term`. Requires admin auth and must not include arbitrary URL fetch tools or raw database dumps.
@@ -26,7 +27,8 @@ Before a public demo deployment, configure Cloudflare Workers Rate Limiting bind
 - Match `/api/search*` and `/api/course/*`.
 - Start with 120 requests per minute per IP for `/api/search*`.
 - Start with 240 requests per minute per IP for `/api/course/*`.
-- Put `/api/feedback` behind the public search limiter class until a separate feedback limiter exists.
+- Apply `FEEDBACK_RATE_LIMITER` at 20 requests per minute per IP to `/api/feedback`.
+- Configure `FEEDBACK_ALLOWED_ORIGINS` with exact deployed frontend origins.
 - Use a lower threshold for repeated 4xx/5xx responses if Cloudflare rules allow it.
 - Leave `/admin/*` and `/internal/*` protected by token auth regardless of WAF settings.
 
@@ -44,6 +46,35 @@ Run before deployment:
 ```bash
 npm run db:verify
 ```
+
+Existing staging databases must be upgraded through the fail-closed API release
+command. A plain `wrangler deploy` is not a valid release: Worker code may
+require the newest schema, and migrations may invalidate regenerable
+enrichment. The release command refuses to continue without restore-tested D1
+backup evidence and explicit approval of the current migration. It then runs
+the API gates, applies remote migrations, deploys the Worker, rebuilds GPA/RMP
+enrichment, republishes every active/registrable course snapshot, and verifies
+sync status:
+
+```bash
+D1_BACKUP_REF=<YYYYMMDDTHHMMSSZ> \
+D1_BACKUP_EVIDENCE_FILE=artifacts/d1-backup-evidence.md \
+STAGING_MIGRATION_APPROVED=<latest-migration-name> \
+STAGING_MIGRATION_SHA256_APPROVED=<reviewed-lowercase-sha256> \
+STAGING_API_BASE_URL=https://<staging-worker-host> \
+STAGING_ADMIN_TOKEN=<redacted> \
+npm run deploy:api:staging
+```
+
+After reviewing the latest migration, compute its digest with
+`shasum -a 256 apps/api/migrations/<latest-migration-name>.sql` and supply the
+literal lowercase SHA-256. Do not derive the approval variables inline in the
+deploy command: they are the operator's acknowledgement of the exact SQL
+contents, not merely a checksum lookup.
+
+Do not run the web deploy concurrently with this operation. The top-level
+`npm run deploy:staging` deliberately waits for the API migration, deploy, and
+data rebuild to finish before publishing the web build.
 
 Run all local release gates before staging:
 
@@ -93,7 +124,11 @@ Increase `offset` by `processed` for each subsequent request.
 
 ## D1 Backups
 
-Before destructive remote D1 operations, create a backup using the current Cloudflare-supported mechanism, verify that it is restorable, and record the target database, timestamp, and backup location before proceeding. For this FTS-backed schema, use Cloudflare D1 Time Travel because SQL export refuses databases with virtual tables.
+Before every remote migration or other destructive D1 operation, create a
+backup using the current Cloudflare-supported mechanism, verify that it is
+restorable, and record the target database, timestamp, and backup location
+before proceeding. For this FTS-backed schema, use Cloudflare D1 Time Travel
+because SQL export refuses databases with virtual tables.
 
 Minimum command shape:
 
@@ -123,6 +158,7 @@ Required environment variables:
 - `STAGING_API_BASE_URL`
 - `STAGING_ADMIN_TOKEN`
 - `STAGING_INTERNAL_TOKEN`
+- `STAGING_WEB_ORIGIN`
 - `EVAL_BASE_URL`
 
 Commands:

@@ -128,11 +128,6 @@ function applySearchIntent(
     queryTypes.add('schedule');
   }
 
-  if (plan.filters.workload === 'easy') {
-    queryTypes.add('subjective_vibe');
-    plan.softPreferences = { ...plan.softPreferences, lowWorkload: plan.softPreferences?.lowWorkload ?? 0.8 };
-  }
-
   if (plan.semanticQuery.trim() || plan.keywordQuery.trim()) {
     queryTypes.add('topic');
   }

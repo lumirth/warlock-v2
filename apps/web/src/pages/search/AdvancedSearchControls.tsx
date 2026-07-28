@@ -10,6 +10,8 @@ export function AdvancedTextField({
   placeholder,
   inputMode,
   maxLength,
+  error,
+  description,
   onChange,
 }: {
   id: string
@@ -18,9 +20,12 @@ export function AdvancedTextField({
   placeholder: string
   inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
   maxLength?: number
+  error?: string
+  description?: string
   onChange: (value: string) => void
 }) {
   const inputId = useId()
+  const descriptionId = `${inputId}-description`
 
   return (
     <Field>
@@ -37,8 +42,22 @@ export function AdvancedTextField({
         maxLength={maxLength}
         placeholder={placeholder}
         value={value}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error || description ? descriptionId : undefined}
         onChange={(event) => onChange(event.currentTarget.value)}
       />
+      {error || description ? (
+        <p
+          id={descriptionId}
+          className={
+            error
+              ? 'text-destructive text-xs leading-5'
+              : 'text-muted-foreground text-xs leading-5'
+          }
+        >
+          {error ?? description}
+        </p>
+      ) : null}
     </Field>
   )
 }
@@ -87,7 +106,7 @@ export function AdvancedSelectField({
         ))}
       </select>
       {description ? (
-        <p className="text-destructive text-xs leading-5">{description}</p>
+        <p className="text-muted-foreground text-xs leading-5">{description}</p>
       ) : null}
     </Field>
   )
@@ -107,14 +126,14 @@ export function AdvancedCheckboxField({
   onChange: (checked: boolean) => void
 }) {
   return (
-    <Field className="rounded-md border bg-background px-3 py-2">
+    <Field className="bg-background rounded-md border px-3 py-2.5">
       <div className="flex items-start gap-2">
         <input
           id={id}
           type="checkbox"
           checked={checked}
           onChange={(event) => onChange(event.currentTarget.checked)}
-          className="mt-1 size-4 rounded-[var(--radius-sm)] border-border text-primary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="border-border text-primary accent-primary focus-visible:ring-ring focus-visible:ring-offset-background mt-0.5 size-5 rounded-[var(--radius-sm)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         />
         <div className="flex min-w-0 flex-col gap-0.5">
           <FieldLabel htmlFor={id}>{label}</FieldLabel>

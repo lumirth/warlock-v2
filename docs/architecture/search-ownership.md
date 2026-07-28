@@ -22,7 +22,7 @@ not redefine it.
 | Public request, response, actions, query codec, shared display policy | `packages/query-types` | Planner, retrieval, D1, HTTP |
 | URL/header/path translation | `apps/api/src/http` | Search semantics or DTO assembly |
 | HTTP endpoints | `apps/api/src/routes` | SQL, parsing source XML, retrieval, ranking |
-| Search sequencing, cache, and timings | `SearchPipeline` | Extraction rules, lane SQL, ranking weights, public DTO shape |
+| Search sequencing and cache orchestration | `SearchPipeline` | Extraction rules, lane SQL, ranking weights, public DTO shape |
 | Student-language extraction and resolution | `extractor.ts`, `extraction/*`, `query-resolver.ts` | Retrieval or presentation |
 | Interpreted intent | `SearchPlan` and `search-plan-compiler.ts` | Executable lane configuration |
 | Executable candidate recall | `RetrievalPlan` and retrieval lane modules | Public presentation or ranking policy |
@@ -60,11 +60,13 @@ not redefine it.
   pretend every planned lane ran successfully, and degraded results are not
   written to the normal result cache.
 - Exact course and CRN recall still obey all hard filters.
-- Search ranks one stable, bounded browse window before pagination and counts
-  the complete executable candidate union separately. `pagination.totalResults`
-  is the exact match count; `pagination.browseableResults` states how many
-  top-ranked matches can be paged through. Semantic recall respects
-  Vectorize's supported top-k limit.
+- Search ranks one stable 400-result browse window before pagination and counts
+  the successful-lane candidate union separately. `pagination.totalResults` is
+  exact for lanes that completed; `pagination.countIsComplete` is false when a
+  failed lane makes the response partial. `pagination.browseableResults` states
+  how many top-ranked matches can be paged through, while `candidateWindow`
+  reports pre-hydration truncation. The public codec rejects windows beyond 400
+  results. Semantic recall respects Vectorize's supported top-k limit.
 - Requirement evidence is loaded once per result set. Ranking and DTO
   presentation derive from the same structured requirement rows.
 - Ranking policy lives under `ranking/*`. Tests assert ordering and public
@@ -76,10 +78,12 @@ not redefine it.
   `GenEd`. Storage/source code may retain `course_gened`.
 - Requirement filters preserve mode and all codes:
   `{ mode: "single" | "any" | "all", codes: string[] }`.
-- The public product concept is `workload`; source/storage fields such as
-  `difficulty_score` may retain source vocabulary.
-- Query aliases such as `gened`, `difficulty`, and `pot` terminate at parser or
-  codec ingress.
+- The public product concept is `instructor difficulty`; source/storage fields
+  such as `difficulty_score` may retain source vocabulary. It is an
+  evidence-gated RMP signal, not a claim about total course workload.
+- Query aliases such as `gened` and `pot` terminate at parser or codec ingress.
+  Structured instructor difficulty uses the explicit
+  `instructor_difficulty` field.
 - Course entities, search result wrappers, and detail response envelopes are
   separate DTOs.
 - Course-data vocabulary boundaries are documented in
@@ -95,7 +99,9 @@ not redefine it.
 - Applied filter chips are removable and their action must change the represented
   constraint. Explanations and warnings are not filter chips.
 - Advanced-search enum values and GenEd options come from
-  `packages/query-types`. Available years come from `/api/terms`.
+  `packages/query-types`. Available term/year pairs come from the `terms`
+  records returned by `/api/terms`; clients must not invent a cross-product of
+  independent years and semesters.
 
 ## Automated Boundaries
 

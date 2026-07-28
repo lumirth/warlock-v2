@@ -4,11 +4,9 @@ import { upsertSyncState } from '../db/sync-state-repository.js';
 import {
   COURSE_SCORE_POLICY,
   normalizeGpa,
-  normalizeGpaWorkload,
   normalizeRmp,
 } from './course-score-policy.js';
 
-const COURSE_UPDATE_BATCH_SIZE = 500;
 const INSTRUCTOR_COURSE_CONTEXTS_SQL = `
   SELECT DISTINCT
     ? AS term_id,
@@ -26,9 +24,11 @@ const INSTRUCTOR_COURSE_CONTEXTS_SQL = `
 type CourseScoreSource = {
   id: string;
   avg_gpa: number | null;
-  primary_instructor_rmp: number | null;
+  gpa_sample_size?: number | null;
+  primary_instructor_rmp?: number | null;
   linked_rmp_rating: number | null;
   linked_rmp_difficulty: number | null;
+  linked_rmp_num_ratings?: number | null;
 };
 
 type CourseScoreResult = {
@@ -45,15 +45,6 @@ function roundScore(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function weightedAverage(parts: Array<{ value: number | null; weight: number }>): number | null {
-  const availableParts = parts.filter((part): part is { value: number; weight: number } => part.value !== null);
-  const totalWeight = availableParts.reduce((total, part) => total + part.weight, 0);
-
-  if (totalWeight === 0) return null;
-
-  return availableParts.reduce((total, part) => total + part.value * part.weight, 0) / totalWeight;
-}
-
 function scoreFromGpa(avgGpa: number): number {
   return clampScore(normalizeGpa(avgGpa));
 }
@@ -62,47 +53,37 @@ function scoreFromRmpRating(rating: number): number {
   return clampScore(normalizeRmp(rating));
 }
 
-function validRmpMetric(value: number | null | undefined): number | null {
-  return typeof value === 'number' && value > 0 ? value : null;
-}
-
-function workloadFromGpa(avgGpa: number): number {
-  return clampScore(normalizeGpaWorkload(avgGpa));
-}
-
-function workloadFromRmp(rmpDifficulty: number): number {
+function difficultyFromRmp(rmpDifficulty: number): number {
   return clampScore(normalizeRmp(rmpDifficulty));
 }
 
 export function calculateCourseScores(source: CourseScoreSource): CourseScoreResult {
-  const rmpRating = validRmpMetric(source.linked_rmp_rating) ?? validRmpMetric(source.primary_instructor_rmp);
-  const rmpDifficulty = validRmpMetric(source.linked_rmp_difficulty);
-  const quality = weightedAverage([
-    {
-      value: typeof source.avg_gpa === 'number' ? scoreFromGpa(source.avg_gpa) : null,
-      weight: COURSE_SCORE_POLICY.QUALITY.GPA_WEIGHT,
-    },
-    {
-      value: typeof rmpRating === 'number' ? scoreFromRmpRating(rmpRating) : null,
-      weight: COURSE_SCORE_POLICY.QUALITY.RMP_WEIGHT,
-    },
-  ]);
+  const hasGpaEvidence =
+    typeof source.avg_gpa === 'number'
+    && (source.gpa_sample_size ?? 0) >= COURSE_SCORE_POLICY.QUALITY.MIN_GPA_RECORDS;
+  const hasRmpEvidence =
+    typeof source.linked_rmp_rating === 'number'
+    && source.linked_rmp_rating > 0
+    && (source.linked_rmp_num_ratings ?? 0) >= COURSE_SCORE_POLICY.QUALITY.MIN_RMP_RATINGS;
+  const hasDifficultyEvidence =
+    typeof source.linked_rmp_difficulty === 'number'
+    && source.linked_rmp_difficulty > 0
+    && (source.linked_rmp_num_ratings ?? 0) >= COURSE_SCORE_POLICY.DIFFICULTY.MIN_RMP_RATINGS;
 
-  const workload = weightedAverage([
-    {
-      value: typeof source.avg_gpa === 'number' ? workloadFromGpa(source.avg_gpa) : null,
-      weight: COURSE_SCORE_POLICY.WORKLOAD.GPA_WEIGHT,
-    },
-    {
-      value: rmpDifficulty === null ? null : workloadFromRmp(rmpDifficulty),
-      weight: COURSE_SCORE_POLICY.WORKLOAD.RMP_WEIGHT,
-    },
-  ]);
+  const quality = hasGpaEvidence && hasRmpEvidence
+    ? (
+        scoreFromGpa(source.avg_gpa as number) * COURSE_SCORE_POLICY.QUALITY.GPA_WEIGHT
+        + scoreFromRmpRating(source.linked_rmp_rating as number) * COURSE_SCORE_POLICY.QUALITY.RMP_WEIGHT
+      )
+    : null;
+  const difficulty = hasDifficultyEvidence
+    ? difficultyFromRmp(source.linked_rmp_difficulty as number)
+    : null;
 
   return {
     qualityScore: quality === null ? null : roundScore(quality),
-    difficultyScore: workload === null ? null : roundScore(workload),
-    primaryInstructorRmp: rmpRating ?? null,
+    difficultyScore: difficulty === null ? null : roundScore(difficulty),
+    primaryInstructorRmp: hasRmpEvidence ? source.linked_rmp_rating : null,
   };
 }
 
@@ -169,14 +150,14 @@ async function rebuildInstructorCourseLinks(
     FROM contexts
   `).bind(options.termId, options.year, options.term).first<{ context_count: number }>();
 
-  await db.prepare(`
+  const deleteStatement = db.prepare(`
     DELETE FROM instructor_course_links
     WHERE term_id = ?
-  `).bind(options.termId).run();
+  `).bind(options.termId);
 
-  const insertResult = await db.prepare(`
+  const insertStatement = db.prepare(`
     WITH contexts AS (${INSTRUCTOR_COURSE_CONTEXTS_SQL}),
-    gpa_matches AS (
+    resolved AS (
       SELECT
         c.term_id,
         c.subject,
@@ -187,53 +168,27 @@ async function rebuildInstructorCourseLinks(
           FROM gpa_stats g
           WHERE g.subject = c.subject
             AND g.number = c.number
-            AND g.instructor LIKE c.instructor_name || '%'
+            AND lower(trim(g.instructor)) = lower(trim(c.instructor_name))
           ORDER BY g.sample_size DESC
           LIMIT 1
         ) AS gpa_id,
-        (
-          SELECT g.instructor
-          FROM gpa_stats g
-          WHERE g.subject = c.subject
-            AND g.number = c.number
-            AND g.instructor LIKE c.instructor_name || '%'
-          ORDER BY g.sample_size DESC
-          LIMIT 1
-        ) AS gpa_instructor
+        CASE
+          WHEN (
+            SELECT COUNT(*)
+            FROM rmp_cache r
+            WHERE lower(trim(r.instructor_name)) = lower(trim(c.instructor_name))
+              AND r.expires_at > unixepoch()
+          ) = 1
+          THEN (
+            SELECT r.rmp_id
+            FROM rmp_cache r
+            WHERE lower(trim(r.instructor_name)) = lower(trim(c.instructor_name))
+              AND r.expires_at > unixepoch()
+            LIMIT 1
+          )
+          ELSE NULL
+        END AS rmp_id
       FROM contexts c
-    ),
-    resolved AS (
-      SELECT
-        g.term_id,
-        g.subject,
-        g.number,
-        g.instructor_name,
-        g.gpa_id,
-        (
-          SELECT r.rmp_id
-          FROM rmp_cache r
-          WHERE r.instructor_name = CASE
-            WHEN g.gpa_instructor IS NOT NULL AND instr(g.gpa_instructor, ',') > 0
-              THEN trim(substr(g.gpa_instructor, 1, instr(g.gpa_instructor, ',') - 1))
-                || ', '
-                || upper(substr(trim(substr(g.gpa_instructor, instr(g.gpa_instructor, ',') + 1)), 1, 1))
-            ELSE g.gpa_instructor
-          END
-          LIMIT 1
-        ) AS bridge_rmp_id,
-        (
-          SELECT r.rmp_id
-          FROM rmp_cache r
-          WHERE r.instructor_name = CASE
-            WHEN instr(g.instructor_name, ',') > 0
-              THEN trim(substr(g.instructor_name, 1, instr(g.instructor_name, ',') - 1))
-                || ', '
-                || upper(substr(trim(substr(g.instructor_name, instr(g.instructor_name, ',') + 1)), 1, 1))
-            ELSE g.instructor_name
-          END
-          LIMIT 1
-        ) AS direct_rmp_id
-      FROM gpa_matches g
     )
     INSERT INTO instructor_course_links (
       term_id, subject, number, instructor_name,
@@ -245,15 +200,18 @@ async function rebuildInstructorCourseLinks(
       number,
       instructor_name,
       gpa_id,
-      COALESCE(bridge_rmp_id, direct_rmp_id)
+      rmp_id
     FROM resolved
     WHERE true
     ON CONFLICT(term_id, subject, number, instructor_name) DO UPDATE SET
       gpa_id = excluded.gpa_id,
       rmp_id = excluded.rmp_id
-  `).bind(options.termId, options.year, options.term).run();
+  `).bind(options.termId, options.year, options.term);
 
-  const linkCount = insertResult.meta?.changes ?? 0;
+  // D1 batch() is transactional: a failed insert rolls back the delete, so a
+  // term never exposes an empty or half-rebuilt link set.
+  const batchResult = await db.batch([deleteStatement, insertStatement]);
+  const linkCount = batchResult[1]?.meta?.changes ?? 0;
 
   return {
     contextCount: countResult?.context_count ?? 0,
@@ -280,12 +238,11 @@ async function updateEnrichmentState(
  * Propagates course-wide GPA averages from gpa_stats to the courses table.
  */
 export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
-  await db.prepare(`
+  const deleteAverages = db.prepare(`
     DELETE FROM gpa_stats
     WHERE instructor IS NULL
-  `).run();
-
-  await db.prepare(`
+  `);
+  const insertAverages = db.prepare(`
     INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, median_gpa, sample_size, last_updated)
     SELECT
       subject,
@@ -298,100 +255,175 @@ export async function enrichCoursesWithGpa(db: D1Database): Promise<void> {
     FROM gpa_stats
     WHERE instructor IS NOT NULL
     GROUP BY subject, number
+  `);
+
+  // Replacing the derived GPA rows is one transaction. If the aggregate insert
+  // fails, the prior course-average rows remain intact.
+  await db.batch([deleteAverages, insertAverages]);
+
+  // Publish the complete course GPA projection in one SQLite statement. The
+  // correlated subqueries intentionally yield NULL for courses absent from the
+  // new generation, but no public row changes until the statement commits.
+  await db.prepare(`
+    UPDATE courses
+    SET
+      avg_gpa = (
+        SELECT g.avg_gpa
+        FROM gpa_stats g
+        WHERE g.instructor IS NULL
+          AND g.subject = courses.subject
+          AND g.number = courses.number
+        LIMIT 1
+      ),
+      gpa_sample_size = (
+        SELECT g.sample_size
+        FROM gpa_stats g
+        WHERE g.instructor IS NULL
+          AND g.subject = courses.subject
+          AND g.number = courses.number
+        LIMIT 1
+      ),
+      updated_at = unixepoch()
   `).run();
-
-  const result = await db.prepare(`
-    SELECT
-      g.subject,
-      g.number,
-      g.avg_gpa,
-      g.sample_size
-    FROM gpa_stats g
-    LEFT JOIN courses c ON g.subject = c.subject AND g.number = c.number
-    WHERE g.instructor IS NULL
-    AND (
-      c.avg_gpa IS NULL
-      OR ABS(c.avg_gpa - g.avg_gpa) > 0.01
-      OR c.gpa_sample_size != g.sample_size
-    )
-  `).all<{ subject: string; number: string; avg_gpa: number; sample_size: number }>();
-
-  if (!result.success) {
-    throw new Error('Failed to load aggregate GPA updates');
-  }
-
-  const updates = result.results;
-
-  for (let i = 0; i < updates.length; i += COURSE_UPDATE_BATCH_SIZE) {
-    const chunk = updates.slice(i, i + COURSE_UPDATE_BATCH_SIZE);
-    const statements = chunk.map(stat =>
-      db.prepare(`
-        UPDATE courses
-        SET avg_gpa = ?, gpa_sample_size = ?
-        WHERE subject = ? AND number = ?
-      `).bind(stat.avg_gpa, stat.sample_size, stat.subject, stat.number)
-    );
-    await db.batch(statements);
-  }
-
 }
 
 /**
  * Computes normalized 0-100 course quality and difficulty scores from available GPA/RMP data.
  */
 export async function enrichCoursesWithScores(db: D1Database): Promise<{ updated: number }> {
-  const result = await db.prepare(`
-    SELECT
-      c.id,
-      c.avg_gpa,
-      c.primary_instructor_rmp,
-      AVG(CASE WHEN r.rating > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.rating END) as linked_rmp_rating,
-      AVG(CASE WHEN r.difficulty > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.difficulty END) as linked_rmp_difficulty
-    FROM courses c
-    LEFT JOIN instructor_course_links l
-      ON l.term_id = CAST(c.year AS TEXT) || '-' || c.term
-      AND l.subject = c.subject
-      AND l.number = c.number
-    LEFT JOIN rmp_cache r ON l.rmp_id = r.rmp_id
-    GROUP BY c.id
-    HAVING
-      c.avg_gpa IS NOT NULL
-      OR (c.primary_instructor_rmp IS NOT NULL AND c.primary_instructor_rmp > 0)
-      OR AVG(CASE WHEN r.rating > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.rating END) IS NOT NULL
-      OR AVG(CASE WHEN r.difficulty > 0 AND COALESCE(r.num_ratings, 0) > 0 THEN r.difficulty END) IS NOT NULL
-  `).all<CourseScoreSource>();
+  const publishScores = db.prepare(`
+    WITH score_sources AS (
+      SELECT
+        c.id,
+        c.avg_gpa,
+        c.gpa_sample_size,
+        SUM(CASE
+          WHEN r.rating > 0
+            AND COALESCE(r.num_ratings, 0) >= ${COURSE_SCORE_POLICY.QUALITY.MIN_RMP_RATINGS}
+          THEN r.rating * r.num_ratings
+        END) / NULLIF(SUM(CASE
+          WHEN r.rating > 0
+            AND COALESCE(r.num_ratings, 0) >= ${COURSE_SCORE_POLICY.QUALITY.MIN_RMP_RATINGS}
+          THEN r.num_ratings ELSE 0
+        END), 0) as linked_rmp_rating,
+        SUM(CASE
+          WHEN r.difficulty > 0
+            AND COALESCE(r.num_ratings, 0) >= ${COURSE_SCORE_POLICY.DIFFICULTY.MIN_RMP_RATINGS}
+          THEN r.difficulty * r.num_ratings
+        END) / NULLIF(SUM(CASE
+          WHEN r.difficulty > 0
+            AND COALESCE(r.num_ratings, 0) >= ${COURSE_SCORE_POLICY.DIFFICULTY.MIN_RMP_RATINGS}
+          THEN r.num_ratings ELSE 0
+        END), 0) as linked_rmp_difficulty,
+        SUM(CASE
+          WHEN (
+            (r.rating > 0 AND COALESCE(r.num_ratings, 0) >= ${COURSE_SCORE_POLICY.QUALITY.MIN_RMP_RATINGS})
+            OR (
+              r.difficulty > 0
+              AND COALESCE(r.num_ratings, 0) >= ${COURSE_SCORE_POLICY.DIFFICULTY.MIN_RMP_RATINGS}
+            )
+          )
+          THEN r.num_ratings ELSE 0
+        END) as linked_rmp_num_ratings
+      FROM courses c
+      LEFT JOIN instructor_course_links l
+        ON l.term_id = CAST(c.year AS TEXT) || '-' || c.term
+        AND l.subject = c.subject
+        AND l.number = c.number
+        AND instr(
+          ';' || replace(trim(COALESCE(c.primary_instructor, '')), '; ', ';') || ';',
+          ';' || trim(l.instructor_name) || ';'
+        ) > 0
+      LEFT JOIN rmp_cache r
+        ON l.rmp_id = r.rmp_id
+        AND r.expires_at > unixepoch()
+      GROUP BY c.id
+    ),
+    computed_scores AS (
+      SELECT
+        id,
+        CASE
+          WHEN avg_gpa IS NOT NULL
+            AND COALESCE(gpa_sample_size, 0) >= ${COURSE_SCORE_POLICY.QUALITY.MIN_GPA_RECORDS}
+            AND linked_rmp_rating > 0
+            AND linked_rmp_num_ratings >= ${COURSE_SCORE_POLICY.QUALITY.MIN_RMP_RATINGS}
+          THEN round(
+            (
+              CASE
+                WHEN avg_gpa <= ${COURSE_SCORE_POLICY.RANGES.GPA_MIN} THEN 0
+                WHEN avg_gpa >= ${COURSE_SCORE_POLICY.RANGES.GPA_MAX} THEN 100
+                ELSE (
+                  (avg_gpa - ${COURSE_SCORE_POLICY.RANGES.GPA_MIN})
+                  / (
+                    ${COURSE_SCORE_POLICY.RANGES.GPA_MAX}
+                    - ${COURSE_SCORE_POLICY.RANGES.GPA_MIN}
+                  )
+                ) * 100
+              END
+            ) * ${COURSE_SCORE_POLICY.QUALITY.GPA_WEIGHT}
+            + (
+              CASE
+                WHEN linked_rmp_rating <= ${COURSE_SCORE_POLICY.RANGES.RMP_MIN} THEN 0
+                WHEN linked_rmp_rating >= ${COURSE_SCORE_POLICY.RANGES.RMP_MAX} THEN 100
+                ELSE (
+                  (linked_rmp_rating - ${COURSE_SCORE_POLICY.RANGES.RMP_MIN})
+                  / (
+                    ${COURSE_SCORE_POLICY.RANGES.RMP_MAX}
+                    - ${COURSE_SCORE_POLICY.RANGES.RMP_MIN}
+                  )
+                ) * 100
+              END
+            ) * ${COURSE_SCORE_POLICY.QUALITY.RMP_WEIGHT},
+            1
+          )
+          ELSE NULL
+        END AS quality_score,
+        CASE
+          WHEN linked_rmp_difficulty > 0
+            AND linked_rmp_num_ratings >= ${COURSE_SCORE_POLICY.DIFFICULTY.MIN_RMP_RATINGS}
+          THEN round(
+            CASE
+              WHEN linked_rmp_difficulty <= ${COURSE_SCORE_POLICY.RANGES.RMP_MIN} THEN 0
+              WHEN linked_rmp_difficulty >= ${COURSE_SCORE_POLICY.RANGES.RMP_MAX} THEN 100
+              ELSE (
+                (linked_rmp_difficulty - ${COURSE_SCORE_POLICY.RANGES.RMP_MIN})
+                / (
+                  ${COURSE_SCORE_POLICY.RANGES.RMP_MAX}
+                  - ${COURSE_SCORE_POLICY.RANGES.RMP_MIN}
+                )
+              ) * 100
+            END,
+            1
+          )
+          ELSE NULL
+        END AS difficulty_score,
+        CASE
+          WHEN linked_rmp_rating > 0
+            AND linked_rmp_num_ratings >= ${COURSE_SCORE_POLICY.QUALITY.MIN_RMP_RATINGS}
+          THEN linked_rmp_rating
+          ELSE NULL
+        END AS primary_instructor_rmp
+      FROM score_sources
+    )
+    UPDATE courses AS target
+    SET
+      quality_score = computed_scores.quality_score,
+      difficulty_score = computed_scores.difficulty_score,
+      primary_instructor_rmp = computed_scores.primary_instructor_rmp,
+      updated_at = unixepoch()
+    FROM computed_scores
+    WHERE target.id = computed_scores.id
+  `);
+  const countUpdatedCourses = db.prepare(`
+    SELECT COUNT(*) AS updated
+    FROM courses
+  `);
 
-  if (!result.success) {
-    throw new Error('Failed to load course score sources');
-  }
-  if (result.results.length === 0) {
-    return { updated: 0 };
-  }
-
-  let updated = 0;
-  for (let i = 0; i < result.results.length; i += COURSE_UPDATE_BATCH_SIZE) {
-    const chunk = result.results.slice(i, i + COURSE_UPDATE_BATCH_SIZE);
-    const statements = chunk.map((row) => {
-      const scores = calculateCourseScores(row);
-      updated++;
-      return db.prepare(`
-        UPDATE courses
-        SET
-          quality_score = ?,
-          difficulty_score = ?,
-          primary_instructor_rmp = ?,
-          updated_at = unixepoch()
-        WHERE id = ?
-      `).bind(
-        scores.qualityScore,
-        scores.difficultyScore,
-        scores.primaryInstructorRmp,
-        row.id
-      );
-    });
-
-    await db.batch(statements);
-  }
-
-  return { updated };
+  // The source aggregation, score calculation, stale-value clearing, and
+  // publication are one SQLite statement. The scalar count shares its atomic
+  // D1 batch because D1's changes metadata includes FTS-trigger writes and
+  // therefore does not truthfully represent the number of courses updated.
+  const results = await db.batch([publishScores, countUpdatedCourses]);
+  const count = results[1]?.results?.[0] as { updated?: number } | undefined;
+  return { updated: count?.updated ?? 0 };
 }

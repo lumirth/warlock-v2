@@ -70,15 +70,15 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 65,
     query: "hard CS class",
-    expected_filters: { subject: "CS", workload: "hard" },
+    expected_filters: { subject: "CS" },
     invariants: { subject: "CS" },
     category: "score",
-    notes: "Difficulty language should be explicit and not remain as residual copy"
+    notes: "Subjective language remains searchable and does not imply instructor difficulty"
   },
   {
     id: 66,
     query: "easy 3 credit humanities",
-    expected_filters: { workload: "easy", credits: 3, requirement: requirement("HUM") },
+    expected_filters: { credits: 3, requirement: requirement("HUM") },
     category: "score"
   },
   {
@@ -102,9 +102,9 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
   },
   {
     id: 70,
-    query: "sort by difficulty",
+    query: "sort by instructor difficulty",
     expected_filters: {},
-    expected_soft_preferences: { inferredSort: { field: "workload", direction: "asc" } },
+    expected_soft_preferences: { inferredSort: { field: "instructor_difficulty", direction: "asc" } },
     expected_results: { non_empty: true, top_k: 10 },
     category: "semantic",
     notes: "Generic sort commands should become ranking controls, not keyword text"
@@ -359,13 +359,11 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
     id: 102,
     query: "easy online gen ed",
     expected_filters: {
-      workload: "easy",
       online: true,
       requirement: anyRequirement(GENERIC_REQUIREMENT_CODES)
     },
     expected_intent: {
-      queryTypes: ["requirement", "schedule", "subjective_vibe"],
-      warnings: ["workload_evidence_incomplete"],
+      queryTypes: ["requirement", "schedule", "topic"],
     },
     category: "decision"
   },
@@ -373,12 +371,10 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
     id: 103,
     query: "easy cs gened",
     expected_filters: {
-      workload: "easy",
       requirement: requirement("CS")
     },
     expected_intent: {
-      queryTypes: ["requirement", "subjective_vibe"],
-      warnings: ["workload_evidence_incomplete"],
+      queryTypes: ["requirement", "topic"],
     },
     category: "decision",
     notes: "CS plus GenEd language should mean the Cultural Studies requirement, not the Computer Science subject"
@@ -387,15 +383,13 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
     id: 114,
     query: "easy cs",
     expected_filters: {
-      workload: "easy",
-      requirement: requirement("CS")
+      subject: "CS"
     },
     expected_intent: {
-      queryTypes: ["requirement", "subjective_vibe"],
-      warnings: ["workload_evidence_incomplete"],
+      queryTypes: ["topic"],
     },
     category: "disambiguation",
-    notes: "Subjective shorthand defaults to Cultural Studies with Computer Science exposed as an alternate interpretation"
+    notes: "Subjective language stays searchable and does not change the CS subject meaning"
   },
   {
     id: 104,
@@ -435,11 +429,9 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 106,
     query: "chill 3 credit class after 2pm",
-    expected_filters: { workload: "easy", credits: 3, startAfterMinutes: 840 },
-    expected_soft_preferences: { lowWorkload: 0.84 },
+    expected_filters: { credits: 3, startAfterMinutes: 840 },
     expected_intent: {
-      queryTypes: ["schedule", "subjective_vibe"],
-      warnings: ["workload_evidence_incomplete"],
+      queryTypes: ["schedule", "topic"],
     },
     category: "decision"
   },
@@ -478,11 +470,11 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 110,
     query: "easy US minority no tests",
-    expected_filters: { workload: "easy", requirement: requirement("US") },
+    expected_filters: { requirement: requirement("US") },
     expected_intent: {
-      queryTypes: ["requirement", "subjective_vibe", "avoidance"],
+      queryTypes: ["avoidance", "subjective_vibe", "requirement", "topic"],
       negativeTerms: ["exam_heavy", "tests", "exams"],
-      warnings: ["workload_evidence_incomplete", "exam_evidence_incomplete"],
+      warnings: ["exam_evidence_incomplete"],
     },
     expected_results: {
       non_empty: true,
@@ -536,7 +528,7 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
   {
     id: 115,
     query: "easy science but no math",
-    expected_filters: { workload: "easy", requirement: requirement("NAT"), not: { subjects: ["MATH"] } },
+    expected_filters: { not: { subjects: ["MATH"] } },
     expected_soft_preferences: { lowMath: 0.86 },
     expected_results: {
       non_empty: true,
@@ -599,7 +591,6 @@ export const LONG_TAIL_GOLDEN_QUERIES: GoldQuery[] = [
     id: 119,
     query: "what's an easy gen ed",
     expected_filters: {
-      workload: "easy",
       requirement: anyRequirement(GENERIC_REQUIREMENT_CODES)
     },
     expected_results: {

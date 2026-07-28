@@ -32,7 +32,9 @@ describe('searchControllerReducer', () => {
       ...INITIAL_SEARCH_CONTROLLER_STATE,
       session: {
         ...INITIAL_SEARCH_CONTROLLER_STATE.session,
-        results: [{ course: { id: 'CS-225' } }] as SearchControllerState['session']['results'],
+        results: [
+          { course: { id: 'CS-225' } },
+        ] as SearchControllerState['session']['results'],
         meta: {
           nextRequest: { query: 'data structures' },
           interpretedRequest: { query: 'data structures' },
@@ -59,5 +61,31 @@ describe('searchControllerReducer', () => {
     expect(failed.session.meta).toBe(state.session.meta)
     expect(failed.session.pagination).toBe(state.session.pagination)
     expect(failed.session.error).toBe('Try again.')
+  })
+
+  it('rolls an optimistic sort label back when refresh fails', () => {
+    const state: SearchControllerState = {
+      ...INITIAL_SEARCH_CONTROLLER_STATE,
+      session: {
+        ...INITIAL_SEARCH_CONTROLLER_STATE.session,
+        sort: { field: 'gpa', direction: 'desc' },
+        committedSort: { field: 'relevance', direction: 'desc' },
+        results: [
+          { course: { id: 'CS-225' } },
+        ] as SearchControllerState['session']['results'],
+      },
+    }
+
+    const failed = searchControllerReducer(state, {
+      type: 'search/failed',
+      message: 'Try again.',
+      mode: 'refresh',
+    })
+
+    expect(failed.session.sort).toEqual({
+      field: 'relevance',
+      direction: 'desc',
+    })
+    expect(failed.session.results).toBe(state.session.results)
   })
 })

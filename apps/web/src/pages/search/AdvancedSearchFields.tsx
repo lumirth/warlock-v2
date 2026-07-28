@@ -1,29 +1,22 @@
 import {
-  ANY_GENED_DISPLAY_LABEL,
-  GENED_DISPLAY_NAME,
   isSearchLevelFilter,
   isSearchStatusFilter,
-  isSearchTermFilter,
   isSearchTimeFilter,
   type AdvancedSearchStateDto,
   type SearchRequestFilterKey,
   type SearchRequestFiltersDto,
   type SearchScope,
+  type SearchTermOptionDto,
 } from '@uiuc-course-search/query-types'
-import {
-  FieldGroup,
-  FieldLegend,
-  FieldSet,
-} from '@/components/ui/field'
+import { FieldGroup, FieldLegend, FieldSet } from '@/components/ui/field'
 import {
   CREDIT_OPTIONS,
   DELIVERY_OPTIONS,
   LEVEL_OPTIONS,
   PART_OF_TERM_OPTIONS,
   STATUS_OPTIONS,
-  TERM_OPTIONS,
   TIME_OPTIONS,
-  WORKLOAD_OPTIONS,
+  INSTRUCTOR_DIFFICULTY_OPTIONS,
   type SelectOption,
 } from './search-options'
 import {
@@ -31,23 +24,25 @@ import {
   AdvancedSelectField,
   AdvancedTextField,
 } from './AdvancedSearchControls'
-import {
-  REQUIREMENT_MATCH_OPTIONS,
-  RequirementPicker,
-  requirementFilterFromCodes,
-  requirementMatchMode,
-} from './RequirementPicker'
+import { RequirementPicker } from './RequirementPicker'
+import type { AdvancedFilterErrors } from './search-filter-model'
 
 export function AdvancedSearchFields({
   advancedDraft,
-  availableYears,
-  availableYearsError,
+  availableTerms,
+  termOptionsError,
+  termOptionsLoading,
+  errors,
+  onRetryTermOptions,
   onAdvancedDraftFilterChange,
   onAdvancedDraftScopeChange,
 }: {
   advancedDraft: AdvancedSearchStateDto
-  availableYears?: number[]
-  availableYearsError: boolean
+  availableTerms?: SearchTermOptionDto[]
+  termOptionsError: boolean
+  termOptionsLoading: boolean
+  errors: AdvancedFilterErrors
+  onRetryTermOptions: () => void
   onAdvancedDraftFilterChange: <Key extends SearchRequestFilterKey>(
     key: Key,
     value: SearchRequestFiltersDto[Key]
@@ -55,19 +50,29 @@ export function AdvancedSearchFields({
   onAdvancedDraftScopeChange: (value?: SearchScope) => void
 }) {
   const filters = advancedDraft.filters
-  const yearOptions = getYearOptions(availableYears, filters.year)
+  const offeringOptions = getOfferingOptions(
+    availableTerms,
+    filters.term,
+    filters.year
+  )
+  const selectedOffering = getSelectedOfferingValue(
+    availableTerms,
+    filters.term,
+    filters.year
+  )
 
   return (
     <div className="flex flex-col gap-5">
       <FieldSet>
         <FieldLegend variant="label">Course</FieldLegend>
-        <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <AdvancedTextField
             id="advanced-subject"
             label="Subject"
             maxLength={8}
             placeholder="e.g. CS"
             value={filters.subject ?? ''}
+            error={errors.subject}
             onChange={(value) =>
               onAdvancedDraftFilterChange(
                 'subject',
@@ -82,6 +87,7 @@ export function AdvancedSearchFields({
             maxLength={4}
             placeholder="e.g. 225"
             value={filters.number ?? ''}
+            error={errors.number}
             onChange={(value) =>
               onAdvancedDraftFilterChange('number', value || undefined)
             }
@@ -91,24 +97,9 @@ export function AdvancedSearchFields({
             label="Instructor"
             placeholder="e.g. Fagen"
             value={filters.instructor ?? ''}
+            error={errors.instructor}
             onChange={(value) =>
               onAdvancedDraftFilterChange('instructor', value || undefined)
-            }
-          />
-          <AdvancedSelectField
-            id="advanced-requirement-mode"
-            label={`${GENED_DISPLAY_NAME} match`}
-            placeholder={ANY_GENED_DISPLAY_LABEL}
-            value={requirementMatchMode(filters.requirement)}
-            options={REQUIREMENT_MATCH_OPTIONS}
-            onChange={(value) =>
-              onAdvancedDraftFilterChange(
-                'requirement',
-                requirementFilterFromCodes(
-                  filters.requirement?.codes ?? [],
-                  value === 'all' ? 'all' : 'any'
-                )
-              )
             }
           />
           <AdvancedSelectField
@@ -124,45 +115,63 @@ export function AdvancedSearchFields({
         </FieldGroup>
         <RequirementPicker
           value={filters.requirement}
-          onChange={(value) => onAdvancedDraftFilterChange('requirement', value)}
+          onChange={(value) =>
+            onAdvancedDraftFilterChange('requirement', value)
+          }
         />
       </FieldSet>
 
       <FieldSet>
         <FieldLegend variant="label">Term and meeting</FieldLegend>
-        <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <AdvancedSelectField
-            id="advanced-term"
-            label="Term"
-            placeholder="Any term"
-            value={filters.term}
-            options={TERM_OPTIONS}
-            onChange={(value) =>
-              onAdvancedDraftFilterChange('term', termFilterValue(value))
-            }
-          />
-          <AdvancedSelectField
-            id="advanced-year"
-            label="Year"
-            placeholder={availableYearsError ? 'Years unavailable' : 'Any year'}
-            value={filters.year?.toString()}
-            options={yearOptions}
-            disabled={availableYearsError}
-            description={
-              availableYearsError
-                ? 'Available years could not be loaded. Try again after the API is reachable.'
-                : undefined
-            }
-            onChange={(value) =>
-              onAdvancedDraftFilterChange('year', yearFilterValue(value))
-            }
-          />
+        <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-2">
+            <AdvancedSelectField
+              id="advanced-offering"
+              label="Offering"
+              placeholder={
+                termOptionsLoading
+                  ? 'Loading offerings…'
+                  : termOptionsError
+                    ? 'Offerings unavailable'
+                    : 'Any current offering'
+              }
+              value={selectedOffering}
+              options={offeringOptions}
+              disabled={termOptionsLoading || termOptionsError}
+              description={
+                termOptionsError
+                  ? 'Term choices could not be loaded.'
+                  : 'Choose a real catalog offering.'
+              }
+              onChange={(value) => {
+                const offering = availableTerms?.find(
+                  (candidate) => candidate.termId === value
+                )
+                onAdvancedDraftFilterChange('term', offering?.term)
+                onAdvancedDraftFilterChange('year', offering?.year)
+                if (offering?.status === 'historical') {
+                  onAdvancedDraftScopeChange('all')
+                }
+              }}
+            />
+            {termOptionsError ? (
+              <button
+                type="button"
+                className="text-primary min-h-8 w-fit text-xs font-medium underline underline-offset-4"
+                onClick={onRetryTermOptions}
+              >
+                Retry offering list
+              </button>
+            ) : null}
+          </div>
           <AdvancedTextField
             id="advanced-days"
             label="Days"
             maxLength={7}
             placeholder="e.g. MWF"
             value={filters.days ?? ''}
+            error={errors.days}
+            description="Use M T W R F S U; R means Thursday."
             onChange={(value) =>
               onAdvancedDraftFilterChange(
                 'days',
@@ -186,7 +195,9 @@ export function AdvancedSearchFields({
             placeholder="Any part"
             value={filters.partOfTerm}
             options={PART_OF_TERM_OPTIONS}
-            onChange={(value) => onAdvancedDraftFilterChange('partOfTerm', value)}
+            onChange={(value) =>
+              onAdvancedDraftFilterChange('partOfTerm', value)
+            }
           />
         </FieldGroup>
         <AdvancedCheckboxField
@@ -205,8 +216,8 @@ export function AdvancedSearchFields({
         <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <AdvancedSelectField
             id="advanced-credits"
-            label="Credits"
-            placeholder="Any credits"
+            label="Exact credits"
+            placeholder="Any exact value"
             value={filters.credits?.toString()}
             options={CREDIT_OPTIONS}
             onChange={(value) =>
@@ -218,9 +229,7 @@ export function AdvancedSearchFields({
             label="Delivery"
             placeholder="Any delivery"
             value={
-              filters.online === undefined
-                ? undefined
-                : String(filters.online)
+              filters.online === undefined ? undefined : String(filters.online)
             }
             options={DELIVERY_OPTIONS}
             onChange={(value) =>
@@ -241,15 +250,15 @@ export function AdvancedSearchFields({
             }
           />
           <AdvancedSelectField
-            id="advanced-workload"
-            label="Workload"
-            placeholder="Any workload"
-            value={filters.workload}
-            options={WORKLOAD_OPTIONS}
+            id="advanced-instructor-difficulty"
+            label="Instructor difficulty"
+            placeholder="Any instructor difficulty"
+            value={filters.instructorDifficulty}
+            options={INSTRUCTOR_DIFFICULTY_OPTIONS}
             onChange={(value) =>
               onAdvancedDraftFilterChange(
-                'workload',
-                value === 'easy' || value === 'hard' ? value : undefined
+                'instructorDifficulty',
+                value === 'lower' || value === 'higher' ? value : undefined
               )
             }
           />
@@ -257,12 +266,6 @@ export function AdvancedSearchFields({
       </FieldSet>
     </div>
   )
-}
-
-function termFilterValue(
-  value: string | undefined
-): SearchRequestFiltersDto['term'] {
-  return isSearchTermFilter(value) ? value : undefined
 }
 
 function timeFilterValue(
@@ -284,13 +287,6 @@ function levelFilterValue(
   return isSearchLevelFilter(level) ? level : undefined
 }
 
-function yearFilterValue(
-  value: string | undefined
-): SearchRequestFiltersDto['year'] {
-  const year = value ? parseInt(value, 10) : NaN
-  return Number.isNaN(year) ? undefined : year
-}
-
 function creditFilterValue(
   value: string | undefined
 ): SearchRequestFiltersDto['credits'] {
@@ -298,13 +294,54 @@ function creditFilterValue(
   return Number.isNaN(credits) ? undefined : credits
 }
 
-function getYearOptions(
-  availableYears: number[] | undefined,
+function getOfferingOptions(
+  availableTerms: SearchTermOptionDto[] | undefined,
+  selectedTerm: SearchRequestFiltersDto['term'],
   selectedYear: number | undefined
 ): SelectOption[] {
-  const years = new Set(availableYears ?? [])
-  if (typeof selectedYear === 'number') years.add(selectedYear)
-  return [...years]
-    .sort((left, right) => right - left)
-    .map((year) => ({ value: String(year), label: String(year) }))
+  const options =
+    availableTerms?.map((offering) => ({
+      value: offering.termId,
+      label: `${offering.label} · ${termStatusLabel(offering.status)}`,
+    })) ?? []
+
+  if (
+    selectedTerm &&
+    selectedYear &&
+    !availableTerms?.some(
+      (offering) =>
+        offering.term === selectedTerm && offering.year === selectedYear
+    )
+  ) {
+    options.unshift({
+      value: `${selectedYear}-${selectedTerm}`,
+      label: `${capitalize(selectedTerm)} ${selectedYear} · saved selection`,
+    })
+  }
+
+  return options
+}
+
+function getSelectedOfferingValue(
+  availableTerms: SearchTermOptionDto[] | undefined,
+  selectedTerm: SearchRequestFiltersDto['term'],
+  selectedYear: number | undefined
+): string | undefined {
+  if (!selectedTerm || !selectedYear) return undefined
+  return (
+    availableTerms?.find(
+      (offering) =>
+        offering.term === selectedTerm && offering.year === selectedYear
+    )?.termId ?? `${selectedYear}-${selectedTerm}`
+  )
+}
+
+function termStatusLabel(status: SearchTermOptionDto['status']): string {
+  if (status === 'registrable') return 'registration open'
+  if (status === 'active') return 'active'
+  return 'historical'
+}
+
+function capitalize(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1).toLowerCase()}`
 }

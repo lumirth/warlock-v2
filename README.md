@@ -4,6 +4,9 @@ Pre-alpha UIUC course search app with a React/Vite frontend, Cloudflare Worker A
 
 ## Current Commands
 
+Use Node.js 22 or newer (`.nvmrc` is provided), then install the locked
+workspace with `npm ci`.
+
 ```bash
 npm run typecheck
 npm test
@@ -25,7 +28,8 @@ Wrangler starts on another port, set `VITE_API_PROXY_TARGET`, for example
 
 ## Route Classes
 
-- Public: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`
+- Public reads: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`, `/api/terms`
+- Public write: `POST /api/feedback`, limited separately and accepted only from configured frontend origins
 - Admin: `/admin/*`, protected by `Authorization: Bearer $ADMIN_TOKEN`
 - Internal service fan-out: `/internal/*`, protected by `Authorization: Bearer $INTERNAL_TOKEN`
 - Admin diagnostics: `/admin/debug/subjects/:year/:term`, admin-protected and limited to a fixed CISAPI subject-list diagnostic
@@ -59,7 +63,7 @@ Cloudflare staging readiness is intentionally executable. After staging resource
 npm run cloudflare:preflight
 ```
 
-This command is expected to fail until real Cloudflare auth and staging evidence are present. The final report must use concrete evidence labels such as `Staging API URL`, `Staging Web URL`, `Pages Project`, `Pages Branch`, `WAF Rule ID` or `Rate-Limit Rule ID`, `Abuse Control Routes`, `Abuse Control Action`, `Abuse Control Thresholds`, `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified`.
+This command is expected to fail until real Cloudflare auth and staging evidence are present. The final report must use concrete evidence labels such as `Staging API URL`, `Staging Web URL`, `Pages Project`, `Pages Branch`, `Rate-Limit Namespace IDs` (including search, course, and feedback), `WAF Rule ID` or `Rate-Limit Rule ID`, `Abuse Control Routes`, `Abuse Control Action`, `Abuse Control Thresholds`, `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified`.
 
 ## Corpus Bootstrap
 

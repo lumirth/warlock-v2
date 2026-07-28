@@ -74,4 +74,26 @@ describe('App shell', () => {
     expect(document.documentElement).toHaveClass('dark')
     expect(document.documentElement.style.colorScheme).toBe('dark')
   })
+
+  it('provides a skip link and a useful not-found route', () => {
+    render(
+      <TestUiProvider>
+        <MemoryRouter initialEntries={['/not-a-real-page']}>
+          <App />
+        </MemoryRouter>
+      </TestUiProvider>
+    )
+
+    expect(screen.getByText(/skip to main content/i)).toHaveAttribute(
+      'href',
+      '#main-content'
+    )
+    expect(
+      screen.getByRole('heading', { name: /page not found/i })
+    ).toBeInTheDocument()
+    expect(document.title).toBe('Page not found · UIUC Course Search')
+    expect(
+      screen.getByRole('link', { name: /return to course search/i })
+    ).toHaveAttribute('href', '/')
+  })
 })

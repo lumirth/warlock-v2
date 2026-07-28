@@ -1,21 +1,21 @@
 export const COURSE_SCORE_POLICY = {
-  // Weights for Composite Quality Score (0-100).
+  // A quality signal is only published when both independently sampled sources
+  // meet their evidence floors. Missing inputs are never reweighted to 100%.
   QUALITY: {
-    RMP_WEIGHT: 0.7,
-    GPA_WEIGHT: 0.3,
+    RMP_WEIGHT: 0.6,
+    GPA_WEIGHT: 0.4,
+    MIN_GPA_RECORDS: 30,
+    MIN_RMP_RATINGS: 5,
   },
 
-  // Weights for Composite Workload Score (0-100).
-  WORKLOAD: {
-    GPA_WEIGHT: 0.5,
-    RMP_WEIGHT: 0.5,
+  // Difficulty is a student-rating proxy, not an estimate derived from grades.
+  DIFFICULTY: {
+    MIN_RMP_RATINGS: 5,
   },
 
   RANGES: {
     GPA_MAX: 4.0,
     GPA_MIN: 2.0,
-    GPA_WORKLOAD_EASY: 3.5,
-    GPA_WORKLOAD_HARD: 2.7,
     RMP_MAX: 5.0,
     RMP_MIN: 1.0,
   },
@@ -41,19 +41,6 @@ export function normalizeRmp(rating: number): number {
   return (
     ((clamped - COURSE_SCORE_POLICY.RANGES.RMP_MIN) /
       (COURSE_SCORE_POLICY.RANGES.RMP_MAX - COURSE_SCORE_POLICY.RANGES.RMP_MIN)) *
-    100
-  );
-}
-
-export function normalizeGpaWorkload(gpa: number): number {
-  const clamped = Math.min(
-    Math.max(gpa, COURSE_SCORE_POLICY.RANGES.GPA_WORKLOAD_HARD),
-    COURSE_SCORE_POLICY.RANGES.GPA_WORKLOAD_EASY,
-  );
-  return (
-    ((COURSE_SCORE_POLICY.RANGES.GPA_WORKLOAD_EASY - clamped) /
-      (COURSE_SCORE_POLICY.RANGES.GPA_WORKLOAD_EASY -
-        COURSE_SCORE_POLICY.RANGES.GPA_WORKLOAD_HARD)) *
     100
   );
 }

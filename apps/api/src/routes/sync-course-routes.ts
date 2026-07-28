@@ -17,6 +17,7 @@ import {
   runManualTermSync,
   runSubjectSyncBatch,
 } from '../services/course-sync-application.js';
+import { coordinateCourseSync } from '../services/sync-coordinator.js';
 import {
   parseForceRunningLocks,
   type SyncRouteBindings,
@@ -50,8 +51,16 @@ function parseSyncPagination(
 
 syncCourseRoutes.post('/internal/sync-batch', async (c) => {
   const runId = createRunId('sync-batch');
+  let payload: SyncBatchRequest;
   try {
-    const { year, term, subjects, status, totalSubjects } = await c.req.json<SyncBatchRequest>();
+    payload = await c.req.json<SyncBatchRequest>();
+  } catch (error) {
+    logger.warn('internal.syncBatch.invalidJson', { runId, ...errorFields(error) });
+    return c.json({ error: 'Request body must be valid JSON' }, 400);
+  }
+
+  try {
+    const { year, term, subjects, status, totalSubjects } = payload;
 
     if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400);
@@ -78,6 +87,9 @@ syncCourseRoutes.post('/internal/sync-batch', async (c) => {
     const normalizedSubjects = subjects.map(subject => typeof subject === 'string' ? subject.trim().toUpperCase() : '');
     if (normalizedSubjects.some(subject => !/^[A-Z]{2,4}$/.test(subject))) {
       return c.json({ error: 'subjects must be 2-4 letter subject codes' }, 400);
+    }
+    if (new Set(normalizedSubjects).size !== normalizedSubjects.length) {
+      return c.json({ error: 'subjects must not contain duplicates' }, 400);
     }
 
     let requestedStatus: TermStatus | undefined;
@@ -109,7 +121,7 @@ syncCourseRoutes.post('/internal/sync-batch', async (c) => {
     return c.json(result);
   } catch (error) {
     logger.error('internal.syncBatch.failed', { runId, ...errorFields(error) });
-    return c.json({ error: String(error) }, 500);
+    return c.json({ error: 'Internal sync batch failed', runId }, 500);
   }
 });
 
@@ -188,4 +200,19 @@ syncCourseRoutes.post('/admin/sync-active', async (c) => {
   }
 
   return c.json(result);
+});
+
+syncCourseRoutes.post('/admin/sync-active/full', async (c) => {
+  const runId = createRunId('admin-course-sync');
+  try {
+    const result = await coordinateCourseSync(c.env, {
+      runId,
+      cron: 'admin',
+      trigger: 'admin_full_sync',
+    });
+    return c.json(result);
+  } catch (error) {
+    logger.error('admin.courseSync.failed', { runId, ...errorFields(error) });
+    return c.json({ error: 'Full active-term sync failed', runId }, 500);
+  }
 });

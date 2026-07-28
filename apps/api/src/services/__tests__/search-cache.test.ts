@@ -120,6 +120,7 @@ describe('search cache', () => {
         semanticQuery: '',
         scope: 'active',
         semanticTermIds: [],
+        sort: { field: 'relevance', direction: 'desc' },
       },
     };
     const result = {
@@ -148,6 +149,23 @@ describe('search cache', () => {
     await expect(getCachedSearchPlan(kv, request)).resolves.toEqual(planning);
     await expect(getCachedSearchResult(kv, request)).resolves.toEqual(result);
     expect(expirationTtls.every((ttl) => ttl >= 60)).toBe(true);
+  });
+
+  it('rejects a cache value whose verified request identity does not match', async () => {
+    const kv = {
+      get: async () => JSON.stringify({
+        identity: '{"query":"different request"}',
+        value: {
+          extraction: { hints: [], residual: '' },
+          queryResidual: '',
+          plan: { filters: {}, keywordQuery: '', semanticQuery: '' },
+          compilerEvents: [],
+        },
+      }),
+    } as unknown as KVNamespace;
+    const request = normalizeSearchRequestDto({ query: 'data structures' });
+
+    await expect(getCachedSearchPlan(kv, request)).resolves.toBeNull();
   });
 
   it('does not cache partially degraded search results', async () => {
@@ -180,6 +198,7 @@ describe('search cache', () => {
             semanticQuery: request.query,
             scope: 'active',
             semanticTermIds: [],
+            sort: { field: 'relevance', direction: 'desc' },
           },
         },
         retrievalExecution: {

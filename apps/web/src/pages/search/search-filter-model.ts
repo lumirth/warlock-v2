@@ -1,9 +1,17 @@
 import {
   type AdvancedSearchStateDto,
-  normalizeSearchRequestDto,
-  searchRequestHasFilters,
+  type SearchRequestFilterKey,
+  type SearchRequestFiltersDto,
   type SearchRequestDto,
 } from '@uiuc-course-search/query-types'
+
+export type AdvancedFilterErrors = Partial<
+  Record<SearchRequestFilterKey, string>
+>
+
+export type AdvancedFilterValidation =
+  | { ok: true; value: AdvancedSearchStateDto; errors: AdvancedFilterErrors }
+  | { ok: false; value: AdvancedSearchStateDto; errors: AdvancedFilterErrors }
 
 export function advancedFiltersChanged(
   previous: AdvancedSearchStateDto,
@@ -13,36 +21,86 @@ export function advancedFiltersChanged(
 }
 
 export function hasAdvancedFilterValue(state: AdvancedSearchStateDto): boolean {
-  return (
-    hasSearchableAdvancedFilterValue(state) ||
-    normalizeAdvancedValue(state.scope) !== ''
-  )
+  return hasSearchableAdvancedFilterValue(state) || state.scope === 'all'
 }
 
 export function hasSearchableAdvancedFilterValue(
   state: AdvancedSearchStateDto
 ): boolean {
-  return searchRequestHasFilters({ filters: cleanAdvancedFilters(state).filters })
+  return Object.values(cleanAdvancedFilters(state).filters).some(
+    (value) => value !== undefined
+  )
 }
 
 export function cleanAdvancedFilters(
   state: AdvancedSearchStateDto
 ): AdvancedSearchStateDto {
-  return advancedStateFromRequest({
-    query: '',
-    filters: state.filters,
-    scope: state.scope,
-  })
+  const filters: SearchRequestFiltersDto = {}
+
+  for (const [rawKey, rawValue] of Object.entries(state.filters)) {
+    if (rawValue === undefined || rawValue === null || rawValue === '') continue
+    const key = rawKey as SearchRequestFilterKey
+
+    if (typeof rawValue === 'string') {
+      const trimmed = rawValue.trim()
+      if (!trimmed) continue
+      const normalized =
+        key === 'subject' || key === 'number' || key === 'days'
+          ? trimmed.toUpperCase()
+          : trimmed
+      Object.assign(filters, { [key]: normalized })
+      continue
+    }
+
+    Object.assign(filters, { [key]: rawValue })
+  }
+
+  return {
+    filters,
+    ...(state.scope === 'all' ? { scope: 'all' as const } : {}),
+  }
 }
 
 export function advancedStateFromRequest(
   request: SearchRequestDto
 ): AdvancedSearchStateDto {
-  const normalized = normalizeSearchRequestDto(request)
-  return {
-    filters: normalized.filters,
-    ...(normalized.scope === 'all' ? { scope: normalized.scope } : {}),
+  return cleanAdvancedFilters({
+    filters: request.filters ?? {},
+    ...(request.scope === 'all' ? { scope: request.scope } : {}),
+  })
+}
+
+export function validateAdvancedFilters(
+  state: AdvancedSearchStateDto
+): AdvancedFilterValidation {
+  const value = cleanAdvancedFilters(state)
+  const errors: AdvancedFilterErrors = {}
+  const { filters } = value
+
+  if (filters.subject && !/^[A-Z]{2,4}$/.test(filters.subject)) {
+    errors.subject = 'Use a 2 to 4 letter subject code, such as CS.'
   }
+  if (filters.number && !/^\d{3}[A-Z]?$/.test(filters.number)) {
+    errors.number = 'Use a 3 digit course number with an optional letter.'
+  }
+  if (filters.instructor && filters.instructor.length > 80) {
+    errors.instructor = 'Use 80 characters or fewer.'
+  }
+  if (filters.days && !/^[MTWRFSU]{1,7}$/.test(filters.days)) {
+    errors.days = 'Use day letters such as MWF or TR. R means Thursday.'
+  }
+  if (
+    filters.year !== undefined &&
+    (!Number.isInteger(filters.year) ||
+      filters.year < 2000 ||
+      filters.year > 2100)
+  ) {
+    errors.year = 'Choose a supported offering year.'
+  }
+
+  return Object.keys(errors).length === 0
+    ? { ok: true, value, errors }
+    : { ok: false, value, errors }
 }
 
 export function advancedFiltersContradictQuery(

@@ -160,7 +160,7 @@ describe('hybridSearch', () => {
 
   it('chunks broad hybrid candidate loading and preserves lane evidence', async () => {
     vi.mocked(embeddings.searchCourses).mockResolvedValue(
-      Array.from({ length: 50 }, (_, index) => ({ id: `semantic-${index}`, score: 1 - index / 100 }))
+      Array.from({ length: 100 }, (_, index) => ({ id: `semantic-${index}`, score: 1 - index / 1000 }))
     );
 
     const courseLoadBindSizes: number[] = [];
@@ -171,6 +171,7 @@ describe('hybridSearch', () => {
       title: id,
       description: null,
       credit_hours: 3,
+      credit_hours_text: '3 hours.',
       subject_id: 'CS',
       course_info: null,
       degree_attributes: null,
@@ -201,12 +202,12 @@ describe('hybridSearch', () => {
         async all() {
           if (sql.includes('FROM courses_fts')) {
             return {
-              results: Array.from({ length: 50 }, (_, index) => ({ id: `course-${index}`, fts_score: index })),
+              results: Array.from({ length: 250 }, (_, index) => ({ id: `course-${index}`, fts_score: index })),
             };
           }
           if (sql.includes('FROM sections_fts')) {
             return {
-              results: Array.from({ length: 50 }, (_, index) => ({ id: `section-${index}`, fts_score: index })),
+              results: Array.from({ length: 250 }, (_, index) => ({ id: `section-${index}`, fts_score: index })),
             };
           }
           if (sql.includes('FROM courses c') && sql.includes('WHERE c.id IN')) {
@@ -227,7 +228,7 @@ describe('hybridSearch', () => {
       filters: {},
     };
 
-    const { results } = await hybridSearch(
+    const { results, candidateWindow } = await hybridSearch(
       mockDb as unknown as D1Database,
       mockVectorize as unknown as VectorizeIndex,
       mockAi as unknown as Ai,
@@ -235,7 +236,12 @@ describe('hybridSearch', () => {
       plan,
     );
 
-    expect(results).toHaveLength(150);
+    expect(results).toHaveLength(400);
+    expect(candidateWindow).toEqual({
+      retrievedCandidates: 600,
+      hydrationLimit: 400,
+      truncated: true,
+    });
     expect(courseLoadBindSizes.length).toBeGreaterThan(1);
     expect(courseLoadBindSizes.every(size => size <= 50)).toBe(true);
     expect(results[0].laneResults?.[0]).toEqual(expect.objectContaining({
@@ -259,6 +265,7 @@ describe('hybridSearch', () => {
       title,
       description: null,
       credit_hours: 3,
+      credit_hours_text: '3 hours.',
       subject_id: 'CS',
       course_info: null,
       degree_attributes: null,
@@ -398,6 +405,36 @@ describe('course retrieval lanes', () => {
     ]);
   });
 
+  it('orders structured attribute results before applying the lane limit', async () => {
+    let preparedSql = '';
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        preparedSql = sql;
+        return {
+          bind: vi.fn((...params: unknown[]) => {
+            expect(params.at(-1)).toBe(1);
+            return {
+              all: vi.fn(async () => ({ results: [{ id: 'CS-101' }] })),
+            };
+          }),
+        };
+      }),
+    };
+
+    await structuredCourseSearch(
+      db as unknown as D1Database,
+      { subject: 'CS' },
+      1,
+      'all',
+      { field: 'gpa', direction: 'desc' },
+    );
+
+    expect(preparedSql).toContain('c.avg_gpa DESC');
+    expect(preparedSql.indexOf('ORDER BY')).toBeLessThan(
+      preparedSql.indexOf('LIMIT ?'),
+    );
+  });
+
   it('recalls exact title matches before unrelated FTS matches', async () => {
     const seenSql: string[] = [];
     const db = {
@@ -406,20 +443,29 @@ describe('course retrieval lanes', () => {
         return {
           bind: vi.fn((...params: unknown[]) => ({
             all: vi.fn(async () => {
-              if (sql.includes('LOWER(c.title) LIKE')) {
+              if (
+                sql.includes('LOWER(c.title) LIKE') &&
+                sql.includes('courses_fts MATCH')
+              ) {
                 expect(params).toEqual([
                   'data structures',
                   'data structures%',
                   '%data structures%',
+                  'data structures',
                   20,
                 ]);
-                return { results: [{ id: 'CS-225-2026-fall', title_rank: 1 }] };
-              }
-              if (sql.includes('courses_fts MATCH')) {
                 return {
                   results: [
-                    { id: 'ECE-541-2026-fall', fts_score: -1 },
-                    { id: 'CS-225-2026-fall', fts_score: 0 },
+                    {
+                      id: 'CS-225-2026-fall',
+                      title_rank: 1,
+                      fts_score: 0,
+                    },
+                    {
+                      id: 'ECE-541-2026-fall',
+                      title_rank: null,
+                      fts_score: -1,
+                    },
                   ],
                 };
               }
@@ -436,6 +482,7 @@ describe('course retrieval lanes', () => {
       cleanKeywordQuery: 'data structures',
       titleQuery: 'data structures',
       scope: 'all',
+      sort: { field: 'relevance', direction: 'desc' },
     }, 20);
 
     expect(seenSql.some(sql => sql.includes('LOWER(c.title) LIKE'))).toBe(true);
@@ -474,6 +521,7 @@ describe('course retrieval lanes', () => {
       cleanKeywordQuery: 'class about movies no essays film cinema media documentary television pop culture visual culture papers essays',
       titleQuery: '',
       scope: 'all',
+      sort: { field: 'relevance', direction: 'desc' },
     }, 20);
   });
 });
@@ -481,6 +529,27 @@ describe('course retrieval lanes', () => {
 describe('semantic post-filtering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('drops stale Vectorize ids even when no structured filter is active', async () => {
+    const semanticResults = [
+      { id: 'CS-225', score: 0.9 },
+      { id: 'REMOVED-101', score: 0.8 },
+    ];
+
+    mockDb.prepare.mockReturnValue({
+      bind: vi.fn().mockReturnValue({
+        all: vi.fn().mockResolvedValue({
+          results: [{ id: 'CS-225' }],
+        }),
+      }),
+    });
+
+    await expect(postFilterSemanticResults(
+      mockDb as unknown as D1Database,
+      semanticResults,
+      {},
+    )).resolves.toEqual([{ id: 'CS-225', score: 0.9 }]);
   });
 
   it('filters semantic results by a single requirement code', async () => {

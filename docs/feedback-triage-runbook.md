@@ -74,7 +74,7 @@ For `search_eval` candidates:
 
 For `score_audit` candidates:
 
-- Inspect GPA, RMP, quality, workload, and sample-size inputs.
+- Inspect GPA, RMP, quality, instructor-difficulty, and sample-size inputs.
 - Confirm whether the displayed score copy is wrong or just under-explained.
 - Add DTO/UI tests for valid score-report classes.
 

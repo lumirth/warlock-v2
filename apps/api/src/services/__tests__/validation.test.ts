@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { validateSyncResult } from '../validation.js';
+import {
+  assertPublishableSubjectSnapshot,
+  validateSyncBatchContract,
+  validateSyncResult,
+} from '../validation.js';
 import type { TermSyncResult } from '../parallel-sync.js';
 
 const baseResult: TermSyncResult = {
@@ -77,5 +81,38 @@ describe('validateSyncResult', () => {
 
     const warnings = validateSyncResult(result);
     expect(warnings.some(w => w.includes('failed'))).toBe(true);
+  });
+
+  it('refuses empty subject snapshots before publication', () => {
+    expect(() => assertPublishableSubjectSnapshot({
+      subject: { id: 'CS' },
+      termId: '2026-fall',
+      year: 2026,
+      term: 'fall',
+      courses: [],
+    } as never, 'CS')).toThrow('snapshot contains no courses');
+  });
+
+  it('detects missing and internally inconsistent batch results', () => {
+    expect(validateSyncBatchContract({
+      termId: '2026-fall',
+      year: 2026,
+      term: 'fall',
+      subjectResults: [],
+      totalCourses: 1,
+      totalSections: 0,
+      successfulSubjects: 1,
+      failedSubjects: 0,
+      durationMs: 1,
+      rateLimitHits: 0,
+    }, {
+      year: 2026,
+      term: 'fall',
+      subjects: ['CS'],
+    })).toEqual(expect.arrayContaining([
+      'missing subject result CS',
+      'totalCourses does not match subject results',
+      'successfulSubjects does not match subject results',
+    ]));
   });
 });

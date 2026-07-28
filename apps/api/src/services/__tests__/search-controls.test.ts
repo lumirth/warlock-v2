@@ -30,6 +30,10 @@ const course = (overrides: Partial<Course>): Course => ({
   created_at: 0,
   updated_at: 0,
   ...overrides,
+  credit_hours_text:
+    overrides.credit_hours_text === undefined
+      ? '4 hours.'
+      : overrides.credit_hours_text,
 });
 
 const result = (
@@ -128,7 +132,7 @@ describe('applyFinalOrderingControls', () => {
     ]);
   });
 
-  it('sorts workload by displayed tier, not raw difficulty score', () => {
+  it('sorts instructor difficulty by displayed tier, not raw difficulty score', () => {
     const sorted = applyFinalOrderingControls(
       [
         result('easy-relevance-first', { difficulty_score: 20 }),
@@ -136,7 +140,7 @@ describe('applyFinalOrderingControls', () => {
         result('easy-lower-raw-score', { difficulty_score: 5 }),
         result('moderate', { difficulty_score: 55 }),
       ],
-      { sort: { field: 'workload', direction: 'asc' }, scope: 'all' },
+      { sort: { field: 'instructor_difficulty', direction: 'asc' }, scope: 'all' },
     );
 
     expect(sorted.map((item) => item.course.id)).toEqual([
@@ -219,9 +223,9 @@ describe('normalizeSearchControls', () => {
       direction: 'desc',
     });
     expect(
-      normalizeSearchControls({ sort: { field: 'workload' } }).sort,
+      normalizeSearchControls({ sort: { field: 'instructor_difficulty' } }).sort,
     ).toEqual({
-      field: 'workload',
+      field: 'instructor_difficulty',
       direction: 'asc',
     });
   });

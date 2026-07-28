@@ -94,7 +94,7 @@ export type MatchEvidenceKind =
   | "schedule"
   | "delivery"
   | "instructor"
-  | "workload"
+  | "instructor_difficulty"
   | "topic"
   | "semantic"
   | "keyword"
@@ -132,7 +132,7 @@ export type CourseMetricsDto = {
   medianGpa: number | null;
   gpaSampleSize: number | null;
   qualityScore: number | null;
-  workloadScore: number | null;
+  instructorDifficultyScore: number | null;
 };
 
 export type CourseCatalogDto = {
@@ -150,6 +150,21 @@ export type CourseRegistrationDto = {
   approvalCode: string | null;
 };
 
+export type CourseRegistrationSummaryDto = {
+  total: number;
+  open: number;
+  restricted: number;
+  waitlisted: number;
+  closed: number;
+  cancelled: number;
+  unknown: number;
+  /**
+   * Oldest section-sync Unix timestamp included in this summary. Null means
+   * there are no sections or at least one included section has unknown age.
+   */
+  lastSynced: number | null;
+};
+
 export type CourseLinksDto = {
   courseExplorerUrl?: string;
 };
@@ -160,7 +175,10 @@ export type CourseSummaryDto = {
   number: string;
   title: string;
   description: string | null;
+  /** Exact numeric value only when the official catalog states one value. */
   creditHours: number | null;
+  /** Official catalog wording, including ranges and variable-credit language. */
+  creditHoursText: string | null;
   year: number;
   term: string;
   primaryInstructor: string | null;
@@ -168,6 +186,7 @@ export type CourseSummaryDto = {
   catalog: CourseCatalogDto;
   scheduleNotes: CourseScheduleNotesDto;
   registration: CourseRegistrationDto;
+  registrationSummary?: CourseRegistrationSummaryDto;
   requirements: CourseRequirementDto[];
   links: CourseLinksDto;
 };
@@ -186,8 +205,8 @@ export type CourseDetailCacheDto = {
   cached?: boolean;
   stale?: boolean;
   staleReason?: string | null;
-  ageSeconds?: number;
-  fetchedAt?: number;
+  ageSeconds?: number | null;
+  fetchedAt?: number | null;
   termStatus?: string;
 };
 

@@ -36,7 +36,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'instructor',
                 label: 'Instructor fagen',
                 value: 'fagen',
-                removeRequest: ({ query: 'algorithms' }),
+                removeRequest: { query: 'algorithms' },
               },
             ],
             ambiguityActions: [],
@@ -62,7 +62,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
       })
     })
     expect(screen.getByLabelText(/course search query/i)).toHaveValue(
-      'professor fagen algorithms'
+      'algorithms'
     )
   })
 
@@ -86,7 +86,10 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                nextRequest: ({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+                nextRequest: {
+                  query: '',
+                  filters: { requirement: singleRequirementFilter('CS') },
+                },
               },
             ],
           },
@@ -99,7 +102,9 @@ describe('SearchPage refinements and ambiguity actions', () => {
     setQuery('CS gened')
     submitSearch()
 
-    expect(await screen.findByText(/did you mean a different interpretation/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/did you mean a different interpretation/i)
+    ).toBeInTheDocument()
     await screen.findByRole('button', { name: /use cultural studies/i })
     fireEvent.click(
       screen.getByRole('button', { name: /use cultural studies/i })
@@ -109,12 +114,12 @@ describe('SearchPage refinements and ambiguity actions', () => {
       expectLastSearchCalledWithRequest({
         query: '',
         pagination: { limit: 20, offset: 0 },
-        filters: expect.objectContaining({ requirement: singleRequirementFilter('CS') }),
+        filters: expect.objectContaining({
+          requirement: singleRequirementFilter('CS'),
+        }),
       })
     })
-    expect(screen.getByLabelText(/course search query/i)).toHaveValue(
-      'CS gened'
-    )
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('')
   })
 
   it('keeps accepted ambiguity actions as the canonical request during sort changes', async () => {
@@ -122,13 +127,16 @@ describe('SearchPage refinements and ambiguity actions', () => {
     const sortedResponse = deferred<SearchResponseDto>()
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([
-          course({
-            id: 'CS-100-2026-spring',
-            number: '100',
-            title: 'Freshman Orientation',
-          }),
-        ], 'CS'),
+        ...searchResponse(
+          [
+            course({
+              id: 'CS-100-2026-spring',
+              number: '100',
+              title: 'Freshman Orientation',
+            }),
+          ],
+          'CS'
+        ),
         meta: {
           ...searchResponse([], 'fixture').meta,
           nextRequest: {
@@ -145,7 +153,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'subject',
                 label: 'Subject CS',
                 value: 'CS',
-                removeRequest: ({ query: '', filters: undefined }),
+                removeRequest: { query: '', filters: undefined },
               },
             ],
             ambiguityActions: [
@@ -153,7 +161,10 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                nextRequest: ({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+                nextRequest: {
+                  query: '',
+                  filters: { requirement: singleRequirementFilter('CS') },
+                },
               },
             ],
           },
@@ -187,14 +198,17 @@ describe('SearchPage refinements and ambiguity actions', () => {
 
     await act(async () => {
       culturalStudiesResponse.resolve({
-        ...searchResponse([
-          course({
-            id: 'ANTH-103-2026-spring',
-            subject: 'ANTH',
-            number: '103',
-            title: 'Anthropology in a Changing World',
-          }),
-        ], { query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+        ...searchResponse(
+          [
+            course({
+              id: 'ANTH-103-2026-spring',
+              subject: 'ANTH',
+              number: '103',
+              title: 'Anthropology in a Changing World',
+            }),
+          ],
+          { query: '', filters: { requirement: singleRequirementFilter('CS') } }
+        ),
         meta: {
           ...searchResponse([], 'fixture').meta,
           nextRequest: {
@@ -208,7 +222,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'requirement',
                 label: 'GenEd CS',
                 value: 'CS',
-                removeRequest: ({ query: 'CS' }),
+                removeRequest: { query: 'CS' },
               },
             ],
             ambiguityActions: [],
@@ -241,19 +255,22 @@ describe('SearchPage refinements and ambiguity actions', () => {
 
     await act(async () => {
       sortedResponse.resolve({
-        ...searchResponse([
-          course({
-            id: 'AFST-222-2026-spring',
-            subject: 'AFST',
-            number: '222',
-            title: 'Introduction to Modern Africa',
-            metrics: { avgGpa: 3.76 },
-          }),
-        ], {
-          query: '',
-          filters: { requirement: singleRequirementFilter('CS') },
-          sort: { field: 'gpa', direction: 'desc' },
-        }),
+        ...searchResponse(
+          [
+            course({
+              id: 'AFST-222-2026-spring',
+              subject: 'AFST',
+              number: '222',
+              title: 'Introduction to Modern Africa',
+              metrics: { avgGpa: 3.76 },
+            }),
+          ],
+          {
+            query: '',
+            filters: { requirement: singleRequirementFilter('CS') },
+            sort: { field: 'gpa', direction: 'desc' },
+          }
+        ),
         meta: {
           ...searchResponse([], 'fixture').meta,
           nextRequest: {
@@ -268,7 +285,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'requirement',
                 label: 'GenEd CS',
                 value: 'CS',
-                removeRequest: ({ query: 'CS' }),
+                removeRequest: { query: 'CS' },
               },
             ],
             ambiguityActions: [],
@@ -279,19 +296,24 @@ describe('SearchPage refinements and ambiguity actions', () => {
     })
 
     await screen.findByText('AFST 222')
-    expect(screen.getByText('Introduction to Modern Africa')).toBeInTheDocument()
+    expect(
+      screen.getByText('Introduction to Modern Africa')
+    ).toBeInTheDocument()
   })
 
   it('returns to the typed query when removing the last accepted ambiguity filter', async () => {
     vi.mocked(api.search)
       .mockResolvedValueOnce({
-        ...searchResponse([
-          course({
-            id: 'CS-100-2026-spring',
-            number: '100',
-            title: 'Freshman Orientation',
-          }),
-        ], 'CS'),
+        ...searchResponse(
+          [
+            course({
+              id: 'CS-100-2026-spring',
+              number: '100',
+              title: 'Freshman Orientation',
+            }),
+          ],
+          'CS'
+        ),
         meta: {
           ...searchResponse([], 'fixture').meta,
           nextRequest: {
@@ -308,7 +330,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'subject',
                 label: 'Subject CS',
                 value: 'CS',
-                removeRequest: ({ query: '', filters: undefined }),
+                removeRequest: { query: '', filters: undefined },
               },
             ],
             ambiguityActions: [
@@ -316,21 +338,27 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-requirement-CS',
                 term: 'CS',
                 label: 'Cultural Studies',
-                nextRequest: ({ query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+                nextRequest: {
+                  query: '',
+                  filters: { requirement: singleRequirementFilter('CS') },
+                },
               },
             ],
           },
         },
       })
       .mockResolvedValueOnce({
-        ...searchResponse([
-          course({
-            id: 'ANTH-103-2026-spring',
-            subject: 'ANTH',
-            number: '103',
-            title: 'Anthropology in a Changing World',
-          }),
-        ], { query: '', filters: { requirement: singleRequirementFilter('CS') } }),
+        ...searchResponse(
+          [
+            course({
+              id: 'ANTH-103-2026-spring',
+              subject: 'ANTH',
+              number: '103',
+              title: 'Anthropology in a Changing World',
+            }),
+          ],
+          { query: '', filters: { requirement: singleRequirementFilter('CS') } }
+        ),
         meta: {
           ...searchResponse([], 'fixture').meta,
           nextRequest: {
@@ -344,7 +372,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 type: 'requirement',
                 label: 'GenEd CS',
                 value: 'CS',
-                removeRequest: ({ query: 'CS' }),
+                removeRequest: { query: 'CS' },
               },
             ],
             ambiguityActions: [],
@@ -352,13 +380,16 @@ describe('SearchPage refinements and ambiguity actions', () => {
         },
       })
       .mockResolvedValueOnce(
-        searchResponse([
-          course({
-            id: 'CS-100-2026-spring',
-            number: '100',
-            title: 'Freshman Orientation',
-          }),
-        ], 'CS')
+        searchResponse(
+          [
+            course({
+              id: 'CS-100-2026-spring',
+              number: '100',
+              title: 'Freshman Orientation',
+            }),
+          ],
+          'CS'
+        )
       )
 
     renderSearchPage()
@@ -397,7 +428,10 @@ describe('SearchPage refinements and ambiguity actions', () => {
           },
           interpretedRequest: {
             query: '',
-            filters: { requirement: singleRequirementFilter('CS'), workload: 'easy' },
+            filters: {
+              requirement: singleRequirementFilter('CS'),
+              instructorDifficulty: 'lower',
+            },
           },
           ui: {
             chips: [],
@@ -406,10 +440,13 @@ describe('SearchPage refinements and ambiguity actions', () => {
                 id: '0-0-subject-CS',
                 term: 'cs',
                 label: 'Computer Science',
-                nextRequest: ({
+                nextRequest: {
                   query: '',
-                  filters: { subject: 'CS', workload: 'easy' },
-                }),
+                  filters: {
+                    subject: 'CS',
+                    instructorDifficulty: 'lower',
+                  },
+                },
               },
             ],
           },
@@ -431,7 +468,7 @@ describe('SearchPage refinements and ambiguity actions', () => {
       expectLastSearchCalledWithRequest({
         query: '',
         pagination: { limit: 20, offset: 0 },
-        filters: { subject: 'CS', workload: 'easy' },
+        filters: { subject: 'CS', instructorDifficulty: 'lower' },
         scope: 'active',
         sort: { field: 'relevance', direction: 'desc' },
       })

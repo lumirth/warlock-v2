@@ -56,6 +56,7 @@ function mockExecution(results: SearchResult[]): void {
           semanticQuery: plan.semanticQuery,
           scope: controls.scope,
           semanticTermIds: [],
+          sort: controls.sort,
         },
       },
       retrievalExecution: {
@@ -92,6 +93,10 @@ const mockCourse = (overrides: Partial<Course> = {}): Course => ({
   created_at: 0,
   updated_at: 0,
   ...overrides,
+  credit_hours_text:
+    overrides.credit_hours_text === undefined
+      ? "4 hours."
+      : overrides.credit_hours_text,
 });
 
 describe("SearchPipeline", () => {
@@ -273,15 +278,15 @@ describe("SearchPipeline", () => {
   });
 
   it("infers explicit sort-by commands without leaving sort words in the residual query", async () => {
-    const query = "sort by difficulty";
+    const query = "sort by instructor difficulty";
     vi.mocked(extractor.extract).mockReturnValue({
       hints: [],
-      residual: "sort by difficulty",
+      residual: "sort by instructor difficulty",
     });
     vi.mocked(queryResolver.resolveQuery).mockResolvedValue({
       filters: {},
-      semanticQuery: "sort by difficulty",
-      keywordQuery: "sort by difficulty",
+      semanticQuery: "sort by instructor difficulty",
+      keywordQuery: "sort by instructor difficulty",
     });
     mockExecution([
       { course: mockCourse({ id: "EASY", difficulty_score: 12 }), score: 1 },
@@ -294,13 +299,16 @@ describe("SearchPipeline", () => {
         keywordQuery: "",
         semanticQuery: "",
         softPreferences: expect.objectContaining({
-          inferredSort: { field: "workload", direction: "asc" },
+          inferredSort: { field: "instructor_difficulty", direction: "asc" },
         }),
     });
     expect(
       budgetFromFirstSearchCall().browseableResultLimit,
     ).toBe(MAX_BROWSEABLE_SEARCH_RESULTS);
-    expect(controlsFromFirstSearchCall().sort).toEqual({ field: "workload", direction: "asc" });
+    expect(controlsFromFirstSearchCall().sort).toEqual({
+      field: "instructor_difficulty",
+      direction: "asc",
+    });
     expect(result.results[0].course.id).toBe("EASY");
   });
 

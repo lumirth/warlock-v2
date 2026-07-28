@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react'
 import { SearchIcon } from 'lucide-react'
+import { SEARCH_QUERY_MAX_LENGTH } from '@uiuc-course-search/query-types'
 import { Button } from '@/components/ui/button'
 import { Field, FieldLabel } from '@/components/ui/field'
 import {
@@ -35,11 +36,19 @@ export function SearchForm({
             </InputGroupAddon>
             <InputGroupInput
               id="course-search-query"
+              type="search"
+              enterKeyHint="search"
               autoComplete="off"
+              maxLength={SEARCH_QUERY_MAX_LENGTH}
               placeholder="Search by course, topic, professor, GenEd, or time"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
             />
+            <InputGroupAddon align="inline-end">
+              <Button type="submit" size="icon-sm" aria-label="Search courses">
+                <SearchIcon aria-hidden />
+              </Button>
+            </InputGroupAddon>
           </InputGroup>
         </Field>
       </form>

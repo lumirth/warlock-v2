@@ -1,5 +1,9 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { SearchScope } from "@uiuc-course-search/query-types";
+import {
+  DEFAULT_SEARCH_SORT,
+  type SearchScope,
+  type SearchSort,
+} from "@uiuc-course-search/query-types";
 import type { SearchFilters } from "./search-planner-types.js";
 import {
   buildFilteredCourseQuery,
@@ -8,6 +12,7 @@ import {
 import { rankedLaneRow } from "./search-retrieval-lane-result.js";
 import { escapeLike } from "./search-text.js";
 import type { RetrievalLaneResult } from "./search-types.js";
+import { courseSqlOrderBy } from "./search-sql-sort.js";
 
 type CourseKeywordLaneInput = {
   filters: SearchFilters;
@@ -15,6 +20,7 @@ type CourseKeywordLaneInput = {
   cleanKeywordQuery: string;
   titleQuery: string;
   scope: SearchScope;
+  sort: SearchSort;
 };
 
 export function buildFilteredCourseCandidateQuery(
@@ -39,13 +45,14 @@ export async function structuredCourseSearch(
   filters: SearchFilters,
   limit: number = 50,
   scope: SearchScope = "all",
+  sort: SearchSort = DEFAULT_SEARCH_SORT,
 ): Promise<RetrievalLaneResult[]> {
   const candidateQuery = buildFilteredCourseCandidateQuery(filters, scope);
   const result = await db.prepare(`
     SELECT candidates.id
     FROM (${candidateQuery.sql}) candidates
     JOIN courses c ON c.id = candidates.id
-    ORDER BY c.year DESC, c.subject, c.number
+    ORDER BY ${courseSqlOrderBy(sort, "c.year DESC, c.subject, c.number")}
     LIMIT ?
   `)
     .bind(...candidateQuery.params, limit)
@@ -64,6 +71,7 @@ export async function exactCourseSearch(
   filters: SearchFilters,
   limit: number = 50,
   scope: SearchScope = "all",
+  sort: SearchSort = DEFAULT_SEARCH_SORT,
 ): Promise<RetrievalLaneResult[]> {
   const courseCode = filters.subject && filters.number
     ? `${filters.subject} ${filters.number}`
@@ -76,8 +84,10 @@ export async function exactCourseSearch(
     SELECT candidates.id
     FROM (${candidateQuery.sql}) candidates
     JOIN courses c ON c.id = candidates.id
-    ORDER BY c.year DESC,
-      CASE c.term WHEN 'spring' THEN 1 WHEN 'fall' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END
+    ORDER BY ${courseSqlOrderBy(
+      sort,
+      "c.year DESC, CASE c.term WHEN 'spring' THEN 1 WHEN 'fall' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END",
+    )}
     LIMIT ?
   `)
     .bind(...candidateQuery.params, limit)
@@ -132,6 +142,7 @@ async function titleKeywordSearch(
   filters: SearchFilters,
   limit: number = 20,
   scope: SearchScope = "all",
+  sort: SearchSort = DEFAULT_SEARCH_SORT,
 ): Promise<RetrievalLaneResult[]> {
   const candidateQuery = buildTitleCandidateQuery(titleQuery, filters, scope);
   if (!candidateQuery) return [];
@@ -141,11 +152,10 @@ async function titleKeywordSearch(
     SELECT candidates.id, candidates.title_rank
     FROM (${candidateQuery.sql}) candidates
     JOIN courses c ON c.id = candidates.id
-    ORDER BY title_rank ASC,
-      c.year DESC,
-      CASE c.term WHEN 'fall' THEN 1 WHEN 'spring' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END,
-      c.subject,
-      c.number
+    ORDER BY ${courseSqlOrderBy(
+      sort,
+      "title_rank ASC, c.year DESC, CASE c.term WHEN 'fall' THEN 1 WHEN 'spring' THEN 2 WHEN 'summer' THEN 3 ELSE 4 END, c.subject, c.number",
+    )}
     LIMIT ?
   `)
     .bind(...candidateQuery.params, limit)
@@ -189,43 +199,91 @@ export async function keywordSearch(
   const { filters, keywordQuery, cleanKeywordQuery, titleQuery, scope } = input;
   if (!keywordQuery.trim()) return [];
 
-  const titleResults = titleQuery
-    ? await titleKeywordSearch(db, titleQuery, filters, limit, scope)
-    : [];
-  const candidateQuery = buildCourseFtsCandidateQuery(cleanKeywordQuery, filters, scope);
-  if (!candidateQuery) return titleResults;
+  const titleCandidateQuery = titleQuery
+    ? buildTitleCandidateQuery(titleQuery, filters, scope)
+    : null;
+  const ftsCandidateQuery = buildCourseFtsCandidateQuery(
+    cleanKeywordQuery,
+    filters,
+    scope,
+  );
 
+  if (!ftsCandidateQuery) {
+    return titleQuery
+      ? titleKeywordSearch(db, titleQuery, filters, limit, scope, input.sort)
+      : [];
+  }
+
+  if (!titleCandidateQuery) {
+    const result = await db.prepare(`
+      SELECT candidates.id, candidates.fts_score
+      FROM (${ftsCandidateQuery.sql}) candidates
+      JOIN courses c ON c.id = candidates.id
+      ORDER BY ${courseSqlOrderBy(input.sort, "fts_score ASC")}
+      LIMIT ?
+    `)
+      .bind(...ftsCandidateQuery.params, limit)
+      .all<{ id: string; fts_score: number }>();
+
+    return result.results.map((row, index) => rankedLaneRow(
+      "official_text",
+      row.id,
+      index,
+      "Official course text FTS recall.",
+      {
+        rawScore: row.fts_score,
+        matchedTerms: [cleanKeywordQuery],
+      },
+    ));
+  }
+
+  const titleNeedle = titleQuery.replace(/"/g, "").toLowerCase().trim();
   const result = await db.prepare(`
-    SELECT candidates.id, candidates.fts_score
-    FROM (${candidateQuery.sql}) candidates
-    ORDER BY fts_score ASC
+    SELECT
+      candidates.id,
+      MIN(candidates.title_rank) AS title_rank,
+      MIN(candidates.fts_score) AS fts_score
+    FROM (
+      SELECT title_candidates.id, title_candidates.title_rank, NULL AS fts_score
+      FROM (${titleCandidateQuery.sql}) title_candidates
+      UNION ALL
+      SELECT fts_candidates.id, NULL AS title_rank, fts_candidates.fts_score
+      FROM (${ftsCandidateQuery.sql}) fts_candidates
+    ) candidates
+    JOIN courses c ON c.id = candidates.id
+    GROUP BY candidates.id
+    ORDER BY ${courseSqlOrderBy(
+      input.sort,
+      "CASE WHEN title_rank IS NOT NULL THEN 0 ELSE 1 END ASC, title_rank ASC, fts_score ASC, c.year DESC, c.subject, c.number",
+    )}
     LIMIT ?
   `)
-    .bind(...candidateQuery.params, limit)
-    .all<{ id: string; fts_score: number }>();
+    .bind(
+      ...titleCandidateQuery.params,
+      ...ftsCandidateQuery.params,
+      limit,
+    )
+    .all<{
+      id: string;
+      title_rank: number | null;
+      fts_score: number | null;
+    }>();
 
-  const ftsResults = result.results.map((row, index) => rankedLaneRow(
-    "official_text",
-    row.id,
-    index,
-    "Official course text FTS recall.",
-    {
-      rawScore: row.fts_score,
-      matchedTerms: [cleanKeywordQuery],
-    },
-  ));
-  if (titleResults.length === 0) {
-    return ftsResults;
-  }
-
-  const seen = new Set<string>();
-  const combined: RetrievalLaneResult[] = [];
-  for (const row of [...titleResults, ...ftsResults]) {
-    if (seen.has(row.id)) continue;
-    seen.add(row.id);
-    combined.push({ ...row, rank: combined.length + 1 });
-    if (combined.length >= limit) break;
-  }
-
-  return combined;
+  return result.results.map((row, index) => {
+    const titleMatched = row.title_rank !== null;
+    return rankedLaneRow(
+      "official_text",
+      row.id,
+      index,
+      titleMatched
+        ? row.title_rank === 1
+          ? "Exact title recall."
+          : "Title prefix or contains recall."
+        : "Official course text FTS recall.",
+      {
+        rawScore: row.title_rank ?? row.fts_score ?? undefined,
+        matchedTerms: [titleMatched ? titleNeedle : cleanKeywordQuery],
+      },
+    );
+  });
 }

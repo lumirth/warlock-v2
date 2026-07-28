@@ -1,6 +1,11 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { TermState, TermStateStatus } from './types.js';
 
+type DiscoveredTermState = Pick<
+  TermState,
+  'term_id' | 'year' | 'term' | 'status' | 'last_checked'
+>;
+
 export async function upsertTermState(
   db: D1Database,
   termState: Omit<TermState, 'created_at' | 'updated_at'>
@@ -23,6 +28,44 @@ export async function upsertTermState(
     termState.last_checked, termState.last_synced, termState.subjects_count,
     termState.courses_count, termState.sections_count, termState.sync_errors
   ).run();
+}
+
+/**
+ * Updates discovery-owned fields without erasing producer-owned sync
+ * freshness/count/error fields. Historical rows are only inserted when
+ * explicitly requested, preventing routine discovery from recreating terms
+ * removed by retention.
+ */
+export async function upsertDiscoveredTermState(
+  db: D1Database,
+  termState: DiscoveredTermState,
+  options: { allowInsert?: boolean } = {}
+): Promise<boolean> {
+  const result = await db.prepare(`
+    INSERT INTO term_state (
+      term_id, year, term, status, last_checked, last_synced,
+      subjects_count, courses_count, sections_count, sync_errors
+    )
+    SELECT ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL
+    WHERE ? = 1
+       OR EXISTS (SELECT 1 FROM term_state WHERE term_id = ?)
+    ON CONFLICT(term_id) DO UPDATE SET
+      year = excluded.year,
+      term = excluded.term,
+      status = excluded.status,
+      last_checked = excluded.last_checked,
+      updated_at = unixepoch()
+  `).bind(
+    termState.term_id,
+    termState.year,
+    termState.term,
+    termState.status,
+    termState.last_checked,
+    options.allowInsert === false ? 0 : 1,
+    termState.term_id
+  ).run();
+
+  return (result.meta?.changes ?? 0) > 0;
 }
 
 export async function touchTermStateChecked(

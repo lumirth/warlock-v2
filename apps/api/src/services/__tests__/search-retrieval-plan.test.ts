@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { singleRequirementFilter } from "@uiuc-course-search/query-types";
 import type { SearchPlan } from "../search-planner-types.js";
-import { buildSearchCandidateBudget } from "../search-budget.js";
+import {
+  buildSearchCandidateBudget,
+  MAX_RETRIEVAL_LANE_RESULTS,
+} from "../search-budget.js";
 import { normalizeSearchControls } from "../search-controls.js";
 import { buildRetrievalPlan, type RetrievalPlan } from "../search-retrieval-plan.js";
 
@@ -52,6 +55,11 @@ describe("buildRetrievalPlan", () => {
     expect(hasLane(result, "official_text")).toBe(true);
     expect(hasLane(result, "section_text")).toBe(true);
     expect(hasLane(result, "topic_semantic")).toBe(true);
+    expect(
+      result.lanes
+        .filter((lane) => lane.lane !== "topic_semantic")
+        .every((lane) => lane.limit <= MAX_RETRIEVAL_LANE_RESULTS),
+    ).toBe(true);
   });
 
   it("uses one structured recall lane for hard section filters", () => {

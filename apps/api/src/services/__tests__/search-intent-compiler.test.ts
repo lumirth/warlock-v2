@@ -18,19 +18,18 @@ function plan(overrides: Partial<SearchPlan> = {}): SearchPlan {
 
 describe('compileSearchIntent', () => {
   it('turns generic gened language into an explicit any-GenEd constraint', () => {
-    const searchPlan = plan({
-      filters: { workload: 'easy' },
-    });
+    const searchPlan = plan();
 
-    const result = compileSearchIntent(searchPlan, 'easy cs gened', '');
+    const result = compileSearchIntent(searchPlan, 'easy cs gened', 'easy');
 
     expect(result.plan.filters).toMatchObject({
-      workload: 'easy',
       requirement: requirementFilter('any', GENERIC_REQUIREMENT_CODES),
     });
-    expect(result.plan.intent?.queryTypes).toEqual(expect.arrayContaining(['requirement', 'subjective_vibe']));
+    expect(result.plan.filters).not.toHaveProperty('instructorDifficulty');
+    expect(result.plan.intent?.queryTypes).toEqual(['requirement']);
+    expect(result.queryResidual).toBe('easy');
     expect(searchPlan).toEqual({
-      filters: { workload: 'easy' },
+      filters: {},
       keywordQuery: '',
       semanticQuery: '',
     });
@@ -38,17 +37,18 @@ describe('compileSearchIntent', () => {
 
   it('does not broaden a specific GenEd bucket into generic any-GenEd', () => {
     const searchPlan = plan({
-      filters: { requirement: singleRequirementFilter('CS'), workload: 'easy' },
+      filters: { requirement: singleRequirementFilter('CS') },
     });
 
-    const result = compileSearchIntent(searchPlan, 'easy cs gened', '');
+    const result = compileSearchIntent(searchPlan, 'easy cs gened', 'easy');
 
     expect(result.plan.filters).toMatchObject({
       requirement: singleRequirementFilter('CS'),
-      workload: 'easy',
     });
+    expect(result.plan.filters).not.toHaveProperty('instructorDifficulty');
     expect(result.plan.filters.requirement?.mode).toBe('single');
-    expect(result.plan.intent?.queryTypes).toEqual(expect.arrayContaining(['requirement', 'subjective_vibe']));
+    expect(result.plan.intent?.queryTypes).toEqual(['requirement']);
+    expect(result.queryResidual).toBe('easy');
   });
 
   it('does not convert ambiguous counts language into a fake GenEd filter', () => {

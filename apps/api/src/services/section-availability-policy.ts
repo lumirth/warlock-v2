@@ -37,15 +37,18 @@ export function normalizeSectionAvailability(
   const rawStatus = clean(input.status);
   const statusCode = clean(input.statusCode);
   const sectionStatusCode = clean(input.sectionStatusCode);
-  const normalized = [rawStatus, statusCode, sectionStatusCode]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  const status = normalizedSectionAvailabilityStatus(normalized);
+  const rawStatusClassification = normalizedSectionAvailabilityStatus(rawStatus);
+  const status = [
+    rawStatusClassification,
+    normalizedSectionAvailabilityStatus(sectionStatusCode),
+    normalizedSectionAvailabilityStatus(statusCode),
+  ].find((candidate) => candidate !== "unknown") ?? "unknown";
 
   return {
     status,
-    label: rawStatus || STATUS_LABELS[status],
+    label: rawStatusClassification === "unknown"
+      ? STATUS_LABELS[status]
+      : rawStatus ?? STATUS_LABELS[status],
     rawStatus,
     statusCode,
     sectionStatusCode,
@@ -53,8 +56,9 @@ export function normalizeSectionAvailability(
 }
 
 function normalizedSectionAvailabilityStatus(
-  normalized: string,
+  value: string | null,
 ): CourseSectionAvailabilityStatus {
+  const normalized = value?.toLowerCase() ?? "";
   if (!normalized) return "unknown";
   if (normalized.includes("cancel")) return "cancelled";
   if (normalized.includes("wait")) return "waitlisted";

@@ -24,27 +24,13 @@ describe('AliasRegistry', () => {
     });
   });
 
-  describe('workload aliases', () => {
-    it('matches "easy"', () => {
-      const matches = registry.match('easy class');
-      expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'workload', canonical: 'easy' })
-      );
-    });
-
-    it('matches "gpa booster" as easy', () => {
-      const matches = registry.match('gpa booster');
-      expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'workload', canonical: 'easy' })
-      );
-    });
-
-    it('matches "hard"', () => {
-      const matches = registry.match('hard class');
-      expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'workload', canonical: 'hard' })
-      );
-    });
+  describe('subjective language', () => {
+    it.each(['easy class', 'chill class', 'gpa booster', 'hard class'])(
+      'does not convert "%s" into a structured alias',
+      (query) => {
+        expect(registry.match(query)).toEqual([]);
+      },
+    );
   });
 
   describe('status aliases', () => {
@@ -213,13 +199,6 @@ describe('AliasRegistry', () => {
       const timeMatches = matches.filter(m => m.kind === 'time');
       expect(timeMatches).toHaveLength(1);
       expect(timeMatches[0].canonical).toBe('early');
-    });
-
-    it('matches "gpa booster" before "gpa"', () => {
-      const matches = registry.match('gpa booster class');
-      expect(matches).toContainEqual(
-        expect.objectContaining({ kind: 'workload', canonical: 'easy' })
-      );
     });
   });
 });

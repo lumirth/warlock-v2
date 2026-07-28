@@ -7,16 +7,21 @@ import {
   type SubjectSnapshot,
 } from '../transforms/course.js';
 
-export type GenEdCleanup = {
-  courseId: string;
-  currentKeys: { categoryId: string; attributeCode: string | null }[];
+export type SubjectSnapshotManifest = {
+  subjectId: string;
+  year: number;
+  term: string;
+  courseIdsJson: string;
+  sectionIdsJson: string;
+  genEdKeysJson: string;
+  meetingKeysJson: string;
+  meetingInstructorKeysJson: string;
 };
 
 export type SnapshotPersistenceOperation =
   | { kind: 'subject.upsert'; subject: SubjectSnapshot['subject'] }
   | { kind: 'course.upsert'; course: CourseSnapshot['course'] }
   | { kind: 'course_gened.upsert'; gened: Omit<CourseGened, 'id'> }
-  | { kind: 'course_gened.prune_stale'; cleanup: GenEdCleanup }
   | { kind: 'section.upsert'; section: CourseSnapshot['sections'][number]['section'] }
   | { kind: 'instructor.upsert'; instructor: Omit<Instructor, 'id'> }
   | { kind: 'meeting.upsert'; meeting: Omit<CourseSnapshot['sections'][number]['meetings'][number], 'instructors'> }
@@ -29,38 +34,23 @@ export type SnapshotPersistenceOperation =
     }
   | {
       kind: 'subject.prune_stale_meeting_instructors';
-      subjectId: string;
-      year: number;
-      term: string;
-      syncTimestamp: number;
+      manifest: SubjectSnapshotManifest;
     }
   | {
       kind: 'subject.prune_stale_meetings';
-      subjectId: string;
-      year: number;
-      term: string;
-      syncTimestamp: number;
+      manifest: SubjectSnapshotManifest;
     }
   | {
       kind: 'subject.prune_stale_sections';
-      subjectId: string;
-      year: number;
-      term: string;
-      syncTimestamp: number;
+      manifest: SubjectSnapshotManifest;
     }
   | {
       kind: 'subject.prune_stale_course_geneds';
-      subjectId: string;
-      year: number;
-      term: string;
-      syncTimestamp: number;
+      manifest: SubjectSnapshotManifest;
     }
   | {
       kind: 'subject.prune_stale_courses';
-      subjectId: string;
-      year: number;
-      term: string;
-      syncTimestamp: number;
+      manifest: SubjectSnapshotManifest;
     };
 
 export type SnapshotPersistencePlan = {
@@ -83,21 +73,17 @@ export function subjectSnapshotPersistencePlan(
 
   const sectionPlan = sectionPersistenceOperations(snapshot.courses);
   writeOperations.push(...sectionPlan.operations);
+  const manifest = subjectSnapshotManifest(snapshot);
 
   return {
     writeOperations,
-    finalizeOperations: subjectStalePruneOperations(
-      snapshot.subject.id,
-      snapshot.year,
-      snapshot.term,
-      snapshot.syncTimestamp
-    ),
+    finalizeOperations: subjectStalePruneOperations(manifest),
     coursesCount: snapshot.courses.length,
     sectionsCount: sectionPlan.sectionsCount,
   };
 }
 
-function courseGenedPersistenceOperations(
+function courseGenedWriteOperations(
   courseId: string,
   genEdCategories: CourseGenEdSnapshot[]
 ): SnapshotPersistenceOperation[] {
@@ -110,24 +96,7 @@ function courseGenedPersistenceOperations(
     });
   }
 
-  operations.push({
-    kind: 'course_gened.prune_stale',
-    cleanup: courseGenedCleanup(courseId, genEdCategories),
-  });
   return operations;
-}
-
-function courseGenedCleanup(
-  courseId: string,
-  genEdCategories: CourseGenEdSnapshot[]
-): GenEdCleanup {
-  return {
-    courseId,
-    currentKeys: genEdCategories.map(gened => ({
-      categoryId: gened.categoryId,
-      attributeCode: gened.attributeCode,
-    })),
-  };
 }
 
 function appendCourseWriteOperations(
@@ -135,7 +104,7 @@ function appendCourseWriteOperations(
   snapshot: CourseSnapshot
 ): void {
   operations.push({ kind: 'course.upsert', course: snapshot.course });
-  operations.push(...courseGenedPersistenceOperations(
+  operations.push(...courseGenedWriteOperations(
     snapshot.course.id,
     snapshot.genEdCategories
   ));
@@ -195,18 +164,77 @@ function sectionPersistenceOperations(courses: CourseSnapshot[]): {
 }
 
 function subjectStalePruneOperations(
-  subjectId: string,
-  year: number,
-  term: string,
-  syncTimestamp: number
+  manifest: SubjectSnapshotManifest
 ): SnapshotPersistenceOperation[] {
   return [
-    { kind: 'subject.prune_stale_meeting_instructors', subjectId, year, term, syncTimestamp },
-    { kind: 'subject.prune_stale_meetings', subjectId, year, term, syncTimestamp },
-    { kind: 'subject.prune_stale_sections', subjectId, year, term, syncTimestamp },
-    { kind: 'subject.prune_stale_course_geneds', subjectId, year, term, syncTimestamp },
-    { kind: 'subject.prune_stale_courses', subjectId, year, term, syncTimestamp },
+    { kind: 'subject.prune_stale_meeting_instructors', manifest },
+    { kind: 'subject.prune_stale_meetings', manifest },
+    { kind: 'subject.prune_stale_sections', manifest },
+    { kind: 'subject.prune_stale_course_geneds', manifest },
+    { kind: 'subject.prune_stale_courses', manifest },
   ];
+}
+
+function subjectSnapshotManifest(
+  snapshot: SubjectSnapshot
+): SubjectSnapshotManifest {
+  const courseIds: string[] = [];
+  const sectionIds: string[] = [];
+  const genEdKeys: Array<{
+    courseId: string;
+    categoryId: string;
+    attributeCode: string;
+  }> = [];
+  const meetingKeys: Array<{
+    sectionId: string;
+    meetingIndex: number;
+  }> = [];
+  const meetingInstructorKeys: Array<{
+    sectionId: string;
+    meetingIndex: number;
+    lastName: string;
+    firstName: string;
+  }> = [];
+
+  for (const courseSnapshot of snapshot.courses) {
+    courseIds.push(courseSnapshot.course.id);
+    for (const gened of courseSnapshot.genEdCategories) {
+      genEdKeys.push({
+        courseId: courseSnapshot.course.id,
+        categoryId: gened.categoryId,
+        attributeCode: gened.attributeCode ?? '',
+      });
+    }
+
+    for (const { section, meetings } of courseSnapshot.sections) {
+      sectionIds.push(section.id);
+      for (const meeting of meetings) {
+        meetingKeys.push({
+          sectionId: meeting.section_id,
+          meetingIndex: meeting.meeting_index,
+        });
+        for (const instructor of meeting.instructors) {
+          meetingInstructorKeys.push({
+            sectionId: meeting.section_id,
+            meetingIndex: meeting.meeting_index,
+            lastName: instructor.lastName,
+            firstName: normalizeInstructorFirstName(instructor.firstName),
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    subjectId: snapshot.subject.id,
+    year: snapshot.year,
+    term: snapshot.term,
+    courseIdsJson: JSON.stringify(courseIds),
+    sectionIdsJson: JSON.stringify(sectionIds),
+    genEdKeysJson: JSON.stringify(genEdKeys),
+    meetingKeysJson: JSON.stringify(meetingKeys),
+    meetingInstructorKeysJson: JSON.stringify(meetingInstructorKeys),
+  };
 }
 
 function courseGenedRow(

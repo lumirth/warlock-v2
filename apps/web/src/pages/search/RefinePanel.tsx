@@ -7,6 +7,7 @@ import type {
   SearchChipDto,
   SearchMetaDto,
   SearchScope,
+  SearchTermOptionDto,
 } from '@uiuc-course-search/query-types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,12 +16,16 @@ import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { AdvancedSearchFields } from './AdvancedSearchFields'
 import { getChipClass } from './search-result-model'
+import type { AdvancedFilterErrors } from './search-filter-model'
 
 export function RefinePanel({
   meta,
   resultCountLabel,
-  availableYears,
-  availableYearsError,
+  availableTerms,
+  termOptionsError,
+  termOptionsLoading,
+  advancedDraftErrors,
+  hasAdvancedDraftErrors,
   advancedOpen,
   advancedDraft,
   hasAdvancedDraftChanges,
@@ -31,11 +36,15 @@ export function RefinePanel({
   onAmbiguityAction,
   onApplyAdvancedSearch,
   onResetAdvancedDraft,
+  onRetryTermOptions,
 }: {
   meta: SearchMetaDto | null
   resultCountLabel?: string
-  availableYears?: number[]
-  availableYearsError: boolean
+  availableTerms?: SearchTermOptionDto[]
+  termOptionsError: boolean
+  termOptionsLoading: boolean
+  advancedDraftErrors: AdvancedFilterErrors
+  hasAdvancedDraftErrors: boolean
   advancedOpen: boolean
   advancedDraft: AdvancedSearchStateDto
   hasAdvancedDraftChanges: boolean
@@ -49,6 +58,7 @@ export function RefinePanel({
   onAmbiguityAction: (action: SearchAmbiguityActionDto) => void
   onApplyAdvancedSearch: () => void
   onResetAdvancedDraft: () => void
+  onRetryTermOptions: () => void
 }) {
   const activeChips = meta?.ui.chips ?? []
 
@@ -61,7 +71,9 @@ export function RefinePanel({
               {meta ? 'Refine results' : 'Search filters'}
             </h2>
             <p className="text-muted-foreground text-xs">
-              {meta ? resultCountLabel : 'Choose filters before or after searching.'}
+              {meta
+                ? resultCountLabel
+                : 'Choose filters before or after searching.'}
             </p>
           </div>
           <Button
@@ -77,7 +89,10 @@ export function RefinePanel({
         </div>
 
         {activeChips.length ? (
-          <div aria-label="Active search filters" className="flex flex-wrap gap-2">
+          <div
+            aria-label="Active search filters"
+            className="flex flex-wrap gap-2"
+          >
             {activeChips.map((chip) => (
               <SearchChipBadge
                 key={chip.id}
@@ -117,15 +132,20 @@ export function RefinePanel({
           >
             <AdvancedSearchFields
               advancedDraft={advancedDraft}
-              availableYears={availableYears}
-              availableYearsError={availableYearsError}
+              availableTerms={availableTerms}
+              termOptionsError={termOptionsError}
+              termOptionsLoading={termOptionsLoading}
+              errors={advancedDraftErrors}
+              onRetryTermOptions={onRetryTermOptions}
               onAdvancedDraftFilterChange={onAdvancedDraftFilterChange}
               onAdvancedDraftScopeChange={onAdvancedDraftScopeChange}
             />
 
-            <div className="mt-4 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="bg-card sticky bottom-0 -mx-1 mt-4 flex flex-col gap-3 border-t px-1 py-4 sm:static sm:flex-row sm:items-center sm:justify-between">
               <p className="text-muted-foreground text-xs">
-                Filters apply to the current search text.
+                {hasAdvancedDraftErrors
+                  ? 'Correct the highlighted fields before applying.'
+                  : 'Filters apply to the current search text.'}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -138,7 +158,7 @@ export function RefinePanel({
                 </Button>
                 <Button
                   size="xs"
-                  disabled={!hasAdvancedDraftChanges}
+                  disabled={!hasAdvancedDraftChanges || hasAdvancedDraftErrors}
                   onClick={onApplyAdvancedSearch}
                 >
                   Apply filters
@@ -162,17 +182,14 @@ function SearchChipBadge({
   return (
     <Badge
       variant={chip.type === 'semantic' ? 'outline' : 'secondary'}
-      className={cn(
-        'h-auto min-h-5 py-0.5 normal-case',
-        getChipClass(chip)
-      )}
+      className={cn('h-auto min-h-5 py-0.5 normal-case', getChipClass(chip))}
     >
       {chip.label}
       <Button
         aria-label={`Remove ${chip.label}`}
         size="icon-xs"
         variant="ghost"
-        className="-mr-1 size-4 rounded-[var(--radius-sm)] p-0"
+        className="-mr-1 rounded-[var(--radius-sm)] p-0"
         onClick={(event) => {
           event.preventDefault()
           onRemoveChip(chip)

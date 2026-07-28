@@ -1,6 +1,9 @@
 import type { D1Database, VectorizeIndex, Ai } from '@cloudflare/workers-types';
 import { parseSubjectsXml, parseSubjectCascadeXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
-import { writeSubjectSnapshotToD1 } from './course-snapshot-writer.js';
+import {
+  writeSubjectSnapshotToD1,
+  type SubjectSnapshotPublicationFence,
+} from './course-snapshot-writer.js';
 import {
   courseSnapshotToEmbeddingData,
   deleteCourseEmbeddings,
@@ -10,6 +13,7 @@ import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
 import { fromSubjectCascade } from '../transforms/course.js';
 import type { SyncRunStatus } from '../db/types.js';
+import { assertPublishableSubjectSnapshot } from './validation.js';
 
 const SUBJECT_SYNC_LOCK_TTL_SECONDS = 30 * 60;
 const SUBJECT_CASCADE_TIMEOUT_MS = 60_000;
@@ -28,7 +32,9 @@ interface SyncSubjectsOptions {
   lockMode?: SubjectLockMode;
 }
 
-interface SubjectSyncResult {
+type SubjectSyncLease = SubjectSnapshotPublicationFence;
+
+export interface SubjectSyncResult {
   subject: string;
   success: boolean;
   coursesCount: number;
@@ -107,29 +113,37 @@ async function fetchSubjectCascade(
 async function saveSubjectData(
   db: D1Database,
   parsed: ParsedSubjectCascade,
+  expectedSubject: string,
   year: number,
   term: string,
+  lease: SubjectSyncLease,
   vectorize?: VectorizeIndex,
   ai?: Ai
 ): Promise<{ coursesCount: number; sectionsCount: number }> {
   const snapshot = fromSubjectCascade(parsed, year, term);
+  assertPublishableSubjectSnapshot(snapshot, expectedSubject);
   let embeddingData: ReturnType<typeof courseSnapshotToEmbeddingData>[] | undefined;
+  let staleCourseIds: string[] = [];
 
   if (vectorize && ai) {
     const existingCourseIds = await loadSubjectCourseIds(db, parsed.subjectId, year, term);
     const currentCourseIds = new Set(snapshot.courses.map(course => course.course.id));
-    await deleteCourseEmbeddings(
-      vectorize,
-      existingCourseIds.filter(courseId => !currentCourseIds.has(courseId))
-    );
+    staleCourseIds = existingCourseIds.filter(courseId => !currentCourseIds.has(courseId));
     embeddingData = snapshot.courses.map(courseSnapshotToEmbeddingData);
   }
 
-  const { coursesCount, sectionsCount } =
-    await writeSubjectSnapshotToD1(db, snapshot);
+  await renewSubjectSyncLease(db, lease);
+  const { coursesCount, sectionsCount } = await writeSubjectSnapshotToD1(
+    db,
+    snapshot,
+    { publicationFence: lease }
+  );
 
   if (vectorize && ai && embeddingData) {
+    await renewSubjectSyncLease(db, lease);
     await upsertCourseEmbeddingsInBatches(vectorize, ai, embeddingData);
+    await renewSubjectSyncLease(db, lease);
+    await deleteCourseEmbeddings(vectorize, staleCourseIds);
   }
 
   return { coursesCount, sectionsCount };
@@ -170,7 +184,17 @@ export async function getSubjectsForTerm(
   upstreamBackoff.recordSuccess();
 
   const xml = await response.text();
-  return parseSubjectsXml(xml).map(subject => subject.id);
+  const subjects = [
+    ...new Set(
+      parseSubjectsXml(xml)
+        .map(subject => subject.id.trim().toUpperCase())
+        .filter(Boolean)
+    ),
+  ];
+  if (subjects.length === 0) {
+    throw new Error(`Refusing empty subject list for ${year}-${term}`);
+  }
+  return subjects;
 }
 
 export async function syncSubjects(
@@ -195,8 +219,8 @@ export async function syncSubjects(
 
     const batchPromises = batch.map(async (subject): Promise<SubjectSyncResult> => {
       const subjectStart = Date.now();
-      const lockAcquired = await acquireSubjectSyncLock(db, termId, subject, lockMode);
-      if (!lockAcquired) {
+      const ownerToken = await acquireSubjectSyncLock(db, termId, subject, lockMode);
+      if (!ownerToken) {
         return {
           subject,
           success: true,
@@ -206,26 +230,30 @@ export async function syncSubjects(
           durationMs: Date.now() - subjectStart
         };
       }
+      const lease: SubjectSyncLease = { termId, subject, ownerToken };
 
       try {
         const parsed = await fetchSubjectCascade(config, year, term, subject);
 
         if (!parsed) {
-          await updateSubjectSyncState(db, termId, subject, 'failed', 0, 0, 'Failed to parse response');
-          return {
-            subject,
-            success: false,
-            coursesCount: 0,
-            sectionsCount: 0,
-            error: 'Failed to parse response',
-            durationMs: Date.now() - subjectStart
-          };
+          throw new Error('Failed to parse response');
         }
 
         const { coursesCount, sectionsCount } = await saveSubjectData(
-          db, parsed, year, term, vectorize, ai
+          db, parsed, subject, year, term, lease, vectorize, ai
         );
-        await updateSubjectSyncState(db, termId, subject, 'complete', coursesCount, sectionsCount);
+        const completed = await finishSubjectSync(
+          db,
+          lease,
+          'complete',
+          coursesCount,
+          sectionsCount
+        );
+        if (!completed) {
+          throw new Error(
+            'Subject sync lease ownership changed; refusing stale completion checkpoint'
+          );
+        }
 
         return {
           subject,
@@ -236,7 +264,7 @@ export async function syncSubjects(
         };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        await updateSubjectSyncState(db, termId, subject, 'failed', 0, 0, errorMsg);
+        await finishSubjectSync(db, lease, 'failed', 0, 0, errorMsg);
         if (errorMsg.includes('Rate limited')) {
           rateLimitHits++;
         }
@@ -285,60 +313,85 @@ async function acquireSubjectSyncLock(
   termId: string,
   subject: string,
   lockMode: SubjectLockMode = 'respect-running'
-): Promise<boolean> {
-  const existing = await db.prepare(`
-    SELECT last_sync, status
-    FROM subject_sync_state
-    WHERE term_id = ? AND subject = ?
-  `).bind(termId, subject).first<{ last_sync: number | null; status: SyncRunStatus | null }>();
-
-  const now = Math.floor(Date.now() / 1000);
-  if (
-    lockMode !== 'force'
-    && existing?.status === 'running'
-    && existing.last_sync
-    && now - existing.last_sync < SUBJECT_SYNC_LOCK_TTL_SECONDS
-  ) {
-    return false;
-  }
-
-  await db.prepare(`
+): Promise<string | null> {
+  const ownerToken = `subject:${crypto.randomUUID()}`;
+  const result = await db.prepare(`
     INSERT INTO subject_sync_state (
-      term_id, subject, last_sync, status, courses_synced, sections_synced, error
+      term_id, subject, last_sync, status, courses_synced, sections_synced, error,
+      owner_token
     )
-    VALUES (?, ?, unixepoch(), 'running', 0, 0, NULL)
+    VALUES (?, ?, unixepoch(), 'running', 0, 0, NULL, ?)
     ON CONFLICT(term_id, subject) DO UPDATE SET
       last_sync = excluded.last_sync,
       status = excluded.status,
       courses_synced = excluded.courses_synced,
       sections_synced = excluded.sections_synced,
-      error = excluded.error
-  `).bind(termId, subject).run();
+      error = excluded.error,
+      owner_token = excluded.owner_token
+    WHERE ? = 1
+       OR subject_sync_state.status != 'running'
+       OR subject_sync_state.last_sync IS NULL
+       OR subject_sync_state.last_sync <= unixepoch() - ?
+  `).bind(
+    termId,
+    subject,
+    ownerToken,
+    lockMode === 'force' ? 1 : 0,
+    SUBJECT_SYNC_LOCK_TTL_SECONDS
+  ).run();
 
-  return true;
+  return (result.meta?.changes ?? 0) > 0 ? ownerToken : null;
 }
 
-async function updateSubjectSyncState(
+async function renewSubjectSyncLease(
   db: D1Database,
-  termId: string,
-  subject: string,
+  lease: SubjectSyncLease
+): Promise<void> {
+  const result = await db.prepare(`
+    UPDATE subject_sync_state
+    SET last_sync = unixepoch()
+    WHERE term_id = ?
+      AND subject = ?
+      AND owner_token = ?
+      AND status = 'running'
+  `).bind(lease.termId, lease.subject, lease.ownerToken).run();
+  if ((result.meta?.changes ?? 0) !== 1) {
+    throw new Error(
+      'Subject sync lease ownership changed; refusing stale data publication'
+    );
+  }
+}
+
+async function finishSubjectSync(
+  db: D1Database,
+  lease: SubjectSyncLease,
   status: SyncRunStatus,
   coursesCount: number,
   sectionsCount: number,
   error?: string
-): Promise<void> {
-  await db.prepare(`
-    INSERT INTO subject_sync_state (
-      term_id, subject, last_sync, status, courses_synced, sections_synced, error
-    )
-    VALUES (?, ?, unixepoch(), ?, ?, ?, ?)
-    ON CONFLICT(term_id, subject) DO UPDATE SET
-      last_sync = excluded.last_sync,
-      status = excluded.status,
-      courses_synced = excluded.courses_synced,
-      sections_synced = excluded.sections_synced,
-      error = excluded.error
-  `).bind(termId, subject, status, coursesCount, sectionsCount, error ?? null).run();
+): Promise<boolean> {
+  const result = await db.prepare(`
+    UPDATE subject_sync_state
+    SET last_sync = unixepoch(),
+        status = ?,
+        courses_synced = ?,
+        sections_synced = ?,
+        error = ?,
+        owner_token = NULL
+    WHERE term_id = ?
+      AND subject = ?
+      AND owner_token = ?
+      AND status = 'running'
+  `).bind(
+    status,
+    coursesCount,
+    sectionsCount,
+    error ?? null,
+    lease.termId,
+    lease.subject,
+    lease.ownerToken
+  ).run();
+  return (result.meta?.changes ?? 0) === 1;
 }
 
 export async function syncTerm(

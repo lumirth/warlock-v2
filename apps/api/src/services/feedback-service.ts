@@ -1,10 +1,13 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { FeedbackResponseDto, FeedbackSubmitDto } from '@uiuc-course-search/query-types';
+import {
+  FEEDBACK_EXPECTED_MAX_LENGTH,
+  FEEDBACK_MESSAGE_MAX_LENGTH,
+  FEEDBACK_QUERY_MAX_LENGTH,
+  type FeedbackResponseDto,
+  type FeedbackSubmitDto,
+} from '@uiuc-course-search/query-types';
 import { insertFeedbackEvent, type FeedbackEventRecord } from '../db/feedback-repository.js';
 
-const MAX_QUERY_LENGTH = 500;
-const MAX_EXPECTED_LENGTH = 1000;
-const MAX_MESSAGE_LENGTH = 2000;
 const MAX_USER_AGENT_LENGTH = 300;
 
 type SubmitFeedbackInput = {
@@ -53,7 +56,7 @@ function feedbackSubmitToRecord({
     kind: body.kind,
     issue: body.issue,
     page: body.page,
-    query: optionalString(body.query, MAX_QUERY_LENGTH),
+    query: optionalString(body.query, FEEDBACK_QUERY_MAX_LENGTH),
     courseId: optionalString(body.courseId, 200),
     subject: optionalString(body.subject, 20)?.toUpperCase() ?? null,
     number: optionalString(body.number, 20),
@@ -62,8 +65,8 @@ function feedbackSubmitToRecord({
     crn: optionalString(body.crn, 20),
     instructorName: optionalString(body.instructorName, 200),
     scoreField: optionalString(body.scoreField, 20),
-    expected: optionalString(body.expected, MAX_EXPECTED_LENGTH),
-    message: optionalString(body.message, MAX_MESSAGE_LENGTH),
+    expected: optionalString(body.expected, FEEDBACK_EXPECTED_MAX_LENGTH),
+    message: optionalString(body.message, FEEDBACK_MESSAGE_MAX_LENGTH),
     anonymousSessionId: optionalString(body.anonymousSessionId, 200),
     metadata: body.metadata ? JSON.stringify(body.metadata) : null,
     userAgent: optionalString(userAgent, MAX_USER_AGENT_LENGTH),

@@ -256,7 +256,9 @@ function normalizeKeyPart(value: string | undefined): string {
 function normalizeScoreField(value: string | undefined): string | undefined {
   const normalized = value?.trim().toLowerCase();
   if (!normalized) return undefined;
-  return normalized === 'difficulty' ? 'workload' : normalized;
+  return normalized === 'difficulty' || normalized === 'workload'
+    ? 'instructor_difficulty'
+    : normalized;
 }
 
 function extractRows(value: unknown): FeedbackExportRow[] {

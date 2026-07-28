@@ -1,18 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
   getQualityLabel,
   getQualityTone,
-  getWorkloadLabel,
-  getWorkloadTone,
+  getInstructorDifficultyLabel,
+  getInstructorDifficultyTone,
   isFiniteMetric,
   metricToneTextClass,
 } from '../utils/grading'
 
 interface ScorecardProps {
   qualityScore: number | null
-  workloadScore: number | null
+  instructorDifficultyScore: number | null
   avgGpa?: number | null
   medianGpa?: number | null
   gpaSampleSize?: number | null
@@ -21,7 +20,7 @@ interface ScorecardProps {
 
 export function Scorecard({
   qualityScore,
-  workloadScore,
+  instructorDifficultyScore,
   avgGpa,
   medianGpa,
   gpaSampleSize,
@@ -32,43 +31,59 @@ export function Scorecard({
     : 'N/A'
   const qualityTone = getQualityTone(qualityLabel)
 
-  const hasWorkload = isFiniteMetric(workloadScore)
+  const hasInstructorDifficulty = isFiniteMetric(instructorDifficultyScore)
   const hasAvgGpa = isFiniteMetric(avgGpa)
   const hasMedianGpa = isFiniteMetric(medianGpa)
   const hasPrimaryRating = isFiniteMetric(primaryInstructorRmp)
 
-  const workloadLabel = hasWorkload ? getWorkloadLabel(workloadScore) : 'N/A'
+  const instructorDifficultyLabel = hasInstructorDifficulty
+    ? getInstructorDifficultyLabel(instructorDifficultyScore)
+    : 'N/A'
 
-  const workloadTone = getWorkloadTone(workloadLabel)
+  const instructorDifficultyTone = getInstructorDifficultyTone(
+    instructorDifficultyLabel
+  )
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Course scores</CardTitle>
+        <CardTitle>Evidence-limited signals</CardTitle>
+        <p className="text-muted-foreground text-xs leading-5">
+          Historical GPA and linked Rate My Professors data. These are not
+          official course evaluations.
+        </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <dl className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground text-sm">Quality</dt>
-            <dd className={cn('text-sm font-semibold', metricToneTextClass(qualityTone))}>
+            <dt className="text-muted-foreground text-sm">Quality signal</dt>
+            <dd
+              className={cn(
+                'text-sm font-semibold',
+                metricToneTextClass(qualityTone)
+              )}
+            >
               {qualityLabel}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground text-sm">Workload</dt>
+            <dt className="text-muted-foreground text-sm">
+              Instructor difficulty
+            </dt>
             <dd
-              className={cn('text-sm font-semibold', metricToneTextClass(workloadTone))}
+              className={cn(
+                'text-sm font-semibold',
+                metricToneTextClass(instructorDifficultyTone)
+              )}
             >
-              {workloadLabel}
+              {instructorDifficultyLabel}
             </dd>
           </div>
           {hasPrimaryRating && (
             <div className="flex items-center justify-between gap-4">
-              <dt className="text-muted-foreground text-sm">
-                Instructor rating
-              </dt>
+              <dt className="text-muted-foreground text-sm">RMP rating</dt>
               <dd className="text-sm font-semibold">
-                {primaryInstructorRmp.toFixed(1)}
+                {primaryInstructorRmp.toFixed(1)} / 5
               </dd>
             </div>
           )}
@@ -81,7 +96,7 @@ export function Scorecard({
                 </span>
                 {typeof gpaSampleSize === 'number' && (
                   <span className="text-muted-foreground text-right text-xs">
-                    {gpaSampleSize.toLocaleString()} records
+                    {gpaSampleSize.toLocaleString()} GPA records
                   </span>
                 )}
               </dd>
@@ -90,20 +105,21 @@ export function Scorecard({
           {hasMedianGpa && (
             <div className="flex items-center justify-between gap-4">
               <dt className="text-muted-foreground text-sm">Median GPA</dt>
-              <dd className="text-sm font-semibold">
-                {medianGpa.toFixed(2)}
-              </dd>
+              <dd className="text-sm font-semibold">{medianGpa.toFixed(2)}</dd>
             </div>
           )}
         </dl>
 
-        <Badge variant="outline" className="text-muted-foreground w-fit">
-          {isFiniteMetric(qualityScore)
-            ? typeof gpaSampleSize === 'number'
-              ? `Based on ${gpaSampleSize.toLocaleString()} records`
-              : 'Record count unavailable'
-            : 'Not enough records for a quality label'}
-        </Badge>
+        <div className="text-muted-foreground border-t pt-3 text-xs leading-5">
+          <p>
+            Quality combines GPA and linked RMP evidence only when at least 30
+            GPA records and 5 RMP ratings are available.
+          </p>
+          <p className="mt-1">
+            Instructor difficulty comes from linked RMP data; it does not
+            measure assigned work.
+          </p>
+        </div>
       </CardContent>
     </Card>
   )

@@ -35,6 +35,14 @@ export function presentSearchResponse(input: {
     effectiveRequest,
   );
   const normalizedInterpretedRequest = normalizeSearchRequestDto(interpretedRequest);
+  const retrievalDegraded =
+    result.meta.retrievalExecution.failedLanes.length > 0;
+  const sortLimitedToRetrievedWindow =
+    appliedSort.field !== "relevance"
+    && result.meta.retrievalExecution.successfulLanes.includes("topic_semantic")
+    && result.results.some((searchResult) =>
+      searchResult.laneMatches?.includes("topic_semantic"),
+    );
   const ui = buildSearchUiPlan(
     result.meta.extraction.hints,
     result.meta.plan,
@@ -57,14 +65,24 @@ export function presentSearchResponse(input: {
       nextRequest,
       interpretedRequest,
       ui,
+      retrieval: {
+        degraded: retrievalDegraded,
+        ...(sortLimitedToRetrievedWindow
+          ? { sortLimitedToRetrievedWindow: true }
+          : {}),
+      },
     },
     pagination: {
       totalResults: result.totalResults,
+      countIsComplete: !retrievalDegraded,
       browseableResults: result.results.length,
       limit,
       offset,
       hasMore,
       nextOffset: hasMore ? offset + limit : null,
+      ...(result.meta.candidateWindow
+        ? { candidateWindow: result.meta.candidateWindow }
+        : {}),
     },
   };
 }

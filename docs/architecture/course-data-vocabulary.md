@@ -13,11 +13,12 @@ only at named boundaries, and do not let aliases leak past ingress.**
 - Snapshots and DB writers are storage-shaped. They may use table vocabulary such
   as `course_gened`, `difficulty_score`, `course_info`, or `part_of_term`.
 - Domain and public DTO code is product-shaped. Search and web state should say
-  `requirement`, `workload`, `catalog`, `scheduleNotes`, `availability`, and
-  `sourceFacts`. Student-facing copy should call UIUC General Education
-  requirements `GenEd`.
+  `requirement`, `instructorDifficulty`, `catalog`, `scheduleNotes`,
+  `availability`, and `sourceFacts`. Student-facing copy should call UIUC
+  General Education requirements `GenEd`.
 - Query aliases terminate at parser/codec edges. Downstream code should not
-  prefer legacy aliases such as `gened`, `difficulty`, or `pot`.
+  prefer legacy aliases such as `gened` or `pot`; instructor difficulty uses
+  the explicit `instructor_difficulty` field.
 - UI components may render raw source facts, but they should not interpret raw
   source codes. Interpretation belongs in a policy or display-model module.
 
@@ -42,7 +43,7 @@ only at named boundaries, and do not let aliases leak past ingress.**
 | Section dates | source section date range | `sections.start_date`, `end_date`, `date_range_text` | Section schedule dates | `section.schedule.startDate/endDate/dateRangeText` | Dates | `partOfTerm` and schedule-language aliases at ingress |
 | Section title / text / notes / CAPP area | source section facts | `sections.section_title`, `section_text`, `section_notes`, `capp_area` | Source facts | `section.sourceFacts.*` | Section title / Section notes / Section text / CAPP area | none |
 | Section and meeting instructors | source instructor text | `sections.instructor` plus meeting instructors | Canonical course instructor profiles | `section.instructors[]`, `meeting.instructors[]` | Instructor | `instructor` |
-| GPA and RMP source metrics | GPA/RMP enrichment | `avg_gpa`, `median_gpa`, `quality_score`, `difficulty_score`, RMP fields | Course and instructor metrics | `course.metrics.*`, `CourseInstructorDto.*` | GPA / Quality / Workload / Instructor rating | `gpa`, `quality`, `workload`; parser may accept `difficulty` at ingress |
+| GPA and RMP source metrics | GPA/RMP enrichment with source sample counts | `avg_gpa`, `median_gpa`, `gpa_sample_size`, `quality_score`, `difficulty_score`, RMP rating/difficulty/count fields | Evidence-gated course and instructor signals | `course.metrics.*`, `CourseInstructorDto.*` | GPA / Quality / Instructor difficulty / Instructor rating | Quality is published only when GPA has at least 30 records and RMP has at least 5 ratings; instructor difficulty is an RMP-only signal with at least 5 ratings, not a grade-derived estimate or a claim about total course workload; canonical public fields are `gpa`, `quality`, and `instructor_difficulty` |
 
 ## Canonical Policy Owners
 
@@ -50,7 +51,7 @@ only at named boundaries, and do not let aliases leak past ingress.**
   requirement labels, and public tier labels live in `packages/query-types`.
 - GenEd requirement evidence extraction from snapshots lives in
   `apps/api/src/transforms/course-requirements.ts`.
-- Workload and quality score production lives in
+- Instructor-difficulty and quality score production lives in
   `apps/api/src/services/course-score-policy.ts`.
 - Search ranking thresholds and boosts live in
   `apps/api/src/services/ranking/ranking-policy.ts`.

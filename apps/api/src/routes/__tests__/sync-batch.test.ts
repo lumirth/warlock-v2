@@ -3,11 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Ai, D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
 import type { TermState } from '../../db/types.js';
 import { syncSubjects, syncTerm } from '../../services/parallel-sync.js';
+import { coordinateCourseSync } from '../../services/sync-coordinator.js';
 import { syncRoutes } from '../sync.js';
 
 vi.mock('../../services/parallel-sync.js', () => ({
   syncSubjects: vi.fn(),
   syncTerm: vi.fn(),
+}));
+
+vi.mock('../../services/sync-coordinator.js', () => ({
+  coordinateCourseSync: vi.fn(),
 }));
 
 type RunCall = {
@@ -84,9 +89,10 @@ describe('internal sync batch route', () => {
   beforeEach(() => {
     vi.mocked(syncSubjects).mockReset();
     vi.mocked(syncTerm).mockReset();
+    vi.mocked(coordinateCourseSync).mockReset();
   });
 
-  it('updates term_state with cumulative counts after a successful fan-out batch', async () => {
+  it('returns a fan-out batch result without claiming term-level freshness', async () => {
     vi.mocked(syncSubjects).mockResolvedValue({
       termId: '2026-fall',
       year: 2026,
@@ -115,10 +121,7 @@ describe('internal sync batch route', () => {
 
     expect(response.status).toBe(200);
     const termUpsert = runCalls.find(call => call.sql.includes('INSERT INTO term_state'));
-    expect(termUpsert?.params.slice(0, 4)).toEqual(['2026-fall', 2026, 'fall', 'registrable']);
-    expect(termUpsert?.params[5]).toEqual(expect.any(Number));
-    expect(termUpsert?.params.slice(6, 9)).toEqual([187, 42, 99]);
-    expect(termUpsert?.params[9]).toBeNull();
+    expect(termUpsert).toBeUndefined();
   });
 
   it('does not mark a skipped-only batch as freshly synced', async () => {
@@ -149,8 +152,7 @@ describe('internal sync batch route', () => {
 
     expect(response.status).toBe(200);
     const termUpsert = runCalls.find(call => call.sql.includes('INSERT INTO term_state'));
-    expect(termUpsert?.params[5]).toBe(111);
-    expect(termUpsert?.params.slice(6, 9)).toEqual([187, 42, 99]);
+    expect(termUpsert).toBeUndefined();
   });
 
   it('rejects malformed year and term before syncing or upserting term_state', async () => {
@@ -169,6 +171,22 @@ describe('internal sync batch route', () => {
     expect(response.status).toBe(400);
     expect(vi.mocked(syncSubjects)).not.toHaveBeenCalled();
     expect(runCalls).toEqual([]);
+  });
+
+  it('rejects duplicate subject codes before syncing', async () => {
+    const response = await app().request('/internal/sync-batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        year: 2026,
+        term: 'fall',
+        subjects: ['CS', 'cs'],
+        totalSubjects: 2,
+      }),
+    }, createEnv(termState()));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining('duplicates') });
+    expect(vi.mocked(syncSubjects)).not.toHaveBeenCalled();
   });
 
   it('does not mark sync-active skipped-only terms as freshly synced', async () => {
@@ -196,5 +214,43 @@ describe('internal sync batch route', () => {
     expect(termUpsert?.params[4]).toEqual(expect.any(Number));
     expect(termUpsert?.params[5]).toBe(111);
     expect(termUpsert?.params.slice(6, 9)).toEqual([187, 42, 99]);
+  });
+
+  it('exposes the exact full coordinator result for release gating', async () => {
+    vi.mocked(coordinateCourseSync).mockResolvedValue({
+      termCount: 1,
+      failedTermCount: 0,
+      results: [{
+        termId: '2026-fall',
+        subjectCount: 187,
+        batchCount: 10,
+        failedBatchCount: 0,
+        failedSubjectCount: 0,
+        skippedSubjectCount: 0,
+        deletedCourseCount: 2,
+        success: true,
+      }],
+    });
+
+    const response = await app().request(
+      '/admin/sync-active/full',
+      { method: 'POST' },
+      createEnv(termState()),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      termCount: 1,
+      failedTermCount: 0,
+      results: [{
+        termId: '2026-fall',
+        deletedCourseCount: 2,
+        success: true,
+      }],
+    });
+    expect(coordinateCourseSync).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ trigger: 'admin_full_sync' }),
+    );
   });
 });

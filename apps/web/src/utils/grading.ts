@@ -1,12 +1,12 @@
 import {
   getQualityTierLabel,
-  getWorkloadTierLabel,
+  getInstructorDifficultyTierLabel,
   type QualityTierLabel,
-  type WorkloadTierLabel,
+  type InstructorDifficultyTierLabel,
 } from '@uiuc-course-search/query-types'
 
 type QualityLabel = QualityTierLabel
-type WorkloadLabel = WorkloadTierLabel
+type InstructorDifficultyLabel = InstructorDifficultyTierLabel
 export type MetricTone = 'success' | 'warning' | 'destructive' | 'muted'
 
 export function isFiniteMetric(value: unknown): value is number {
@@ -17,8 +17,10 @@ export function getQualityLabel(score: number): QualityLabel | 'N/A' {
   return getQualityTierLabel(score) ?? 'N/A'
 }
 
-export function getWorkloadLabel(score: number): WorkloadLabel | 'N/A' {
-  return getWorkloadTierLabel(score) ?? 'N/A'
+export function getInstructorDifficultyLabel(
+  score: number
+): InstructorDifficultyLabel | 'N/A' {
+  return getInstructorDifficultyTierLabel(score) ?? 'N/A'
 }
 
 export function getQualityTone(
@@ -30,11 +32,11 @@ export function getQualityTone(
   return 'destructive'
 }
 
-export function getWorkloadTone(
-  label: WorkloadLabel | 'N/A'
+export function getInstructorDifficultyTone(
+  label: InstructorDifficultyLabel | 'N/A'
 ): MetricTone {
   if (label === 'N/A') return 'muted'
-  if (label === 'Hard') return 'destructive'
+  if (label === 'Higher') return 'destructive'
   if (label === 'Moderate') return 'warning'
   return 'success'
 }

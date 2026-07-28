@@ -9,7 +9,7 @@ export const SEARCH_SORT_FIELDS = [
   "relevance",
   "gpa",
   "quality",
-  "workload",
+  "instructor_difficulty",
   "instructor_rating",
   "level",
   "credits",
@@ -31,7 +31,7 @@ export const SEARCH_SORT_DEFAULT_DIRECTIONS: Record<
   relevance: "desc",
   gpa: "desc",
   quality: "desc",
-  workload: "asc",
+  instructor_difficulty: "asc",
   instructor_rating: "desc",
   level: "asc",
   credits: "asc",
@@ -88,9 +88,10 @@ export const SEARCH_STATUS_VALUES = [
 
 export type SearchStatusFilter = (typeof SEARCH_STATUS_VALUES)[number];
 
-export const SEARCH_WORKLOAD_VALUES = ["easy", "hard"] as const;
+export const SEARCH_INSTRUCTOR_DIFFICULTY_VALUES = ["lower", "higher"] as const;
 
-export type SearchWorkloadFilter = (typeof SEARCH_WORKLOAD_VALUES)[number];
+export type SearchInstructorDifficultyFilter =
+  (typeof SEARCH_INSTRUCTOR_DIFFICULTY_VALUES)[number];
 
 export const SEARCH_LEVEL_VALUES = [100, 200, 300, 400, 500] as const;
 
@@ -98,7 +99,10 @@ export type SearchLevelFilter = (typeof SEARCH_LEVEL_VALUES)[number];
 
 export const SEARCH_PAGINATION_DEFAULT_LIMIT = 20;
 export const SEARCH_PAGINATION_MAX_LIMIT = 50;
-export const SEARCH_PAGINATION_MAX_OFFSET = 1_150;
+export const SEARCH_BROWSEABLE_RESULT_LIMIT = 400;
+export const SEARCH_PAGINATION_MAX_OFFSET =
+  SEARCH_BROWSEABLE_RESULT_LIMIT - 1;
+export const SEARCH_QUERY_MAX_LENGTH = 500;
 
 export function isSearchSortField(value: unknown): value is SortField {
   return includesSearchValue(SEARCH_SORT_FIELDS, value);
@@ -120,10 +124,10 @@ export function isSearchStatusFilter(value: unknown): value is SearchStatusFilte
   return includesSearchValue(SEARCH_STATUS_VALUES, value);
 }
 
-export function isSearchWorkloadFilter(
+export function isSearchInstructorDifficultyFilter(
   value: unknown,
-): value is SearchWorkloadFilter {
-  return includesSearchValue(SEARCH_WORKLOAD_VALUES, value);
+): value is SearchInstructorDifficultyFilter {
+  return includesSearchValue(SEARCH_INSTRUCTOR_DIFFICULTY_VALUES, value);
 }
 
 export function isSearchLevelFilter(value: unknown): value is SearchLevelFilter {
@@ -143,7 +147,7 @@ export type SearchRequestFiltersDto = {
   partOfTerm?: string;
   online?: boolean;
   status?: SearchStatusFilter;
-  workload?: SearchWorkloadFilter;
+  instructorDifficulty?: SearchInstructorDifficultyFilter;
   level?: SearchLevelFilter;
 };
 
@@ -185,6 +189,11 @@ export function normalizeSearchRequestDto(
   if (typeof request.query !== "string") {
     throw new TypeError("query must be a string");
   }
+  if (request.query.length > SEARCH_QUERY_MAX_LENGTH) {
+    throw new TypeError(
+      `query must be ${SEARCH_QUERY_MAX_LENGTH} characters or fewer`,
+    );
+  }
   return {
     query: request.query,
     filters: compactSearchRequestFilters(request.filters),
@@ -200,6 +209,7 @@ export function normalizeSearchPaginationDto(
   const offset = pagination?.offset ?? 0;
   assertSearchInteger(limit, "limit", 1, SEARCH_PAGINATION_MAX_LIMIT);
   assertSearchInteger(offset, "offset", 0, SEARCH_PAGINATION_MAX_OFFSET);
+  assertSearchPaginationWindow(limit, offset);
   return { limit, offset };
 }
 
@@ -319,13 +329,15 @@ function compactSearchRequestFilters(
     "lower",
   );
   if (status) compact.status = status;
-  const workload = normalizeEnumSearchString(
-    filters.workload,
-    "workload",
-    SEARCH_WORKLOAD_VALUES,
+  const instructorDifficulty = normalizeEnumSearchString(
+    filters.instructorDifficulty,
+    "instructorDifficulty",
+    SEARCH_INSTRUCTOR_DIFFICULTY_VALUES,
     "lower",
   );
-  if (workload) compact.workload = workload;
+  if (instructorDifficulty) {
+    compact.instructorDifficulty = instructorDifficulty;
+  }
   if (filters.level !== undefined) {
     if (!isSearchLevelFilter(filters.level)) {
       throw new TypeError(`level must be one of: ${SEARCH_LEVEL_VALUES.join(", ")}`);
@@ -391,6 +403,14 @@ function assertSearchInteger(
 ): void {
   if (!Number.isInteger(value) || value < min || value > max) {
     throw new TypeError(`${name} must be an integer between ${min} and ${max}`);
+  }
+}
+
+function assertSearchPaginationWindow(limit: number, offset: number): void {
+  if (limit + offset > SEARCH_BROWSEABLE_RESULT_LIMIT) {
+    throw new TypeError(
+      `pagination window must not exceed ${SEARCH_BROWSEABLE_RESULT_LIMIT} results`,
+    );
   }
 }
 

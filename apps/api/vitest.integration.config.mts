@@ -18,6 +18,7 @@ export default defineConfig(async () => {
           ratelimits: {
             SEARCH_RATE_LIMITER: { simple: { limit: 120, period: 60 } },
             COURSE_RATE_LIMITER: { simple: { limit: 240, period: 60 } },
+            FEEDBACK_RATE_LIMITER: { simple: { limit: 20, period: 60 } },
           },
           bindings: {
             TEST_MIGRATIONS: migrations,
@@ -25,6 +26,7 @@ export default defineConfig(async () => {
             CURRENT_TERM: "spring",
             CISAPI_BASE: "https://courses.illinois.edu/cisapp/explorer/catalog",
             FRONTEND_BASE: "http://localhost:5173",
+            FEEDBACK_ALLOWED_ORIGINS: "http://local.test",
             SYNC_CONCURRENCY: "1",
             BACKOFF_BASE_MS: "1000",
             BACKOFF_MAX_MS: "1000",

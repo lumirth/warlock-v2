@@ -9,6 +9,8 @@ import type { RetrievalExecutionResult } from "./search-retrieval-lane-executors
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
 import { buildSectionFtsCandidateQuery } from "./search-retrieval-section-lanes.js";
 
+const D1_MAX_BOUND_PARAMETERS = 100;
+
 /**
  * Counts the exact union described by the executable retrieval plan. SQL lanes
  * are counted without their browse limits; semantic recall contributes the
@@ -57,24 +59,62 @@ export async function countSearchCandidates(
         : [],
     ),
   ];
-  if (semanticIds.length > 0) {
-    candidates.push({
-      sql: semanticIds.map(() => "SELECT ? AS id").join(" UNION ALL "),
-      params: semanticIds,
-    });
+
+  if (candidates.length === 0) return semanticIds.length;
+
+  const candidateSql = candidates.map(({ sql }) => sql).join("\nUNION ALL\n");
+  const candidateParams = candidates.flatMap(({ params }) => params);
+  if (candidateParams.length > D1_MAX_BOUND_PARAMETERS) {
+    throw new Error(
+      `Search candidate count requires ${candidateParams.length} SQL bindings; `
+      + `maximum is ${D1_MAX_BOUND_PARAMETERS}`,
+    );
   }
 
-  if (candidates.length === 0) return 0;
-
-  const result = await db.prepare(`
+  const sqlTotal = await runCount(db, `
     SELECT COUNT(DISTINCT id) AS total
     FROM (
-      ${candidates.map(({ sql }) => sql).join("\nUNION ALL\n")}
+      ${candidateSql}
     ) search_candidates
-  `)
-    .bind(...candidates.flatMap(({ params }) => params))
-    .first<{ total: number }>();
+  `, candidateParams);
 
+  if (semanticIds.length === 0) return sqlTotal;
+  if (candidateParams.length === D1_MAX_BOUND_PARAMETERS) {
+    throw new Error(
+      `Search candidate count uses all ${D1_MAX_BOUND_PARAMETERS} SQL bindings; `
+      + 'no binding remains to merge semantic candidates',
+    );
+  }
+
+  const semanticChunkSize = D1_MAX_BOUND_PARAMETERS - candidateParams.length;
+  let semanticOverlap = 0;
+  for (let offset = 0; offset < semanticIds.length; offset += semanticChunkSize) {
+    const semanticChunk = semanticIds.slice(offset, offset + semanticChunkSize);
+    const semanticSql = semanticChunk
+      .map(() => "SELECT ? AS id")
+      .join(" UNION ALL ");
+    semanticOverlap += await runCount(db, `
+      SELECT COUNT(DISTINCT semantic_candidates.id) AS total
+      FROM (
+        ${semanticSql}
+      ) semantic_candidates
+      JOIN (
+        ${candidateSql}
+      ) search_candidates ON search_candidates.id = semantic_candidates.id
+    `, [...semanticChunk, ...candidateParams]);
+  }
+
+  return sqlTotal + semanticIds.length - semanticOverlap;
+}
+
+async function runCount(
+  db: D1Database,
+  sql: string,
+  params: unknown[],
+): Promise<number> {
+  const result = await db.prepare(sql)
+    .bind(...params)
+    .first<{ total: number }>();
   if (!result || !Number.isFinite(result.total)) {
     throw new Error("Search candidate count did not return a total");
   }

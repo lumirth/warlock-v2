@@ -16,6 +16,11 @@ import type {
 } from './course-detail-types.js';
 import { resolveTermContext } from './term-state.js';
 import type { UpstreamBackoff } from './upstream-backoff.js';
+import {
+  cacheLiveDetailSnapshot,
+  getCachedLiveDetailSnapshot,
+} from './course-detail-live-cache.js';
+import type { LiveCourseDetailSnapshot } from './course-detail-types.js';
 
 export type {
   CourseDetailServiceEnv,
@@ -39,6 +44,25 @@ export class CourseDetailService {
         const cached = await this.loadStoredDetail(context, { state: 'cached' });
         if (cached) {
           return cached;
+        }
+
+        const cachedLiveSnapshot = await getCachedLiveDetailSnapshot(
+          this.env.SEARCH_CACHE,
+          context,
+          Math.floor(this.nowMs() / 1000),
+        ).catch((error) => {
+          logger.warn('courseDetail.liveCache.getFailed', {
+            courseId: context?.courseId,
+            ...errorFields(error),
+          });
+          return null;
+        });
+        if (cachedLiveSnapshot) {
+          return this.buildLiveSnapshotResponse(
+            context,
+            cachedLiveSnapshot,
+            true,
+          );
         }
       }
 
@@ -81,8 +105,13 @@ export class CourseDetailService {
     const existing = await this.repository.loadStoredCourse(context.courseId);
     if (!existing) return null;
 
-    if (options.state === 'cached' && existing.age_seconds * 1000 >= context.cacheTtlMs) {
-      return null;
+    if (options.state === 'cached') {
+      const ageSeconds = existing.age_seconds;
+      const isFresh = typeof ageSeconds === 'number'
+        && Number.isFinite(ageSeconds)
+        && ageSeconds >= 0
+        && ageSeconds * 1000 < context.cacheTtlMs;
+      if (!isFresh) return null;
     }
 
     const enrichment = await this.repository.loadEnrichment(context);
@@ -97,22 +126,20 @@ export class CourseDetailService {
 
     switch (liveResult.state) {
       case 'snapshot': {
-        const [instructorLinkRows, existingMetadata, medianGpa] = await Promise.all([
-          this.repository.loadInstructorLinkRows(context),
-          this.repository.loadExistingCourseMetadata(context.courseId),
-          this.repository.loadCourseMedianGpa(context.subject, context.number),
-        ]);
-
-        return buildLiveCourseDetailResponse(context, liveResult.value, {
-          instructorLinkRows,
-          existingMetadata,
-          medianGpa,
+        await cacheLiveDetailSnapshot(
+          this.env.SEARCH_CACHE,
+          context,
+          liveResult.value,
+        ).catch((error) => {
+          logger.warn('courseDetail.liveCache.putFailed', {
+            courseId: context.courseId,
+            ...errorFields(error),
+          });
         });
+        return this.buildLiveSnapshotResponse(context, liveResult.value, false);
       }
       case 'not_found':
         return { status: 404, body: { error: 'Course not found' } };
-      case 'parse_error':
-        return { status: 500, body: { error: 'Failed to parse course data' } };
       case 'upstream_error':
         return this.handleUnsuccessfulUpstream(
           context,
@@ -121,6 +148,26 @@ export class CourseDetailService {
           liveResult.retryable
         );
     }
+  }
+
+  private async buildLiveSnapshotResponse(
+    context: CourseDetailContext,
+    snapshot: LiveCourseDetailSnapshot,
+    cacheHit: boolean,
+  ): Promise<CourseDetailResponse> {
+    const [instructorLinkRows, existingMetadata, medianGpa] = await Promise.all([
+      this.repository.loadInstructorLinkRows(context),
+      this.repository.loadExistingCourseMetadata(context.courseId),
+      this.repository.loadCourseMedianGpa(context.subject, context.number),
+    ]);
+
+    return buildLiveCourseDetailResponse(context, snapshot, {
+      instructorLinkRows,
+      existingMetadata,
+      medianGpa,
+    }, {
+      cacheHit,
+    });
   }
 
   private async staleFallback(

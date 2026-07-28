@@ -4,7 +4,7 @@ import {
   STUDENT_LANGUAGE_ALIAS_ENTRIES,
 } from './student-language-lexicon.js';
 
-type AliasKind = 'subject' | 'requirement' | 'delivery' | 'status' | 'workload' | 'days' | 'time';
+type AliasKind = 'subject' | 'requirement' | 'delivery' | 'status' | 'days' | 'time';
 
 interface AliasEntry {
   kind: AliasKind;

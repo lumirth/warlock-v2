@@ -122,7 +122,7 @@ function buildTopicExpansionKeywordQuery(
 function applySortIntent(plan: SearchPlan, rawQuery: string): boolean {
   const normalized = rawQuery.toLowerCase();
   let inferredSort: SearchSort | null = null;
-  const explicitSortMatch = /\b(?:sort|order|rank)(?:\s+(?:courses?|classes?|results?))?\s+by\s+(avg\s+gpa|gpa|difficulty|workload|quality|professor\s+rating|instructor\s+rating|rating|level|credits?)\b/.exec(normalized);
+  const explicitSortMatch = /\b(?:sort|order|rank)(?:\s+(?:courses?|classes?|results?))?\s+by\s+(avg\s+gpa|gpa|instructor\s+difficulty|rmp\s+difficulty|quality|professor\s+rating|instructor\s+rating|rating|level|credits?)\b/.exec(normalized);
 
   if (explicitSortMatch) {
     const field = explicitSortMatch[1];
@@ -137,22 +137,16 @@ function applySortIntent(plan: SearchPlan, rawQuery: string): boolean {
     } else if (field.startsWith('credit')) {
       inferredSort = { field: 'credits', direction: 'asc' };
     } else {
-      inferredSort = { field: 'workload', direction: 'asc' };
+      inferredSort = { field: 'instructor_difficulty', direction: 'asc' };
     }
   } else if (/\b(?:highest|best|top)\s+(?:avg\s+)?gpa\b|\b(?:avg\s+)?gpa\s+(?:highest|best|top)\b/.test(normalized)) {
     inferredSort = { field: 'gpa', direction: 'desc' };
   } else if (/\b(?:best|top|highest\s+rated)\s+(?:professors?|instructors?)\b|\b(?:professor|instructor)\s+rating\b/.test(normalized)) {
     inferredSort = { field: 'instructor_rating', direction: 'desc' };
-  } else if (/\b(?:easiest|least\s+(?:work|workload)|lowest\s+workload)\b/.test(normalized)) {
-    inferredSort = { field: 'workload', direction: 'asc' };
-    plan.filters.workload = plan.filters.workload ?? 'easy';
-    plan.softPreferences = {
-      ...(plan.softPreferences ?? {}),
-      lowWorkload: 0.86,
-    };
-  } else if (/\b(?:hardest|most\s+difficult|highest\s+workload)\b/.test(normalized)) {
-    inferredSort = { field: 'workload', direction: 'desc' };
-    plan.filters.workload = plan.filters.workload ?? 'hard';
+  } else if (/\blowest\s+(?:instructor|rmp)\s+difficulty\b/.test(normalized)) {
+    inferredSort = { field: 'instructor_difficulty', direction: 'asc' };
+  } else if (/\bhighest\s+(?:instructor|rmp)\s+difficulty\b/.test(normalized)) {
+    inferredSort = { field: 'instructor_difficulty', direction: 'desc' };
   }
 
   if (!inferredSort) {
@@ -189,13 +183,12 @@ export function compileSortIntent(plan: SearchPlan, rawQuery: string): SortInten
 
 export function removeSortScaffolding(query: string): string {
   return query
-    .replace(/\b(?:sort|order|rank)(?:\s+(?:courses?|classes?|results?))?\s+by\s+(?:avg\s+gpa|gpa|difficulty|workload|quality|professor\s+rating|instructor\s+rating|rating|level|credits?)\b/gi, ' ')
+    .replace(/\b(?:sort|order|rank)(?:\s+(?:courses?|classes?|results?))?\s+by\s+(?:avg\s+gpa|gpa|instructor\s+difficulty|rmp\s+difficulty|quality|professor\s+rating|instructor\s+rating|rating|level|credits?)\b/gi, ' ')
     .replace(/\b(?:highest|best|top)\s+(?:avg\s+)?gpa\b/gi, ' ')
     .replace(/\b(?:avg\s+)?gpa\s+(?:highest|best|top)\b/gi, ' ')
     .replace(/\b(?:best|top|highest\s+rated)\s+(?:professors?|instructors?)\b/gi, ' ')
     .replace(/\b(?:professor|instructor)\s+rating\b/gi, ' ')
-    .replace(/\b(?:easiest|least\s+(?:work|workload)|lowest\s+workload)\b/gi, ' ')
-    .replace(/\b(?:hardest|most\s+difficult|highest\s+workload)\b/gi, ' ')
+    .replace(/\b(?:lowest|highest)\s+(?:instructor|rmp)\s+difficulty\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

@@ -19,6 +19,7 @@ function snapshot(): CourseSnapshot {
       title: 'Constructing Race in America',
       description: 'Race, culture, and institutions in the United States.',
       credit_hours: 3,
+      credit_hours_text: '3 hours.',
       year: 2026,
       term: 'spring',
       avg_gpa: null,

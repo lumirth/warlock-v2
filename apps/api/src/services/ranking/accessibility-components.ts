@@ -1,8 +1,3 @@
-import {
-  getQualityTierLabel,
-  getQualityTierRank,
-  getWorkloadTierLabel,
-} from "@uiuc-course-search/query-types";
 import type { Course } from "../../db/types.js";
 import type { SearchPlan } from "../search-planner-types.js";
 import type { RankingScoreComponent, SearchResult } from "../search-types.js";
@@ -10,53 +5,17 @@ import { catalogLevel } from "./ranking-text.js";
 import { RANKING_POLICY } from "./ranking-policy.js";
 import { scoreComponent } from "./score-utils.js";
 
-export function workloadPreferenceComponents(
+export function accessibilityPreferenceComponents(
   result: SearchResult,
   plan: SearchPlan,
 ): RankingScoreComponent[] {
-  if (!hasEasyOrAccessibleIntent(plan)) {
+  if (!hasAccessibilityIntent(plan)) {
     return [];
   }
 
   const components: RankingScoreComponent[] = [];
   const { course } = result;
   const level = catalogLevel(course.number);
-  const qualityTierRank = getQualityTierRank(course.quality_score);
-  const qualityLabel = getQualityTierLabel(course.quality_score);
-  const workloadTier = getWorkloadTierLabel(course.difficulty_score);
-
-  if (
-    qualityTierRank !== null &&
-    qualityTierRank >= RANKING_POLICY.components.easyIntent.minQualityTierRank
-  ) {
-    components.push(scoreComponent(
-      "workload_preference",
-      RANKING_POLICY.components.easyIntent.boosts.qualityTier,
-      `${qualityLabel} quality tier supports an easy or low-risk course choice.`,
-      qualityLabel ? [qualityLabel] : undefined,
-    ));
-  }
-
-  if (workloadTier === RANKING_POLICY.components.easyIntent.preferredWorkloadTier) {
-    components.push(scoreComponent(
-      "workload_preference",
-      RANKING_POLICY.components.easyIntent.boosts.workloadTier,
-      "Displayed workload tier is Easy.",
-      [workloadTier],
-    ));
-  }
-
-  if (
-    typeof course.avg_gpa === "number" &&
-    course.avg_gpa >= RANKING_POLICY.components.easyIntent.minAverageGpa
-  ) {
-    components.push(scoreComponent(
-      "workload_preference",
-      RANKING_POLICY.components.easyIntent.boosts.averageGpa,
-      "Average GPA evidence supports a lower-risk workload interpretation.",
-      [`Avg GPA ${course.avg_gpa.toFixed(2)}`],
-    ));
-  }
 
   const levelValue = easyIntentLevelValue(level);
   if (levelValue !== 0) {
@@ -64,8 +23,8 @@ export function workloadPreferenceComponents(
       "level_accessibility",
       levelValue,
       levelValue > 0
-        ? `${level} level is more accessible for easy/non-major intent.`
-        : `${level} level is a risk for easy/non-major intent.`,
+        ? `${level} level is more accessible for non-major intent.`
+        : `${level} level is a risk for non-major intent.`,
       level !== null ? [`${level} level`] : undefined,
     ));
   }
@@ -108,7 +67,6 @@ export function nullDataPenaltyComponent(
   if (!needsEvidence) return null;
 
   const hasStructuredSupport = typeof result.course.quality_score === "number"
-    || typeof result.course.difficulty_score === "number"
     || typeof result.course.avg_gpa === "number";
 
   return hasStructuredSupport
@@ -116,24 +74,17 @@ export function nullDataPenaltyComponent(
     : scoreComponent(
       "null_data_penalty",
       RANKING_POLICY.components.nullSubjectiveEvidencePenalty,
-      "Subjective preference has no visible workload, quality, or GPA evidence for this course.",
+      "Subjective preference has no visible quality or GPA evidence for this course.",
     );
 }
 
-function hasEasyOrAccessibleIntent(plan: SearchPlan): boolean {
+function hasAccessibilityIntent(plan: SearchPlan): boolean {
   const soft = plan.softPreferences ?? {};
-  return Boolean(
-    soft.lowWorkload
-    || soft.lowWriting
-    || soft.lowReading
-    || soft.lowExams
-    || soft.nonMajorFriendly
-    || plan.filters.workload === "easy",
-  );
+  return Boolean(soft.nonMajorFriendly);
 }
 
 function easyIntentLevelValue(level: number | null): number {
-  const levelPolicy = RANKING_POLICY.components.easyIntent.level;
+  const levelPolicy = RANKING_POLICY.components.accessibilityIntent.level;
   if (level === 100) return levelPolicy.level100;
   if (level === 200) return levelPolicy.level200;
   if (level === 300) return levelPolicy.level300;

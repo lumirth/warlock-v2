@@ -103,6 +103,7 @@ export class SearchPipeline {
         plan,
         retrievalPlan: execution.retrievalPlan,
         retrievalExecution: execution.retrievalExecution,
+        candidateWindow: execution.candidateWindow,
       },
     };
 

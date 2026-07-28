@@ -1,9 +1,11 @@
 import {
   DEFAULT_SEARCH_SCOPE,
   DEFAULT_SEARCH_SORT,
+  SEARCH_BROWSEABLE_RESULT_LIMIT,
   SEARCH_PAGINATION_DEFAULT_LIMIT,
   SEARCH_PAGINATION_MAX_LIMIT,
   SEARCH_PAGINATION_MAX_OFFSET,
+  SEARCH_QUERY_MAX_LENGTH,
   SEARCH_LEVEL_VALUES,
   SEARCH_SCOPE_VALUES,
   SEARCH_SORT_DEFAULT_DIRECTIONS,
@@ -11,7 +13,7 @@ import {
   SEARCH_STATUS_VALUES,
   SEARCH_TERM_VALUES,
   SEARCH_TIME_VALUES,
-  SEARCH_WORKLOAD_VALUES,
+  SEARCH_INSTRUCTOR_DIFFICULTY_VALUES,
   isSearchLevelFilter,
   isSearchScope,
   isSearchSortField,
@@ -79,7 +81,9 @@ export function searchRequestToQueryEntries(
   if (filters.partOfTerm) entries.push(["partOfTerm", filters.partOfTerm]);
   if (filters.online !== undefined) entries.push(["online", String(filters.online)]);
   if (filters.status) entries.push(["status", filters.status]);
-  if (filters.workload) entries.push(["workload", filters.workload]);
+  if (filters.instructorDifficulty) {
+    entries.push(["instructor_difficulty", filters.instructorDifficulty]);
+  }
   if (filters.level !== undefined) entries.push(["level", String(filters.level)]);
 
   if (normalized.scope !== DEFAULT_SEARCH_SCOPE) {
@@ -97,6 +101,14 @@ export function searchRequestToQueryEntries(
 export function decodeSearchRequestQuery(
   params: SearchQueryParamReader,
 ): SearchRequestQueryDecodeResult {
+  const rawQuery = params.get("q") ?? "";
+  if (rawQuery.length > SEARCH_QUERY_MAX_LENGTH) {
+    return {
+      ok: false,
+      error: `q must be ${SEARCH_QUERY_MAX_LENGTH} characters or fewer`,
+    };
+  }
+
   const parsedLimit = parseBoundedSearchIntParam(params.get("limit"), "limit", {
     min: 1,
     max: SEARCH_PAGINATION_MAX_LIMIT,
@@ -110,6 +122,12 @@ export function decodeSearchRequestQuery(
     defaultValue: 0,
   });
   if (!parsedOffset.ok) return parsedOffset;
+  if (parsedLimit.value + parsedOffset.value > SEARCH_BROWSEABLE_RESULT_LIMIT) {
+    return {
+      ok: false,
+      error: `pagination window must not exceed ${SEARCH_BROWSEABLE_RESULT_LIMIT} results`,
+    };
+  }
 
   const parsedSort = parseSearchSortParams(params.get("sort"), params.get("direction"));
   if (!parsedSort.ok) return parsedSort;
@@ -118,7 +136,7 @@ export function decodeSearchRequestQuery(
   if (!parsedScope.ok) return parsedScope;
 
   const requestInput: SearchRequestDto = {
-    query: params.get("q") ?? "",
+    query: rawQuery,
     filters: {},
     sort: parsedSort.value,
     scope: parsedScope.value,
@@ -226,15 +244,16 @@ export function decodeSearchRequestQuery(
     requestInput.filters!.status = parsedStatus.value;
   }
 
-  const workload = params.get("workload");
-  if (workload) {
-    const parsedWorkload = parseSearchEnumParam(
-      workload.toLowerCase(),
-      "workload",
-      SEARCH_WORKLOAD_VALUES,
+  const instructorDifficulty = params.get("instructor_difficulty");
+  if (instructorDifficulty) {
+    const parsedInstructorDifficulty = parseSearchEnumParam(
+      instructorDifficulty.toLowerCase(),
+      "instructor_difficulty",
+      SEARCH_INSTRUCTOR_DIFFICULTY_VALUES,
     );
-    if (!parsedWorkload.ok) return parsedWorkload;
-    requestInput.filters!.workload = parsedWorkload.value;
+    if (!parsedInstructorDifficulty.ok) return parsedInstructorDifficulty;
+    requestInput.filters!.instructorDifficulty =
+      parsedInstructorDifficulty.value;
   }
 
   const level = parseSearchLevelParam(params.get("level"));

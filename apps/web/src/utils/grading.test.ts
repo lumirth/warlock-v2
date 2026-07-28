@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getQualityLabel,
   getQualityTone,
-  getWorkloadLabel,
+  getInstructorDifficultyLabel,
   isFiniteMetric,
 } from './grading'
 
@@ -14,7 +14,7 @@ describe('quality labels', () => {
 
   it('does not turn invalid metrics into positive labels', () => {
     expect(getQualityLabel(Number.NaN)).toBe('N/A')
-    expect(getWorkloadLabel(Number.NaN)).toBe('N/A')
+    expect(getInstructorDifficultyLabel(Number.NaN)).toBe('N/A')
     expect(isFiniteMetric(Number.NaN)).toBe(false)
     expect(isFiniteMetric(58)).toBe(true)
   })

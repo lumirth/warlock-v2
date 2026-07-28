@@ -94,11 +94,6 @@ function extractAliases(text: string, hints: Hint[]): string {
           hints.push({ type: 'time', value: match.canonical, metadata });
         }
         break;
-      case 'workload':
-        if (match.canonical === 'easy' || match.canonical === 'hard') {
-          hints.push({ type: 'workload', value: match.canonical, metadata });
-        }
-        break;
       case 'status':
         if (isSearchStatusFilter(match.canonical)) {
           hints.push({ type: 'status', value: match.canonical, metadata });

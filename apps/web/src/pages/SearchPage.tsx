@@ -1,5 +1,6 @@
 import { AlertCircleIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { SearchTermOptionsDto } from '@uiuc-course-search/query-types'
 import { FeedbackButton } from '../components/FeedbackButton'
 import { PageContainer } from '@/components/PageContainer'
@@ -9,16 +10,111 @@ import { RefinePanel } from './search/RefinePanel'
 import { ResultsList } from './search/ResultsList'
 import { SearchForm } from './search/SearchForm'
 import { useSearchController } from './search/useSearchController'
+import {
+  readSearchUrlState,
+  writeResultViewToSearch,
+  writeSearchUrlState,
+} from './search/search-url-state'
+import type { ResultViewMode } from './search/search-sort-model'
 
 export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
-  const { state, derived, actions } = useSearchController()
-  const [termOptions, setTermOptions] = useState<SearchTermOptionsDto | null>(null)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [initialUrlState] = useState(() =>
+    readSearchUrlState(new URLSearchParams(location.search))
+  )
+  const handledSearchRef = useRef(location.search)
+  const pendingSearchRef = useRef<string | null>(null)
+  const resultViewRef = useRef<ResultViewMode>(initialUrlState.view ?? 'cards')
+  const [urlError, setUrlError] = useState(initialUrlState.error)
+
+  const handleRequestChange = useCallback(
+    (
+      request: Parameters<typeof writeSearchUrlState>[0],
+      mode: 'replace' | 'refine' | 'append' | 'refresh'
+    ) => {
+      const nextSearch = writeSearchUrlState(request, resultViewRef.current)
+      if (
+        nextSearch === location.search ||
+        nextSearch === pendingSearchRef.current
+      ) {
+        return
+      }
+      pendingSearchRef.current = nextSearch
+      navigate(
+        { pathname: '/', search: nextSearch },
+        {
+          replace: mode === 'append' || mode === 'refresh',
+        }
+      )
+    },
+    [location.search, navigate]
+  )
+
+  const clearSearchUrl = useCallback(() => {
+    if (!location.search) return
+    pendingSearchRef.current = ''
+    navigate({ pathname: '/', search: '' })
+  }, [location.search, navigate])
+
+  const { state, derived, actions } = useSearchController({
+    initialRequest: initialUrlState.request,
+    initialResultViewMode: initialUrlState.view,
+    onRequestChange: handleRequestChange,
+    onClear: clearSearchUrl,
+  })
+  const searchActionsRef = useRef(actions)
+  const [termOptions, setTermOptions] = useState<SearchTermOptionsDto | null>(
+    null
+  )
   const [termOptionsError, setTermOptionsError] = useState(false)
+  const [termOptionsAttempt, setTermOptionsAttempt] = useState(0)
+
+  useEffect(() => {
+    searchActionsRef.current = actions
+  }, [actions])
+
+  useEffect(() => {
+    resultViewRef.current = state.draft.resultViewMode
+  }, [state.draft.resultViewMode])
+
+  useEffect(() => {
+    document.title = state.session.meta
+      ? `${derived.resultsHeadingLabel} · UIUC Course Search`
+      : 'UIUC Course Search'
+  }, [derived.resultsHeadingLabel, state.session.meta])
+
+  useEffect(() => {
+    if (pendingSearchRef.current !== null) {
+      if (location.search === pendingSearchRef.current) {
+        handledSearchRef.current = location.search
+        pendingSearchRef.current = null
+        return
+      }
+      pendingSearchRef.current = null
+    }
+    if (location.search === handledSearchRef.current) return
+    handledSearchRef.current = location.search
+    const nextUrlState = readSearchUrlState(
+      new URLSearchParams(location.search)
+    )
+    setUrlError(nextUrlState.error)
+
+    if (nextUrlState.request) {
+      searchActionsRef.current.restoreRequest(
+        nextUrlState.request,
+        nextUrlState.view ?? 'cards'
+      )
+    } else {
+      searchActionsRef.current.resetFromUrl(nextUrlState.view ?? 'cards')
+    }
+  }, [location.search])
 
   useEffect(() => {
     const controller = new AbortController()
 
-    api.getTermOptions(controller.signal)
+    api
+      .getTermOptions(controller.signal)
       .then((options) => {
         setTermOptions(options)
         setTermOptionsError(false)
@@ -30,7 +126,21 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
       })
 
     return () => controller.abort()
-  }, [])
+  }, [termOptionsAttempt])
+
+  const handleViewChange = (view: ResultViewMode) => {
+    resultViewRef.current = view
+    actions.setResultViewMode(view)
+    const nextSearch = writeResultViewToSearch(location.search, view)
+    pendingSearchRef.current = nextSearch
+    navigate({ pathname: '/', search: nextSearch }, { replace: true })
+  }
+
+  const resetBrokenSearchLink = () => {
+    setUrlError(null)
+    actions.resetFromUrl('cards')
+    clearSearchUrl()
+  }
 
   return (
     <PageContainer className="py-4 sm:py-6">
@@ -44,6 +154,23 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
           onExampleSearch={actions.runExampleSearch}
         />
 
+        {urlError && (
+          <Alert variant="destructive">
+            <AlertCircleIcon aria-hidden />
+            <AlertTitle>That search link is not valid</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-3">
+              <span>{urlError}</span>
+              <button
+                type="button"
+                className="min-h-8 font-medium underline underline-offset-4"
+                onClick={resetBrokenSearchLink}
+              >
+                Start a new search
+              </button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {state.session.error && (
           <Alert variant="destructive">
             <AlertCircleIcon aria-hidden />
@@ -55,8 +182,11 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
         <RefinePanel
           meta={state.session.meta}
           resultCountLabel={derived.resultCountLabel}
-          availableYears={termOptions?.years}
-          availableYearsError={termOptionsError}
+          availableTerms={termOptions?.terms}
+          termOptionsError={termOptionsError}
+          termOptionsLoading={!termOptions && !termOptionsError}
+          advancedDraftErrors={derived.advancedDraftErrors}
+          hasAdvancedDraftErrors={derived.hasAdvancedDraftErrors}
           advancedOpen={state.draft.advancedOpen}
           advancedDraft={state.draft.advancedDraft}
           hasAdvancedDraftChanges={derived.hasAdvancedDraftChanges}
@@ -67,6 +197,11 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
           onAmbiguityAction={actions.applyAmbiguityAction}
           onApplyAdvancedSearch={actions.applyAdvancedSearch}
           onResetAdvancedDraft={actions.resetAdvancedDraft}
+          onRetryTermOptions={() => {
+            setTermOptions(null)
+            setTermOptionsError(false)
+            setTermOptionsAttempt((attempt) => attempt + 1)
+          }}
         />
 
         <ResultsList
@@ -92,7 +227,9 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
                 context={{
                   query: state.session.meta.nextRequest.query,
                   metadata: {
-                    resultCount: state.session.pagination?.totalResults ?? state.session.results.length,
+                    resultCount:
+                      state.session.pagination?.totalResults ??
+                      state.session.results.length,
                     hasMore: state.session.pagination?.hasMore === true,
                     typedQuery: state.draft.query.trim() || null,
                     effectiveQuery: derived.activeRequestQuery || null,
@@ -103,10 +240,11 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
           }
           onSortFieldChange={actions.handleSortFieldChange}
           onDirectionToggle={actions.toggleSortDirection}
-          onViewChange={actions.setResultViewMode}
+          onViewChange={handleViewChange}
           onTableSort={actions.handleTableSort}
           onRemoveChip={actions.removeChip}
           onLoadMore={actions.loadMoreResults}
+          returnTo={`${location.pathname}${location.search}`}
         />
       </div>
     </PageContainer>

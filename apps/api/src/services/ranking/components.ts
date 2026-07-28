@@ -13,8 +13,8 @@ import { scoreComponent } from "./score-utils.js";
 import {
   eligibilityComponent,
   nullDataPenaltyComponent,
-  workloadPreferenceComponents,
-} from "./workload-components.js";
+  accessibilityPreferenceComponents,
+} from "./accessibility-components.js";
 import { RANKING_POLICY } from "./ranking-policy.js";
 
 export function rankingComponentsForResult(
@@ -29,7 +29,7 @@ export function rankingComponentsForResult(
     exactnessComponent(result),
     qualityTierComponent(result.course),
     requirementComponent(result, plan),
-    ...workloadPreferenceComponents(result, plan),
+    ...accessibilityPreferenceComponents(result, plan),
     eligibilityComponent(result.course, plan),
     negativePreferenceComponent(result.course, plan),
     nullDataPenaltyComponent(result, plan),

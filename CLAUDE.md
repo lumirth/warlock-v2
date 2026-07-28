@@ -50,7 +50,7 @@ The canonical baseline migration in `apps/api/migrations/0001_initial_schema.sql
 - **Worker adapter** (`index.ts`): delegates scheduled events to `services/scheduled-workflows.ts`; keep cron workflow details out of the entrypoint.
 - **Scheduled workflow policy** (`services/scheduled-workflows.ts`): maps cron strings to named workflows and dispatches them via `waitUntil`.
 - **Auto-discovery** (`services/term-discovery.ts`): twice-daily cron (`0 10,22 * * *`) discovers terms and classifies them as `registrable`, `active`, or `historical`.
-- **Fan-out course sync** (`services/sync-coordinator.ts`, `services/parallel-sync.ts`, `routes/sync-course-routes.ts`): every 5 minutes (`*/5 * * * *`), active and registrable terms are split into subject batches and dispatched through the `SELF` service binding.
+- **Fan-out course sync** (`services/sync-coordinator.ts`, `services/parallel-sync.ts`, `routes/sync-course-routes.ts`): twice daily, active and registrable terms are split into subject batches and dispatched through the `SELF` service binding. Only an all-subject successful coordinator run publishes term freshness and reconciles subjects removed from the authoritative term manifest.
 - **Snapshot persistence** (`transforms/course.ts`, `services/snapshot-persistence-operations.ts`, `services/snapshot-persistence-sql.ts`, `services/course-snapshot-writer.ts`): CISAPI data flows through a canonical `CourseSnapshot`; operation planning is separate from prepared D1 execution.
 
 ### Search Pipeline
@@ -60,7 +60,7 @@ Search is intentionally split between interpretation, execution, and presentatio
 2. **Query planning** (`services/query-parser.ts`, `services/extractor.ts`, `services/query-resolver.ts`, `services/search-plan-compiler.ts`): parses power syntax, extracts hints, validates hints, resolves subject/GenEd ambiguity, and produces one immutable plan.
 3. **Retrieval planning** (`services/search-retrieval-plan.ts`): derives the executable lanes and candidate budgets from the immutable plan.
 4. **Retrieval execution** (`services/search-executor.ts`, `services/search-hybrid.ts`, `services/search-retrieval-lane-executors.ts`): runs exact, FTS, structured, and optional Vectorize recall before term ordering and applied controls.
-5. **Ranking policy** (`services/ranking/*`): named score components, requirement/workload/negative-preference policy, attribute sort behavior, nulls-last sort semantics, and term ordering.
+5. **Ranking policy** (`services/ranking/*`): named score components, requirement/avoidance/accessibility policy, attribute sort behavior, nulls-last sort semantics, and term ordering.
 6. **Response presentation** (`services/search-pipeline-result.ts`, `services/search-response-presenter.ts`, `services/search-result-presentation.ts`, `services/search-ui-plan.ts`): converts the private pipeline result into public DTOs, chips, explanations, and warnings.
 
 ### Course Detail Boundary
@@ -75,9 +75,18 @@ Search is intentionally split between interpretation, execution, and presentatio
 - `VECTORIZE` - Vector index
 - `AI` - Workers AI (`bge-small-en-v1.5`)
 - `SELF` - Service binding for fan-out sync dispatch
+- `SEARCH_RATE_LIMITER` - Public search request limit
+- `COURSE_RATE_LIMITER` - Public course-detail request limit
+- `FEEDBACK_RATE_LIMITER` - Lower-volume feedback write limit
+- `FEEDBACK_ALLOWED_ORIGINS` - Comma-separated exact frontend origins permitted to write feedback
 - `ADMIN_TOKEN` - Bearer token for `/admin/*`
 - `INTERNAL_TOKEN` - Bearer token for `/internal/*`
 - `RMP_AUTH_TOKEN` - RMP GraphQL authorization value when RMP sync is enabled
+
+### Public HTTP Surface
+
+- Reads: `GET /`, `GET /health`, `GET /api/search`, `GET /api/course/:subject/:number`, `GET /api/terms`
+- Anonymous write: `POST /api/feedback`, with a bounded JSON contract, dedicated rate limit, and configured-origin check
 
 ## Active Docs
 

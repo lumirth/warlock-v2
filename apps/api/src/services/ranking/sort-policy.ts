@@ -1,6 +1,6 @@
 import {
   getQualityTierRank,
-  getWorkloadTierRank,
+  getInstructorDifficultyTierRank,
   type SearchSort,
 } from "@uiuc-course-search/query-types";
 import type { SearchResult } from "../search-types.js";
@@ -17,8 +17,8 @@ export function sortValueForResult(
       return typeof course.avg_gpa === "number" ? course.avg_gpa : null;
     case "quality":
       return getQualityTierRank(course.quality_score);
-    case "workload":
-      return getWorkloadTierRank(course.difficulty_score);
+    case "instructor_difficulty":
+      return getInstructorDifficultyTierRank(course.difficulty_score);
     case "instructor_rating":
       return typeof course.primary_instructor_rmp === "number"
         ? course.primary_instructor_rmp

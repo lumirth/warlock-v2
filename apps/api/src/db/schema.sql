@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS app_meta (
 );
 
 INSERT OR REPLACE INTO app_meta (key, value, updated_at)
-VALUES ('schema_version', '0002_course_gened_key', unixepoch());
+VALUES ('schema_version', '0004_subject_sync_fencing', unixepoch());
 
 -- Core course table
 CREATE TABLE IF NOT EXISTS courses (
@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS courses (
     last_synced INTEGER,
     created_at INTEGER DEFAULT (unixepoch()),
     updated_at INTEGER DEFAULT (unixepoch()),
+    credit_hours_text TEXT,
 
     UNIQUE(subject, number, year, term)
 );
@@ -184,7 +185,9 @@ CREATE TABLE IF NOT EXISTS gpa_source_rows (
     instructor TEXT,
     avg_gpa REAL NOT NULL,
     sample_size INTEGER NOT NULL,
-    last_updated INTEGER
+    last_updated INTEGER,
+    source_year INTEGER,
+    source_term TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_gpa_source_rows_course_instructor
@@ -193,19 +196,22 @@ ON gpa_source_rows(subject, number, instructor);
 -- RMP cache
 CREATE TABLE IF NOT EXISTS rmp_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    instructor_name TEXT UNIQUE NOT NULL,
-
-    rmp_id TEXT UNIQUE,
+    instructor_name TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    rmp_id TEXT UNIQUE NOT NULL,
     rating REAL,
     difficulty REAL,
     would_take_again_pct REAL,
     num_ratings INTEGER,
     department TEXT,
-    top_tags TEXT,                    -- JSON array
+    top_tags TEXT,
 
     fetched_at INTEGER,
     expires_at INTEGER
 );
+CREATE INDEX IF NOT EXISTS idx_rmp_cache_instructor_name
+ON rmp_cache(instructor_name);
 
 CREATE TABLE IF NOT EXISTS instructor_course_links (
     term_id TEXT NOT NULL,
@@ -239,7 +245,24 @@ CREATE TABLE IF NOT EXISTS subject_sync_state (
     courses_synced INTEGER NOT NULL DEFAULT 0,
     sections_synced INTEGER NOT NULL DEFAULT 0,
     error TEXT,
+    owner_token TEXT,
     PRIMARY KEY (term_id, subject)
+);
+CREATE UNIQUE INDEX idx_subject_sync_state_owner
+ON subject_sync_state(term_id, subject, owner_token);
+
+-- A publication batch inserts and removes one of these rows in the same D1
+-- transaction. The foreign key makes a stale owner's batch fail before any
+-- snapshot rows can be changed.
+CREATE TABLE IF NOT EXISTS subject_sync_publication_fences (
+    term_id TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    owner_token TEXT NOT NULL,
+    PRIMARY KEY (term_id, subject, owner_token),
+    FOREIGN KEY (term_id, subject, owner_token)
+      REFERENCES subject_sync_state(term_id, subject, owner_token)
+      ON UPDATE CASCADE
+      ON DELETE CASCADE
 );
 
 -- Term state tracking

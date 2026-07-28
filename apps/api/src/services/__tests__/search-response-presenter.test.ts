@@ -64,11 +64,40 @@ describe("presentSearchResponse", () => {
     ]);
     expect(response.pagination).toEqual({
       totalResults: 42,
+      countIsComplete: true,
       browseableResults: 16,
       limit: 5,
       offset: 10,
       hasMore: true,
       nextOffset: 15,
+    });
+    expect(response.meta.retrieval).toEqual({ degraded: false });
+  });
+
+  it("discloses when an attribute sort only orders bounded semantic matches", () => {
+    const result = pipelineResult({
+      rawQuery: "machine learning",
+      sort: { field: "gpa", direction: "desc" },
+      results: [{
+        course: course(),
+        score: 1,
+        laneMatches: ["topic_semantic"],
+      }],
+    });
+    result.meta.retrievalExecution.successfulLanes = ["topic_semantic"];
+
+    const response = presentSearchResponse({
+      request: normalizeSearchRequestDto({
+        query: "machine learning",
+        sort: { field: "gpa", direction: "desc" },
+      }),
+      pagination: { limit: 20, offset: 0 },
+      result,
+    });
+
+    expect(response.meta.retrieval).toEqual({
+      degraded: false,
+      sortLimitedToRetrievedWindow: true,
     });
   });
 });
@@ -111,6 +140,7 @@ function pipelineResult(input: {
           semanticQuery: plan.semanticQuery,
           scope: "active",
           semanticTermIds: [],
+          sort,
         },
       },
       retrievalExecution: {
@@ -148,5 +178,9 @@ function course(overrides: Partial<Course> = {}): Course {
     created_at: 0,
     updated_at: 0,
     ...overrides,
+    credit_hours_text:
+      overrides.credit_hours_text === undefined
+        ? "4 hours."
+        : overrides.credit_hours_text,
   };
 }

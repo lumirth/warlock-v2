@@ -1,11 +1,11 @@
 import type {
   RequirementFilter,
+  SearchInstructorDifficultyFilter,
   SearchLevelFilter,
   SearchSort,
   SearchStatusFilter,
   SearchTermFilter,
   SearchTimeFilter,
-  SearchWorkloadFilter,
 } from "@uiuc-course-search/query-types";
 
 export interface SearchFilters {
@@ -24,7 +24,7 @@ export interface SearchFilters {
   credits?: number;
   online?: boolean;
   status?: SearchStatusFilter;
-  workload?: SearchWorkloadFilter;
+  instructorDifficulty?: SearchInstructorDifficultyFilter;
   not?: {
     time?: string[];
     days?: string[];
@@ -82,7 +82,6 @@ export type SearchSoftPreferences = {
   lowReading?: number;
   lowMath?: number;
   lowExams?: number;
-  lowWorkload?: number;
   fun?: number;
   nonMajorFriendly?: number;
   noListedPrereq?: boolean;
@@ -120,7 +119,6 @@ export type HintType =
   | "credits"
   | "online"
   | "status"
-  | "workload"
   | "requirement"
   | "term"
   | "partOfTerm"
@@ -138,7 +136,6 @@ export type HintValueByType = {
   credits: number;
   online: boolean;
   status: SearchStatusFilter;
-  workload: SearchWorkloadFilter;
   requirement: string;
   term: TermValue;
   partOfTerm: string;

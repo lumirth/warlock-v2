@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { singleRequirementFilter } from "@uiuc-course-search/query-types";
 import { parseSearchHttpRequest } from "../search-request.js";
+import { SEARCH_QUERY_MAX_LENGTH } from "@uiuc-course-search/query-types";
 
 describe("parseSearchHttpRequest", () => {
   it("normalizes public search params into a canonical request and pagination", () => {
@@ -19,7 +20,7 @@ describe("parseSearchHttpRequest", () => {
         part_of_term: "a",
         online: "yes",
         status: "open",
-        workload: "easy",
+        instructor_difficulty: "lower",
         level: "400",
         sort: "gpa",
         direction: "asc",
@@ -47,7 +48,7 @@ describe("parseSearchHttpRequest", () => {
             partOfTerm: "A",
             online: true,
             status: "open",
-            workload: "easy",
+            instructorDifficulty: "lower",
             level: 400,
           },
           sort: { field: "gpa", direction: "asc" },
@@ -71,7 +72,7 @@ describe("parseSearchHttpRequest", () => {
 
     expect(parsed).toEqual({
       ok: false,
-      error: "sort must be one of: relevance, gpa, quality, workload, instructor_rating, level, credits",
+      error: "sort must be one of: relevance, gpa, quality, instructor_difficulty, instructor_rating, level, credits",
     });
   });
 
@@ -79,6 +80,15 @@ describe("parseSearchHttpRequest", () => {
     expect(parseSearchHttpRequest(new URLSearchParams())).toEqual({
       ok: false,
       error: "Missing query parameter q",
+    });
+  });
+
+  it("rejects overlong query text at the HTTP boundary", () => {
+    expect(parseSearchHttpRequest(new URLSearchParams({
+      q: "x".repeat(SEARCH_QUERY_MAX_LENGTH + 1),
+    }))).toEqual({
+      ok: false,
+      error: `q must be ${SEARCH_QUERY_MAX_LENGTH} characters or fewer`,
     });
   });
 });

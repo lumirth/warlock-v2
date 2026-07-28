@@ -40,10 +40,10 @@ describe('FeedbackButton', () => {
     renderFeedbackButton()
 
     fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
-    fireEvent.change(screen.getByLabelText(/expected result/i), {
+    fireEvent.change(screen.getByLabelText(/what did you expect/i), {
       target: { value: 'courses taught by Wade Fagen-Ulmschneider' },
     })
-    fireEvent.change(screen.getByLabelText(/feedback note/i), {
+    fireEvent.change(screen.getByLabelText(/additional context/i), {
       target: { value: 'The professor name should be enough.' },
     })
     fireEvent.click(screen.getByRole('button', { name: /^send feedback$/i }))
@@ -68,7 +68,17 @@ describe('FeedbackButton', () => {
     expect(
       screen.getByRole('heading', { name: /what looked wrong/i })
     ).toBeInTheDocument()
-    expect(screen.getByLabelText(/expected result/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/what did you expect/i)).toHaveAttribute(
+      'maxLength',
+      '1000'
+    )
+    expect(screen.getByLabelText(/additional context/i)).toHaveAttribute(
+      'maxLength',
+      '2000'
+    )
+    expect(
+      screen.getByRole('button', { name: /^send feedback$/i })
+    ).toBeDisabled()
   })
 
   it('uses calm recovery copy when feedback submission fails', async () => {
@@ -79,6 +89,9 @@ describe('FeedbackButton', () => {
     renderFeedbackButton()
 
     fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
+    fireEvent.change(screen.getByLabelText(/additional context/i), {
+      target: { value: 'The result order appears wrong.' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /^send feedback$/i }))
 
     const alert = await screen.findByRole('alert')

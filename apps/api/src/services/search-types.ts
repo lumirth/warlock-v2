@@ -1,4 +1,7 @@
-import type { CourseRequirementDto } from "@uiuc-course-search/query-types";
+import type {
+  CourseRegistrationSummaryDto,
+  CourseRequirementDto,
+} from "@uiuc-course-search/query-types";
 import type { Course } from '../db/types.js';
 
 export type RetrievalLane =
@@ -17,7 +20,6 @@ type RankingScoreComponentName =
   | "requirement_match"
   | "introductory_gateway"
   | "level_accessibility"
-  | "workload_preference"
   | "eligibility"
   | "negative_preference_penalty"
   | "null_data_penalty"
@@ -39,6 +41,7 @@ export interface SearchResult {
   laneMatches?: RetrievalLane[];
   laneRanks?: Partial<Record<RetrievalLane, number>>;
   requirements?: CourseRequirementDto[];
+  registrationSummary?: CourseRegistrationSummaryDto;
   laneResults?: RetrievalLaneResult[];
   scoreComponents?: RankingScoreComponent[];
   termPriority?: number;

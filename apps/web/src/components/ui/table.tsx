@@ -4,10 +4,17 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+function Table({
+  className,
+  scrollAreaLabel = 'Scrollable table',
+  ...props
+}: React.ComponentProps<'table'> & { scrollAreaLabel?: string }) {
   return (
     <div
       data-slot="table-container"
+      role="region"
+      aria-label={scrollAreaLabel}
+      tabIndex={0}
       className="relative w-full overflow-x-auto"
     >
       <table
@@ -78,11 +85,4 @@ function TableCell({ className, ...props }: React.ComponentProps<'td'>) {
   )
 }
 
-export {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-}
+export { Table, TableHeader, TableBody, TableHead, TableRow, TableCell }

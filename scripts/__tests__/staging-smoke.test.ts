@@ -9,6 +9,7 @@ const ENV = {
   STAGING_API_BASE_URL: 'https://staging.example.test',
   STAGING_ADMIN_TOKEN: 'admin-token',
   STAGING_INTERNAL_TOKEN: 'internal-token',
+  STAGING_WEB_ORIGIN: 'https://staging-web.example.test',
   STAGING_SMOKE_SUBJECT: 'CS',
   STAGING_SMOKE_NUMBER: '225',
   STAGING_SMOKE_TERM: 'spring',
@@ -70,7 +71,7 @@ function makeFetcher(options: MockOptions = {}) {
     }
     if (url.pathname === '/api/feedback') {
       return request.method === 'POST'
-        ? json(202, { id: 'feedback-1', status: 'accepted', received_at: 1780380000 })
+        ? json(400, { error: 'kind is not supported' })
         : json(405, { error: 'Method not allowed' });
     }
     if (url.pathname === '/admin/upstream-backoff-status') {

@@ -3,8 +3,9 @@ import {
   canonicalRequirementCode,
   canonicalRequirementCodes,
 } from "@uiuc-course-search/query-types";
-import { WORKLOAD_FILTER_THRESHOLDS } from "./ranking/ranking-policy.js";
-import { rawSectionStatusesForSearchFilter } from "./section-availability-policy.js";
+import {
+  INSTRUCTOR_DIFFICULTY_FILTER_THRESHOLDS,
+} from "./ranking/ranking-policy.js";
 
 export const TIME_RANGES: Record<string, { start?: string; end?: string }> = {
   early: { end: "09:00" },
@@ -209,26 +210,28 @@ export function buildFilterClauses(
 
   if (filters.status) {
     joinKeys.add("sections");
-    const statuses = rawSectionStatusesForSearchFilter(filters.status);
-    const placeholders = statuses.map(() => "?").join(",");
-    where.push(`s.status IN (${placeholders})`);
-    params.push(...statuses);
+    const effectiveStatus = sectionAvailabilityStatusSql();
+
+    if (filters.status === "open") {
+      where.push(`${effectiveStatus} = 'open'`);
+    } else if (filters.status === "available") {
+      where.push(`${effectiveStatus} IN ('open', 'restricted')`);
+    } else {
+      where.push(`${effectiveStatus} = 'closed'`);
+    }
   }
 
-  if (filters.workload) {
-    const thresholds = WORKLOAD_FILTER_THRESHOLDS[filters.workload];
+  if (filters.instructorDifficulty) {
+    const thresholds =
+      INSTRUCTOR_DIFFICULTY_FILTER_THRESHOLDS[filters.instructorDifficulty];
 
     if ("minScoreExclusive" in thresholds) {
-      where.push(
-        "(c.difficulty_score > ? OR (c.difficulty_score IS NULL AND c.avg_gpa <= ?))",
-      );
-      params.push(thresholds.minScoreExclusive, thresholds.fallbackMaxGpa);
+      where.push("c.difficulty_score > ?");
+      params.push(thresholds.minScoreExclusive);
     }
     if ("maxScoreInclusive" in thresholds) {
-      where.push(
-        "(c.difficulty_score <= ? OR (c.difficulty_score IS NULL AND c.avg_gpa >= ?))",
-      );
-      params.push(thresholds.maxScoreInclusive, thresholds.fallbackMinGpa);
+      where.push("c.difficulty_score <= ?");
+      params.push(thresholds.maxScoreInclusive);
     }
   }
 
@@ -388,4 +391,25 @@ function onlineEvidenceSql(): string {
 
 function physicalLocationEvidenceSql(): string {
   return "NULLIF(TRIM(COALESCE(NULLIF(m.building_name, ''), s.location, '')), '') IS NOT NULL";
+}
+
+function sectionAvailabilityStatusSql(): string {
+  return `COALESCE(
+    NULLIF(${normalizedAvailabilityStatusSql("s.status")}, 'unknown'),
+    NULLIF(${normalizedAvailabilityStatusSql("s.section_status_code")}, 'unknown'),
+    NULLIF(${normalizedAvailabilityStatusSql("s.status_code")}, 'unknown'),
+    'unknown'
+  )`;
+}
+
+function normalizedAvailabilityStatusSql(column: string): string {
+  const normalized = `lower(trim(COALESCE(${column}, '')))`;
+  return `CASE
+    WHEN ${normalized} LIKE '%cancel%' THEN 'cancelled'
+    WHEN ${normalized} LIKE '%wait%' THEN 'waitlisted'
+    WHEN ${normalized} LIKE '%restrict%' THEN 'restricted'
+    WHEN ${normalized} LIKE '%closed%' OR ${normalized} = 'c' THEN 'closed'
+    WHEN ${normalized} LIKE '%open%' OR ${normalized} = 'a' THEN 'open'
+    ELSE 'unknown'
+  END`;
 }

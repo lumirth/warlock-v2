@@ -54,13 +54,6 @@ export function extractContextualRequirements(text: string, hints: Hint[]): stri
         value: rule.code,
         metadata: createMetadata('nlp', match[0], rule.confidence),
       });
-      if (rule.code === 'NAT' && /\b(?:easy|chill)\b/i.test(match[0])) {
-        hints.push({
-          type: 'workload',
-          value: 'easy',
-          metadata: createMetadata('nlp', match[0], 0.82),
-        });
-      }
       matches.push({ index: match.index, length: match[0].length });
     }
 

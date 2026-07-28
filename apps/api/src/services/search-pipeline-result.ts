@@ -3,6 +3,7 @@ import type { SearchCompilerEvent } from "./search-plan-compiler.js";
 import type { RetrievalPlan } from "./search-retrieval-plan.js";
 import type { SearchResult } from "./search-types.js";
 import type { RetrievalExecutionSummary } from "./search-retrieval-lane-executors.js";
+import type { SearchCandidateWindow } from "./search-hybrid.js";
 
 export interface SearchPipelineResult {
   results: SearchResult[];
@@ -19,5 +20,6 @@ export interface SearchPipelineResult {
     plan: SearchPlan;
     retrievalPlan: RetrievalPlan;
     retrievalExecution: RetrievalExecutionSummary;
+    candidateWindow?: SearchCandidateWindow;
   };
 }

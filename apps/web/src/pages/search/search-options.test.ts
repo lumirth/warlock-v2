@@ -5,15 +5,16 @@ import {
   SEARCH_STATUS_VALUES,
   SEARCH_TERM_VALUES,
   SEARCH_TIME_VALUES,
-  SEARCH_WORKLOAD_VALUES,
+  SEARCH_INSTRUCTOR_DIFFICULTY_VALUES,
 } from '@uiuc-course-search/query-types'
 import {
+  CREDIT_OPTIONS,
   LEVEL_OPTIONS,
   SORT_FIELD_OPTIONS,
   STATUS_OPTIONS,
   TERM_OPTIONS,
   TIME_OPTIONS,
-  WORKLOAD_OPTIONS,
+  INSTRUCTOR_DIFFICULTY_OPTIONS,
 } from './search-options'
 
 describe('search option values', () => {
@@ -27,8 +28,10 @@ describe('search option values', () => {
     expect(STATUS_OPTIONS.map((option) => option.value)).toEqual([
       ...SEARCH_STATUS_VALUES,
     ])
-    expect(WORKLOAD_OPTIONS.map((option) => option.value)).toEqual([
-      ...SEARCH_WORKLOAD_VALUES,
+    expect(
+      INSTRUCTOR_DIFFICULTY_OPTIONS.map((option) => option.value)
+    ).toEqual([
+      ...SEARCH_INSTRUCTOR_DIFFICULTY_VALUES,
     ])
     expect(LEVEL_OPTIONS.map((option) => Number(option.value))).toEqual([
       ...SEARCH_LEVEL_VALUES,
@@ -36,5 +39,7 @@ describe('search option values', () => {
     expect(SORT_FIELD_OPTIONS.map((option) => option.value)).toEqual([
       ...SEARCH_SORT_FIELDS,
     ])
+    expect(CREDIT_OPTIONS[1].label).toBe('Exactly 1 credit')
+    expect(CREDIT_OPTIONS[3].label).toBe('Exactly 3 credits')
   })
 })
