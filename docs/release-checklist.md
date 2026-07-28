@@ -62,8 +62,10 @@ pages. A separate finalizer refetches the authoritative manifest, matches its
 SHA-256 to the exact paged subject set, rejects stale checkpoints or implausible
 destructive shrinkage, and only then records term freshness. The release then
 imports the complete GPA dataset and rebuilds GPA aggregates, the RMP cache,
-instructor links, and public scores. The GPA import is capped at 1,024 chunk requests and
-fails on an unsuccessful, invalid, or non-progressing response; GPA aggregation
+instructor links, and public scores. The GPA import is capped at 1,024 chunk
+requests, with bounded backoff for transient D1 transport failures and
+mutation-lease contention. It fails on any other unsuccessful, invalid, or
+non-progressing response; GPA aggregation
 does not begin until the importer reports completion with a durable completion
 key. If any migration, deploy, rebuild, or status check fails, stop and use the
 recorded Time Travel bookmark; do not publish the web build against a partially

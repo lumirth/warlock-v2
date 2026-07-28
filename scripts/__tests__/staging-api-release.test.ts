@@ -10,6 +10,7 @@ import {
   rebuildRegenerableData,
   releaseCommands,
   releaseTargetFromArgv,
+  requestGpaChunkWithRetry,
   stagingReleaseConfig,
   syncGpaUntilComplete,
   syncReleaseTermsInPages,
@@ -415,6 +416,60 @@ describe('release paged term sync', () => {
 });
 
 describe('release GPA import', () => {
+  it('retries transient D1 failures and GPA lease contention', async () => {
+    const request = vi.fn()
+      .mockRejectedValueOnce(new Error(
+        'POST /admin/sync-gpa failed with 500: '
+        + '{"error":"D1_ERROR: Network connection lost."}',
+      ))
+      .mockResolvedValueOnce({
+        success: false,
+        rowsProcessed: 0,
+        message: 'GPA sync mutation lease is busy',
+        isComplete: false,
+        completionKey: null,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        rowsProcessed: 10,
+        message: 'Processed 10 rows',
+        isComplete: false,
+        completionKey: null,
+      });
+    const sleep = vi.fn(async () => {});
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(requestGpaChunkWithRetry(
+        request,
+        sleep,
+      )).resolves.toMatchObject({
+        success: true,
+        rowsProcessed: 10,
+      });
+    } finally {
+      consoleWarn.mockRestore();
+    }
+
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 1_000);
+    expect(sleep).toHaveBeenNthCalledWith(2, 2_000);
+  });
+
+  it('does not retry a non-transient GPA failure', async () => {
+    const request = vi.fn().mockRejectedValue(
+      new Error('POST /admin/sync-gpa failed with 400: bad request'),
+    );
+    const sleep = vi.fn(async () => {});
+
+    await expect(requestGpaChunkWithRetry(
+      request,
+      sleep,
+    )).rejects.toThrow(/400: bad request/);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it('imports every GPA chunk before aggregating and publishing scores', async () => {
     let gpaCalls = 0;
     const request = vi.fn(async (_config: unknown, path: string) => {

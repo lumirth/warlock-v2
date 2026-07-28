@@ -11,6 +11,8 @@ import { runCli } from './lib/run-cli.ts';
 
 const ADMIN_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
 const MAX_GPA_SYNC_CALLS = 1024;
+const MAX_GPA_TRANSIENT_ATTEMPTS = 8;
+const GPA_RETRY_MAX_DELAY_MS = 8_000;
 const RELEASE_TERM_SYNC_PAGE_LIMIT = 5;
 const MAX_RELEASE_TERM_SYNC_PAGES = 2_000;
 const VALID_SEARCH_TERMS = new Set<string>(SEARCH_TERM_VALUES);
@@ -446,6 +448,47 @@ export async function syncGpaUntilComplete(
   throw new Error(
     `GPA import did not complete within ${maxCalls} chunk requests.`,
   );
+}
+
+export async function requestGpaChunkWithRetry(
+  requestChunk: () => Promise<Record<string, unknown>>,
+  sleep: (delayMs: number) => Promise<void> = delay,
+  maxAttempts = MAX_GPA_TRANSIENT_ATTEMPTS,
+): Promise<Record<string, unknown>> {
+  if (!Number.isSafeInteger(maxAttempts) || maxAttempts <= 0) {
+    throw new Error('GPA retry attempt limit must be a positive integer.');
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const payload = await requestChunk();
+      if (!isGpaMutationLeaseBusy(payload)) return payload;
+      if (attempt === maxAttempts) {
+        throw new Error(
+          `GPA sync mutation lease remained busy for ${maxAttempts} attempts.`,
+        );
+      }
+    } catch (error) {
+      if (
+        attempt === maxAttempts
+        || !isRetryableGpaRequestError(error)
+      ) {
+        throw error;
+      }
+    }
+
+    const retryDelayMs = Math.min(
+      2 ** (attempt - 1) * 1_000,
+      GPA_RETRY_MAX_DELAY_MS,
+    );
+    console.warn(
+      `GPA chunk request was temporarily unavailable; retrying in `
+      + `${retryDelayMs}ms (attempt ${attempt + 1}/${maxAttempts}).`,
+    );
+    await sleep(retryDelayMs);
+  }
+
+  throw new Error('GPA retry loop ended without a result.');
 }
 
 export function assertTermDiscoveryResult(
@@ -886,10 +929,12 @@ export async function rebuildRegenerableData(
   const syncedTermIds = finalizedTerms.map(term => term.termId);
 
   console.log('\n==> import complete GPA dataset');
-  const gpaImport = await syncGpaUntilComplete(() => request(
-    config,
-    '/admin/sync-gpa',
-    { method: 'POST', admin: true },
+  const gpaImport = await syncGpaUntilComplete(() => (
+    requestGpaChunkWithRetry(() => request(
+      config,
+      '/admin/sync-gpa',
+      { method: 'POST', admin: true },
+    ))
   ));
   console.log(
     `Imported ${gpaImport.rowsProcessed} GPA rows across `
@@ -942,6 +987,32 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
 
 function isNonNegativeFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isGpaMutationLeaseBusy(
+  payload: Record<string, unknown>,
+): boolean {
+  return (
+    payload.success === false
+    && payload.rowsProcessed === 0
+    && payload.isComplete === false
+    && payload.completionKey === null
+    && payload.message === 'GPA sync mutation lease is busy'
+  );
+}
+
+function isRetryableGpaRequestError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    /\b(?:429|502|503|504)\b/.test(error.message)
+    || /\bD1_ERROR:\s*Network connection lost\b/i.test(error.message)
+    || /\bfetch failed\b/i.test(error.message)
+    || /\b(?:request|operation)\s+(?:timed out|timeout)\b/i.test(error.message)
+  );
+}
+
+function delay(delayMs: number): Promise<void> {
+  return new Promise(resolvePromise => setTimeout(resolvePromise, delayMs));
 }
 
 async function main(): Promise<void> {
