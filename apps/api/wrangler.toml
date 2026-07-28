@@ -9,7 +9,6 @@ CURRENT_TERM = "fall"
 
 # API endpoints
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
-FRONTEND_BASE = "https://courses.illinois.edu"
 FEEDBACK_ALLOWED_ORIGINS = "https://uiuc-course-search-web.pages.dev"
 
 # Sync settings
@@ -94,7 +93,6 @@ crons = []
 CURRENT_YEAR = "2026"
 CURRENT_TERM = "fall"
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
-FRONTEND_BASE = "https://courses.illinois.edu"
 FEEDBACK_ALLOWED_ORIGINS = "https://staging.uiuc-course-search-web.pages.dev"
 SYNC_CONCURRENCY = "25"
 SYNC_EMBEDDINGS = "true"

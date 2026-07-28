@@ -44,7 +44,6 @@ function env() {
     CURRENT_YEAR: '2026',
     CURRENT_TERM: 'fall',
     CISAPI_BASE: 'https://example.invalid',
-    FRONTEND_BASE: 'https://example.invalid',
     SYNC_CONCURRENCY: '1',
     INTERNAL_TOKEN: 'internal-token',
     RMP_AUTH_TOKEN: 'Basic public-token',

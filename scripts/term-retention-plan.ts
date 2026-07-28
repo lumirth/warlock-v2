@@ -20,7 +20,7 @@ import {
   type TermMaintenanceFetcher,
 } from './lib/term-maintenance.ts';
 
-const DEFAULT_FRONTEND_BASE = 'https://courses.illinois.edu';
+const DEFAULT_CISAPI_BASE = 'https://courses.illinois.edu/cisapp/explorer';
 const DEFAULT_FROM_YEAR = 2004;
 const DEFAULT_TARGET_SIZE_MB = 250;
 const BYTES_PER_MEGABYTE = 1024 * 1024;
@@ -39,7 +39,7 @@ const ROW_BYTE_ESTIMATE = {
 export type TermRetentionArgs = {
   fromYear: number;
   toYear: number;
-  frontendBase: string;
+  cisapiBase: string;
   statusInput?: string;
   output?: string;
   sqlOutput?: string;
@@ -66,7 +66,7 @@ export type TermRetentionRow = AvailableTerm & {
 
 export type TermRetentionReport = {
   generated_at: string;
-  frontend_base: string;
+  cisapi_base: string;
   from_year: number;
   to_year: number;
   current_year: number;
@@ -245,7 +245,7 @@ export function parseTermRetentionArgs(argv: string[]): TermRetentionArgs {
   const args: TermRetentionArgs = {
     fromYear: DEFAULT_FROM_YEAR,
     toYear: currentYear + 1,
-    frontendBase: DEFAULT_FRONTEND_BASE,
+    cisapiBase: DEFAULT_CISAPI_BASE,
     targetSizeMb: DEFAULT_TARGET_SIZE_MB,
   };
 
@@ -259,8 +259,8 @@ export function parseTermRetentionArgs(argv: string[]): TermRetentionArgs {
     } else if (arg === '--to-year' && next) {
       args.toYear = parseNonNegativeInt(next, '--to-year');
       index += 1;
-    } else if (arg === '--frontend-base' && next) {
-      args.frontendBase = next;
+    } else if (arg === '--cisapi-base' && next) {
+      args.cisapiBase = next;
       index += 1;
     } else if (arg === '--status-input' && next) {
       args.statusInput = next;
@@ -385,7 +385,7 @@ export async function buildTermRetentionReport(
 
   return {
     generated_at: new Date().toISOString(),
-    frontend_base: args.frontendBase,
+    cisapi_base: args.cisapiBase,
     from_year: args.fromYear,
     to_year: args.toYear,
     current_year: currentYear,
@@ -420,7 +420,7 @@ export function formatTermRetentionReport(report: TermRetentionReport): string {
     '# Term Retention Plan',
     '',
     `Generated at: ${report.generated_at}`,
-    `Frontend base: ${report.frontend_base}`,
+    `CIS API base: ${report.cisapi_base}`,
     `Year range: ${report.from_year}-${report.to_year}`,
     `Current term reference: ${report.current_year} ${report.current_term}`,
     `Status source: ${report.status_source ?? 'not provided'}`,

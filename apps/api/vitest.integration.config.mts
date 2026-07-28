@@ -34,7 +34,6 @@ export default defineConfig(async () => {
             CURRENT_YEAR: "2026",
             CURRENT_TERM: "spring",
             CISAPI_BASE: "https://courses.illinois.edu/cisapp/explorer/catalog",
-            FRONTEND_BASE: "http://localhost:5173",
             FEEDBACK_ALLOWED_ORIGINS: "http://local.test",
             SYNC_CONCURRENCY: "1",
             BACKOFF_BASE_MS: "1000",

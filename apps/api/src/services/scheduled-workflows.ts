@@ -23,7 +23,6 @@ type ScheduledWorkflowEnv = {
   VECTORIZE?: VectorizeIndex;
   GPA_CACHE: KVNamespace;
   CISAPI_BASE: string;
-  FRONTEND_BASE: string;
   SYNC_CONCURRENCY: string;
   SYNC_EMBEDDINGS?: string;
   INTERNAL_TOKEN?: string;
@@ -122,7 +121,6 @@ async function handleTermDiscovery(env: ScheduledWorkflowEnv, runId: string, cro
   logger.info('cron.termDiscovery.start', { runId, cron });
   try {
     const classifications = await discoverAndClassifyTerms(env.DB, {
-      frontendBase: env.FRONTEND_BASE,
       cisapiBase: env.CISAPI_BASE,
     });
     const active = classifications.filter(c => c.status === 'active');

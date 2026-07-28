@@ -6,19 +6,15 @@ import {
   type TermCoverageArgs,
 } from '../term-coverage-plan.ts';
 import { discoverAvailableTerms } from '../lib/term-maintenance.ts';
+import { termListResponse } from './term-list-fixture.ts';
 
-function response(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
+const CISAPI_BASE = 'https://courses.example.test/cisapp/explorer';
 
 function args(overrides: Partial<TermCoverageArgs> = {}): TermCoverageArgs {
   return {
     fromYear: 2025,
     toYear: 2026,
-    frontendBase: 'https://courses.example.test',
+    cisapiBase: CISAPI_BASE,
     currentYear: 2026,
     currentTerm: 'spring',
     ...overrides,
@@ -30,7 +26,7 @@ describe('term coverage plan', () => {
     expect(parseTermCoverageArgs([
       '--from-year', '2020',
       '--to-year', '2027',
-      '--frontend-base', 'https://courses.example.test',
+      '--cisapi-base', CISAPI_BASE,
       '--status-input', 'artifacts/sync-status.json',
       '--retention-input', 'artifacts/term-retention-plan.json',
       '--output', 'artifacts/term-coverage.json',
@@ -39,7 +35,7 @@ describe('term coverage plan', () => {
     ])).toMatchObject({
       fromYear: 2020,
       toYear: 2027,
-      frontendBase: 'https://courses.example.test',
+      cisapiBase: CISAPI_BASE,
       statusInput: 'artifacts/sync-status.json',
       retentionInput: 'artifacts/term-retention-plan.json',
       output: 'artifacts/term-coverage.json',
@@ -50,8 +46,8 @@ describe('term coverage plan', () => {
 
   it('discovers available terms across years in chronological order', async () => {
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(response({ Fall: 'fall', Spring: 'spring' }))
-      .mockResolvedValueOnce(response({ Summer: 'summer' }));
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2025, ['fall', 'spring']))
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2026, ['summer']));
 
     const discovered = await discoverAvailableTerms(args(), fetcher);
 
@@ -66,8 +62,8 @@ describe('term coverage plan', () => {
 
   it('records warnings instead of stopping the whole plan when a year fails', async () => {
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(response({ Fall: 'fall' }))
-      .mockResolvedValueOnce(response({ error: 'not found' }, 404));
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2025, ['fall']))
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2026, [], 404));
 
     const discovered = await discoverAvailableTerms(args(), fetcher);
 
@@ -77,8 +73,8 @@ describe('term coverage plan', () => {
 
   it('builds missing, stale, and count-gap backfill commands from sync status', async () => {
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(response({ Fall: 'fall' }))
-      .mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }));
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2025, ['fall']))
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2026, ['spring', 'fall']));
     const status = {
       termStates: [
         {
@@ -137,7 +133,9 @@ describe('term coverage plan', () => {
   });
 
   it('uses sync-status freshness currentTermId instead of wall-clock term inference', async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }));
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      termListResponse(CISAPI_BASE, 2026, ['spring', 'fall']),
+    );
 
     const report = await buildTermCoverageReport(args({
       fromYear: 2026,
@@ -166,7 +164,9 @@ describe('term coverage plan', () => {
   });
 
   it('keeps partially synced terms in the backfill plan', async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring' }));
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      termListResponse(CISAPI_BASE, 2026, ['spring']),
+    );
     const status = {
       subjectSyncStates: [
         { term_id: '2026-spring', subject: 'CS', status: 'complete' },
@@ -201,7 +201,9 @@ describe('term coverage plan', () => {
   });
 
   it('keeps terms with impossible subject counts in the backfill plan', async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring' }));
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      termListResponse(CISAPI_BASE, 2026, ['spring']),
+    );
     const status = {
       subjectSyncStates: [
         { term_id: '2026-spring', subject: 'CS', status: 'complete' },
@@ -238,8 +240,8 @@ describe('term coverage plan', () => {
 
   it('scopes coverage and backfill commands to retained terms when a retention plan is provided', async () => {
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(response({ Fall: 'fall' }))
-      .mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }));
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2025, ['fall']))
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2026, ['spring', 'fall']));
     const status = {
       termStates: [
         {
@@ -281,7 +283,9 @@ describe('term coverage plan', () => {
   });
 
   it('builds the freshness gate command from the actual status and retention sources', async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce(response({ Spring: 'spring' }));
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      termListResponse(CISAPI_BASE, 2026, ['spring']),
+    );
 
     const report = await buildTermCoverageReport(args({
       fromYear: 2026,
@@ -303,7 +307,9 @@ describe('term coverage plan', () => {
   });
 
   it('formats a readable markdown coverage report', async () => {
-    const fetcher = vi.fn().mockResolvedValue(response({ Fall: 'fall' }));
+    const fetcher = vi.fn().mockResolvedValue(
+      termListResponse(CISAPI_BASE, 2025, ['fall']),
+    );
     const report = await buildTermCoverageReport(args({ fromYear: 2025, toYear: 2025 }), {
       fetcher,
       status: null,

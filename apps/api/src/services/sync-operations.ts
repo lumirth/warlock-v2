@@ -11,7 +11,6 @@ export type SyncRouteBindings = {
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
   CISAPI_BASE: string;
-  FRONTEND_BASE: string;
 
   SYNC_CONCURRENCY: string;
   SYNC_EMBEDDINGS?: string;

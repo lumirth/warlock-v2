@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
+import { parseTermListXml } from '@uiuc-course-search/course-explorer-contract';
 import { searchTermRank } from '@uiuc-course-search/query-types';
 import { asRecord, type JsonRecord } from './json-shape.ts';
 import {
-  normalizeTerm,
   termId,
   type Term,
 } from './term-model.ts';
@@ -17,30 +17,39 @@ export type AvailableTerm = {
 };
 
 export async function discoverAvailableTerms(
-  args: { fromYear: number; toYear: number; frontendBase: string },
+  args: { fromYear: number; toYear: number; cisapiBase: string },
   fetcher: TermMaintenanceFetcher = request => fetch(request),
 ): Promise<{ terms: AvailableTerm[]; warnings: string[] }> {
   const terms: AvailableTerm[] = [];
   const warnings: string[] = [];
 
   for (let year = args.fromYear; year <= args.toYear; year += 1) {
-    const url = endpoint(args.frontendBase, `ajax/search/termlist/${year}`);
+    const url = endpoint(args.cisapiBase, `schedule/${year}.xml`);
     const response = await fetcher(new Request(url));
     if (!response.ok) {
       warnings.push(`term list ${year} failed with HTTP ${response.status}`);
       continue;
     }
 
-    const body = await response.json().catch(() => null) as unknown;
-    const record = asRecord(body);
-    if (!record) {
-      warnings.push(`term list ${year} returned a non-object response`);
+    const xml = await response.text();
+    let parsed;
+    try {
+      parsed = parseTermListXml(xml, {
+        requestedYear: year,
+        cisapiBase: args.cisapiBase,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnings.push(`term list ${year} was rejected: ${message}`);
       continue;
     }
 
-    for (const value of Object.values(record)) {
-      const term = normalizeTerm(value);
-      if (term) terms.push({ year, term, term_id: termId(year, term) });
+    for (const item of parsed) {
+      terms.push({
+        year: item.year,
+        term: item.term,
+        term_id: termId(item.year, item.term),
+      });
     }
   }
 

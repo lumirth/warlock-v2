@@ -68,7 +68,6 @@ function env() {
     CURRENT_YEAR: '2026',
     CURRENT_TERM: 'fall',
     CISAPI_BASE: 'https://example.invalid',
-    FRONTEND_BASE: 'https://example.invalid',
     FEEDBACK_ALLOWED_ORIGINS: 'https://web.example.invalid',
     SYNC_CONCURRENCY: '1',
     BACKOFF_BASE_MS: '100',

@@ -7,19 +7,15 @@ import {
   type TermRetentionArgs,
   type TermRetentionRow,
 } from '../term-retention-plan.ts';
+import { termListResponse } from './term-list-fixture.ts';
 
-function response(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
+const CISAPI_BASE = 'https://courses.example.test/cisapp/explorer';
 
 function args(overrides: Partial<TermRetentionArgs> = {}): TermRetentionArgs {
   return {
     fromYear: 2024,
     toYear: 2026,
-    frontendBase: 'https://courses.example.test',
+    cisapiBase: CISAPI_BASE,
     currentYear: 2026,
     currentTerm: 'spring',
     targetSizeMb: 250,
@@ -53,7 +49,7 @@ describe('term retention plan', () => {
     expect(parseTermRetentionArgs([
       '--from-year', '2020',
       '--to-year', '2027',
-      '--frontend-base', 'https://courses.example.test',
+      '--cisapi-base', CISAPI_BASE,
       '--status-input', 'artifacts/sync-status.json',
       '--output', 'artifacts/term-retention-plan.json',
       '--sql-output', 'artifacts/term-retention-prune.sql',
@@ -64,7 +60,7 @@ describe('term retention plan', () => {
     ])).toMatchObject({
       fromYear: 2020,
       toYear: 2027,
-      frontendBase: 'https://courses.example.test',
+      cisapiBase: CISAPI_BASE,
       statusInput: 'artifacts/sync-status.json',
       output: 'artifacts/term-retention-plan.json',
       sqlOutput: 'artifacts/term-retention-prune.sql',
@@ -77,9 +73,9 @@ describe('term retention plan', () => {
 
   it('pins registrable and active terms while dropping old terms outside the rolling window', async () => {
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(response({ Fall: 'fall', Spring: 'spring' }))
-      .mockResolvedValueOnce(response({ Fall: 'fall', Spring: 'spring', Summer: 'summer', Winter: 'winter' }))
-      .mockResolvedValueOnce(response({ Fall: 'fall', Spring: 'spring', Summer: 'summer', Winter: 'winter' }));
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2024, ['fall', 'spring']))
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2025, ['fall', 'spring', 'summer', 'winter']))
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2026, ['fall', 'spring', 'summer', 'winter']));
     const status = {
       termStates: [
         termState('2026-fall', 'registrable'),
@@ -120,12 +116,9 @@ describe('term retention plan', () => {
   });
 
   it('prioritizes fall and spring over winter and summer inside the same year', async () => {
-    const fetcher = vi.fn().mockResolvedValue(response({
-      Winter: 'winter',
-      Spring: 'spring',
-      Summer: 'summer',
-      Fall: 'fall',
-    }));
+    const fetcher = vi.fn().mockResolvedValue(
+      termListResponse(CISAPI_BASE, 2025, ['winter', 'spring', 'summer', 'fall']),
+    );
 
     const report = await buildTermRetentionReport(args({
       fromYear: 2025,
@@ -148,10 +141,9 @@ describe('term retention plan', () => {
   });
 
   it('uses sync-status freshness currentTermId instead of wall-clock term inference', async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce(response({
-      Spring: 'spring',
-      Fall: 'fall',
-    }));
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      termListResponse(CISAPI_BASE, 2026, ['spring', 'fall']),
+    );
 
     const report = await buildTermRetentionReport(args({
       fromYear: 2026,
@@ -184,8 +176,8 @@ describe('term retention plan', () => {
 
   it('does not let older fall and spring terms outrank newer winter and summer terms', async () => {
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }))
-      .mockResolvedValueOnce(response({ Winter: 'winter', Summer: 'summer' }));
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2026, ['spring', 'fall']))
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2027, ['winter', 'summer']));
 
     const report = await buildTermRetentionReport(args({
       fromYear: 2026,
@@ -211,8 +203,8 @@ describe('term retention plan', () => {
 
   it('does not fill leftover budget with older tiny terms after a newer candidate stops fitting', async () => {
     const fetcher = vi.fn()
-      .mockResolvedValueOnce(response({ Fall: 'fall' }))
-      .mockResolvedValueOnce(response({ Spring: 'spring', Fall: 'fall' }));
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2025, ['fall']))
+      .mockResolvedValueOnce(termListResponse(CISAPI_BASE, 2026, ['spring', 'fall']));
 
     const report = await buildTermRetentionReport(args({
       fromYear: 2025,
@@ -236,11 +228,9 @@ describe('term retention plan', () => {
   });
 
   it('orders pinned registrable terms before retained historical terms in output artifacts', async () => {
-    const fetcher = vi.fn().mockResolvedValue(response({
-      Spring: 'spring',
-      Summer: 'summer',
-      Fall: 'fall',
-    }));
+    const fetcher = vi.fn().mockResolvedValue(
+      termListResponse(CISAPI_BASE, 2026, ['spring', 'summer', 'fall']),
+    );
 
     const report = await buildTermRetentionReport(args({
       fromYear: 2026,
@@ -310,7 +300,9 @@ describe('term retention plan', () => {
   });
 
   it('formats a readable markdown report', async () => {
-    const fetcher = vi.fn().mockResolvedValue(response({ Fall: 'fall' }));
+    const fetcher = vi.fn().mockResolvedValue(
+      termListResponse(CISAPI_BASE, 2025, ['fall']),
+    );
     const report = await buildTermRetentionReport(args({ fromYear: 2025, toYear: 2025 }), {
       fetcher,
       status: { termStates: [termState('2025-fall')] },

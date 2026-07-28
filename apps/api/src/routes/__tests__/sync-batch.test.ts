@@ -56,7 +56,6 @@ function createEnv(existingTerm: TermState | null, runCalls: RunCall[] = []) {
     CURRENT_YEAR: '2026',
     CURRENT_TERM: 'fall',
     CISAPI_BASE: 'https://example.invalid',
-    FRONTEND_BASE: 'https://example.invalid',
     SYNC_CONCURRENCY: '1',
   };
 }

@@ -33,7 +33,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_FRONTEND_BASE = 'https://courses.illinois.edu';
+const DEFAULT_CISAPI_BASE = 'https://courses.illinois.edu/cisapp/explorer';
 const DEFAULT_FROM_YEAR = 2004;
 const DEFAULT_TARGET_SIZE_MB = 250;
 const DEFAULT_FEEDBACK_DATABASE = 'course-search-db-staging';
@@ -50,7 +50,7 @@ export type SemesterMaintenanceArgs = {
   adminToken?: string;
   fromYear: number;
   toYear: number;
-  frontendBase: string;
+  cisapiBase: string;
   targetSizeMb: number;
   maxRetainedTerms?: number;
   noFeedback: boolean;
@@ -121,7 +121,7 @@ function usage(): string {
     'Options:',
     '  --from-year <year>              Discovery horizon start. Default: 2004',
     '  --to-year <year>                Discovery horizon end. Default: current year + 1',
-    '  --frontend-base <url>           Course Explorer base URL.',
+    '  --cisapi-base <url>             Course Explorer CIS API base URL.',
     '  --target-size-mb <mb>           Rolling full-detail D1 target. Default: 250',
     '  --max-retained-terms <n>        Optional retained-term cap for what-if plans.',
     '  --no-feedback                  Skip read-only feedback D1 export.',
@@ -137,7 +137,7 @@ export function parseSemesterMaintenanceArgs(argv: string[]): SemesterMaintenanc
   const args: SemesterMaintenanceArgs = {
     fromYear: DEFAULT_FROM_YEAR,
     toYear: currentYear + 1,
-    frontendBase: DEFAULT_FRONTEND_BASE,
+    cisapiBase: DEFAULT_CISAPI_BASE,
     targetSizeMb: DEFAULT_TARGET_SIZE_MB,
     noFeedback: false,
     feedbackDatabase: DEFAULT_FEEDBACK_DATABASE,
@@ -168,8 +168,8 @@ export function parseSemesterMaintenanceArgs(argv: string[]): SemesterMaintenanc
     } else if (arg === '--to-year' && next) {
       args.toYear = parseNonNegativeInt(next, '--to-year');
       index += 1;
-    } else if (arg === '--frontend-base' && next) {
-      args.frontendBase = next;
+    } else if (arg === '--cisapi-base' && next) {
+      args.cisapiBase = next;
       index += 1;
     } else if (arg === '--target-size-mb' && next) {
       args.targetSizeMb = parseNonNegativeFloat(next, '--target-size-mb');
@@ -225,7 +225,7 @@ export async function runSemesterMaintenancePlan(
   const retention = await buildTermRetentionReport({
     fromYear: args.fromYear,
     toYear: args.toYear,
-    frontendBase: args.frontendBase,
+    cisapiBase: args.cisapiBase,
     statusInput: paths.status,
     output: paths.retention,
     targetSizeMb: args.targetSizeMb,
@@ -241,7 +241,7 @@ export async function runSemesterMaintenancePlan(
   const coverage = await buildTermCoverageReport({
     fromYear: args.fromYear,
     toYear: args.toYear,
-    frontendBase: args.frontendBase,
+    cisapiBase: args.cisapiBase,
     statusInput: paths.status,
     retentionInput: paths.retention,
     output: paths.coverage,

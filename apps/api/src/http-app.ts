@@ -23,7 +23,6 @@ export type Bindings = {
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
   CISAPI_BASE: string;
-  FRONTEND_BASE: string;
   FEEDBACK_ALLOWED_ORIGINS: string;
   SYNC_CONCURRENCY: string;
   SYNC_EMBEDDINGS?: string;

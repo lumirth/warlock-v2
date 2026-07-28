@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   assertCourseSyncStatus,
   assertFullCourseSyncResult,
+  assertTermDiscoveryResult,
   latestMigrationName,
   latestMigrationSha256,
   productionDatabaseFromWrangler,
@@ -319,6 +320,18 @@ describe('release GPA import', () => {
   it('imports every GPA chunk before aggregating and publishing scores', async () => {
     let gpaCalls = 0;
     const request = vi.fn(async (_config: unknown, path: string) => {
+      if (path === '/admin/discover-terms') {
+        return {
+          discovered: 1,
+          terms: [{
+            termId: '2026-fall',
+            year: 2026,
+            term: 'fall',
+            status: 'active',
+            sampleStatuses: ['Open'],
+          }],
+        };
+      }
       if (path === '/admin/sync-active/full') {
         return {
           termCount: 1,
@@ -485,5 +498,130 @@ describe('release GPA import', () => {
       /did not complete within 3 chunk requests/,
     );
     expect(requestChunk).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('release term discovery gate', () => {
+  const validDiscovery = {
+    discovered: 3,
+    terms: [
+      {
+        termId: '2026-spring',
+        year: 2026,
+        term: 'spring',
+        status: 'historical',
+        sampleStatuses: [],
+      },
+      {
+        termId: '2026-fall',
+        year: 2026,
+        term: 'fall',
+        status: 'active',
+        sampleStatuses: ['Closed'],
+      },
+      {
+        termId: '2027-spring',
+        year: 2027,
+        term: 'spring',
+        status: 'registrable',
+        sampleStatuses: ['Open'],
+      },
+    ],
+  };
+
+  it('accepts a positive, internally consistent discovery response', () => {
+    expect(assertTermDiscoveryResult(validDiscovery)).toEqual([
+      '2026-spring',
+      '2026-fall',
+      '2027-spring',
+    ]);
+  });
+
+  it('identifies zero-term discovery explicitly', () => {
+    expect(() => assertTermDiscoveryResult({
+      discovered: 0,
+      terms: [],
+    })).toThrow(/returned zero terms/);
+  });
+
+  it.each([
+    {
+      label: 'non-integer count',
+      payload: { ...validDiscovery, discovered: 1.5 },
+    },
+    {
+      label: 'count mismatch',
+      payload: { ...validDiscovery, discovered: 2 },
+    },
+    {
+      label: 'invalid term ID',
+      payload: {
+        discovered: 1,
+        terms: [{ ...validDiscovery.terms[0], termId: 'wrong' }],
+      },
+    },
+    {
+      label: 'invalid year',
+      payload: {
+        discovered: 1,
+        terms: [{ ...validDiscovery.terms[0], year: '2026' }],
+      },
+    },
+    {
+      label: 'invalid term',
+      payload: {
+        discovered: 1,
+        terms: [{ ...validDiscovery.terms[0], term: 'autumn' }],
+      },
+    },
+    {
+      label: 'invalid status',
+      payload: {
+        discovered: 1,
+        terms: [{ ...validDiscovery.terms[0], status: 'current' }],
+      },
+    },
+    {
+      label: 'invalid sample statuses',
+      payload: {
+        discovered: 1,
+        terms: [{ ...validDiscovery.terms[0], sampleStatuses: 'Open' }],
+      },
+    },
+  ])('rejects malformed discovery: $label', ({ payload }) => {
+    expect(() => assertTermDiscoveryResult(payload)).toThrow(/malformed/);
+  });
+
+  it('rejects duplicate term identities', () => {
+    expect(() => assertTermDiscoveryResult({
+      discovered: 2,
+      terms: [
+        validDiscovery.terms[0],
+        { ...validDiscovery.terms[0] },
+      ],
+    })).toThrow(/duplicate term IDs/);
+  });
+
+  it('stops before full sync when discovery returns no terms', async () => {
+    const request = vi.fn(async (_config: unknown, path: string) => (
+      path === '/admin/discover-terms'
+        ? { discovered: 0, terms: [] }
+        : {}
+    ));
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      await expect(rebuildRegenerableData(
+        stagingReleaseConfig(validEnv),
+        request,
+      )).rejects.toThrow(/returned zero terms/);
+    } finally {
+      consoleLog.mockRestore();
+    }
+
+    expect(request.mock.calls.map(call => call[1])).toEqual([
+      '/health',
+      '/admin/discover-terms',
+    ]);
   });
 });

@@ -12,7 +12,6 @@ type SyncTestBindings = {
   CURRENT_YEAR: string;
   CURRENT_TERM: string;
   CISAPI_BASE: string;
-  FRONTEND_BASE: string;
   SYNC_CONCURRENCY: string;
 };
 
@@ -29,7 +28,6 @@ function requestSyncRoute(path: string, db: D1Database) {
     CURRENT_YEAR: '2026',
     CURRENT_TERM: 'spring',
     CISAPI_BASE: 'https://example.invalid',
-    FRONTEND_BASE: 'https://example.invalid',
     SYNC_CONCURRENCY: '1',
   });
 }

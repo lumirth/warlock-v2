@@ -3,10 +3,16 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
+import {
+  SEARCH_TERM_VALUES,
+  TERM_STATUS_VALUES,
+} from '@uiuc-course-search/query-types';
 import { runCli } from './lib/run-cli.ts';
 
 const ADMIN_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
 const MAX_GPA_SYNC_CALLS = 1024;
+const VALID_SEARCH_TERMS = new Set<string>(SEARCH_TERM_VALUES);
+const VALID_TERM_STATUSES = new Set<string>(TERM_STATUS_VALUES);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const apiDir = join(repoRoot, 'apps/api');
 
@@ -424,6 +430,70 @@ export async function syncGpaUntilComplete(
   );
 }
 
+export function assertTermDiscoveryResult(
+  payload: Record<string, unknown>,
+): string[] {
+  if (
+    !Number.isSafeInteger(payload.discovered)
+    || (payload.discovered as number) < 0
+  ) {
+    throw new Error(
+      'Term discovery returned a malformed discovered count; '
+      + 'expected a positive integer.',
+    );
+  }
+  const discovered = payload.discovered as number;
+  if (discovered === 0) {
+    throw new Error(
+      'Term discovery returned zero terms; refusing to run a full sync.',
+    );
+  }
+  if (
+    !Array.isArray(payload.terms)
+    || payload.terms.length !== discovered
+  ) {
+    throw new Error(
+      'Term discovery returned a malformed terms array or count mismatch.',
+    );
+  }
+
+  const termIds: string[] = [];
+  for (const [index, rawTerm] of payload.terms.entries()) {
+    if (!rawTerm || typeof rawTerm !== 'object' || Array.isArray(rawTerm)) {
+      throw new Error(
+        `Term discovery returned a malformed term at index ${index}.`,
+      );
+    }
+    const term = rawTerm as Record<string, unknown>;
+    const year = term.year;
+    const termName = term.term;
+    const expectedTermId = `${String(year)}-${String(termName)}`;
+    if (
+      !Number.isSafeInteger(year)
+      || (year as number) < 2004
+      || (year as number) > new Date().getFullYear() + 5
+      || typeof termName !== 'string'
+      || !VALID_SEARCH_TERMS.has(termName)
+      || typeof term.termId !== 'string'
+      || term.termId !== expectedTermId
+      || typeof term.status !== 'string'
+      || !VALID_TERM_STATUSES.has(term.status)
+      || !Array.isArray(term.sampleStatuses)
+      || term.sampleStatuses.some(status => typeof status !== 'string')
+    ) {
+      throw new Error(
+        `Term discovery returned a malformed term at index ${index}.`,
+      );
+    }
+    termIds.push(term.termId);
+  }
+
+  if (new Set(termIds).size !== termIds.length) {
+    throw new Error('Term discovery returned duplicate term IDs.');
+  }
+  return termIds;
+}
+
 export function assertFullCourseSyncResult(
   payload: Record<string, unknown>,
 ): string[] {
@@ -520,10 +590,11 @@ export async function rebuildRegenerableData(
   await request(config, '/health');
 
   console.log('\n==> discover current term state');
-  await request(config, '/admin/discover-terms', {
+  const discovery = await request(config, '/admin/discover-terms', {
     method: 'POST',
     admin: true,
   });
+  assertTermDiscoveryResult(discovery);
 
   console.log('\n==> republish active and registrable course snapshots');
   const fullSync = await request(config, '/admin/sync-active/full', {

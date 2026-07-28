@@ -6,7 +6,11 @@ import { upsertDiscoveredTermState } from '../db/term-state-repository.js';
 import type { TermStateStatus } from '../db/types.js';
 import { getUpstreamBackoff } from './upstream-backoff.js';
 import { browserFetch } from '../http/browser-fetch.js';
-import { parseEnrollmentStatusesXml, parseSubjectsXml } from '../cisapi/parser.js';
+import {
+  parseEnrollmentStatusesXml,
+  parseSubjectsXml,
+  parseTermListXml,
+} from '../cisapi/parser.js';
 
 const DEFAULT_FROM_YEAR = 2004;
 const DEFAULT_CLASSIFICATION_SUBJECTS = [
@@ -24,7 +28,6 @@ const DEFAULT_CLASSIFICATION_SUBJECTS = [
 const REGISTRABLE_STATUS_PATTERN = /\b(open|crosslistopen|wait\s*list)\b/i;
 
 interface TermDiscoveryConfig {
-  frontendBase: string;
   cisapiBase: string;
   fromYear?: number;
   toYear?: number;
@@ -46,7 +49,7 @@ interface TermClassification {
 }
 
 /**
- * Fetches valid terms for a given year from the frontend AJAX endpoint
+ * Fetches and validates the authoritative CIS term list for one year.
  */
 async function discoverTermsForYear(
   config: TermDiscoveryConfig,
@@ -55,25 +58,26 @@ async function discoverTermsForYear(
   const upstreamBackoff = getUpstreamBackoff();
   await upstreamBackoff.waitIfNeeded();
 
-  const url = `${config.frontendBase}/ajax/search/termlist/${year}`;
+  const url = `${config.cisapiBase.replace(/\/+$/, '')}/schedule/${year}.xml`;
   const response = await browserFetch(url);
 
   if (!response.ok) {
     if (upstreamBackoff.isRateLimited(response.status)) {
-      upstreamBackoff.recordFailure(`termlist ${year}: ${response.status}`, response.status);
+      upstreamBackoff.recordFailure(`terms ${year}: ${response.status}`, response.status);
     }
-    throw new Error(`Failed to fetch termlist for ${year}: ${response.status}`);
+    throw new Error(`Failed to fetch terms for ${year}: ${response.status}`);
   }
 
   upstreamBackoff.recordSuccess();
 
-  const data = await response.json() as Record<string, string>;
-  // Response format: {"Winter":"winter","Spring":"spring",...}
-
-  return Object.values(data).map(term => ({
-    year,
-    term,
-    termId: makeTermId(year, term)
+  const xml = await response.text();
+  return parseTermListXml(xml, {
+    requestedYear: year,
+    cisapiBase: config.cisapiBase,
+  }).map(term => ({
+    year: term.year,
+    term: term.term,
+    termId: makeTermId(term.year, term.term),
   }));
 }
 
@@ -90,12 +94,8 @@ export async function discoverAllTerms(
   const allTerms: DiscoveredTerm[] = [];
 
   for (let year = fromYear; year <= toYear; year += 1) {
-    try {
-      const terms = await discoverTermsForYear(config, year);
-      allTerms.push(...terms);
-    } catch (error) {
-      logger.error('termDiscovery.discoverYear.failed', { year, ...errorFields(error) });
-    }
+    const terms = await discoverTermsForYear(config, year);
+    allTerms.push(...terms);
   }
 
   return allTerms.sort((left, right) => {

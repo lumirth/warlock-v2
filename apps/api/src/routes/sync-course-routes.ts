@@ -127,7 +127,6 @@ syncCourseRoutes.post('/internal/sync-batch', async (c) => {
 
 syncCourseRoutes.post('/admin/discover-terms', async (c) => {
   const config = {
-    frontendBase: c.env.FRONTEND_BASE,
     cisapiBase: c.env.CISAPI_BASE,
   };
 

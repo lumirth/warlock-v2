@@ -8,8 +8,10 @@ import {
   runSemesterMaintenancePlan,
   type SemesterMaintenanceArgs,
 } from '../semester-maintenance-plan.ts';
+import { termListResponse } from './term-list-fixture.ts';
 
 let tempRoot: string | undefined;
+const CISAPI_BASE = 'https://courses.example.test/cisapp/explorer';
 
 function makeTempDir(): string {
   tempRoot ??= mkdtempSync(join(tmpdir(), 'semester-plan-test-'));
@@ -37,7 +39,7 @@ function args(overrides: Partial<SemesterMaintenanceArgs> = {}): SemesterMainten
     adminToken: 'test-token',
     fromYear: 2025,
     toYear: 2026,
-    frontendBase: 'https://courses.example.test',
+    cisapiBase: CISAPI_BASE,
     targetSizeMb: 250,
     noFeedback: true,
     feedbackDatabase: 'course-search-db-staging',
@@ -132,11 +134,11 @@ function termlistFetcher() {
       expect(request.headers.get('Authorization')).toBe('Bearer test-token');
       return response(syncStatus());
     }
-    if (url.pathname.endsWith('/ajax/search/termlist/2025')) {
-      return response({ Fall: 'fall' });
+    if (url.pathname.endsWith('/schedule/2025.xml')) {
+      return termListResponse(CISAPI_BASE, 2025, ['fall']);
     }
-    if (url.pathname.endsWith('/ajax/search/termlist/2026')) {
-      return response({ Spring: 'spring', Summer: 'summer', Fall: 'fall' });
+    if (url.pathname.endsWith('/schedule/2026.xml')) {
+      return termListResponse(CISAPI_BASE, 2026, ['spring', 'summer', 'fall']);
     }
     return response({ error: 'not found' }, 404);
   });
@@ -149,7 +151,7 @@ describe('semester maintenance plan', () => {
       '--status-input', 'artifacts/sync-status.json',
       '--from-year', '2024',
       '--to-year', '2027',
-      '--frontend-base', 'https://courses.example.test',
+      '--cisapi-base', CISAPI_BASE,
       '--target-size-mb', '125.5',
       '--max-retained-terms', '12',
       '--no-feedback',
@@ -162,7 +164,7 @@ describe('semester maintenance plan', () => {
       statusInput: 'artifacts/sync-status.json',
       fromYear: 2024,
       toYear: 2027,
-      frontendBase: 'https://courses.example.test',
+      cisapiBase: CISAPI_BASE,
       targetSizeMb: 125.5,
       maxRetainedTerms: 12,
       noFeedback: true,
@@ -289,11 +291,11 @@ describe('semester maintenance plan', () => {
           },
         });
       }
-      if (url.pathname.endsWith('/ajax/search/termlist/2025')) {
-        return response({ Fall: 'fall' });
+      if (url.pathname.endsWith('/schedule/2025.xml')) {
+        return termListResponse(CISAPI_BASE, 2025, ['fall']);
       }
-      if (url.pathname.endsWith('/ajax/search/termlist/2026')) {
-        return response({ Spring: 'spring', Summer: 'summer', Fall: 'fall' });
+      if (url.pathname.endsWith('/schedule/2026.xml')) {
+        return termListResponse(CISAPI_BASE, 2026, ['spring', 'summer', 'fall']);
       }
       return response({ error: 'not found' }, 404);
     });
@@ -331,10 +333,10 @@ describe('semester maintenance plan', () => {
           },
         });
       }
-      if (url.pathname.endsWith('/ajax/search/termlist/2026')) {
-        return response({ Fall: 'fall' });
+      if (url.pathname.endsWith('/schedule/2026.xml')) {
+        return termListResponse(CISAPI_BASE, 2026, ['fall']);
       }
-      return response({}, 200);
+      return termListResponse(CISAPI_BASE, 2026, [], 404);
     });
 
     const report = await runSemesterMaintenancePlan(args({
