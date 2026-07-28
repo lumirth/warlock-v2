@@ -234,7 +234,9 @@ async function recordTermSyncResult(
     status: resolveManualSyncTermStatus(existingTerm, options.requestedStatus),
     last_checked: now,
     last_synced: fullySuccessful ? now : existingTerm?.last_synced ?? null,
-    subjects_count: aggregateCounts.subjectsCount,
+    subjects_count: options.fullCorpus
+      ? aggregateCounts.subjectsCount
+      : existingTerm?.subjects_count ?? aggregateCounts.subjectsCount,
     courses_count: aggregateCounts.coursesCount,
     sections_count: aggregateCounts.sectionsCount,
     sync_errors: syncErrors(options.result, {

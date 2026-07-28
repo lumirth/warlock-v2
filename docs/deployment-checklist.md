@@ -53,8 +53,11 @@ require the newest schema, and migrations may invalidate regenerable
 enrichment. The release command refuses to continue without restore-tested D1
 backup evidence and explicit approval of the current migration. It then runs
 the API gates, applies remote migrations, deploys the Worker, republishes every
-active/registrable course snapshot, imports the complete GPA dataset, rebuilds
-GPA/RMP enrichment, and verifies sync status:
+active/registrable course snapshot in five-subject requests, imports the
+complete GPA dataset, rebuilds GPA/RMP enrichment, and verifies sync status.
+Each term is finalized only after a fresh authoritative manifest matches the
+release's exact subject-set SHA-256 and every subject checkpoint is newer than
+the release start:
 
 ```bash
 D1_BACKUP_REF=<YYYYMMDDTHHMMSSZ> \

@@ -11,6 +11,8 @@ import { runCli } from './lib/run-cli.ts';
 
 const ADMIN_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
 const MAX_GPA_SYNC_CALLS = 1024;
+const RELEASE_TERM_SYNC_PAGE_LIMIT = 5;
+const MAX_RELEASE_TERM_SYNC_PAGES = 2_000;
 const VALID_SEARCH_TERMS = new Set<string>(SEARCH_TERM_VALUES);
 const VALID_TERM_STATUSES = new Set<string>(TERM_STATUS_VALUES);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -69,6 +71,22 @@ export type GpaImportResult = {
   calls: number;
   rowsProcessed: number;
   completionKey: string;
+};
+
+export type ReleaseDiscoveredTerm = {
+  termId: string;
+  year: number;
+  term: (typeof SEARCH_TERM_VALUES)[number];
+  status: (typeof TERM_STATUS_VALUES)[number];
+  sampleStatuses: string[];
+};
+
+export type ReleaseTermFinalization = {
+  termId: string;
+  subjectCount: number;
+  coursesCount: number;
+  sectionsCount: number;
+  lastSynced: number;
 };
 
 function requiredEnv(
@@ -432,7 +450,7 @@ export async function syncGpaUntilComplete(
 
 export function assertTermDiscoveryResult(
   payload: Record<string, unknown>,
-): string[] {
+): ReleaseDiscoveredTerm[] {
   if (
     !Number.isSafeInteger(payload.discovered)
     || (payload.discovered as number) < 0
@@ -457,7 +475,7 @@ export function assertTermDiscoveryResult(
     );
   }
 
-  const termIds: string[] = [];
+  const terms: ReleaseDiscoveredTerm[] = [];
   for (const [index, rawTerm] of payload.terms.entries()) {
     if (!rawTerm || typeof rawTerm !== 'object' || Array.isArray(rawTerm)) {
       throw new Error(
@@ -485,13 +503,274 @@ export function assertTermDiscoveryResult(
         `Term discovery returned a malformed term at index ${index}.`,
       );
     }
-    termIds.push(term.termId);
+    terms.push({
+      termId: term.termId,
+      year: year as number,
+      term: termName as ReleaseDiscoveredTerm['term'],
+      status: term.status as ReleaseDiscoveredTerm['status'],
+      sampleStatuses: term.sampleStatuses as string[],
+    });
   }
 
-  if (new Set(termIds).size !== termIds.length) {
+  if (new Set(terms.map(term => term.termId)).size !== terms.length) {
     throw new Error('Term discovery returned duplicate term IDs.');
   }
-  return termIds;
+  return terms;
+}
+
+export function assertTermSyncPage(
+  payload: Record<string, unknown>,
+  expectedTerm: ReleaseDiscoveredTerm,
+  expectedOffset: number,
+  expectedTotal?: number,
+): {
+  total: number;
+  subjects: string[];
+  hasMore: boolean;
+  nextOffset: number;
+} {
+  const pagination = payload.pagination;
+  const subjectResults = payload.subjectResults;
+  if (
+    payload.termId !== expectedTerm.termId
+    || payload.year !== expectedTerm.year
+    || payload.term !== expectedTerm.term
+    || payload.forceRunningLocks !== true
+    || !Array.isArray(payload.warnings)
+    || payload.warnings.some(warning => typeof warning !== 'string')
+    || !isRecord(pagination)
+    || !Array.isArray(subjectResults)
+  ) {
+    throw new Error(
+      `Paged sync returned an invalid response for ${expectedTerm.termId} `
+      + `at offset ${expectedOffset}.`,
+    );
+  }
+
+  const total = pagination.total;
+  const hasMore = pagination.hasMore;
+  if (
+    !isPositiveSafeInteger(total)
+    || total > RELEASE_TERM_SYNC_PAGE_LIMIT * MAX_RELEASE_TERM_SYNC_PAGES
+    || pagination.offset !== expectedOffset
+    || pagination.limit !== RELEASE_TERM_SYNC_PAGE_LIMIT
+    || typeof hasMore !== 'boolean'
+    || expectedOffset >= total
+    || (expectedTotal !== undefined && total !== expectedTotal)
+  ) {
+    throw new Error(
+      `Paged sync returned invalid pagination for ${expectedTerm.termId} `
+      + `at offset ${expectedOffset}.`,
+    );
+  }
+
+  const expectedPageSize = Math.min(
+    RELEASE_TERM_SYNC_PAGE_LIMIT,
+    total - expectedOffset,
+  );
+  const expectedHasMore = (
+    expectedOffset + RELEASE_TERM_SYNC_PAGE_LIMIT < total
+  );
+  if (
+    subjectResults.length !== expectedPageSize
+    || hasMore !== expectedHasMore
+    || payload.successfulSubjects !== expectedPageSize
+    || payload.failedSubjects !== 0
+    || !isNonNegativeSafeInteger(payload.rateLimitHits)
+    || !isNonNegativeFiniteNumber(payload.durationMs)
+  ) {
+    throw new Error(
+      `Paged sync returned incomplete coverage for ${expectedTerm.termId} `
+      + `at offset ${expectedOffset}.`,
+    );
+  }
+
+  const subjects: string[] = [];
+  let totalCourses = 0;
+  let totalSections = 0;
+  for (const rawSubject of subjectResults) {
+    if (!isRecord(rawSubject)) {
+      throw new Error(
+        `Paged sync returned an invalid subject for ${expectedTerm.termId}.`,
+      );
+    }
+    const subject = rawSubject.subject;
+    if (
+      typeof subject !== 'string'
+      || !/^[A-Z]{2,4}$/.test(subject)
+      || rawSubject.success !== true
+      || rawSubject.skipped === true
+      || rawSubject.error !== undefined
+      || !isNonNegativeSafeInteger(rawSubject.coursesCount)
+      || !isNonNegativeSafeInteger(rawSubject.sectionsCount)
+      || !isNonNegativeFiniteNumber(rawSubject.durationMs)
+    ) {
+      throw new Error(
+        `Paged sync returned a failed or skipped subject for `
+        + `${expectedTerm.termId} at offset ${expectedOffset}.`,
+      );
+    }
+    subjects.push(subject);
+    totalCourses += rawSubject.coursesCount;
+    totalSections += rawSubject.sectionsCount;
+  }
+  if (
+    new Set(subjects).size !== subjects.length
+    || payload.totalCourses !== totalCourses
+    || payload.totalSections !== totalSections
+  ) {
+    throw new Error(
+      `Paged sync returned inconsistent subject totals for `
+      + `${expectedTerm.termId} at offset ${expectedOffset}.`,
+    );
+  }
+
+  return {
+    total,
+    subjects,
+    hasMore,
+    nextOffset: expectedOffset + subjects.length,
+  };
+}
+
+export function assertTermFinalizationResult(
+  payload: Record<string, unknown>,
+  expectedTerm: ReleaseDiscoveredTerm,
+  expectedSubjectCount: number,
+  minimumLastSync: number,
+  manifestSha256: string,
+): ReleaseTermFinalization {
+  if (
+    payload.success !== true
+    || payload.termId !== expectedTerm.termId
+    || payload.year !== expectedTerm.year
+    || payload.term !== expectedTerm.term
+    || payload.status !== expectedTerm.status
+    || payload.subjectCount !== expectedSubjectCount
+    || payload.completeSubjectCount !== expectedSubjectCount
+    || !isNonNegativeSafeInteger(payload.removedSubjectCount)
+    || !isNonNegativeSafeInteger(payload.deletedCourseCount)
+    || !isNonNegativeSafeInteger(payload.coursesCount)
+    || !isNonNegativeSafeInteger(payload.sectionsCount)
+    || payload.minimumLastSync !== minimumLastSync
+    || !isPositiveSafeInteger(payload.earliestSubjectSync)
+    || payload.earliestSubjectSync < minimumLastSync
+    || payload.manifestSha256 !== manifestSha256
+    || !isPositiveSafeInteger(payload.lastSynced)
+  ) {
+    throw new Error(
+      `Term finalization returned incomplete evidence for `
+      + `${expectedTerm.termId}.`,
+    );
+  }
+  return {
+    termId: expectedTerm.termId,
+    subjectCount: expectedSubjectCount,
+    coursesCount: payload.coursesCount,
+    sectionsCount: payload.sectionsCount,
+    lastSynced: payload.lastSynced,
+  };
+}
+
+export function subjectManifestSha256(subjects: Iterable<string>): string {
+  return createHash('sha256')
+    .update(JSON.stringify([...subjects].sort()))
+    .digest('hex');
+}
+
+export async function syncReleaseTermsInPages(
+  config: ReleaseConfig,
+  discoveredTerms: ReleaseDiscoveredTerm[],
+  request: typeof requestJson = requestJson,
+): Promise<ReleaseTermFinalization[]> {
+  const releaseTerms = discoveredTerms.filter(
+    term => term.status === 'registrable' || term.status === 'active',
+  );
+  if (releaseTerms.length === 0) {
+    throw new Error(
+      'Term discovery returned no active or registrable terms to release.',
+    );
+  }
+
+  const minimumLastSync = Math.floor(Date.now() / 1000);
+  const finalizedTerms: ReleaseTermFinalization[] = [];
+  for (const term of releaseTerms) {
+    let offset = 0;
+    let total: number | undefined;
+    const seenSubjects = new Set<string>();
+    let completedPaging = false;
+
+    for (
+      let page = 1;
+      page <= MAX_RELEASE_TERM_SYNC_PAGES;
+      page += 1
+    ) {
+      console.log(
+        `\n==> sync ${term.termId} subjects at offset ${offset}`,
+      );
+      const payload = await request(
+        config,
+        `/admin/sync/${term.year}/${term.term}`
+        + `?offset=${offset}`
+        + `&limit=${RELEASE_TERM_SYNC_PAGE_LIMIT}`
+        + `&force=true&status=${term.status}`,
+        { method: 'POST', admin: true },
+      );
+      const pageResult = assertTermSyncPage(
+        payload,
+        term,
+        offset,
+        total,
+      );
+      total ??= pageResult.total;
+      for (const subject of pageResult.subjects) {
+        if (seenSubjects.has(subject)) {
+          throw new Error(
+            `Paged sync returned duplicate subject ${subject} `
+            + `across ${term.termId} pages.`,
+          );
+        }
+        seenSubjects.add(subject);
+      }
+
+      if (!pageResult.hasMore) {
+        if (seenSubjects.size !== total) {
+          throw new Error(
+            `Paged sync ended with incomplete subject coverage for `
+            + `${term.termId}.`,
+          );
+        }
+        completedPaging = true;
+        break;
+      }
+      offset = pageResult.nextOffset;
+    }
+
+    if (!completedPaging || total === undefined) {
+      throw new Error(
+        `Paged sync did not complete ${term.termId} within `
+        + `${MAX_RELEASE_TERM_SYNC_PAGES} requests.`,
+      );
+    }
+
+    console.log(`\n==> finalize ${term.termId} authoritative manifest`);
+    const manifestSha256 = subjectManifestSha256(seenSubjects);
+    const finalization = await request(
+      config,
+      `/admin/sync/${term.year}/${term.term}/finalize`
+      + `?since=${minimumLastSync}`
+      + `&manifestSha256=${manifestSha256}`,
+      { method: 'POST', admin: true },
+    );
+    finalizedTerms.push(assertTermFinalizationResult(
+      finalization,
+      term,
+      total,
+      minimumLastSync,
+      manifestSha256,
+    ));
+  }
+  return finalizedTerms;
 }
 
 export function assertFullCourseSyncResult(
@@ -594,14 +873,17 @@ export async function rebuildRegenerableData(
     method: 'POST',
     admin: true,
   });
-  assertTermDiscoveryResult(discovery);
+  const discoveredTerms = assertTermDiscoveryResult(discovery);
 
-  console.log('\n==> republish active and registrable course snapshots');
-  const fullSync = await request(config, '/admin/sync-active/full', {
-    method: 'POST',
-    admin: true,
-  });
-  const syncedTermIds = assertFullCourseSyncResult(fullSync);
+  console.log(
+    '\n==> republish active and registrable course snapshots in bounded pages',
+  );
+  const finalizedTerms = await syncReleaseTermsInPages(
+    config,
+    discoveredTerms,
+    request,
+  );
+  const syncedTermIds = finalizedTerms.map(term => term.termId);
 
   console.log('\n==> import complete GPA dataset');
   const gpaImport = await syncGpaUntilComplete(() => request(
@@ -644,6 +926,22 @@ export function releaseTargetFromArgv(argv: string[]): ReleaseTarget {
     if (argv[1] === 'staging' || argv[1] === 'production') return argv[1];
   }
   throw new Error('Usage: staging-api-release.ts [--target staging|production]');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 async function main(): Promise<void> {

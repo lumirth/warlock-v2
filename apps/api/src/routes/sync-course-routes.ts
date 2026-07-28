@@ -22,8 +22,10 @@ import {
   parseForceRunningLocks,
   type SyncRouteBindings,
 } from '../services/sync-operations.js';
+import { finalizeTermSync } from '../services/term-sync-finalization.js';
 
 export const syncCourseRoutes = new Hono<{ Bindings: SyncRouteBindings }>();
+const FINALIZATION_MAX_RUN_AGE_SECONDS = 12 * 60 * 60;
 
 function parseSyncPagination(
   offset: string | undefined,
@@ -195,6 +197,47 @@ syncCourseRoutes.post('/admin/sync/:year/:term', async (c) => {
     });
 
     return c.json(result);
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+syncCourseRoutes.post('/admin/sync/:year/:term/finalize', async (c) => {
+  const { year, term } = c.req.param();
+  const parsedYear = parseBoundedIntParam(
+    year,
+    'year',
+    { min: 2004, max: new Date().getFullYear() + 2 },
+  );
+  if (!parsedYear.ok) return c.json({ error: parsedYear.error }, 400);
+
+  const parsedTerm = parseEnumParam(term, 'term', SEARCH_TERM_VALUES);
+  if (!parsedTerm.ok) return c.json({ error: parsedTerm.error }, 400);
+
+  const parsedSince = parseBoundedIntParam(
+    c.req.query('since'),
+    'since',
+    {
+      min: Math.floor(Date.now() / 1000) - FINALIZATION_MAX_RUN_AGE_SECONDS,
+      max: Math.floor(Date.now() / 1000) + 300,
+    },
+  );
+  if (!parsedSince.ok) return c.json({ error: parsedSince.error }, 400);
+
+  const manifestSha256 = c.req.query('manifestSha256');
+  if (!manifestSha256 || !/^[a-f0-9]{64}$/.test(manifestSha256)) {
+    return c.json({
+      error: 'manifestSha256 must be a lowercase SHA-256 digest',
+    }, 400);
+  }
+
+  try {
+    return c.json(await finalizeTermSync(c.env, {
+      year: parsedYear.value,
+      term: parsedTerm.value,
+      minimumLastSync: parsedSince.value,
+      expectedManifestSha256: manifestSha256,
+    }));
   } catch (error) {
     return c.json({ error: String(error) }, 500);
   }

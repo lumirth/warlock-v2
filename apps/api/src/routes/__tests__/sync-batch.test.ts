@@ -4,6 +4,7 @@ import type { Ai, D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@clou
 import type { TermState } from '../../db/types.js';
 import { syncSubjects, syncTerm } from '../../services/parallel-sync.js';
 import { coordinateCourseSync } from '../../services/sync-coordinator.js';
+import { finalizeTermSync } from '../../services/term-sync-finalization.js';
 import { syncRoutes } from '../sync.js';
 
 vi.mock('../../services/parallel-sync.js', () => ({
@@ -13,6 +14,10 @@ vi.mock('../../services/parallel-sync.js', () => ({
 
 vi.mock('../../services/sync-coordinator.js', () => ({
   coordinateCourseSync: vi.fn(),
+}));
+
+vi.mock('../../services/term-sync-finalization.js', () => ({
+  finalizeTermSync: vi.fn(),
 }));
 
 type RunCall = {
@@ -89,6 +94,7 @@ describe('internal sync batch route', () => {
     vi.mocked(syncSubjects).mockReset();
     vi.mocked(syncTerm).mockReset();
     vi.mocked(coordinateCourseSync).mockReset();
+    vi.mocked(finalizeTermSync).mockReset();
   });
 
   it('returns a fan-out batch result without claiming term-level freshness', async () => {
@@ -241,7 +247,7 @@ describe('internal sync batch route', () => {
     const termUpsert = runCalls.find(call => call.sql.includes('INSERT INTO term_state'));
     expect(termUpsert?.params[4]).toEqual(expect.any(Number));
     expect(termUpsert?.params[5]).toBe(111);
-    expect(termUpsert?.params.slice(6, 9)).toEqual([187, 42, 99]);
+    expect(termUpsert?.params.slice(6, 9)).toEqual([12, 42, 99]);
   });
 
   it('exposes the exact full coordinator result for release gating', async () => {
@@ -279,6 +285,62 @@ describe('internal sync batch route', () => {
     expect(coordinateCourseSync).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ trigger: 'admin_full_sync' }),
+    );
+  });
+
+  it('requires and forwards a bounded finalization freshness lower bound', async () => {
+    const since = Math.floor(Date.now() / 1000) - 60;
+    const manifestSha256 =
+      '3bd84e6d5f774ad4e39d82e66bb084144aa732e7041a0c19542322762fcdab68';
+    vi.mocked(finalizeTermSync).mockResolvedValue({
+      success: true,
+      termId: '2026-fall',
+      year: 2026,
+      term: 'fall',
+      status: 'registrable',
+      subjectCount: 1,
+      completeSubjectCount: 1,
+      removedSubjectCount: 0,
+      deletedCourseCount: 0,
+      coursesCount: 2,
+      sectionsCount: 3,
+      minimumLastSync: since,
+      earliestSubjectSync: since + 1,
+      manifestSha256,
+      lastSynced: since + 2,
+    });
+
+    const missing = await app().request(
+      '/admin/sync/2026/fall/finalize',
+      { method: 'POST' },
+      createEnv(termState()),
+    );
+    expect(missing.status).toBe(400);
+    expect(finalizeTermSync).not.toHaveBeenCalled();
+
+    const stale = await app().request(
+      '/admin/sync/2026/fall/finalize?since=1',
+      { method: 'POST' },
+      createEnv(termState()),
+    );
+    expect(stale.status).toBe(400);
+    expect(finalizeTermSync).not.toHaveBeenCalled();
+
+    const response = await app().request(
+      `/admin/sync/2026/fall/finalize?since=${since}`
+      + `&manifestSha256=${manifestSha256}`,
+      { method: 'POST' },
+      createEnv(termState()),
+    );
+    expect(response.status).toBe(200);
+    expect(finalizeTermSync).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        year: 2026,
+        term: 'fall',
+        minimumLastSync: since,
+        expectedManifestSha256: manifestSha256,
+      },
     );
   });
 });

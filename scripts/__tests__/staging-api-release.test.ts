@@ -12,6 +12,7 @@ import {
   releaseTargetFromArgv,
   stagingReleaseConfig,
   syncGpaUntilComplete,
+  syncReleaseTermsInPages,
 } from '../staging-api-release.js';
 
 const validEnv = {
@@ -316,6 +317,103 @@ describe('production API release', () => {
   });
 });
 
+describe('release paged term sync', () => {
+  const term = {
+    termId: '2026-fall',
+    year: 2026,
+    term: 'fall' as const,
+    status: 'active' as const,
+    sampleStatuses: ['Open'],
+  };
+
+  it('serializes bounded pages and finalizes only after exact coverage', async () => {
+    const subjects = ['CS', 'MATH', 'STAT', 'PHYS', 'CHEM', 'ENGL'];
+    const request = vi.fn(async (_config: unknown, path: string) => {
+      if (path.includes('/finalize?since=')) {
+        const finalizationUrl = new URL(
+          path,
+          'https://release.test',
+        );
+        const since = Number(finalizationUrl.searchParams.get('since'));
+        const manifestSha256 = finalizationUrl.searchParams.get(
+          'manifestSha256',
+        );
+        return {
+          success: true,
+          termId: term.termId,
+          year: term.year,
+          term: term.term,
+          status: term.status,
+          subjectCount: subjects.length,
+          completeSubjectCount: subjects.length,
+          removedSubjectCount: 1,
+          deletedCourseCount: 2,
+          coursesCount: 60,
+          sectionsCount: 120,
+          minimumLastSync: since,
+          earliestSubjectSync: since,
+          manifestSha256,
+          lastSynced: since + 1,
+        };
+      }
+      const url = new URL(path, 'https://release.test');
+      const offset = Number(url.searchParams.get('offset'));
+      const pageSubjects = subjects.slice(offset, offset + 5);
+      return termPage(term, pageSubjects, {
+        total: subjects.length,
+        offset,
+        hasMore: offset + 5 < subjects.length,
+      });
+    });
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      await expect(syncReleaseTermsInPages(
+        stagingReleaseConfig(validEnv),
+        [term],
+        request,
+      )).resolves.toEqual([expect.objectContaining({
+        termId: term.termId,
+        subjectCount: subjects.length,
+      })]);
+    } finally {
+      consoleLog.mockRestore();
+    }
+
+    expect(request.mock.calls.map(call => call[1])).toEqual([
+      '/admin/sync/2026/fall?offset=0&limit=5&force=true&status=active',
+      '/admin/sync/2026/fall?offset=5&limit=5&force=true&status=active',
+      expect.stringMatching(
+        /^\/admin\/sync\/2026\/fall\/finalize\?since=\d+&manifestSha256=[a-f0-9]{64}$/,
+      ),
+    ]);
+  });
+
+  it('fails before finalization on a skipped page subject', async () => {
+    const request = vi.fn(async () => {
+      const payload = termPage(term, ['CS'], {
+        total: 1,
+        offset: 0,
+        hasMore: false,
+      });
+      payload.subjectResults[0].skipped = true;
+      return payload;
+    });
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      await expect(syncReleaseTermsInPages(
+        stagingReleaseConfig(validEnv),
+        [term],
+        request,
+      )).rejects.toThrow(/failed or skipped subject/);
+    } finally {
+      consoleLog.mockRestore();
+    }
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('release GPA import', () => {
   it('imports every GPA chunk before aggregating and publishing scores', async () => {
     let gpaCalls = 0;
@@ -332,18 +430,56 @@ describe('release GPA import', () => {
           }],
         };
       }
-      if (path === '/admin/sync-active/full') {
+      if (path.startsWith('/admin/sync/2026/fall?')) {
         return {
-          termCount: 1,
-          failedTermCount: 0,
-          results: [{
-            termId: '2026-fall',
-            subjectCount: 1,
-            failedBatchCount: 0,
-            failedSubjectCount: 0,
-            skippedSubjectCount: 0,
+          termId: '2026-fall',
+          year: 2026,
+          term: 'fall',
+          subjectResults: [{
+            subject: 'CS',
             success: true,
+            coursesCount: 10,
+            sectionsCount: 20,
+            durationMs: 1,
           }],
+          totalCourses: 10,
+          totalSections: 20,
+          successfulSubjects: 1,
+          failedSubjects: 0,
+          durationMs: 1,
+          rateLimitHits: 0,
+          pagination: {
+            total: 1,
+            offset: 0,
+            limit: 5,
+            hasMore: false,
+          },
+          forceRunningLocks: true,
+          warnings: [],
+        };
+      }
+      if (path.startsWith('/admin/sync/2026/fall/finalize?since=')) {
+        const finalizationUrl = new URL(path, 'https://release.test');
+        const since = Number(finalizationUrl.searchParams.get('since'));
+        const manifestSha256 = finalizationUrl.searchParams.get(
+          'manifestSha256',
+        );
+        return {
+          success: true,
+          termId: '2026-fall',
+          year: 2026,
+          term: 'fall',
+          status: 'active',
+          subjectCount: 1,
+          completeSubjectCount: 1,
+          removedSubjectCount: 0,
+          deletedCourseCount: 0,
+          coursesCount: 10,
+          sectionsCount: 20,
+          minimumLastSync: since,
+          earliestSubjectSync: since,
+          manifestSha256,
+          lastSynced: 1_800_000_000,
         };
       }
       if (path === '/admin/sync-gpa') {
@@ -390,10 +526,16 @@ describe('release GPA import', () => {
       consoleLog.mockRestore();
     }
 
-    expect(request.mock.calls.map(call => call[1])).toEqual([
+    const paths = request.mock.calls.map(call => call[1]);
+    expect(paths.slice(0, 3)).toEqual([
       '/health',
       '/admin/discover-terms',
-      '/admin/sync-active/full',
+      '/admin/sync/2026/fall?offset=0&limit=5&force=true&status=active',
+    ]);
+    expect(paths[3]).toMatch(
+      /^\/admin\/sync\/2026\/fall\/finalize\?since=\d+&manifestSha256=[a-f0-9]{64}$/,
+    );
+    expect(paths.slice(4)).toEqual([
       '/admin/sync-gpa',
       '/admin/sync-gpa',
       '/admin/enrich-gpa',
@@ -530,11 +672,9 @@ describe('release term discovery gate', () => {
   };
 
   it('accepts a positive, internally consistent discovery response', () => {
-    expect(assertTermDiscoveryResult(validDiscovery)).toEqual([
-      '2026-spring',
-      '2026-fall',
-      '2027-spring',
-    ]);
+    expect(assertTermDiscoveryResult(validDiscovery).map(
+      term => term.termId,
+    )).toEqual(['2026-spring', '2026-fall', '2027-spring']);
   });
 
   it('identifies zero-term discovery explicitly', () => {
@@ -625,3 +765,50 @@ describe('release term discovery gate', () => {
     ]);
   });
 });
+
+function termPage(
+  term: {
+    termId: string;
+    year: number;
+    term: string;
+  },
+  subjects: string[],
+  pagination: {
+    total: number;
+    offset: number;
+    hasMore: boolean;
+  },
+) {
+  const subjectResults: Array<{
+    subject: string;
+    success: boolean;
+    skipped?: boolean;
+    coursesCount: number;
+    sectionsCount: number;
+    durationMs: number;
+  }> = subjects.map(subject => ({
+    subject,
+    success: true,
+    coursesCount: 10,
+    sectionsCount: 20,
+    durationMs: 1,
+  }));
+  return {
+    termId: term.termId,
+    year: term.year,
+    term: term.term,
+    subjectResults,
+    totalCourses: subjectResults.length * 10,
+    totalSections: subjectResults.length * 20,
+    successfulSubjects: subjectResults.length,
+    failedSubjects: 0,
+    durationMs: 1,
+    rateLimitHits: 0,
+    pagination: {
+      ...pagination,
+      limit: 5,
+    },
+    forceRunningLocks: true,
+    warnings: [],
+  };
+}
