@@ -1,6 +1,9 @@
 import { env } from 'cloudflare:workers';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { enrichCoursesWithScores } from '../enrichment.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  enrichCoursesWithScores,
+  rebuildInstructorCourseLinks,
+} from '../enrichment.js';
 
 const testEnv = env as unknown as { DB: D1Database };
 const TERM_ID = '2098-score';
@@ -192,4 +195,143 @@ describe('course score publication in D1', () => {
       'DROP TRIGGER score_publication_abort',
     ).run();
   });
+});
+
+describe('instructor RMP link resolution in D1', () => {
+  const termId = '2097-link';
+
+  beforeEach(async () => {
+    await cleanupInstructorLinkFixture();
+  });
+
+  afterEach(async () => {
+    await cleanupInstructorLinkFixture();
+  });
+
+  it('prefers an exact canonical match, accepts a unique initial match, and rejects an ambiguous one', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(`
+        INSERT INTO courses (id, subject, number, title, year, term)
+        VALUES
+          ('RMLK-101-2097-link', 'RMLK', '101', 'Exact match', 2097, 'link'),
+          ('RMLK-102-2097-link', 'RMLK', '102', 'Initial match', 2097, 'link'),
+          ('RMLK-103-2097-link', 'RMLK', '103', 'Ambiguous match', 2097, 'link')
+      `),
+      testEnv.DB.prepare(`
+        INSERT INTO sections (id, crn, course_id, term_id)
+        VALUES
+          ('2097-link-101', 'rmlk-101', 'RMLK-101-2097-link', ?),
+          ('2097-link-102', 'rmlk-102', 'RMLK-102-2097-link', ?),
+          ('2097-link-103', 'rmlk-103', 'RMLK-103-2097-link', ?)
+      `).bind(termId, termId, termId),
+      testEnv.DB.prepare(`
+        INSERT INTO meetings (section_id, meeting_index)
+        VALUES
+          ('2097-link-101', 0),
+          ('2097-link-102', 0),
+          ('2097-link-103', 0)
+      `),
+      testEnv.DB.prepare(`
+        INSERT INTO instructors (first_name, last_name, display_name)
+        VALUES
+          ('Ada', 'Exactson', 'Exactson, Ada'),
+          ('G.', 'Fallback', 'Fallback, G.'),
+          ('J.', 'Collision', 'Collision, J.')
+      `),
+      testEnv.DB.prepare(`
+        INSERT INTO meeting_instructors (meeting_id, instructor_id)
+        SELECT m.id, i.id
+        FROM meetings m
+        JOIN instructors i
+          ON (m.section_id = '2097-link-101' AND i.display_name = 'Exactson, Ada')
+          OR (m.section_id = '2097-link-102' AND i.display_name = 'Fallback, G.')
+          OR (m.section_id = '2097-link-103' AND i.display_name = 'Collision, J.')
+        WHERE m.section_id IN ('2097-link-101', '2097-link-102', '2097-link-103')
+      `),
+      testEnv.DB.prepare(`
+        INSERT INTO rmp_cache (
+          instructor_name, first_name, last_name, rmp_id,
+          rating, difficulty, num_ratings, fetched_at, expires_at
+        )
+        VALUES
+          ('Exactson, Ada', 'Ada', 'Exactson', 'link-match-exact', 4.5, 2, 20, ?, ?),
+          ('Exactson, Amelia', 'Amelia', 'Exactson', 'link-match-exact-collision', 3, 3, 10, ?, ?),
+          ('Fallback, Grace', 'Grace', 'Fallback', 'link-match-initial', 4, 2, 15, ?, ?),
+          ('Collision, Jane', 'Jane', 'Collision', 'link-match-ambiguous-a', 4, 2, 15, ?, ?),
+          ('Collision, John', 'John', 'Collision', 'link-match-ambiguous-b', 4, 2, 15, ?, ?)
+      `).bind(
+        now, now + 3600,
+        now, now + 3600,
+        now, now + 3600,
+        now, now + 3600,
+        now, now + 3600,
+      ),
+    ]);
+
+    await expect(rebuildInstructorCourseLinks(testEnv.DB, {
+      termId,
+      year: 2097,
+      term: 'link',
+    })).resolves.toMatchObject({
+      contextCount: 3,
+      linkCount: 3,
+    });
+
+    const links = await testEnv.DB.prepare(`
+      SELECT number, instructor_name, rmp_id
+      FROM instructor_course_links
+      WHERE term_id = ?
+      ORDER BY number
+    `).bind(termId).all<{
+      number: string;
+      instructor_name: string;
+      rmp_id: string | null;
+    }>();
+
+    expect(links.results).toEqual([
+      {
+        number: '101',
+        instructor_name: 'Exactson, Ada',
+        rmp_id: 'link-match-exact',
+      },
+      {
+        number: '102',
+        instructor_name: 'Fallback, G.',
+        rmp_id: 'link-match-initial',
+      },
+      {
+        number: '103',
+        instructor_name: 'Collision, J.',
+        rmp_id: null,
+      },
+    ]);
+  });
+
+  async function cleanupInstructorLinkFixture(): Promise<void> {
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        'DELETE FROM instructor_course_links WHERE term_id = ?'
+      ).bind(termId),
+      testEnv.DB.prepare(`
+        DELETE FROM meeting_instructors
+        WHERE meeting_id IN (
+          SELECT m.id
+          FROM meetings m
+          JOIN sections s ON s.id = m.section_id
+          WHERE s.term_id = ?
+        )
+      `).bind(termId),
+      testEnv.DB.prepare(
+        "DELETE FROM courses WHERE subject = 'RMLK' AND year = 2097"
+      ),
+      testEnv.DB.prepare(`
+        DELETE FROM instructors
+        WHERE last_name IN ('Exactson', 'Fallback', 'Collision')
+      `),
+      testEnv.DB.prepare(
+        "DELETE FROM rmp_cache WHERE rmp_id LIKE 'link-match-%'"
+      ),
+    ]);
+  }
 });

@@ -140,7 +140,7 @@ export async function coordinateEnrichment(
   }
 }
 
-async function rebuildInstructorCourseLinks(
+export async function rebuildInstructorCourseLinks(
   db: D1Database,
   options: { termId: string; year: number; term: string }
 ): Promise<{ contextCount: number; linkCount: number }> {
@@ -157,6 +157,45 @@ async function rebuildInstructorCourseLinks(
 
   const insertStatement = db.prepare(`
     WITH contexts AS (${INSTRUCTOR_COURSE_CONTEXTS_SQL}),
+    context_keys AS (
+      SELECT
+        c.*,
+        lower(trim(c.instructor_name)) AS canonical_name,
+        lower(trim(substr(
+          c.instructor_name,
+          1,
+          instr(c.instructor_name, ',') - 1
+        ))) AS last_name_key,
+        lower(substr(trim(substr(
+          c.instructor_name,
+          instr(c.instructor_name, ',') + 1
+        )), 1, 1)) AS first_initial
+      FROM contexts c
+    ),
+    exact_rmp_matches AS (
+      SELECT
+        lower(trim(r.instructor_name)) AS canonical_name,
+        min(r.rmp_id) AS rmp_id
+      FROM rmp_cache r
+      WHERE r.expires_at > unixepoch()
+        AND trim(r.instructor_name) <> ''
+      GROUP BY lower(trim(r.instructor_name))
+      HAVING count(*) = 1
+    ),
+    initial_rmp_matches AS (
+      SELECT
+        lower(trim(r.last_name)) AS last_name_key,
+        lower(substr(trim(r.first_name), 1, 1)) AS first_initial,
+        min(r.rmp_id) AS rmp_id
+      FROM rmp_cache r
+      WHERE r.expires_at > unixepoch()
+        AND trim(r.last_name) <> ''
+        AND trim(r.first_name) <> ''
+      GROUP BY
+        lower(trim(r.last_name)),
+        lower(substr(trim(r.first_name), 1, 1))
+      HAVING count(*) = 1
+    ),
     resolved AS (
       SELECT
         c.term_id,
@@ -172,23 +211,15 @@ async function rebuildInstructorCourseLinks(
           ORDER BY g.sample_size DESC
           LIMIT 1
         ) AS gpa_id,
-        CASE
-          WHEN (
-            SELECT COUNT(*)
-            FROM rmp_cache r
-            WHERE lower(trim(r.instructor_name)) = lower(trim(c.instructor_name))
-              AND r.expires_at > unixepoch()
-          ) = 1
-          THEN (
-            SELECT r.rmp_id
-            FROM rmp_cache r
-            WHERE lower(trim(r.instructor_name)) = lower(trim(c.instructor_name))
-              AND r.expires_at > unixepoch()
-            LIMIT 1
-          )
-          ELSE NULL
-        END AS rmp_id
-      FROM contexts c
+        coalesce(exact.rmp_id, initial.rmp_id) AS rmp_id
+      FROM context_keys c
+      LEFT JOIN exact_rmp_matches exact
+        ON exact.canonical_name = c.canonical_name
+      LEFT JOIN initial_rmp_matches initial
+        ON exact.rmp_id IS NULL
+        AND instr(c.instructor_name, ',') > 0
+        AND initial.last_name_key = c.last_name_key
+        AND initial.first_initial = c.first_initial
     )
     INSERT INTO instructor_course_links (
       term_id, subject, number, instructor_name,

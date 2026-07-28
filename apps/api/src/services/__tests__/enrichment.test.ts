@@ -144,6 +144,21 @@ describe('coordinateEnrichment', () => {
     expect(preparedSql.some(sql => sql.includes('JOIN meeting_instructors'))).toBe(true);
     expect(preparedSql.some(sql => sql.includes('WITH RECURSIVE split'))).toBe(false);
     expect(preparedSql.some(sql => sql.includes('confidence_score') || sql.includes('match_method'))).toBe(false);
+    const linkSql = preparedSql
+      .find(sql => sql.includes('INSERT INTO instructor_course_links'))
+      ?.replace(/\s+/g, ' ');
+    expect(linkSql).toContain('exact_rmp_matches AS');
+    expect(linkSql).toContain(
+      'GROUP BY lower(trim(r.instructor_name)) HAVING count(*) = 1'
+    );
+    expect(linkSql).toContain('initial_rmp_matches AS');
+    expect(linkSql).toContain(
+      'GROUP BY lower(trim(r.last_name)), lower(substr(trim(r.first_name), 1, 1)) HAVING count(*) = 1'
+    );
+    expect(linkSql).toContain('coalesce(exact.rmp_id, initial.rmp_id)');
+    expect(linkSql).toContain("instr(c.instructor_name, ',') > 0");
+    expect(linkSql).toContain('ON exact.rmp_id IS NULL');
+    expect(linkSql).not.toMatch(/\b(?:like|soundex)\b/i);
     expect(preparedSql.filter(sql => sql.includes('WITH score_sources AS'))).toHaveLength(1);
     expect(transactionalBatches.slice(0, 2).map(batch =>
       batch.map(sql => sql.replace(/\s+/g, ' ').trim())

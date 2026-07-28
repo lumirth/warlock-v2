@@ -38,10 +38,14 @@ async function main(): Promise<void> {
   const coverage = evaluateCorpusCoverage(GOLDEN_QUERIES);
   const duplicateIds = findDuplicateQueryIds(GOLDEN_QUERIES);
   const report = `${formatReport(results)}\n${formatCorpusCoverageReport(coverage)}`;
+  const artifactDirectory = new URL("../../../artifacts/", import.meta.url);
 
-  mkdirSync("artifacts", { recursive: true });
-  writeFileSync("artifacts/eval-smoke-report.md", report);
-  writeFileSync("artifacts/eval-smoke-results.json", `${JSON.stringify(results, null, 2)}\n`);
+  mkdirSync(artifactDirectory, { recursive: true });
+  writeFileSync(new URL("eval-smoke-report.md", artifactDirectory), report);
+  writeFileSync(
+    new URL("eval-smoke-results.json", artifactDirectory),
+    `${JSON.stringify(results, null, 2)}\n`,
+  );
   console.log(report);
 
   if (
