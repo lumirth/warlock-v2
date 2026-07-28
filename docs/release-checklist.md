@@ -65,11 +65,13 @@ imports the complete GPA dataset and rebuilds GPA aggregates, the RMP cache,
 instructor links, and public scores. The GPA import is capped at 1,024 chunk
 requests, with bounded backoff for transient D1 transport failures and
 mutation-lease contention. It fails on any other unsuccessful, invalid, or
-non-progressing response; GPA aggregation
-does not begin until the importer reports completion with a durable completion
-key. If any migration, deploy, rebuild, or status check fails, stop and use the
-recorded Time Travel bookmark; do not publish the web build against a partially
-released API.
+non-progressing response. Each GPA chunk only persists idempotent source rows;
+the importer rebuilds all derived GPA summaries once, as a set-based operation,
+at EOF and only then records the durable completion key. Downstream course and
+instructor enrichment does not begin until that completed generation is
+reported. If any migration, deploy, rebuild, or status check fails, stop and use
+the recorded Time Travel bookmark; do not publish the web build against a
+partially released API.
 
 Review the latest SQL migration itself, compute its SHA-256 with
 `shasum -a 256 apps/api/migrations/<latest-migration-name>.sql`, and paste the

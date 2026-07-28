@@ -4,6 +4,7 @@ import {
   claimGpaCompletionEnrichment,
   resetGpaSync,
   processGpaBatch,
+  rebuildAllGpaStats,
   resumeGpaSync,
 } from '../gpa-sync.js';
 
@@ -63,21 +64,23 @@ function createGpaDb(syncState?: {
         avgGpa,
         sampleSize,
       });
-    } else if (sql.includes('DELETE FROM gpa_stats') && sql.includes('subject = ?')) {
-      const [subject, number, instructor] = params as [string, string, string | null, string | null];
-      gpaStats.delete(statsKey(subject, number, instructor));
+    } else if (sql.includes('DELETE FROM gpa_stats')) {
+      gpaStats.clear();
     } else if (sql.includes('INSERT INTO gpa_stats') && sql.includes('FROM gpa_source_rows')) {
-      const [subject, number, instructor] = params as [string, string, string | null, string | null];
-      const rows = Array.from(sourceRows.values()).filter(row =>
-        row.subject === subject && row.number === number && row.instructor === instructor
-      );
-      const sampleSize = rows.reduce((total, row) => total + row.sampleSize, 0);
-      const weightedPoints = rows.reduce((total, row) => total + row.avgGpa * row.sampleSize, 0);
-      if (sampleSize > 0) {
-        gpaStats.set(statsKey(subject, number, instructor), {
-          avgGpa: weightedPoints / sampleSize,
-          sampleSize,
-        });
+      const groups = new Map<string, SourceRow[]>();
+      for (const row of sourceRows.values()) {
+        const key = statsKey(row.subject, row.number, row.instructor);
+        groups.set(key, [...(groups.get(key) ?? []), row]);
+      }
+      for (const [key, rows] of groups) {
+        const sampleSize = rows.reduce((total, row) => total + row.sampleSize, 0);
+        const weightedPoints = rows.reduce((total, row) => total + row.avgGpa * row.sampleSize, 0);
+        if (sampleSize > 0) {
+          gpaStats.set(key, {
+            avgGpa: weightedPoints / sampleSize,
+            sampleSize,
+          });
+        }
       }
     } else if (sql.includes('INSERT INTO sync_state') && params[0] === 'gpa') {
       syncStateWrites.push(params);
@@ -117,7 +120,7 @@ afterEach(() => {
 });
 
 describe('gpa sync', () => {
-  it('idempotently aggregates repeated course/instructor rows', async () => {
+  it('ingests source rows without rebuilding stats, then publishes one idempotent aggregate', async () => {
     const { db, gpaStats, sourceRows } = createGpaDb();
     const lines = [
       gpaLine('CS', '225', { 8: 1 }, 'Lovelace, Ada'),
@@ -126,6 +129,12 @@ describe('gpa sync', () => {
 
     await processGpaBatch(db, lines);
     await processGpaBatch(db, lines);
+
+    expect(gpaStats.size).toBe(0);
+    expect(db.prepare).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO gpa_stats'));
+
+    await rebuildAllGpaStats(db, 'lease-owner');
+    await rebuildAllGpaStats(db, 'lease-owner');
 
     expect(gpaStats.get(statsKey('CS', '225', 'Lovelace, Ada'))).toEqual({
       avgGpa: 3.5,
@@ -153,6 +162,8 @@ describe('gpa sync', () => {
 
     expect(syncStateWrites[0]?.[1]).toBe(1780488000);
     expect(syncStateWrites[0]?.[2]).toBe('complete');
+    expect(db.prepare).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO gpa_stats'));
+    expect(kv.delete).toHaveBeenCalledWith('gpa_full_dataset');
   });
 
   it('does not fetch or rewrite a completed GPA generation', async () => {

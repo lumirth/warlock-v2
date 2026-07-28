@@ -191,12 +191,66 @@ describe('GPA generation concurrency in D1', () => {
       WHERE subject = 'TEST'
       ORDER BY number
     `).all<{ number: string }>();
+    const stats = await testEnv.DB.prepare(`
+      SELECT number, avg_gpa, sample_size FROM gpa_stats
+      WHERE subject = 'TEST'
+      ORDER BY number
+    `).all<{ number: string; avg_gpa: number; sample_size: number }>();
     expect(state).toEqual({
       last_status: 'complete',
       cursor: winningDataset.length,
       etag: '"dataset-v1"',
     });
     expect(sourceRows.results).toEqual([{ number: '102' }]);
+    expect(stats.results).toEqual([{
+      number: '102',
+      avg_gpa: 4,
+      sample_size: 10,
+    }]);
+  });
+
+  it('rebuilds derived stats before completing an already-at-EOF checkpoint', async () => {
+    const cachedDataset = 'cached-generation';
+    await testEnv.GPA_CACHE.put('gpa_full_dataset', cachedDataset);
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(`
+        INSERT INTO gpa_source_rows (
+          row_key, source_year, source_term, subject, number, instructor,
+          avg_gpa, sample_size, last_updated
+        )
+        VALUES
+          ('source-a', 2099, 'test', 'TEST', '103', 'Teacher, Ada', 4.0, 10, unixepoch()),
+          ('source-b', 2099, 'test', 'TEST', '103', 'Teacher, Ada', 3.0, 30, unixepoch())
+      `),
+      testEnv.DB.prepare(`
+        INSERT INTO sync_state (
+          id, last_sync, last_status, items_synced, cursor, etag
+        )
+        VALUES ('gpa', unixepoch(), 'running', 2, ?, '"dataset-v1"')
+      `).bind(cachedDataset.length),
+    ]);
+
+    await expect(resumeGpaSync(testEnv.DB, testEnv.GPA_CACHE)).resolves.toMatchObject({
+      success: true,
+      isComplete: true,
+      rowsProcessed: 0,
+    });
+
+    const state = await testEnv.DB.prepare(`
+      SELECT last_status, cursor, items_synced FROM sync_state WHERE id = 'gpa'
+    `).first<{ last_status: string; cursor: number; items_synced: number }>();
+    const stats = await testEnv.DB.prepare(`
+      SELECT avg_gpa, sample_size FROM gpa_stats
+      WHERE subject = 'TEST' AND number = '103' AND instructor = 'Teacher, Ada'
+    `).first<{ avg_gpa: number; sample_size: number }>();
+
+    expect(state).toEqual({
+      last_status: 'complete',
+      cursor: cachedDataset.length,
+      items_synced: 2,
+    });
+    expect(stats).toEqual({ avg_gpa: 3.25, sample_size: 40 });
+    await expect(testEnv.GPA_CACHE.get('gpa_full_dataset')).resolves.toBeNull();
   });
 });
 

@@ -152,7 +152,7 @@ async function resumeGpaSyncUnderLease(
   // 3. Check for completion
   if (cursor >= fullText.length) {
     logger.info('gpa.resume.complete', { cursor });
-    await kv.delete(KV_KEY); // Cleanup
+    await rebuildAllGpaStats(db, leaseOwner);
 
     await writeGpaCheckpoint(db, state, {
       id: 'gpa',
@@ -162,6 +162,7 @@ async function resumeGpaSyncUnderLease(
       cursor: cursor, // Keep cursor at end
       etag: generationEtag,
     });
+    await kv.delete(KV_KEY);
 
     return {
       success: true,
@@ -213,6 +214,9 @@ async function resumeGpaSyncUnderLease(
   // 6. Update state
   await renewGpaMutationLease(db, leaseOwner);
   const reachedEnd = nextCursor >= fullText.length;
+  if (reachedEnd) {
+    await rebuildAllGpaStats(db, leaseOwner);
+  }
   await writeGpaCheckpoint(db, state, {
     id: 'gpa',
     last_sync: currentUnixSeconds(),
@@ -469,7 +473,10 @@ export async function resetGpaSync(db: D1Database, kv: KVNamespace): Promise<Gpa
 }
 
 /**
- * Processor: Parses lines and batch-inserts into D1.
+ * Processor: parses lines and persists source provenance only.
+ *
+ * Aggregate publication happens once at durable EOF, avoiding repeated
+ * delete-and-aggregate work for every 50 KiB chunk.
  * Kept local to avoid dispatch overhead.
  */
 export async function processGpaBatch(
@@ -582,45 +589,45 @@ export async function processGpaBatch(
     }
   }
 
-  const affectedGroups = new Map<string, Pick<GpaRecord, 'subject' | 'number' | 'instructor'>>();
-  for (const record of records) {
-    affectedGroups.set(`${record.subject}\0${record.number}\0${record.instructor ?? ''}`, {
-      subject: record.subject,
-      number: record.number,
-      instructor: record.instructor,
-    });
-  }
-
-  for (const group of affectedGroups.values()) {
-    if (options.leaseOwner) {
-      await renewGpaMutationLease(db, options.leaseOwner);
-    }
-    const deleteStatement = db.prepare(`
-      DELETE FROM gpa_stats
-      WHERE subject = ?
-        AND number = ?
-        AND ((instructor IS NULL AND ? IS NULL) OR instructor = ?)
-    `).bind(group.subject, group.number, group.instructor, group.instructor);
-
-    const insertStatement = db.prepare(`
-      INSERT INTO gpa_stats (subject, number, instructor, avg_gpa, sample_size, last_updated)
-      SELECT
-        subject,
-        number,
-        instructor,
-        CAST(SUM(avg_gpa * sample_size) AS REAL) / SUM(sample_size) AS avg_gpa,
-        SUM(sample_size) AS sample_size,
-        unixepoch() AS last_updated
-      FROM gpa_source_rows
-      WHERE subject = ?
-        AND number = ?
-        AND ((instructor IS NULL AND ? IS NULL) OR instructor = ?)
-      GROUP BY subject, number, instructor
-    `).bind(group.subject, group.number, group.instructor, group.instructor);
-    await db.batch([deleteStatement, insertStatement]);
-  }
-
   return { inserted: totalInserted };
+}
+
+export async function rebuildAllGpaStats(
+  db: D1Database,
+  leaseOwner: string,
+): Promise<void> {
+  await renewGpaMutationLease(db, leaseOwner);
+  const leasePredicate = `
+    EXISTS (
+      SELECT 1
+      FROM sync_state
+      WHERE id = ?
+        AND etag = ?
+        AND last_status = 'running'
+    )
+  `;
+  const deleteStats = db.prepare(`
+    DELETE FROM gpa_stats
+    WHERE ${leasePredicate}
+  `).bind(GPA_MUTATION_LEASE_ID, leaseOwner);
+  const insertStats = db.prepare(`
+    INSERT INTO gpa_stats (
+      subject, number, instructor, avg_gpa, sample_size, last_updated
+    )
+    SELECT
+      subject,
+      number,
+      instructor,
+      CAST(SUM(avg_gpa * sample_size) AS REAL) / SUM(sample_size) AS avg_gpa,
+      SUM(sample_size) AS sample_size,
+      unixepoch() AS last_updated
+    FROM gpa_source_rows
+    WHERE ${leasePredicate}
+    GROUP BY subject, number, instructor
+  `).bind(GPA_MUTATION_LEASE_ID, leaseOwner);
+
+  await db.batch([deleteStats, insertStats]);
+  await renewGpaMutationLease(db, leaseOwner);
 }
 
 function d1ChangedRows(result: D1Result<unknown>): number {
