@@ -161,6 +161,12 @@ npx wrangler vectorize create-metadata-index course-embeddings-staging --propert
 
 After adding or changing embedding metadata, rebuild embeddings before accepting semantic-search smoke results. Old vectors without `term_id` cannot participate in active-scope semantic recall.
 
+Production keeps `SYNC_EMBEDDINGS=false` during authoritative course
+publication so Vectorize throughput cannot make D1 snapshots incomplete.
+Populate semantic vectors separately with the bounded backfill endpoint after
+the core release is healthy; keyword, structured, and exact retrieval remain
+available while that optional backfill runs.
+
 Backfill each page until the response reports `"hasMore": false`:
 
 ```bash

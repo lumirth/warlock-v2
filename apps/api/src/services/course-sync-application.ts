@@ -27,6 +27,7 @@ type SyncSubjectBatchCommand = {
   subjects: string[];
   requestedStatus?: TermStateStatus;
   totalSubjects?: number | null;
+  forceRunningLocks?: boolean;
 };
 
 type SyncTermCommand = {
@@ -63,7 +64,10 @@ export async function runSubjectSyncBatch(
     command.term,
     command.subjects,
     embeddingVectorize(env),
-    embeddingAi(env)
+    embeddingAi(env),
+    {
+      lockMode: command.forceRunningLocks ? 'force' : 'respect-running',
+    },
   );
 
   return result;

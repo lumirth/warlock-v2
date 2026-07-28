@@ -8,4 +8,5 @@ export type SyncBatchRequest = {
   subjects: string[];
   status?: TermStateStatus;
   totalSubjects?: number;
+  forceRunningLocks?: boolean;
 };

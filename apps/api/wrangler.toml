@@ -13,7 +13,9 @@ FEEDBACK_ALLOWED_ORIGINS = "https://uiuc-course-search-web.pages.dev"
 
 # Sync settings
 SYNC_CONCURRENCY = "25"
-SYNC_EMBEDDINGS = "true"
+# Course publication is the authoritative release gate. Vectorize has a
+# separate throughput budget, so semantic vectors are backfilled explicitly.
+SYNC_EMBEDDINGS = "false"
 
 # Rate limiting
 BACKOFF_BASE_MS = "5000"

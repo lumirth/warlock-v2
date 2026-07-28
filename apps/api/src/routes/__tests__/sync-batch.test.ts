@@ -115,12 +115,41 @@ describe('internal sync batch route', () => {
         subjects: ['CS'],
         status: 'registrable',
         totalSubjects: 187,
+        forceRunningLocks: true,
       }),
     }, createEnv(termState(), runCalls));
 
     expect(response.status).toBe(200);
     const termUpsert = runCalls.find(call => call.sql.includes('INSERT INTO term_state'));
     expect(termUpsert).toBeUndefined();
+    expect(syncSubjects).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      2026,
+      'fall',
+      ['CS'],
+      undefined,
+      undefined,
+      { lockMode: 'force' },
+    );
+  });
+
+  it('rejects a non-boolean forceRunningLocks value', async () => {
+    const response = await app().request('/internal/sync-batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        year: 2026,
+        term: 'fall',
+        subjects: ['CS'],
+        forceRunningLocks: 'yes',
+      }),
+    }, createEnv(termState()));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'forceRunningLocks must be a boolean',
+    });
+    expect(syncSubjects).not.toHaveBeenCalled();
   });
 
   it('does not mark a skipped-only batch as freshly synced', async () => {

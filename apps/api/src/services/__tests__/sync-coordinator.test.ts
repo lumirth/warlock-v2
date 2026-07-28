@@ -64,7 +64,9 @@ describe('coordinateCourseSync', () => {
         year: number;
         term: string;
         subjects: string[];
+        forceRunningLocks: boolean;
       };
+      expect(body.forceRunningLocks).toBe(false);
       return Response.json(syncResult(body.year, body.term, body.subjects));
     });
 

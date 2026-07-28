@@ -60,7 +60,14 @@ syncCourseRoutes.post('/internal/sync-batch', async (c) => {
   }
 
   try {
-    const { year, term, subjects, status, totalSubjects } = payload;
+    const {
+      year,
+      term,
+      subjects,
+      status,
+      totalSubjects,
+      forceRunningLocks,
+    } = payload;
 
     if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
       return c.json({ error: 'No subjects provided' }, 400);
@@ -107,6 +114,12 @@ syncCourseRoutes.post('/internal/sync-batch', async (c) => {
     if (parsedTotalSubjects === undefined) {
       return c.json({ error: 'totalSubjects must be an integer greater than or equal to subjects.length' }, 400);
     }
+    if (
+      forceRunningLocks !== undefined
+      && typeof forceRunningLocks !== 'boolean'
+    ) {
+      return c.json({ error: 'forceRunningLocks must be a boolean' }, 400);
+    }
 
     logger.info('internal.syncBatch.start', { runId, year: parsedYear, term: parsedTerm.value, subjectCount: normalizedSubjects.length });
 
@@ -116,6 +129,7 @@ syncCourseRoutes.post('/internal/sync-batch', async (c) => {
       subjects: normalizedSubjects,
       requestedStatus,
       totalSubjects: parsedTotalSubjects,
+      forceRunningLocks,
     });
 
     return c.json(result);

@@ -79,7 +79,13 @@ export async function coordinateCourseSync(
 
   const results: CourseSyncTermResult[] = [];
   for (const termState of activeTerms) {
-    results.push(await syncTermSubjects(env, config, termState, options.runId));
+    results.push(await syncTermSubjects(
+      env,
+      config,
+      termState,
+      options.runId,
+      options.trigger === 'admin_full_sync',
+    ));
   }
 
   return {
@@ -98,7 +104,8 @@ async function syncTermSubjects(
   env: CourseSyncCoordinatorEnv,
   config: SubjectDiscoveryConfig,
   termState: TermState,
-  runId: string
+  runId: string,
+  forceRunningLocks: boolean,
 ): Promise<CourseSyncTermResult> {
   try {
     logger.info('cron.courseSync.subjects.start', { runId, termId: termState.term_id });
@@ -121,7 +128,8 @@ async function syncTermSubjects(
       termState,
       allSubjects.length,
       batches,
-      runId
+      runId,
+      forceRunningLocks,
     );
     const aggregate = aggregateBatchResults(
       termState,
@@ -222,7 +230,8 @@ async function dispatchSubjectBatches(
   termState: TermState,
   totalSubjects: number,
   batches: string[][],
-  runId: string
+  runId: string,
+  forceRunningLocks: boolean,
 ): Promise<{ results: TermSyncResult[]; failedBatchCount: number }> {
   const results: TermSyncResult[] = [];
   let failedBatchCount = 0;
@@ -236,6 +245,7 @@ async function dispatchSubjectBatches(
       subjects,
       status: termState.status,
       totalSubjects,
+      forceRunningLocks,
     };
 
     try {
