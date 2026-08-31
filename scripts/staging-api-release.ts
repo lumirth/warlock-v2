@@ -60,10 +60,18 @@ async function bootstrapCatalog(
   const headers = { Authorization: `Bearer ${required(`${prefix}_ADMIN_TOKEN`)}` };
   await adminRequest(baseUrl, '/admin/discover-terms', headers);
   for (let step = 0; step < 64; step += 1) {
-    const sync = await adminRequest(baseUrl, '/admin/sync', headers) as {
+    let sync: {
       catalogReady?: boolean;
       processed?: { termId?: string; subjects?: string[]; failedSubjects?: number } | null;
     };
+    try {
+      sync = await adminRequest(baseUrl, '/admin/sync', headers) as typeof sync;
+    } catch (error) {
+      if (!(error instanceof Error)
+        || (error.name !== 'TimeoutError' && error.name !== 'AbortError')) throw error;
+      console.warn(`Catalog step ${step + 1} timed out; resuming from durable subject state.`);
+      continue;
+    }
     if (sync.catalogReady) return headers;
     if (sync.processed) {
       console.log(`Catalog step ${step + 1}: ${sync.processed.termId} `
