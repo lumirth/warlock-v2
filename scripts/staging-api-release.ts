@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { request } from 'node:https';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCli } from './lib/run-cli.ts';
@@ -84,10 +85,25 @@ async function adminRequest(
   headers: Record<string, string>,
   method = 'POST',
 ): Promise<unknown> {
-  const response = await fetch(`${baseUrl}${path}`, { method, headers });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}.`);
-  return body;
+  return new Promise((resolve, reject) => {
+    const req = request(`${baseUrl}${path}`, { method, headers }, response => {
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { text += chunk; });
+      response.on('end', () => {
+        const status = response.statusCode ?? 0;
+        if (status < 200 || status >= 300) {
+          reject(new Error(`${path} returned HTTP ${status}.`));
+          return;
+        }
+        try { resolve(text ? JSON.parse(text) : null); }
+        catch { reject(new Error(`${path} returned invalid JSON.`)); }
+      });
+    });
+    req.setTimeout(30 * 60_000, () => req.destroy(new Error(`${path} timed out.`)));
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 async function main(): Promise<void> {
