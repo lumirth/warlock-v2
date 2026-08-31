@@ -1,373 +1,185 @@
 import type { D1Database, Fetcher, VectorizeIndex } from '@cloudflare/workers-types';
 import type { TermState } from '../db/types.js';
-import { getTermsByStatus } from '../db/term-state-repository.js';
 import { internalAuthHeaders } from '../middleware/auth.js';
 import { errorFields, logger } from '../observability/logger.js';
 import {
   getSubjectsForTerm,
+  summarizeTermSync,
   type SubjectSyncResult,
   type TermSyncResult,
 } from './parallel-sync.js';
-import { MAX_SYNC_SUBJECTS_PER_REQUEST, type SyncBatchRequest } from './sync-batch-contract.js';
-import {
-  recordCoordinatedTermSyncFailure,
-  recordCoordinatedTermSyncResult,
-} from './course-sync-application.js';
-import { syncEmbeddingsEnabled } from './sync-operations.js';
 import { reconcileTermSubjectManifest } from './term-subject-manifest.js';
-import { validateSyncBatchContract } from './validation.js';
+import { syncConcurrency } from './sync-operations.js';
 
-type CourseSyncCoordinatorEnv = {
+const SUBJECTS_PER_REQUEST = 20;
+
+type Env = {
   DB: D1Database;
   SELF: Fetcher;
   CISAPI_BASE: string;
   SYNC_CONCURRENCY: string;
-  SYNC_EMBEDDINGS?: string;
-  VECTORIZE?: VectorizeIndex;
+  VECTORIZE: VectorizeIndex;
   INTERNAL_TOKEN?: string;
 };
 
-export type CourseSyncTrigger = 'scheduled_course_sync' | 'admin_full_sync';
-
-type CourseSyncCoordinatorOptions = {
-  runId: string;
-  cron: string;
-  trigger: CourseSyncTrigger;
-};
-
-type CourseSyncTermResult = {
-  termId: string;
-  subjectCount: number;
-  batchCount: number;
-  failedBatchCount: number;
-  failedSubjectCount: number;
-  skippedSubjectCount: number;
-  deletedCourseCount: number;
-  success: boolean;
-};
-
-type CourseSyncCoordinatorResult = {
-  termCount: number;
-  results: CourseSyncTermResult[];
-  failedTermCount: number;
-};
-
-export async function coordinateCourseSync(
-  env: CourseSyncCoordinatorEnv,
-  options: CourseSyncCoordinatorOptions
-): Promise<CourseSyncCoordinatorResult> {
-  logger.info('cron.courseSync.start', {
-    runId: options.runId,
-    cron: options.cron,
-    trigger: options.trigger,
-  });
-
-  const activeTerms = [
-    ...await getTermsByStatus(env.DB, 'registrable'),
-    ...await getTermsByStatus(env.DB, 'active'),
-  ];
-
-  if (activeTerms.length === 0) {
-    logger.info('cron.courseSync.noActiveTerms', { runId: options.runId });
-    return { termCount: 0, results: [], failedTermCount: 0 };
-  }
-
-  const config = {
-    cisapiBase: env.CISAPI_BASE,
-    concurrency: parseInt(env.SYNC_CONCURRENCY, 10) || 25,
-  };
-
-  const results: CourseSyncTermResult[] = [];
-  for (const termState of activeTerms) {
-    results.push(await syncTermSubjects(
-      env,
-      config,
-      termState,
-      options.runId,
-      options.trigger === 'admin_full_sync',
-    ));
-  }
-
+export async function coordinateCourseSync(env: Env, options: { runId: string }) {
+  const terms = await env.DB.prepare(`
+    SELECT * FROM term_state WHERE status IN ('registrable', 'active')
+    ORDER BY CASE status WHEN 'registrable' THEN 0 ELSE 1 END, year DESC
+  `).all<TermState>();
+  const results = [];
+  for (const term of terms.results) results.push(await syncTerm(env, term, options.runId));
   return {
-    termCount: activeTerms.length,
+    termCount: results.length,
     results,
     failedTermCount: results.filter(result => !result.success).length,
   };
 }
 
-type SubjectDiscoveryConfig = {
-  cisapiBase: string;
-  concurrency: number;
-};
-
-async function syncTermSubjects(
-  env: CourseSyncCoordinatorEnv,
-  config: SubjectDiscoveryConfig,
-  termState: TermState,
-  runId: string,
-  forceRunningLocks: boolean,
-): Promise<CourseSyncTermResult> {
+async function syncTerm(env: Env, term: TermState, runId: string) {
   try {
-    logger.info('cron.courseSync.subjects.start', { runId, termId: termState.term_id });
-    const allSubjects = await getSubjectsForTerm(config, termState.year, termState.term);
-    logger.info('cron.courseSync.subjects.complete', {
-      runId,
-      termId: termState.term_id,
-      subjectCount: allSubjects.length,
-    });
-
-    const batches = chunk(allSubjects, MAX_SYNC_SUBJECTS_PER_REQUEST);
-    logger.info('cron.courseSync.dispatch.start', {
-      runId,
-      termId: termState.term_id,
-      batchCount: batches.length,
-    });
-
-    const dispatch = await dispatchSubjectBatches(
-      env,
-      termState,
-      allSubjects.length,
-      batches,
-      runId,
-      forceRunningLocks,
-    );
-    const aggregate = aggregateBatchResults(
-      termState,
-      dispatch.results,
-      allSubjects.length
-    );
-    const skippedSubjectCount = aggregate.subjectResults.filter(subject => subject.skipped).length;
-    const success = (
-      dispatch.failedBatchCount === 0
-      && aggregate.failedSubjects === 0
-      && skippedSubjectCount === 0
-      && aggregate.subjectResults.length === allSubjects.length
-    );
-
-    logger.info('cron.courseSync.dispatch.complete', {
-      runId,
-      termId: termState.term_id,
-      batchCount: batches.length,
-      failedBatchCount: dispatch.failedBatchCount,
-      failedSubjectCount: aggregate.failedSubjects,
-      skippedSubjectCount,
-    });
-
-    let deletedCourseCount = 0;
-    if (success) {
-      const reconciliation = await reconcileTermSubjectManifest(env.DB, {
-        year: termState.year,
-        term: termState.term,
-        authoritativeSubjects: allSubjects,
-        syncResult: aggregate,
-        vectorize: syncEmbeddingsEnabled(env.SYNC_EMBEDDINGS)
-          ? env.VECTORIZE
-          : undefined,
-      });
-      if (!reconciliation.applied) {
-        throw new Error(
-          `Refusing incomplete subject-manifest reconciliation for ${termState.term_id}`,
-        );
-      }
-      deletedCourseCount = reconciliation.deletedCourseCount;
-      logger.info('cron.courseSync.manifest.complete', {
-        runId,
-        termId: termState.term_id,
-        deletedCourseCount,
-      });
-    }
-
-    await recordCoordinatedTermSyncResult(env.DB, {
-      termState,
-      result: aggregate,
-      totalSubjects: allSubjects.length,
-    });
-
-    return {
-      termId: termState.term_id,
-      subjectCount: allSubjects.length,
-      batchCount: batches.length,
-      failedBatchCount: dispatch.failedBatchCount,
-      failedSubjectCount: aggregate.failedSubjects,
-      skippedSubjectCount,
-      deletedCourseCount,
-      success,
-    };
-  } catch (err) {
-    logger.error('cron.courseSync.term.failed', {
-      runId,
-      termId: termState.term_id,
-      ...errorFields(err),
-    });
-    try {
-      await recordCoordinatedTermSyncFailure(
-        env.DB,
-        termState,
-        err instanceof Error ? err.message : String(err)
-      );
-    } catch (stateError) {
-      logger.error('cron.courseSync.termState.failed', {
-        runId,
-        termId: termState.term_id,
-        ...errorFields(stateError),
-      });
-    }
-    return {
-      termId: termState.term_id,
-      subjectCount: 0,
-      batchCount: 0,
-      failedBatchCount: 0,
-      failedSubjectCount: 0,
-      skippedSubjectCount: 0,
-      deletedCourseCount: 0,
-      success: false,
-    };
+    return await syncTermOrThrow(env, term, runId);
+  } catch (error) {
+    logger.error('courseSync.term.failed', { runId, termId: term.term_id, ...errorFields(error) });
+    await recordFailure(env.DB, term.term_id, error);
+    return outcome(term.term_id, false);
   }
 }
 
-async function dispatchSubjectBatches(
-  env: CourseSyncCoordinatorEnv,
-  termState: TermState,
-  totalSubjects: number,
+async function syncTermOrThrow(env: Env, term: TermState, runId: string) {
+  const subjects = await getSubjectsForTerm({
+    cisapiBase: env.CISAPI_BASE,
+    concurrency: syncConcurrency(env.SYNC_CONCURRENCY),
+  }, term.year, term.term);
+  rejectImplausibleShrink(term, subjects.length);
+
+  const batches = chunk(subjects, SUBJECTS_PER_REQUEST);
+  const { results, failedBatchCount } = await runBatches(env, term, batches, runId);
+  const aggregate = summarizeTermSync(
+    term.year,
+    term.term,
+    results.flatMap(result => result.subjectResults),
+    results.reduce((sum, result) => sum + result.durationMs, 0),
+  );
+  const skipped = aggregate.subjectResults.filter(result => result.skipped).length;
+  const complete = failedBatchCount === 0
+    && aggregate.failedSubjects === 0
+    && skipped === 0
+    && aggregate.subjectResults.length === subjects.length;
+
+  let deletedCourseCount = 0;
+  if (complete) {
+    const reconciliation = await reconcileTermSubjectManifest(env.DB, {
+      year: term.year,
+      term: term.term,
+      authoritativeSubjects: subjects,
+      syncResult: aggregate,
+      vectorize: env.VECTORIZE,
+    });
+    if (!reconciliation.applied) throw new Error('refused incomplete term publication');
+    deletedCourseCount = reconciliation.deletedCourseCount;
+  }
+
+  await recordResult(env.DB, term.term_id, aggregate, subjects.length, complete);
+  return outcome(term.term_id, complete, {
+    subjectCount: subjects.length,
+    batchCount: batches.length,
+    failedBatchCount,
+    failedSubjectCount: aggregate.failedSubjects,
+    skippedSubjectCount: skipped,
+    deletedCourseCount,
+  });
+}
+
+async function runBatches(
+  env: Env,
+  term: TermState,
   batches: string[][],
   runId: string,
-  forceRunningLocks: boolean,
 ): Promise<{ results: TermSyncResult[]; failedBatchCount: number }> {
   const results: TermSyncResult[] = [];
   let failedBatchCount = 0;
-
-  // Each internal batch already fans out subjects concurrently. Dispatching
-  // batches serially bounds upstream concurrency and D1 write pressure.
-  for (const [batchIndex, subjects] of batches.entries()) {
-    const payload: SyncBatchRequest = {
-      year: termState.year,
-      term: termState.term,
-      subjects,
-      status: termState.status,
-      totalSubjects,
-      forceRunningLocks,
-    };
-
+  for (const subjects of batches) {
     try {
-      const response = await env.SELF.fetch('http://internal/internal/sync-batch', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: {
-          'Content-Type': 'application/json',
-          ...internalAuthHeaders(env.INTERNAL_TOKEN),
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`internal sync batch returned HTTP ${response.status}`);
-      }
-
-      const body: unknown = await response.json();
-      const contractErrors = validateSyncBatchContract(body, {
-        year: termState.year,
-        term: termState.term,
-        subjects,
-      });
-      if (contractErrors.length > 0) {
-        throw new Error(`invalid internal sync result: ${contractErrors.join('; ')}`);
-      }
-
-      const result = body as unknown as TermSyncResult;
-      const skippedSubjects = result.subjectResults.filter(subject => subject.skipped).length;
-      if (result.failedSubjects > 0 || skippedSubjects > 0) {
-        failedBatchCount += 1;
-        logger.error('cron.courseSync.dispatch.subjectFailures', {
-          runId,
-          termId: termState.term_id,
-          batchIndex,
-          failedSubjects: result.failedSubjects,
-          skippedSubjects,
-        });
-      }
-      results.push(result);
-    } catch (err) {
+      results.push(await dispatchBatch(env, term, subjects));
+    } catch (error) {
       failedBatchCount += 1;
-      logger.error('cron.courseSync.dispatch.networkError', {
-        runId,
-        termId: termState.term_id,
-        batchIndex,
-        ...errorFields(err),
-      });
-      results.push(failedBatchResult(termState, subjects, err));
+      logger.error('courseSync.batch.failed', { runId, termId: term.term_id, ...errorFields(error) });
+      const failed: SubjectSyncResult[] = subjects.map(subject => ({
+        subject,
+        success: false,
+        coursesCount: 0,
+        sectionsCount: 0,
+        durationMs: 0,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      results.push(summarizeTermSync(term.year, term.term, failed, 0));
     }
   }
-
   return { results, failedBatchCount };
 }
 
-function failedBatchResult(
-  termState: TermState,
-  subjects: string[],
-  error: unknown
-): TermSyncResult {
-  const message = error instanceof Error ? error.message : String(error);
-  const subjectResults: SubjectSyncResult[] = subjects.map(subject => ({
-    subject,
-    success: false,
-    coursesCount: 0,
-    sectionsCount: 0,
-    durationMs: 0,
-    error: message,
-  }));
+async function dispatchBatch(env: Env, term: TermState, subjects: string[]): Promise<TermSyncResult> {
+  const response = await env.SELF.fetch('http://internal/internal/sync-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...internalAuthHeaders(env.INTERNAL_TOKEN) },
+    body: JSON.stringify({ year: term.year, term: term.term, subjects }),
+  });
+  if (!response.ok) throw new Error(`sync batch returned HTTP ${response.status}`);
+  return response.json<TermSyncResult>();
+}
+
+async function recordResult(
+  db: D1Database,
+  termId: string,
+  result: TermSyncResult,
+  subjectCount: number,
+  complete: boolean,
+): Promise<void> {
+  const errors = result.subjectResults
+    .filter(subject => !subject.success || subject.skipped)
+    .map(subject => ({ subject: subject.subject, error: subject.error ?? 'not refreshed' }));
+  await db.prepare(`
+    UPDATE term_state SET
+      last_synced = CASE WHEN ? THEN unixepoch() ELSE last_synced END,
+      subjects_count = CASE WHEN ? THEN ? ELSE subjects_count END,
+      courses_count = CASE WHEN ? THEN ? ELSE courses_count END,
+      sections_count = CASE WHEN ? THEN ? ELSE sections_count END,
+      sync_errors = ?
+    WHERE term_id = ?
+  `).bind(
+    complete, complete, subjectCount, complete, result.totalCourses,
+    complete, result.totalSections, complete ? null : JSON.stringify(errors), termId,
+  ).run();
+}
+
+async function recordFailure(db: D1Database, termId: string, error: unknown): Promise<void> {
+  await db.prepare(`
+    UPDATE term_state SET sync_errors = ? WHERE term_id = ?
+  `).bind(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), termId).run();
+}
+
+function outcome(termId: string, success: boolean, counts = {}) {
   return {
-    termId: termState.term_id,
-    year: termState.year,
-    term: termState.term,
-    subjectResults,
-    totalCourses: 0,
-    totalSections: 0,
-    successfulSubjects: 0,
-    failedSubjects: subjectResults.length,
-    durationMs: 0,
-    rateLimitHits: 0,
-    pagination: {
-      total: subjects.length,
-      offset: 0,
-      limit: subjects.length,
-      hasMore: false,
-    },
+    termId,
+    subjectCount: 0,
+    batchCount: 0,
+    failedBatchCount: 0,
+    failedSubjectCount: 0,
+    skippedSubjectCount: 0,
+    deletedCourseCount: 0,
+    ...counts,
+    success,
   };
 }
 
-function aggregateBatchResults(
-  termState: TermState,
-  results: TermSyncResult[],
-  totalSubjects: number
-): TermSyncResult {
-  const subjectResults = results.flatMap(result => result.subjectResults);
-  const warnings = [
-    ...new Set(results.map(result => result.staleDataWarning).filter((value): value is string => Boolean(value))),
-  ];
-  return {
-    termId: termState.term_id,
-    year: termState.year,
-    term: termState.term,
-    subjectResults,
-    totalCourses: subjectResults.reduce((sum, subject) => sum + subject.coursesCount, 0),
-    totalSections: subjectResults.reduce((sum, subject) => sum + subject.sectionsCount, 0),
-    successfulSubjects: subjectResults.filter(subject => subject.success).length,
-    failedSubjects: subjectResults.filter(subject => !subject.success).length,
-    durationMs: results.reduce((sum, result) => sum + result.durationMs, 0),
-    rateLimitHits: results.reduce((sum, result) => sum + result.rateLimitHits, 0),
-    staleDataWarning: warnings.length > 0 ? warnings.join('; ') : undefined,
-    pagination: {
-      total: totalSubjects,
-      offset: 0,
-      limit: totalSubjects,
-      hasMore: false,
-    },
-  };
+function rejectImplausibleShrink(term: TermState, nextCount: number): void {
+  if (term.subjects_count && term.subjects_count >= 20 && nextCount * 4 < term.subjects_count * 3) {
+    throw new Error(`refusing subject shrink from ${term.subjects_count} to ${nextCount}`);
+  }
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
-  const batches: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    batches.push(items.slice(index, index + size));
-  }
-  return batches;
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+    items.slice(index * size, (index + 1) * size));
 }

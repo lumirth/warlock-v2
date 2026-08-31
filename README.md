@@ -1,98 +1,58 @@
 # UIUC Course Search
 
-Pre-alpha UIUC course search app with a React/Vite frontend, Cloudflare Worker API, D1 storage, Vectorize-backed semantic search, and scheduled sync/enrichment jobs.
+UIUC Course Search is a React application backed by a Cloudflare Worker, D1,
+and optional Vectorize recall. It supports course-code navigation, structured
+filters, natural-language search, course details, and scheduled catalog and
+enrichment refreshes.
 
-## Current Commands
+## Develop
 
-Use Node.js 22 or newer (`.nvmrc` is provided), then install the locked
-workspace with `npm ci`.
+Use Node 22 and the committed lockfile:
 
 ```bash
-npm run typecheck
-npm test
+npm ci
+npm run dev
+```
+
+The complete local gate is deliberately small:
+
+```bash
 npm run build
-npm run bundle:budget
+npm test
 npm run lint
-npm run db:verify
-npm run eval:smoke
+npm run bundle:budget
 npm run security:secrets
-npm run security:audit
-npm run bootstrap:fresh-check
+npm audit --audit-level=high
 ```
 
-Default `npm run build` is deterministic and does not regenerate subject data or fetch network data. Use `npm run generate:subjects` only when intentionally refreshing the committed subject list.
+`npm run build` compiles every workspace and creates the production web bundle.
+Local web development proxies `/api` to `http://localhost:8787`; override it
+with `VITE_API_PROXY_TARGET` when Wrangler uses another port.
 
-Local web development proxies `/api` to `http://localhost:8787` by default. If
-Wrangler starts on another port, set `VITE_API_PROXY_TARGET`, for example
-`VITE_API_PROXY_TARGET=http://localhost:8788 npm run dev -w @uiuc-course-search/web`.
+## System boundaries
 
-## Route Classes
+- `apps/api`: Hono Worker, search, synchronization, enrichment, and D1 access.
+- `apps/web`: React/Vite client.
+- `packages/query-types`: shared public request vocabulary.
+- `apps/api/migrations/0001_schema.sql`: the sole database schema authority.
 
-- Public reads: `/`, `/health`, `/api/search`, `/api/course/:subject/:number`, `/api/terms`
-- Public write: `POST /api/feedback`, limited separately and accepted only from configured frontend origins
-- Admin: `/admin/*`, protected by `Authorization: Bearer $ADMIN_TOKEN`
-- Internal service fan-out: `/internal/*`, protected by `Authorization: Bearer $INTERNAL_TOKEN`
-- Admin diagnostics: `/admin/debug/subjects/:year/:term`, admin-protected and limited to a fixed CISAPI subject-list diagnostic
+Public reads are `/`, `/health`, `/api/search`, `/api/course/:subject/:number`,
+and `/api/terms`. `POST /api/feedback` is origin-, size-, and rate-limited.
+`/admin/*` and `/internal/*` use separate bearer tokens.
 
-## Database
+Search interpretation, retrieval, ranking, and presentation are separate API
+modules, but the public request and response are the stable contract. D1
+integration tests and the deployed public eval cover that boundary without
+copying the pipeline into a test framework.
 
-`apps/api/migrations/` is the immutable ordered upgrade path for existing D1
-databases. `apps/api/src/db/schema.sql` is the current-state bootstrap for new
-databases. `npm run db:verify` proves both paths converge to the same schema and
-exercises supported upgrade behavior.
+## Database and deployment
 
-Verify clean local bootstrap with:
+`apps/api/migrations/0001_schema.sql` is a clean-slate pre-alpha schema, not an
+upgrade path for databases created by the deleted migration history. Point the
+binding at a fresh D1 database when it changes, leaving the previous binding as
+the rollback. Deployment probes the schema and requires a populated active term.
 
-```bash
-npm run db:verify
-```
+See [docs/operations.md](docs/operations.md) for database recovery, release,
+live verification, manual refresh, feedback inspection, and rollback commands.
 
-Remote destructive D1 work should first create and verify a restorable backup/export of the target database.
-
-Run the preflight before destructive D1 operations:
-
-```bash
-npm run d1:preflight -- --database <db-name> --backup-ref <YYYYMMDDTHHMMSSZ> --evidence-file <report-path> --restore-verified
-```
-
-The evidence file must include `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified: yes` markers.
-
-Cloudflare staging readiness is intentionally executable. After staging resources, smoke output, real-looking WAF/rate-limit rule evidence with route/action/threshold proof, and D1 backup/restore evidence exist, run:
-
-```bash
-npm run cloudflare:preflight
-```
-
-This command is expected to fail until real Cloudflare auth and staging evidence are present. The final report must use concrete evidence labels such as `Staging API URL`, `Staging Web URL`, `Pages Project`, `Pages Branch`, `Rate-Limit Namespace IDs` (including search, course, and feedback), `WAF Rule ID` or `Rate-Limit Rule ID`, `Abuse Control Routes`, `Abuse Control Action`, `Abuse Control Thresholds`, `D1 Backup Ref`, `D1 Backup Location`, `D1 Restore Database`, and `D1 Restore Verified`.
-
-Official production deployment is serialized and backup-gated:
-
-```bash
-npm run deploy:production
-```
-
-It releases Worker `uiuc-course-search` against the replacement
-`course-search-db-v2` binding, verifies the rebuilt API, then publishes Pages
-project `uiuc-course-search-web` from branch `main`. See
-`docs/deployment-checklist.md` for the required production-specific backup,
-migration, URL, and admin-token variables. The legacy `course-search-db` is
-rollback-only.
-
-## Corpus Bootstrap
-
-Generated course-history SQL is not a source artifact or a supported bootstrap path. Bootstrap
-the schema, deploy the Worker, then build the rolling full-detail corpus through the
-backup-gated retention and coverage workflow in `docs/data-refresh-runbook.md`.
-
-## Active Docs
-
-- `docs/architecture/search-ownership.md`
-- `docs/architecture/course-data-vocabulary.md`
-- `docs/search-interpretation-chip-model.md`
-- `docs/deployment-checklist.md`
-- `docs/cloudflare-hardening-runbook.md`
-- `docs/security-route-matrix.md`
-- `docs/release-checklist.md`
-- `docs/rollback-checklist.md`
-
-Older plans and analysis notes live under `docs/archive/` as historical context, not current implementation instructions.
+Operational commands and recovery procedures live in [docs/operations.md](docs/operations.md).

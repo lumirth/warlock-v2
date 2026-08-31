@@ -20,27 +20,3 @@ export const COURSE_SCORE_POLICY = {
     RMP_MIN: 1.0,
   },
 } as const;
-
-export function normalizeGpa(gpa: number): number {
-  const clamped = Math.min(
-    Math.max(gpa, COURSE_SCORE_POLICY.RANGES.GPA_MIN),
-    COURSE_SCORE_POLICY.RANGES.GPA_MAX,
-  );
-  return (
-    ((clamped - COURSE_SCORE_POLICY.RANGES.GPA_MIN) /
-      (COURSE_SCORE_POLICY.RANGES.GPA_MAX - COURSE_SCORE_POLICY.RANGES.GPA_MIN)) *
-    100
-  );
-}
-
-export function normalizeRmp(rating: number): number {
-  const clamped = Math.min(
-    Math.max(rating, COURSE_SCORE_POLICY.RANGES.RMP_MIN),
-    COURSE_SCORE_POLICY.RANGES.RMP_MAX,
-  );
-  return (
-    ((clamped - COURSE_SCORE_POLICY.RANGES.RMP_MIN) /
-      (COURSE_SCORE_POLICY.RANGES.RMP_MAX - COURSE_SCORE_POLICY.RANGES.RMP_MIN)) *
-    100
-  );
-}

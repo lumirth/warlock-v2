@@ -2,6 +2,10 @@ export type BoundedJsonBodyResult =
   | { ok: true; value: unknown }
   | { ok: false; reason: "invalid_json" | "too_large" };
 
+type BodyBytesResult =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; reason: "invalid_json" | "too_large" };
+
 export async function readBoundedJsonBody(
   request: Request,
   maxBytes: number,
@@ -18,7 +22,24 @@ export async function readBoundedJsonBody(
     return { ok: false, reason: "invalid_json" };
   }
 
-  const reader = request.body.getReader();
+  const body = await readBytes(request.body, maxBytes);
+  if (!body.ok) return body;
+
+  try {
+    return {
+      ok: true,
+      value: JSON.parse(new TextDecoder().decode(body.bytes)) as unknown,
+    };
+  } catch {
+    return { ok: false, reason: "invalid_json" };
+  }
+}
+
+async function readBytes(
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number,
+): Promise<BodyBytesResult> {
+  const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
 
@@ -37,19 +58,15 @@ export async function readBoundedJsonBody(
     return { ok: false, reason: "invalid_json" };
   }
 
+  return { ok: true, bytes: joinBytes(chunks, byteLength) };
+}
+
+function joinBytes(chunks: Uint8Array[], byteLength: number): Uint8Array {
   const body = new Uint8Array(byteLength);
   let offset = 0;
   for (const chunk of chunks) {
     body.set(chunk, offset);
     offset += chunk.byteLength;
   }
-
-  try {
-    return {
-      ok: true,
-      value: JSON.parse(new TextDecoder().decode(body)) as unknown,
-    };
-  } catch {
-    return { ok: false, reason: "invalid_json" };
-  }
+  return body;
 }

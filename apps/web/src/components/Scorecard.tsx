@@ -1,126 +1,55 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import {
-  getQualityLabel,
-  getQualityTone,
   getInstructorDifficultyLabel,
   getInstructorDifficultyTone,
+  getQualityLabel,
+  getQualityTone,
   isFiniteMetric,
   metricToneTextClass,
+  type MetricTone,
 } from '../utils/grading'
 
-interface ScorecardProps {
+type Props = {
   qualityScore: number | null
   instructorDifficultyScore: number | null
   avgGpa?: number | null
-  medianGpa?: number | null
   gpaSampleSize?: number | null
   primaryInstructorRmp?: number | null
 }
 
-export function Scorecard({
-  qualityScore,
-  instructorDifficultyScore,
-  avgGpa,
-  medianGpa,
-  gpaSampleSize,
-  primaryInstructorRmp,
-}: ScorecardProps) {
-  const qualityLabel = isFiniteMetric(qualityScore)
-    ? getQualityLabel(qualityScore)
-    : 'N/A'
-  const qualityTone = getQualityTone(qualityLabel)
-
-  const hasInstructorDifficulty = isFiniteMetric(instructorDifficultyScore)
-  const hasAvgGpa = isFiniteMetric(avgGpa)
-  const hasMedianGpa = isFiniteMetric(medianGpa)
-  const hasPrimaryRating = isFiniteMetric(primaryInstructorRmp)
-
-  const instructorDifficultyLabel = hasInstructorDifficulty
-    ? getInstructorDifficultyLabel(instructorDifficultyScore)
-    : 'N/A'
-
-  const instructorDifficultyTone = getInstructorDifficultyTone(
-    instructorDifficultyLabel
-  )
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Evidence-limited signals</CardTitle>
-        <p className="text-muted-foreground text-xs leading-5">
-          Historical GPA and linked Rate My Professors data. These are not
-          official course evaluations.
-        </p>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <dl className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground text-sm">Quality signal</dt>
-            <dd
-              className={cn(
-                'text-sm font-semibold',
-                metricToneTextClass(qualityTone)
-              )}
-            >
-              {qualityLabel}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground text-sm">
-              Instructor difficulty
-            </dt>
-            <dd
-              className={cn(
-                'text-sm font-semibold',
-                metricToneTextClass(instructorDifficultyTone)
-              )}
-            >
-              {instructorDifficultyLabel}
-            </dd>
-          </div>
-          {hasPrimaryRating && (
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-muted-foreground text-sm">RMP rating</dt>
-              <dd className="text-sm font-semibold">
-                {primaryInstructorRmp.toFixed(1)} / 5
-              </dd>
-            </div>
-          )}
-          {hasAvgGpa && (
-            <div className="flex items-start justify-between gap-4">
-              <dt className="text-muted-foreground text-sm">Average GPA</dt>
-              <dd className="flex flex-col items-end">
-                <span className="text-right text-sm font-semibold">
-                  {avgGpa.toFixed(2)}
-                </span>
-                {typeof gpaSampleSize === 'number' && (
-                  <span className="text-muted-foreground text-right text-xs">
-                    {gpaSampleSize.toLocaleString()} GPA records
-                  </span>
-                )}
-              </dd>
-            </div>
-          )}
-          {hasMedianGpa && (
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-muted-foreground text-sm">Median GPA</dt>
-              <dd className="text-sm font-semibold">{medianGpa.toFixed(2)}</dd>
-            </div>
-          )}
-        </dl>
-
-        <div className="text-muted-foreground border-t pt-3 text-xs leading-5">
-          <p>
-            Quality combines GPA and linked RMP evidence only when at least 30
-            GPA records and 5 RMP ratings are available.
-          </p>
-          <p className="mt-1">
-            Instructor difficulty comes from linked RMP data; it does not
-            measure assigned work.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  )
+export function Scorecard(props: Props) {
+  const quality = isFiniteMetric(props.qualityScore) ? getQualityLabel(props.qualityScore) : 'N/A'
+  const difficulty = isFiniteMetric(props.instructorDifficultyScore)
+    ? getInstructorDifficultyLabel(props.instructorDifficultyScore) : 'N/A'
+  const rows: Array<{ label: string; value: string; tone?: MetricTone; detail?: string }> = [
+    { label: 'Quality signal', value: quality, tone: getQualityTone(quality) },
+    { label: 'Instructor difficulty', value: difficulty, tone: getInstructorDifficultyTone(difficulty) },
+  ]
+  if (isFiniteMetric(props.primaryInstructorRmp)) rows.push({
+    label: 'RMP rating', value: `${props.primaryInstructorRmp.toFixed(1)} / 5`,
+  })
+  if (isFiniteMetric(props.avgGpa)) rows.push({
+    label: 'Average GPA', value: props.avgGpa.toFixed(2),
+    detail: typeof props.gpaSampleSize === 'number' ? `${props.gpaSampleSize.toLocaleString()} records` : undefined,
+  })
+  return <Card>
+    <CardHeader>
+      <CardTitle>Evidence-limited signals</CardTitle>
+      <p className="text-muted-foreground text-xs leading-5">Historical GPA and linked Rate My Professors data, not official evaluations.</p>
+    </CardHeader>
+    <CardContent>
+      <dl className="flex flex-col gap-2">
+        {rows.map((row) => <div key={row.label} className="flex items-start justify-between gap-4">
+          <dt className="text-muted-foreground text-sm">{row.label}</dt>
+          <dd className={cn('text-right text-sm font-semibold', metricToneTextClass(row.tone))}>
+            {row.value}{row.detail && <small className="text-muted-foreground block font-normal">{row.detail}</small>}
+          </dd>
+        </div>)}
+      </dl>
+      <p className="text-muted-foreground mt-3 border-t pt-3 text-xs leading-5">
+        Quality uses GPA and linked RMP evidence only with enough samples. Instructor difficulty is an RMP signal, not assigned work.
+      </p>
+    </CardContent>
+  </Card>
 }

@@ -1,15 +1,25 @@
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import type { Ai, VectorizeIndex } from "@cloudflare/workers-types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubjectSnapshot } from "../../transforms/course.js";
 import { writeSubjectSnapshotToD1 } from "../course-snapshot-writer.js";
+import { syncSubjects } from "../parallel-sync.js";
 
 const testEnv = env as { DB: D1Database };
 const SYNC_TIME = 1_780_000_000;
 const COURSE_ID = "TST-100-2026-spring";
 const SECTION_ID = "2026-spring-98765";
+const LATE_SECTION_ID = "2026-spring-99999";
+const CASCADE_XML = `
+  <subject id="TST"><label>Test Studies</label>
+    <cascadingCourse id="TST 100"><label>Published despite vector failure</label><creditHours>3</creditHours>
+      <detailedSection id="98765"><sectionNumber>A</sectionNumber><enrollmentStatus>Open</enrollmentStatus></detailedSection>
+    </cascadingCourse>
+  </subject>`;
 
 describe("subject snapshot reconciliation", () => {
   beforeEach(async () => {
+    await testEnv.DB.prepare("DROP TRIGGER IF EXISTS snapshot_test_abort").run();
     await testEnv.DB.batch([
       testEnv.DB.prepare(
         "DELETE FROM subject_sync_state WHERE term_id = '2026-spring' AND subject = 'TST'",
@@ -19,6 +29,47 @@ describe("subject snapshot reconciliation", () => {
         "DELETE FROM instructors WHERE last_name IN ('Lovelace', 'Hopper')",
       ),
     ]);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await testEnv.DB.prepare("DROP TRIGGER IF EXISTS snapshot_test_abort").run();
+  });
+
+  it("publishes the D1 snapshot when embedding upsert fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(CASCADE_XML));
+    const ai = {
+      run: vi.fn(async () => ({ data: [[0.1, 0.2]] })),
+    } as unknown as Ai;
+    const vectorize = {
+      upsert: vi.fn(async () => { throw new Error("vector unavailable"); }),
+    } as unknown as VectorizeIndex;
+
+    const result = await syncSubjects(
+      testEnv.DB,
+      { cisapiBase: "https://courses.test", concurrency: 1 },
+      2026,
+      "spring",
+      ["TST"],
+      vectorize,
+      ai,
+    );
+
+    expect(result).toMatchObject({ successfulSubjects: 1, failedSubjects: 0 });
+    expect(vectorize.upsert).toHaveBeenCalledOnce();
+    await expect(testEnv.DB.prepare(
+      "SELECT title FROM courses WHERE id = ?",
+    ).bind(COURSE_ID).first()).resolves.toEqual({
+      title: "Published despite vector failure",
+    });
+    await expect(testEnv.DB.prepare(`
+      SELECT status, courses_synced, owner_token
+      FROM subject_sync_state WHERE term_id = '2026-spring' AND subject = 'TST'
+    `).first()).resolves.toEqual({
+      status: "complete",
+      courses_synced: 1,
+      owner_token: null,
+    });
   });
 
   it("removes vanished meetings, instructor links, GenEds, and courses without relying on timestamp uniqueness", async () => {
@@ -36,12 +87,12 @@ describe("subject snapshot reconciliation", () => {
     await testEnv.DB.batch([
       testEnv.DB.prepare(`
         INSERT INTO courses (
-          id, subject, number, title, year, term, subject_id, last_synced
+          id, subject, number, title, year, term, subject_id
         ) VALUES (
           'TST-200-2026-spring', 'TST', '200', 'Removed course',
-          2026, 'spring', 'TST', ?
+          2026, 'spring', 'TST'
         )
-      `).bind(SYNC_TIME),
+      `),
       testEnv.DB.prepare(`
         INSERT INTO sections (
           id, crn, course_id, term_id, section_number, last_synced
@@ -99,9 +150,11 @@ describe("subject snapshot reconciliation", () => {
         includeGenEd: false,
       }),
     );
-    await testEnv.DB.prepare(
-      "UPDATE courses SET title = 'Current published title' WHERE id = ?",
-    ).bind(COURSE_ID).run();
+    await testEnv.DB.prepare(`
+      UPDATE courses SET title = 'Current published title', avg_gpa = 3.8,
+        gpa_sample_size = 120, primary_instructor_rmp = 4.7,
+        difficulty_score = 2.1, quality_score = 4.5 WHERE id = ?
+    `).bind(COURSE_ID).run();
     await testEnv.DB.prepare(`
       INSERT INTO subject_sync_state (
         term_id, subject, last_sync, status, courses_synced, sections_synced,
@@ -140,14 +193,110 @@ describe("subject snapshot reconciliation", () => {
       },
     });
 
-    const afterCurrentPublication = await testEnv.DB.prepare(
-      "SELECT title FROM courses WHERE id = ?",
-    ).bind(COURSE_ID).first<{ title: string }>();
+    const afterCurrentPublication = await testEnv.DB.prepare(`
+      SELECT c.title, c.avg_gpa, c.gpa_sample_size, c.primary_instructor_rmp,
+        c.difficulty_score, c.quality_score
+      FROM courses c
+      WHERE c.id = ?
+    `).bind(COURSE_ID).first();
     const fenceRows = await testEnv.DB.prepare(
       "SELECT COUNT(*) AS count FROM subject_sync_publication_fences",
     ).first<{ count: number }>();
-    expect(afterCurrentPublication?.title).toBe("Current owner title");
+    expect(afterCurrentPublication).toEqual({
+      title: "Current owner title",
+      avg_gpa: 3.8,
+      gpa_sample_size: 120,
+      primary_instructor_rmp: 4.7,
+      difficulty_score: 2.1,
+      quality_score: 4.5,
+    });
     expect(fenceRows?.count).toBe(0);
+  });
+
+  it("rejects a valid snapshot when it does not match the leased subject", async () => {
+    await expect(writeSubjectSnapshotToD1(testEnv.DB, snapshot({
+      meetings: [meeting(0, "Lovelace", "Ada")],
+      includeGenEd: false,
+    }), {
+      publicationFence: {
+        termId: "2026-spring",
+        subject: "MATH",
+        ownerToken: "subject:wrong-scope",
+      },
+    })).rejects.toThrow("lease subject mismatch");
+  });
+
+  it("publishes more than 1,000 nested rows with a bounded query shape", async () => {
+    let batches = 0;
+    let statementCount = 0;
+    const instrumentedDb = {
+      prepare: (sql: string) => testEnv.DB.prepare(sql),
+      batch: async (statements: D1PreparedStatement[]) => {
+        batches += 1;
+        statementCount = statements.length;
+        return testEnv.DB.batch(statements);
+      },
+    } as unknown as D1Database;
+    const largeSnapshot = snapshot({
+      meetings: Array.from({ length: 1_001 }, (_, index) =>
+        meeting(index, "Lovelace", "Ada")),
+      includeGenEd: false,
+    });
+
+    await expect(writeSubjectSnapshotToD1(instrumentedDb, largeSnapshot))
+      .resolves.toEqual({ coursesCount: 1, sectionsCount: 1 });
+
+    const counts = await testEnv.DB.prepare(`
+      SELECT COUNT(*) AS meetings,
+        (SELECT COUNT(*) FROM meeting_instructors mi
+          JOIN meetings m ON m.id = mi.meeting_id
+          WHERE m.section_id = ?) AS links
+      FROM meetings WHERE section_id = ?
+    `).bind(SECTION_ID, SECTION_ID).first<{ meetings: number; links: number }>();
+    expect(counts).toEqual({ meetings: 1_001, links: 1_001 });
+    expect(batches).toBe(1);
+    expect(statementCount).toBeLessThan(20);
+  });
+
+  it("rolls back an earlier course update when a late section write fails", async () => {
+    const published = snapshot({
+      meetings: [meeting(0, "Lovelace", "Ada")],
+      includeGenEd: false,
+    });
+    published.courses[0].course.title = "Published title";
+    await writeSubjectSnapshotToD1(testEnv.DB, published);
+    await testEnv.DB.prepare(`
+      CREATE TRIGGER snapshot_test_abort BEFORE INSERT ON sections
+      WHEN NEW.id = '${LATE_SECTION_ID}'
+      BEGIN SELECT RAISE(ABORT, 'late section failure'); END
+    `).run();
+
+    const rejected = snapshot({
+      meetings: [meeting(0, "Hopper", "Grace")],
+      includeGenEd: true,
+    });
+    rejected.courses[0].course.title = "Must roll back";
+    const firstSection = rejected.courses[0].sections[0];
+    rejected.courses[0].sections.push({
+      section: {
+        ...firstSection.section,
+        id: LATE_SECTION_ID,
+        crn: "99999",
+      },
+      meetings: [{
+        ...meeting(0, "Hopper", "Grace"),
+        section_id: LATE_SECTION_ID,
+      }],
+    });
+
+    await expect(writeSubjectSnapshotToD1(testEnv.DB, rejected))
+      .rejects.toThrow("late section failure");
+    await expect(testEnv.DB.prepare(
+      "SELECT title FROM courses WHERE id = ?",
+    ).bind(COURSE_ID).first()).resolves.toEqual({ title: "Published title" });
+    await expect(testEnv.DB.prepare(
+      "SELECT id FROM sections WHERE id = ?",
+    ).bind(LATE_SECTION_ID).first()).resolves.toBeNull();
   });
 });
 
@@ -159,17 +308,6 @@ function snapshot(options: {
     subject: {
       id: "TST",
       name: "Test Studies",
-      college_code: null,
-      department_code: null,
-      unit_name: null,
-      contact_name: null,
-      contact_title: null,
-      address_line1: null,
-      address_line2: null,
-      phone_number: null,
-      website_url: null,
-      description: null,
-      last_synced: SYNC_TIME,
     },
     courses: [
       {
@@ -196,7 +334,6 @@ function snapshot(options: {
           date_range_text: null,
           registration_notes: null,
           approval_code: null,
-          last_synced: SYNC_TIME,
         },
         sections: [
           {
@@ -213,8 +350,6 @@ function snapshot(options: {
               end_time: "09:50",
               location: "Test Hall",
               instructor: null,
-              instructor_rmp: null,
-              instructor_gpa: null,
               last_synced: SYNC_TIME,
               section_title: null,
               status_code: "A",

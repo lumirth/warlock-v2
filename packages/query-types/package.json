@@ -1,12 +1,11 @@
 {
   "name": "@uiuc-course-search/query-types",
-  "version": "0.0.1",
   "main": "index.ts",
   "types": "index.ts",
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "lint": "eslint ."
   }
 }

@@ -3,11 +3,6 @@ import { SearchIcon } from 'lucide-react'
 import { SEARCH_QUERY_MAX_LENGTH } from '@uiuc-course-search/query-types'
 import { Button } from '@/components/ui/button'
 import { Field, FieldLabel } from '@/components/ui/field'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from '@/components/ui/input-group'
 import { FIRST_RUN_EXAMPLE_QUERIES } from './search-options'
 
 export function SearchForm({
@@ -30,26 +25,23 @@ export function SearchForm({
           <FieldLabel htmlFor="course-search-query" className="sr-only">
             Course search query
           </FieldLabel>
-          <InputGroup className="bg-card h-10">
-            <InputGroupAddon>
-              <SearchIcon aria-hidden />
-            </InputGroupAddon>
-            <InputGroupInput
+          <div className="border-input focus-within:border-ring focus-within:ring-ring/50 bg-card flex h-10 items-center gap-2 rounded-lg border px-3 focus-within:ring-3">
+            <SearchIcon className="text-muted-foreground size-4" aria-hidden />
+            <input
               id="course-search-query"
               type="search"
               enterKeyHint="search"
               autoComplete="off"
               maxLength={SEARCH_QUERY_MAX_LENGTH}
               placeholder="Search by course, topic, professor, GenEd, or time"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
             />
-            <InputGroupAddon align="inline-end">
-              <Button type="submit" size="icon-sm" aria-label="Search courses">
-                <SearchIcon aria-hidden />
-              </Button>
-            </InputGroupAddon>
-          </InputGroup>
+            <Button type="submit" size="icon-sm" aria-label="Search courses">
+              <SearchIcon aria-hidden />
+            </Button>
+          </div>
         </Field>
       </form>
 

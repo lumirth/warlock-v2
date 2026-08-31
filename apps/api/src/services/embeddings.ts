@@ -1,26 +1,20 @@
-import type { VectorizeIndex, Ai } from '@cloudflare/workers-types';
-import type { SearchFilters } from './search-planner-types.js';
+import type { Ai, VectorizeIndex } from '@cloudflare/workers-types';
 import type { CourseSnapshot } from '../transforms/course.js';
 import { courseSnapshotRequirementEvidence } from '../transforms/course-requirements.js';
+import type { SearchFilters } from './search-planner-types.js';
 
-const COURSE_EMBEDDING_BATCH_SIZE = 25;
+const MODEL = '@cf/baai/bge-small-en-v1.5';
+const BATCH_SIZE = 25;
 
-export interface CourseEmbeddingData {
-  id: string;
-  termId: string;
-  subject: string;
-  number: string;
-  title: string;
-  description: string | null;
+export type CourseEmbeddingData = {
+  id: string; termId: string; subject: string; number: string; title: string;
+  description: string | null; primary_instructor: string | null;
   requirementSummaryCode: string | null;
-  requirementCodes?: string[];
-  requirementLabels?: string[];
-  primary_instructor: string | null;
-}
+  requirementCodes?: string[]; requirementLabels?: string[];
+};
 
 export function courseSnapshotToEmbeddingData(snapshot: CourseSnapshot): CourseEmbeddingData {
-  const requirements = courseSnapshotRequirementEvidence(snapshot);
-
+  const requirement = courseSnapshotRequirementEvidence(snapshot);
   return {
     id: snapshot.course.id,
     termId: `${snapshot.course.year}-${snapshot.course.term}`,
@@ -28,147 +22,84 @@ export function courseSnapshotToEmbeddingData(snapshot: CourseSnapshot): CourseE
     number: snapshot.course.number,
     title: snapshot.course.title,
     description: snapshot.course.description,
-    requirementSummaryCode: requirements.summaryCode,
-    requirementCodes: requirements.codes,
-    requirementLabels: requirements.labels,
     primary_instructor: snapshot.course.primary_instructor,
+    requirementSummaryCode: requirement.summaryCode,
+    requirementCodes: requirement.codes,
+    requirementLabels: requirement.labels,
   };
-}
-
-export function createCourseEmbeddingText(course: CourseEmbeddingData): string {
-  const instructorsText = course.primary_instructor ? `Instructors: ${course.primary_instructor}` : '';
-  const requirementCodes = course.requirementCodes?.length
-    ? course.requirementCodes
-    : [course.requirementSummaryCode].filter((value): value is string => Boolean(value));
-  const requirementParts = [
-    ...requirementCodes,
-    ...(course.requirementLabels ?? []),
-  ];
-  const requirementText = requirementParts.length > 0
-    ? `Requirements: ${requirementParts.join(' ')}`
-    : '';
-  const parts = [
-    instructorsText,
-    `${course.subject} ${course.number}`,
-    course.title,
-    requirementText,
-    course.description || '',
-  ];
-
-  return parts.filter(Boolean).join(' ').slice(0, 512); // Limit length
-}
-
-async function generateEmbedding(ai: Ai, text: string): Promise<number[]> {
-  const embeddings = await generateEmbeddings(ai, [text]);
-  return embeddings[0];
-}
-
-export async function generateEmbeddings(ai: Ai, texts: string[]): Promise<number[][]> {
-  if (texts.length === 0) return [];
-
-  const response = await ai.run('@cf/baai/bge-small-en-v1.5', {
-    text: texts
-  });
-
-  // Response is { data: [[...numbers], ...] }
-  return (response as { data: number[][] }).data;
-}
-
-export async function upsertCourseEmbeddings(
-  vectorize: VectorizeIndex,
-  ai: Ai,
-  courses: CourseEmbeddingData[]
-): Promise<void> {
-  if (courses.length === 0) return;
-
-  const texts = courses.map(course => createCourseEmbeddingText(course));
-  const embeddings = await generateEmbeddings(ai, texts);
-
-  if (embeddings.length !== courses.length) {
-    throw new Error(`Embedding count mismatch: expected ${courses.length}, got ${embeddings.length}`);
-  }
-
-  await vectorize.upsert(courses.map((course, index) => {
-    const numberVal = parseInt(course.number, 10);
-    const catalogNumber = isNaN(numberVal) ? 0 : numberVal;
-    const levelBucket = catalogNumber > 0 ? Math.floor(catalogNumber / 100) * 100 : 0;
-
-    return {
-      id: course.id,
-      values: embeddings[index],
-      metadata: {
-        subject: course.subject,
-        number: course.number,
-        title: course.title,
-        term_id: course.termId,
-        gened: course.requirementSummaryCode || '',
-        catalog_number: catalogNumber,
-        level_bucket: levelBucket
-      }
-    };
-  }));
 }
 
 export async function upsertCourseEmbeddingsInBatches(
   vectorize: VectorizeIndex,
   ai: Ai,
-  courses: CourseEmbeddingData[]
+  courses: CourseEmbeddingData[],
 ): Promise<void> {
-  for (let index = 0; index < courses.length; index += COURSE_EMBEDDING_BATCH_SIZE) {
-    await upsertCourseEmbeddings(
-      vectorize,
-      ai,
-      courses.slice(index, index + COURSE_EMBEDDING_BATCH_SIZE)
-    );
+  for (let offset = 0; offset < courses.length; offset += BATCH_SIZE) {
+    const batch = courses.slice(offset, offset + BATCH_SIZE);
+    const vectors = await embed(ai, batch.map(embeddingText));
+    if (vectors.length !== batch.length) throw new Error('embedding count mismatch');
+    await vectorize.upsert(batch.map((course, index) => {
+      const number = Number.parseInt(course.number, 10) || 0;
+      return {
+        id: course.id,
+        values: vectors[index],
+        metadata: {
+          subject: course.subject,
+          number: course.number,
+          title: course.title,
+          term_id: course.termId,
+          gened: course.requirementSummaryCode ?? '',
+          catalog_number: number,
+          level_bucket: number ? Math.floor(number / 100) * 100 : 0,
+        },
+      };
+    }));
   }
 }
 
 export async function deleteCourseEmbeddings(
   vectorize: VectorizeIndex,
-  courseIds: string[]
+  courseIds: string[],
 ): Promise<void> {
-  if (courseIds.length === 0) return;
-  await vectorize.deleteByIds(courseIds);
+  if (courseIds.length) await vectorize.deleteByIds(courseIds);
 }
-
-export type SemanticSearchOptions = {
-  filters?: SearchFilters;
-  topK?: number;
-  termIds?: string[];
-};
 
 export async function searchCourses(
   vectorize: VectorizeIndex,
   ai: Ai,
   query: string,
-  options: SemanticSearchOptions = {},
-): Promise<{ id: string; score: number }[]> {
-  const queryEmbedding = await generateEmbedding(ai, query);
-  const { filters, topK = 50, termIds = [] } = options;
+  options: { filters?: SearchFilters; topK?: number; termIds?: string[] } = {},
+): Promise<Array<{ id: string; score: number }>> {
+  const [vector] = await embed(ai, [query]);
+  const filter: VectorizeVectorMetadataFilter = {};
+  if (options.filters?.subject) filter.subject = options.filters.subject;
+  if (options.filters?.level) filter.level_bucket = options.filters.level;
+  if (options.termIds?.length) filter.term_id = { $in: options.termIds };
+  const response = await vectorize.query(vector, {
+    topK: options.topK ?? 50,
+    returnMetadata: 'none',
+    ...(Object.keys(filter).length ? { filter } : {}),
+  });
+  return response.matches.map(({ id, score }) => ({ id, score }));
+}
 
-  const vectorizeOptions: VectorizeQueryOptions = {
-    topK,
-    returnMetadata: 'none'
-  };
+function embeddingText(course: CourseEmbeddingData): string {
+  const requirements = [
+    ...(course.requirementCodes?.length
+      ? course.requirementCodes
+      : course.requirementSummaryCode ? [course.requirementSummaryCode] : []),
+    ...(course.requirementLabels ?? []),
+  ];
+  return [
+    course.primary_instructor && `Instructors: ${course.primary_instructor}`,
+    `${course.subject} ${course.number}`,
+    course.title,
+    requirements.length && `Requirements: ${requirements.join(' ')}`,
+    course.description,
+  ].filter(Boolean).join(' ').slice(0, 512);
+}
 
-  const filterConditions: VectorizeVectorMetadataFilter = {};
-  if (filters?.subject) {
-    filterConditions.subject = filters.subject;
-  }
-  if (filters?.level) {
-    filterConditions.level_bucket = filters.level;
-  }
-  if (termIds.length > 0) {
-    filterConditions.term_id = { $in: termIds };
-  }
-  if (Object.keys(filterConditions).length > 0) {
-    vectorizeOptions.filter = filterConditions;
-  }
-
-  const results = await vectorize.query(queryEmbedding, vectorizeOptions);
-
-  return results.matches.map(m => ({
-    id: m.id,
-    score: m.score
-  }));
+async function embed(ai: Ai, text: string[]): Promise<number[][]> {
+  if (!text.length) return [];
+  return (await ai.run(MODEL, { text }) as { data: number[][] }).data;
 }

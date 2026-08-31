@@ -24,13 +24,13 @@ describe('term subject manifest reconciliation', () => {
         'DELETE FROM courses WHERE year = ? AND term = ?',
       ).bind(YEAR, TERM),
       testEnv.DB.prepare(`
-        INSERT INTO subjects (id, name, last_synced)
-        VALUES ('NEW', 'Current Studies', unixepoch())
+        INSERT INTO subjects (id, name)
+        VALUES ('NEW', 'Current Studies')
         ON CONFLICT(id) DO UPDATE SET name = excluded.name
       `),
       testEnv.DB.prepare(`
-        INSERT INTO subjects (id, name, last_synced)
-        VALUES ('OLD', 'Removed Studies', unixepoch())
+        INSERT INTO subjects (id, name)
+        VALUES ('OLD', 'Removed Studies')
         ON CONFLICT(id) DO UPDATE SET name = excluded.name
       `),
       courseInsert(CURRENT_COURSE_ID, 'NEW'),
@@ -51,13 +51,7 @@ describe('term subject manifest reconciliation', () => {
   });
 
   it('never prunes from partial or failed sync evidence', async () => {
-    const partial = completeResult(['NEW']);
-    partial.pagination = {
-      total: 2,
-      offset: 0,
-      limit: 1,
-      hasMore: true,
-    };
+    const partial = completeResult([]);
 
     await expect(reconcileTermSubjectManifest(testEnv.DB, {
       year: YEAR,
@@ -86,16 +80,43 @@ describe('term subject manifest reconciliation', () => {
       syncResult: failed,
     })).resolves.toMatchObject({ applied: false });
 
+    const wrongTerm = {
+      ...completeResult(['NEW']),
+      termId: `${YEAR + 1}-${TERM}`,
+      year: YEAR + 1,
+    };
+    await expect(reconcileTermSubjectManifest(testEnv.DB, {
+      year: YEAR,
+      term: TERM,
+      authoritativeSubjects: ['NEW'],
+      syncResult: wrongTerm,
+    })).resolves.toMatchObject({ applied: false });
+
+    const extraFailed = completeResult(['NEW']);
+    extraFailed.subjectResults.push({
+      subject: 'OLD',
+      success: false,
+      coursesCount: 0,
+      sectionsCount: 0,
+      durationMs: 1,
+      error: 'unexpected extra failure',
+    });
+    extraFailed.failedSubjects = 1;
+    await expect(reconcileTermSubjectManifest(testEnv.DB, {
+      year: YEAR,
+      term: TERM,
+      authoritativeSubjects: ['NEW'],
+      syncResult: extraFailed,
+    })).resolves.toMatchObject({ applied: false });
+
     await expect(courseIds()).resolves.toEqual([
       CURRENT_COURSE_ID,
       STALE_COURSE_ID,
     ]);
   });
 
-  it('deletes missing subjects only after exact full-run evidence and retains retry IDs on vector failure', async () => {
-    const deleteByIds = vi.fn()
-      .mockRejectedValueOnce(new Error('vector unavailable'))
-      .mockResolvedValue({ mutationId: 'delete-complete' });
+  it('deletes missing D1 subjects after exact full-run evidence despite vector failure', async () => {
+    const deleteByIds = vi.fn().mockRejectedValue(new Error('vector unavailable'));
     const vectorize = { deleteByIds } as unknown as VectorizeIndex;
     const options = {
       year: YEAR,
@@ -107,20 +128,12 @@ describe('term subject manifest reconciliation', () => {
 
     await expect(
       reconcileTermSubjectManifest(testEnv.DB, options),
-    ).rejects.toThrow('vector unavailable');
-    await expect(courseIds()).resolves.toEqual([
-      CURRENT_COURSE_ID,
-      STALE_COURSE_ID,
-    ]);
-
-    await expect(
-      reconcileTermSubjectManifest(testEnv.DB, options),
     ).resolves.toEqual({
       applied: true,
       deletedCourseCount: 1,
     });
-    expect(deleteByIds).toHaveBeenNthCalledWith(1, [STALE_COURSE_ID]);
-    expect(deleteByIds).toHaveBeenNthCalledWith(2, [STALE_COURSE_ID]);
+    expect(deleteByIds).toHaveBeenCalledOnce();
+    expect(deleteByIds).toHaveBeenCalledWith([STALE_COURSE_ID]);
     await expect(courseIds()).resolves.toEqual([CURRENT_COURSE_ID]);
 
     const section = await testEnv.DB.prepare(
@@ -147,8 +160,8 @@ describe('term subject manifest reconciliation', () => {
 function courseInsert(id: string, subject: string): D1PreparedStatement {
   return testEnv.DB.prepare(`
     INSERT INTO courses (
-      id, subject, number, title, year, term, subject_id, last_synced
-    ) VALUES (?, ?, '100', ?, ?, ?, ?, unixepoch())
+      id, subject, number, title, year, term, subject_id
+    ) VALUES (?, ?, '100', ?, ?, ?, ?)
   `).bind(
     id,
     subject,
@@ -196,11 +209,5 @@ function completeResult(subjects: string[]): TermSyncResult {
     failedSubjects: 0,
     durationMs: subjectResults.length,
     rateLimitHits: 0,
-    pagination: {
-      total: subjects.length,
-      offset: 0,
-      limit: subjects.length,
-      hasMore: false,
-    },
   };
 }

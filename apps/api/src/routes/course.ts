@@ -1,53 +1,58 @@
 import { Hono } from 'hono';
-import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
-import { parseCourseDetailHttpRequest } from '../http/course-detail-request.js';
+import type { D1Database } from '@cloudflare/workers-types';
+import { SEARCH_TERM_VALUES } from '@uiuc-course-search/query-types';
 import { errorFields, logger } from '../observability/logger.js';
-import { CourseDetailService } from '../services/course-detail-service.js';
+import { loadCourseDetail } from '../services/course-detail.js';
 
 type Bindings = {
   DB: D1Database;
-
-  // API endpoints
-  CURRENT_YEAR: string;
-  CURRENT_TERM: string;
-  CISAPI_BASE: string;
-
-  // Rate limiting
-  BACKOFF_BASE_MS: string;
-  BACKOFF_MAX_MS: string;
-  MAX_RETRIES: string;
-
-  // Caching
-  CLIENT_CACHE_TTL_MS: string;
-  SEARCH_CACHE?: KVNamespace;
 };
 
 export const courseRoutes = new Hono<{ Bindings: Bindings }>();
 
-// Cache/live/stale behavior belongs to CourseDetailService; the route only adapts HTTP.
 courseRoutes.get('/api/course/:subject/:number', async (c) => {
   const { subject: rawSubject, number: rawNumber } = c.req.param();
-  const parsed = parseCourseDetailHttpRequest({
+  const request = courseRequest(
     rawSubject,
     rawNumber,
-    requestedYear: c.req.query('year'),
-    requestedTerm: c.req.query('term'),
-    cacheControl: c.req.header('Cache-Control'),
-    fresh: c.req.query('fresh'),
-  });
-  if (!parsed.ok) return c.json(parsed.body, parsed.status);
+    c.req.query('year'),
+    c.req.query('term'),
+  );
+  if (!request) return c.json({ error: 'invalid course request' }, 400);
 
-  const service = new CourseDetailService(c.env);
   try {
-    const result = await service.loadCourseDetail(parsed.request);
-
-    return c.json(result.body, result.status, result.headers);
+    const result = await loadCourseDetail(c.env.DB, request);
+    return result
+      ? c.json(result, 200, { 'Cache-Control': 'public, max-age=60, s-maxage=300' })
+      : c.json({ error: 'Course not found' }, 404);
   } catch (error) {
     logger.error('route.course.failed', {
-      subject: parsed.request.subject,
-      number: parsed.request.number,
+      subject: request.subject,
+      number: request.number,
       ...errorFields(error),
     });
     return c.json({ error: 'Internal server error' }, 500);
   }
 });
+
+function courseRequest(
+  rawSubject: string,
+  rawNumber: string,
+  requestedYear?: string,
+  requestedTerm?: string,
+) {
+  const subject = rawSubject.trim().toUpperCase();
+  const number = rawNumber.trim();
+  if (!/^[A-Z]{2,4}$/.test(subject)) return null;
+  if (!/^\d{3}[A-Z]?$/.test(number)) return null;
+  if (Boolean(requestedYear) !== Boolean(requestedTerm)) return null;
+  if (requestedYear) {
+    const year = Number(requestedYear);
+    if (!Number.isInteger(year)) return null;
+    if (year < 2004 || year > new Date().getFullYear() + 2) return null;
+  }
+  if (requestedTerm && !SEARCH_TERM_VALUES.includes(
+    requestedTerm as typeof SEARCH_TERM_VALUES[number]
+  )) return null;
+  return { subject, number, requestedYear, requestedTerm };
+}

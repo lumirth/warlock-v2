@@ -1,12 +1,26 @@
 import { env } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import { executeSearch } from "../search-engine.js";
+import type { SearchPlan } from "../search-planner-types.js";
 
 const COURSE_ID = "CS-225-2026-spring";
 const testEnv = env as { DB: D1Database };
 
 describe("Worker API integration", () => {
   beforeAll(seedSearchFixture);
+
+  it("reports only a fully published catalog as ready", async () => {
+    await testEnv.DB.prepare(`
+      INSERT INTO term_state (term_id, year, term, status, last_checked)
+      VALUES ('2099-fall', 2099, 'fall', 'active', unixepoch())
+    `).run();
+    const response = await SELF.fetch("http://local.test/");
+    const data = await response.json() as { term: string | null };
+    expect(response.status).toBe(200);
+    expect(data.term).toBe("spring 2026");
+    await testEnv.DB.prepare("DELETE FROM term_state WHERE term_id = '2099-fall'").run();
+  });
 
   it("serves exact course lookup with a truthful total", async () => {
     const response = await SELF.fetch("http://local.test/api/search?q=CS%20225");
@@ -46,7 +60,6 @@ describe("Worker API integration", () => {
             waitlisted: number;
             closed: number;
             cancelled: number;
-            unknown: number;
             lastSynced: number | null;
           };
         };
@@ -62,7 +75,6 @@ describe("Worker API integration", () => {
       waitlisted: 0,
       closed: 0,
       cancelled: 0,
-      unknown: 0,
       lastSynced: expect.any(Number),
     });
   });
@@ -79,6 +91,99 @@ describe("Worker API integration", () => {
     };
     expect(data.results[0]?.course.id).toBe(COURSE_ID);
     expect(data.pagination.totalResults).toBe(1);
+  });
+
+  it("publishes one canonical chip for explicit term and year filters", async () => {
+    const response = await SELF.fetch(
+      "http://local.test/api/search?subject=CS&term=spring&year=2026&scope=all",
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json() as {
+      meta: { ui: { chips: Array<{
+        type: string;
+        label: string;
+        removeRequest: { filters?: { subject?: string; term?: string; year?: number } };
+      }> } };
+    };
+    const termChips = data.meta.ui.chips.filter(chip => chip.type === "term" || chip.type === "year");
+    expect(termChips).toHaveLength(1);
+    expect(termChips[0]).toMatchObject({
+      type: "term",
+      label: "Term: spring 2026",
+      removeRequest: { filters: { subject: "CS" } },
+    });
+  });
+
+  it("applies workload exclusions to prerequisite and degree text", async () => {
+    const response = await SELF.fetch("http://local.test/api/search?q=no%20exams%20CS&scope=all");
+    expect(response.status).toBe(200);
+    const data = await response.json() as { results: unknown[] };
+    expect(data.results).toEqual([]);
+  });
+
+  it("passes a full semantic window through one D1 JSON binding", async () => {
+    const ids = Array.from({ length: 60 }, (_, index) => {
+      const number = String(600 + index);
+      return `SEM-${number}-2026-spring`;
+    });
+    await testEnv.DB.batch(ids.map((id, index) => testEnv.DB.prepare(`
+      INSERT INTO courses (id, subject, number, title, year, term)
+      VALUES (?, 'SEM', ?, ?, 2026, 'spring')
+    `).bind(id, String(600 + index), `Semantic result ${index}`)));
+
+    const result = await executeSearch(
+      testEnv.DB,
+      {
+        query: async () => ({
+          matches: ids.map((id, index) => ({ id, score: 1 - index / 100 })),
+        }),
+      } as unknown as VectorizeIndex,
+      { run: async () => ({ data: [[0.1, 0.2]] }) } as unknown as Ai,
+      plan({ subject: "SEM" }, "semantic capacity probe"),
+      { scope: "all", sort: { field: "relevance", direction: "desc" } },
+    );
+
+    expect(result.totalResults).toBe(60);
+    expect(result.results).toHaveLength(60);
+    expect(result.results[0]?.course.id).toBe(ids[0]);
+    expect(result.failedLanes).toEqual([]);
+  });
+
+  it("keeps long exact-title FTS recall within D1's LIKE-pattern limit", async () => {
+    const title = "Distributed Systems Reliability Engineering Laboratory Practicum";
+    const id = "LONG-999-2026-spring";
+    expect(new TextEncoder().encode(`%${title.toLowerCase()}%`).byteLength).toBeGreaterThan(50);
+    await testEnv.DB.prepare(`
+      INSERT INTO courses (id, subject, number, title, year, term)
+      VALUES (?, 'LONG', '999', ?, 2026, 'spring')
+    `).bind(id, title).run();
+
+    const result = await executeSearch(
+      testEnv.DB,
+      {} as VectorizeIndex,
+      {} as Ai,
+      plan({ subject: "LONG" }, "", title.toLowerCase()),
+      { scope: "all", sort: { field: "relevance", direction: "desc" } },
+    );
+
+    expect(result.totalResults).toBe(1);
+    expect(result.results[0]?.course.id).toBe(id);
+    expect(result.failedLanes).toEqual([]);
+  });
+
+  it("keeps long instructor filters within D1's LIKE-pattern limit", async () => {
+    const instructor = "x".repeat(60);
+    expect(new TextEncoder().encode(`%${instructor}%`).byteLength).toBeGreaterThan(50);
+
+    const response = await SELF.fetch(
+      `http://local.test/api/search?instructor=${instructor}&scope=all`,
+    );
+
+    expect(response.status).toBe(200);
+    const data = await response.json() as { results: unknown[]; pagination: { totalResults: number } };
+    expect(data.results).toEqual([]);
+    expect(data.pagination.totalResults).toBe(0);
   });
 
   it("sorts structured results in D1 before applying the result limit", async () => {
@@ -131,8 +236,6 @@ describe("Worker API integration", () => {
 
   it("restricts feedback writes to the configured frontend origin", async () => {
     const payload = JSON.stringify({
-      kind: "search_results",
-      issue: "expected_different_results",
       page: "search",
       query: "data structures",
       expected: "More relevant data structures results",
@@ -178,10 +281,6 @@ describe("Worker API integration", () => {
           availability: { status: string; label: string };
         }>;
       };
-      cache?: {
-        cached?: boolean;
-        termStatus?: string;
-      };
     };
 
     expect(data).toMatchObject({
@@ -197,10 +296,6 @@ describe("Worker API integration", () => {
           instructorDifficultyScore: 42,
         },
       },
-      cache: {
-        cached: true,
-        termStatus: "active",
-      },
     });
     expect(data.course.sections?.[0]).toMatchObject({
       crn: "12345",
@@ -213,13 +308,13 @@ async function seedSearchFixture(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   await testEnv.DB.batch([
     testEnv.DB.prepare(`
-      INSERT INTO subjects (id, name, last_synced)
-      VALUES ('CS', 'Computer Science', ?)
-    `).bind(now),
+      INSERT INTO subjects (id, name)
+      VALUES ('CS', 'Computer Science')
+    `),
     testEnv.DB.prepare(`
-      INSERT INTO subjects (id, name, last_synced)
-      VALUES ('MATH', 'Mathematics', ?)
-    `).bind(now),
+      INSERT INTO subjects (id, name)
+      VALUES ('MATH', 'Mathematics')
+    `),
     testEnv.DB.prepare(`
       INSERT INTO term_state (
         term_id, year, term, status, last_checked, last_synced,
@@ -229,13 +324,14 @@ async function seedSearchFixture(): Promise<void> {
     `).bind(now, now),
     testEnv.DB.prepare(`
       INSERT INTO courses (
-        id, subject, number, title, description, credit_hours, subject_id,
+        id, subject, number, title, description, credit_hours, subject_id, course_info,
         year, term, avg_gpa, gpa_sample_size, primary_instructor,
-        difficulty_score, quality_score, last_synced
+        difficulty_score, quality_score
       )
       VALUES (?, 'CS', '225', 'Data Structures', 'Data abstractions and algorithms.',
-        4, 'CS', 2026, 'spring', 3.4, 100, 'Ada Lovelace', 42, 88, ?)
-    `).bind(COURSE_ID, now),
+        4, 'CS', 'Includes proctored exams.', 2026, 'spring', 3.4, 100,
+        'Ada Lovelace', 42, 88)
+    `).bind(COURSE_ID),
     testEnv.DB.prepare(`
       INSERT INTO sections (
         id, crn, course_id, term_id, section_number, status, type, days,
@@ -254,14 +350,14 @@ async function seedSearchFixture(): Promise<void> {
     testEnv.DB.prepare(`
       INSERT INTO courses (
         id, subject, number, title, description, credit_hours, subject_id,
-        year, term, avg_gpa, last_synced
+        year, term, avg_gpa
       )
       VALUES
         ('MATH-101-2026-spring', 'MATH', '101', 'Closed by section code',
-          'Conflicting registration codes.', 3, 'MATH', 2026, 'spring', 2.1, ?),
+          'Conflicting registration codes.', 3, 'MATH', 2026, 'spring', 2.1),
         ('MATH-102-2026-spring', 'MATH', '102', 'Open by section code',
-          'Conflicting registration codes.', 3, 'MATH', 2026, 'spring', 3.9, ?)
-    `).bind(now, now),
+          'Conflicting registration codes.', 3, 'MATH', 2026, 'spring', 3.9)
+    `),
     testEnv.DB.prepare(`
       INSERT INTO sections (
         id, crn, course_id, term_id, section_number, status,
@@ -274,4 +370,12 @@ async function seedSearchFixture(): Promise<void> {
           'A', 'Unknown', 'A', 'C', ?)
     `).bind(now, now),
   ]);
+}
+
+function plan(
+  filters: SearchPlan["filters"],
+  semanticQuery: string,
+  keywordQuery = "",
+): SearchPlan {
+  return { filters, semanticQuery, keywordQuery };
 }

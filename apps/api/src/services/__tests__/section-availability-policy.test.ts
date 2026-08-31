@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  normalizeSectionAvailability,
-  rawSectionStatusesForSearchFilter,
-} from "../section-availability-policy.js";
+import { normalizeSectionAvailability } from "../section-availability-policy.js";
 
 describe("normalizeSectionAvailability", () => {
   it("uses status codes when enrollment text is unavailable", () => {
@@ -13,7 +10,6 @@ describe("normalizeSectionAvailability", () => {
     })).toMatchObject({
       status: "open",
       label: "Open",
-      rawStatus: "Unknown",
     });
   });
 
@@ -46,14 +42,5 @@ describe("normalizeSectionAvailability", () => {
       status: "closed",
       label: "Closed",
     });
-  });
-});
-
-describe("rawSectionStatusesForSearchFilter", () => {
-  it("keeps restricted sections in the available filter", () => {
-    expect(rawSectionStatusesForSearchFilter("available")).toEqual([
-      "Open",
-      "Restricted",
-    ]);
   });
 });

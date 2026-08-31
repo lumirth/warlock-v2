@@ -3,8 +3,9 @@ import { Hono } from 'hono';
 import { healthRoutes } from '../health.js';
 
 const healthEnv = {
-  CURRENT_YEAR: '2026',
-  CURRENT_TERM: 'spring',
+  DB: {
+    prepare: () => ({ first: async () => ({ term: 'spring', year: 2026 }) }),
+  },
 };
 
 describe('health routes', () => {

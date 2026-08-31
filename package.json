@@ -10,10 +10,8 @@
     "packages/*"
   ],
   "scripts": {
-    "generate:subjects": "tsx scripts/generate-subjects.ts",
     "dev": "concurrently \"npm run dev -w @uiuc-course-search/api\" \"npm run dev -w @uiuc-course-search/web\"",
-    "build": "npm run build --workspaces",
-    "build:with-generated-subjects": "npm run generate:subjects && npm run build",
+    "build": "npm run build --workspaces && npm run typecheck:scripts",
     "test": "npm test --workspaces && npm run test:scripts",
     "test:workspaces": "npm test --workspaces",
     "test:scripts": "vitest run scripts/__tests__",
@@ -22,24 +20,9 @@
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint .",
     "bundle:budget": "tsx scripts/check-bundle-budget.ts",
-    "security:audit": "tsx scripts/security-audit.ts",
     "security:secrets": "tsx scripts/check-secrets.ts",
-    "d1:preflight": "tsx scripts/d1-backup-preflight.ts",
-    "cloudflare:preflight": "tsx scripts/cloudflare-staging-preflight.ts",
-    "bootstrap:fresh-check": "tsx scripts/verify-fresh-clone.ts",
-    "db:verify": "bash scripts/verify-schema.sh",
-    "eval:smoke": "npm run eval:smoke -w @uiuc-course-search/api",
-    "feedback:triage": "tsx scripts/feedback-corpus-candidates.ts",
-    "feedback:export": "tsx scripts/export-feedback.ts",
-    "data:freshness:audit": "tsx scripts/data-freshness-audit.ts",
-    "data:term-retention": "tsx scripts/term-retention-plan.ts",
-    "data:semester:plan": "tsx scripts/semester-maintenance-plan.ts",
-    "data:backfill:term": "tsx scripts/term-backfill.ts",
-    "data:term-coverage": "tsx scripts/term-coverage-plan.ts",
-    "data:backfill:coverage": "tsx scripts/term-coverage-backfill.ts",
     "eval:staging": "if [ -z \"$EVAL_BASE_URL\" ]; then echo \"EVAL_BASE_URL is required, for example https://api-staging.example.workers.dev\" >&2; exit 1; fi; npm run eval -w @uiuc-course-search/api -- \"$EVAL_BASE_URL\"",
     "test:staging": "tsx scripts/staging-smoke.ts",
-    "qa:mock-api": "tsx scripts/browser-qa-mock-api.ts",
     "deploy:api:staging": "npm run deploy:staging -w @uiuc-course-search/api",
     "deploy:web:staging": "npm run deploy:staging -w @uiuc-course-search/web",
     "deploy:staging": "npm run deploy:api:staging && npm run deploy:web:staging",
@@ -48,7 +31,7 @@
     "deploy:production": "npm run deploy:api:production && npm run deploy:web:production"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260728.1",
+    "@cloudflare/workers-types": "^5.20260830.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.9.1",
     "concurrently": "^10.0.4",
@@ -59,7 +42,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.8",
-    "wrangler": "^4.114.0"
+    "wrangler": "^4.127.1"
   },
   "overrides": {
     "esbuild": "0.28.1"

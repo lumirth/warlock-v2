@@ -1,16 +1,9 @@
 import type { D1Database, VectorizeIndex } from '@cloudflare/workers-types';
-import type { TermSyncResult } from './parallel-sync.js';
+import { errorFields, logger } from '../observability/logger.js';
 import { deleteCourseEmbeddings } from './embeddings.js';
+import type { TermSyncResult } from './parallel-sync.js';
 
-const VECTOR_DELETE_BATCH_SIZE = 1_000;
-
-export type TermSubjectManifestReconciliation = {
-  applied: boolean;
-  deletedCourseCount: number;
-  reason?: 'incomplete_sync';
-};
-
-type ReconcileTermSubjectManifestOptions = {
+type Options = {
   year: number;
   term: string;
   authoritativeSubjects: string[];
@@ -18,141 +11,87 @@ type ReconcileTermSubjectManifestOptions = {
   vectorize?: VectorizeIndex;
 };
 
-/**
- * Removes term rows for subjects that vanished from Course Explorer.
- *
- * The authoritative manifest is destructive evidence, so this function fails
- * closed unless the supplied result proves that every subject in that exact
- * manifest completed in one full-corpus run. When semantic indexing is
- * enabled, vectors are deleted before D1. A vector failure therefore leaves
- * the D1 rows (and their retryable IDs) intact.
- */
+export type TermSubjectManifestReconciliation = {
+  applied: boolean;
+  deletedCourseCount: number;
+  reason?: 'incomplete_sync';
+};
+
 export async function reconcileTermSubjectManifest(
   db: D1Database,
-  options: ReconcileTermSubjectManifestOptions,
+  options: Options,
 ): Promise<TermSubjectManifestReconciliation> {
-  const subjects = normalizedManifest(options.authoritativeSubjects);
-  if (!isCompleteManifestSync(options, subjects)) {
-    return {
-      applied: false,
-      deletedCourseCount: 0,
-      reason: 'incomplete_sync',
-    };
+  const subjects = normalizeManifest(options.authoritativeSubjects);
+  if (!completedExactly(options.syncResult, subjects, options.year, options.term)) {
+    return { applied: false, deletedCourseCount: 0, reason: 'incomplete_sync' };
   }
 
-  const subjectsJson = JSON.stringify(subjects);
-  const staleCourses = await db.prepare(`
-    SELECT id
-    FROM courses
-    WHERE year = ?
-      AND term = ?
+  const manifest = JSON.stringify(subjects);
+  const stale = await db.prepare(`
+    SELECT id FROM courses WHERE year = ? AND term = ?
       AND subject NOT IN (SELECT CAST(value AS TEXT) FROM json_each(?))
     ORDER BY id
-  `).bind(options.year, options.term, subjectsJson).all<{ id: string }>();
+  `).bind(options.year, options.term, manifest).all<{ id: string }>();
+  if (!stale.success) throw new Error('failed to read stale courses');
+  const staleIds = stale.results.map(course => course.id);
 
-  if (!staleCourses.success) {
-    throw new Error(
-      `Failed to load stale course IDs for ${options.year}-${options.term}`,
-    );
-  }
-
-  const staleCourseIds = staleCourses.results.map(course => course.id);
-  if (options.vectorize) {
-    for (
-      let index = 0;
-      index < staleCourseIds.length;
-      index += VECTOR_DELETE_BATCH_SIZE
-    ) {
-      await deleteCourseEmbeddings(
-        options.vectorize,
-        staleCourseIds.slice(index, index + VECTOR_DELETE_BATCH_SIZE),
-      );
-    }
-  }
-
-  const deletionResults = await db.batch([
+  const termId = `${options.year}-${options.term}`;
+  const deleted = await db.batch([
     db.prepare(`
-      DELETE FROM instructor_course_links
-      WHERE term_id = ?
-        AND subject NOT IN (
-          SELECT CAST(value AS TEXT) FROM json_each(?)
-        )
-    `).bind(`${options.year}-${options.term}`, subjectsJson),
+      DELETE FROM instructor_course_links WHERE term_id = ?
+        AND subject NOT IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+    `).bind(termId, manifest),
     db.prepare(`
-      DELETE FROM subject_sync_state
-      WHERE term_id = ?
-        AND subject NOT IN (
-          SELECT CAST(value AS TEXT) FROM json_each(?)
-        )
-    `).bind(`${options.year}-${options.term}`, subjectsJson),
+      DELETE FROM subject_sync_state WHERE term_id = ?
+        AND subject NOT IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+    `).bind(termId, manifest),
     db.prepare(`
-      DELETE FROM courses
-      WHERE year = ?
-        AND term = ?
-        AND subject NOT IN (
-          SELECT CAST(value AS TEXT) FROM json_each(?)
-        )
-    `).bind(options.year, options.term, subjectsJson),
+      DELETE FROM courses WHERE year = ? AND term = ?
+        AND subject NOT IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+    `).bind(options.year, options.term, manifest),
   ]);
-  if (deletionResults.some(result => !result.success)) {
-    throw new Error(
-      `Failed to reconcile subject manifest for ${options.year}-${options.term}`,
-    );
-  }
-
-  return {
-    applied: true,
-    deletedCourseCount: staleCourseIds.length,
-  };
-}
-
-function normalizedManifest(subjects: string[]): string[] {
-  const normalized = subjects.map(subject => subject.trim().toUpperCase());
-  if (
-    normalized.length === 0
-    || normalized.some(subject => !/^[A-Z]{2,4}$/.test(subject))
-    || new Set(normalized).size !== normalized.length
-  ) {
-    throw new Error('Refusing invalid authoritative subject manifest');
-  }
-  return normalized;
-}
-
-function isCompleteManifestSync(
-  options: ReconcileTermSubjectManifestOptions,
-  subjects: string[],
-): boolean {
-  const result = options.syncResult;
-  const pagination = result.pagination;
-  if (
-    result.year !== options.year
-    || result.term !== options.term
-    || result.termId !== `${options.year}-${options.term}`
-    || !pagination
-    || pagination.offset !== 0
-    || pagination.hasMore
-    || pagination.total !== subjects.length
-    || pagination.limit !== subjects.length
-    || result.subjectResults.length !== subjects.length
-    || result.successfulSubjects !== subjects.length
-    || result.failedSubjects !== 0
-  ) {
-    return false;
-  }
-
-  const completedSubjects = new Set<string>();
-  for (const subject of result.subjectResults) {
-    const normalizedSubject = subject.subject.trim().toUpperCase();
-    if (
-      !subject.success
-      || subject.skipped
-      || completedSubjects.has(normalizedSubject)
-      || !subjects.includes(normalizedSubject)
-    ) {
-      return false;
+  if (deleted.some(result => !result.success)) throw new Error(`failed to reconcile ${termId}`);
+  if (options.vectorize) {
+    for (let offset = 0; offset < staleIds.length; offset += 1_000) {
+      const ids = staleIds.slice(offset, offset + 1_000);
+      await deleteCourseEmbeddings(options.vectorize, ids).catch(error => {
+        logger.warn('courseSync.embeddings.deleteFailed', {
+          termId,
+          courseCount: ids.length,
+          ...errorFields(error),
+        });
+      });
     }
-    completedSubjects.add(normalizedSubject);
   }
+  return { applied: true, deletedCourseCount: staleIds.length };
+}
 
-  return subjects.every(subject => completedSubjects.has(subject));
+function normalizeManifest(input: string[]): string[] {
+  const subjects = input.map(subject => subject.trim().toUpperCase());
+  if (!subjects.length
+    || subjects.some(subject => !/^[A-Z]{2,4}$/.test(subject))
+    || new Set(subjects).size !== subjects.length) {
+    throw new Error('refusing invalid authoritative subject manifest');
+  }
+  return subjects;
+}
+
+function completedExactly(
+  result: TermSyncResult,
+  subjects: string[],
+  year: number,
+  term: string,
+): boolean {
+  const completed = result.subjectResults
+    .filter(subject => subject.success && !subject.skipped)
+    .map(subject => subject.subject.trim().toUpperCase());
+  return result.year === year
+    && result.term === term
+    && result.termId === `${year}-${term}`
+    && result.subjectResults.length === subjects.length
+    && result.failedSubjects === 0
+    && result.successfulSubjects === subjects.length
+    && completed.length === subjects.length
+    && new Set(completed).size === subjects.length
+    && completed.every(subject => subjects.includes(subject));
 }

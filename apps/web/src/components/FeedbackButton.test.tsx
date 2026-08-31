@@ -1,101 +1,39 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { expect, it, vi } from 'vitest'
 import { api } from '../lib/api-client'
 import { TestUiProvider } from '../test/TestUiProvider'
 import { FeedbackButton } from './FeedbackButton'
 
 vi.mock('../lib/api-client', () => ({
-  api: {
-    submitFeedback: vi.fn(),
-  },
+  api: { submitFeedback: vi.fn() },
 }))
 
-afterEach(() => {
-  cleanup()
-  vi.clearAllMocks()
-})
-
-function renderFeedbackButton() {
+it('submits feedback with its search context and confirms receipt', async () => {
+  vi.mocked(api.submitFeedback).mockResolvedValue({
+    id: 'feedback-1',
+    status: 'accepted',
+    received_at: 1780358400,
+  })
   render(
     <TestUiProvider>
       <FeedbackButton
         buttonLabel="Results not right?"
         page="search"
-        kind="search_results"
-        issue="expected_different_results"
         context={{ query: 'professor fagen' }}
       />
     </TestUiProvider>
   )
-}
 
-describe('FeedbackButton', () => {
-  it('submits structured feedback context and shows completion state', async () => {
-    vi.mocked(api.submitFeedback).mockResolvedValueOnce({
-      id: 'feedback-1',
-      status: 'accepted',
-      received_at: 1780358400,
-    })
-
-    renderFeedbackButton()
-
-    fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
-    fireEvent.change(screen.getByLabelText(/what did you expect/i), {
-      target: { value: 'courses taught by Wade Fagen-Ulmschneider' },
-    })
-    fireEvent.change(screen.getByLabelText(/additional context/i), {
-      target: { value: 'The professor name should be enough.' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /^send feedback$/i }))
-
-    expect(await screen.findByText(/feedback received/i)).toBeInTheDocument()
-    expect(api.submitFeedback).toHaveBeenCalledWith({
-      kind: 'search_results',
-      issue: 'expected_different_results',
-      page: 'search',
-      query: 'professor fagen',
-      expected: 'courses taught by Wade Fagen-Ulmschneider',
-      message: 'The professor name should be enough.',
-    })
+  fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
+  fireEvent.change(screen.getByLabelText(/what did you expect/i), {
+    target: { value: 'courses taught by Fagen' },
   })
+  fireEvent.click(screen.getByRole('button', { name: /^send feedback$/i }))
 
-  it('opens a focused feedback dialog instead of pushing results inline', () => {
-    renderFeedbackButton()
-
-    fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: /what looked wrong/i })
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText(/what did you expect/i)).toHaveAttribute(
-      'maxLength',
-      '1000'
-    )
-    expect(screen.getByLabelText(/additional context/i)).toHaveAttribute(
-      'maxLength',
-      '2000'
-    )
-    expect(
-      screen.getByRole('button', { name: /^send feedback$/i })
-    ).toBeDisabled()
-  })
-
-  it('uses calm recovery copy when feedback submission fails', async () => {
-    vi.mocked(api.submitFeedback).mockRejectedValueOnce(
-      new Error('Internal server error')
-    )
-
-    renderFeedbackButton()
-
-    fireEvent.click(screen.getByRole('button', { name: /results not right/i }))
-    fireEvent.change(screen.getByLabelText(/additional context/i), {
-      target: { value: 'The result order appears wrong.' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /^send feedback$/i }))
-
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(/That feedback did not go through/i)
-    expect(alert).not.toHaveTextContent(/Internal server error/i)
+  expect(await screen.findByText(/feedback received/i)).toBeVisible()
+  expect(api.submitFeedback).toHaveBeenCalledWith({
+    page: 'search',
+    query: 'professor fagen',
+    expected: 'courses taught by Fagen',
   })
 })

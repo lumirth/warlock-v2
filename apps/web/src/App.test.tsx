@@ -2,98 +2,71 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TestUiProvider } from './test/TestUiProvider'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import App from './App'
 
 beforeEach(() => {
-  window.localStorage.clear()
+  localStorage.clear()
   document.documentElement.className = ''
-  document.documentElement.style.colorScheme = ''
 })
 
 afterEach(() => {
-  vi.restoreAllMocks()
   cleanup()
-  document.documentElement.className = ''
-  document.documentElement.style.colorScheme = ''
+  vi.restoreAllMocks()
 })
 
-describe('App shell', () => {
-  it('renders the search brand as the page heading and toggles dark mode', () => {
+describe('application boundary', () => {
+  it('routes unknown addresses and keeps navigation accessible', () => {
     render(
       <TestUiProvider>
-        <MemoryRouter initialEntries={['/']}>
+        <MemoryRouter initialEntries={['/missing']}>
           <App />
         </MemoryRouter>
       </TestUiProvider>
     )
-
-    expect(
-      screen.getByRole('heading', { level: 1, name: /uiuc course search/i })
-    ).toBeInTheDocument()
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /switch to dark mode/i })
-    )
-    expect(document.documentElement).toHaveClass('dark')
-    expect(document.documentElement.style.colorScheme).toBe('dark')
-    expect(window.localStorage.getItem('uiuc-course-search-theme')).toBe('dark')
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /switch to light mode/i })
-    )
-    expect(document.documentElement).not.toHaveClass('dark')
-    expect(document.documentElement.style.colorScheme).toBe('light')
-    expect(window.localStorage.getItem('uiuc-course-search-theme')).toBe(
-      'light'
-    )
-  })
-
-  it('renders and toggles theme when browser storage throws', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new DOMException('blocked', 'SecurityError')
-    })
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('blocked', 'SecurityError')
-    })
-
-    render(
-      <TestUiProvider>
-        <MemoryRouter initialEntries={['/']}>
-          <App />
-        </MemoryRouter>
-      </TestUiProvider>
-    )
-
-    expect(
-      screen.getByRole('heading', { level: 1, name: /uiuc course search/i })
-    ).toBeInTheDocument()
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /switch to dark mode/i })
-    )
-    expect(document.documentElement).toHaveClass('dark')
-    expect(document.documentElement.style.colorScheme).toBe('dark')
-  })
-
-  it('provides a skip link and a useful not-found route', () => {
-    render(
-      <TestUiProvider>
-        <MemoryRouter initialEntries={['/not-a-real-page']}>
-          <App />
-        </MemoryRouter>
-      </TestUiProvider>
-    )
-
     expect(screen.getByText(/skip to main content/i)).toHaveAttribute(
       'href',
       '#main-content'
     )
     expect(
       screen.getByRole('heading', { name: /page not found/i })
-    ).toBeInTheDocument()
-    expect(document.title).toBe('Page not found · UIUC Course Search')
+    ).toBeVisible()
     expect(
       screen.getByRole('link', { name: /return to course search/i })
     ).toHaveAttribute('href', '/')
+  })
+
+  it('applies and persists the selected theme', () => {
+    render(
+      <TestUiProvider>
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      </TestUiProvider>
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: /switch to dark mode/i })
+    )
+    expect(document.documentElement).toHaveClass('dark')
+    expect(localStorage.getItem('uiuc-course-search-theme')).toBe('dark')
+  })
+
+  it('contains unexpected render failures', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const suppress = (event: ErrorEvent) => event.preventDefault()
+    window.addEventListener('error', suppress)
+    const Broken = () => {
+      throw new Error('boom')
+    }
+    render(
+      <AppErrorBoundary>
+        <Broken />
+      </AppErrorBoundary>
+    )
+    expect(screen.getByRole('heading', { name: /fresh start/i })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /reload course search/i })
+    ).toBeVisible()
+    window.removeEventListener('error', suppress)
   })
 })

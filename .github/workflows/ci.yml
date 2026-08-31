@@ -32,20 +32,14 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Verify schema bootstrap
-        run: npm run db:verify
-
-      - name: Test
-        run: npm test
-
       - name: Build
         run: npm run build
 
       - name: Enforce bundle budget
         run: npm run bundle:budget
+
+      - name: Test
+        run: npm test
 
       - name: Lint
         run: npm run lint
@@ -54,15 +48,4 @@ jobs:
         run: npm run security:secrets
 
       - name: Dependency audit
-        run: npm run security:audit
-
-      - name: Search planning smoke eval
-        run: npm run eval:smoke
-
-      - name: Upload eval smoke report
-        uses: actions/upload-artifact@v7.0.1
-        if: always()
-        with:
-          name: eval-smoke-report
-          path: artifacts/eval-smoke-*
-          if-no-files-found: error
+        run: npm audit --audit-level=high

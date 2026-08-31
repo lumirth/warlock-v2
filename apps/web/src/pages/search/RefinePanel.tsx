@@ -12,7 +12,6 @@ import type {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { AdvancedSearchFields } from './AdvancedSearchFields'
 import { getChipClass } from './search-result-model'
@@ -60,8 +59,6 @@ export function RefinePanel({
   onResetAdvancedDraft: () => void
   onRetryTermOptions: () => void
 }) {
-  const activeChips = meta?.ui.chips ?? []
-
   return (
     <Card>
       <CardContent className="flex flex-col gap-4">
@@ -88,48 +85,10 @@ export function RefinePanel({
           </Button>
         </div>
 
-        {activeChips.length ? (
-          <div
-            aria-label="Active search filters"
-            className="flex flex-wrap gap-2"
-          >
-            {activeChips.map((chip) => (
-              <SearchChipBadge
-                key={chip.id}
-                chip={chip}
-                onRemoveChip={onRemoveChip}
-              />
-            ))}
-          </div>
-        ) : meta ? (
-          <p className="text-muted-foreground text-sm">Searching by topic.</p>
-        ) : null}
+        <Interpretation meta={meta} onRemoveChip={onRemoveChip} onAmbiguityAction={onAmbiguityAction} />
 
-        {meta?.ui.ambiguityActions.length ? (
-          <div className="flex flex-col gap-2">
-            <p className="text-muted-foreground text-xs">
-              Did you mean a different interpretation?
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {meta.ui.ambiguityActions.map((action) => (
-                <Button
-                  key={action.id}
-                  size="xs"
-                  variant="secondary"
-                  onClick={() => onAmbiguityAction(action)}
-                >
-                  Use {action.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <Collapsible open={advancedOpen}>
-          <CollapsibleContent
-            id="advanced-search-panel"
-            className="border-t pt-4"
-          >
+        {advancedOpen && (
+          <div id="advanced-search-panel" className="border-t pt-4">
             <AdvancedSearchFields
               advancedDraft={advancedDraft}
               availableTerms={availableTerms}
@@ -165,11 +124,30 @@ export function RefinePanel({
                 </Button>
               </div>
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
+}
+
+function Interpretation({ meta, onRemoveChip, onAmbiguityAction }: {
+  meta: SearchMetaDto | null
+  onRemoveChip: (chip: SearchChipDto) => void
+  onAmbiguityAction: (action: SearchAmbiguityActionDto) => void
+}) {
+  const chips = meta?.ui.chips ?? []
+  return <>
+    {chips.length ? <div aria-label="Active search filters" className="flex flex-wrap gap-2">
+      {chips.map((chip) => <SearchChipBadge key={chip.id} chip={chip} onRemoveChip={onRemoveChip} />)}
+    </div> : meta ? <p className="text-muted-foreground text-sm">Searching by topic.</p> : null}
+    {meta?.ui.ambiguityActions.length ? <div className="flex flex-col gap-2">
+      <p className="text-muted-foreground text-xs">Did you mean a different interpretation?</p>
+      <div className="flex flex-wrap gap-2">{meta.ui.ambiguityActions.map((action) =>
+        <Button key={action.id} size="xs" variant="secondary" onClick={() => onAmbiguityAction(action)}>Use {action.label}</Button>
+      )}</div>
+    </div> : null}
+  </>
 }
 
 function SearchChipBadge({

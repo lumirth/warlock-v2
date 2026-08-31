@@ -1,186 +1,103 @@
-import type { EvalResult } from './types.js';
-import { GOLDEN_QUERIES } from './golden-queries.js';
-import { calculateMetrics } from './metrics.js';
-import { generateReport } from './report.js';
-import {
-  evaluatePublicSearchResponse,
-  evaluateSearchResponse,
-  type SearchResponseForEval,
-} from './checks.js';
+import { evaluateScenario } from './checks.js';
+import { EVAL_SCENARIOS } from './scenarios.js';
 
-const REMOTE_EVAL_REQUEST_DELAY_MS = 650;
-const RATE_LIMIT_RETRY_FALLBACK_MS = 65_000;
-const MAX_RATE_LIMIT_RETRIES = 2;
+const REMOTE_DELAY_MS = 650;
+const RATE_LIMIT_FALLBACK_MS = 65_000;
 
 type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 type Sleeper = (ms: number) => Promise<void>;
-type EvalMode = 'debug' | 'public';
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+export type EvalFailure = {
+  scenario: string;
+  query: string;
+  failures: string[];
+};
+
+const sleep: Sleeper = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+export function evalRequestUrl(baseUrl: string, query: string): string {
+  const base = baseUrl.replace(/\/+$/, '');
+  return `${base}/api/search?q=${encodeURIComponent(query).replace(/'/g, '%27')}&limit=20`;
 }
 
-function encodeQueryParam(value: string): string {
-  return encodeURIComponent(value).replace(/'/g, '%27');
-}
-
-function retryAfterMs(response: Response): number | null {
-  const retryAfter = response.headers.get('Retry-After');
-  if (!retryAfter) return null;
-
-  const seconds = Number.parseFloat(retryAfter);
-  if (Number.isFinite(seconds)) {
-    return Math.max(0, seconds * 1000);
-  }
-
-  const dateMs = Date.parse(retryAfter);
-  if (Number.isNaN(dateMs)) return null;
-
-  return Math.max(0, dateMs - Date.now());
-}
-
-export function requestDelayForBaseUrl(baseUrl: string): number {
-  return /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(?::|\/|$)/i.test(baseUrl)
-    ? 0
-    : REMOTE_EVAL_REQUEST_DELAY_MS;
-}
-
-export function evalModeForEnvironment(env: Record<string, string | undefined>): EvalMode {
-  if (env.EVAL_MODE === 'debug' || env.EVAL_MODE === 'public') {
-    return env.EVAL_MODE;
-  }
-
-  return env.EVAL_ADMIN_TOKEN || env.STAGING_ADMIN_TOKEN ? 'debug' : 'public';
-}
-
-export function evalRequestUrl(
-  baseUrl: string,
-  query: string,
-  mode: EvalMode,
-): string {
-  const encodedQuery = encodeQueryParam(query);
-  return mode === 'debug'
-    ? `${baseUrl}/admin/debug/search-plan?q=${encodedQuery}&limit=20`
-    : `${baseUrl}/api/search?q=${encodedQuery}&limit=20`;
+function retryDelay(response: Response): number {
+  const value = response.headers.get('Retry-After');
+  if (!value) return RATE_LIMIT_FALLBACK_MS;
+  const seconds = Number.parseFloat(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? RATE_LIMIT_FALLBACK_MS : Math.max(0, date - Date.now());
 }
 
 export async function fetchWithRateLimitRetry(
   url: string,
-  options: {
-    fetcher?: Fetcher;
-    init?: RequestInit;
-    sleeper?: Sleeper;
-    maxRetries?: number;
-  } = {},
+  options: { fetcher?: Fetcher; sleeper?: Sleeper; retries?: number } = {},
 ): Promise<Response> {
   const fetcher = options.fetcher ?? fetch;
   const sleeper = options.sleeper ?? sleep;
-  const maxRetries = options.maxRetries ?? MAX_RATE_LIMIT_RETRIES;
-
-  for (let attempt = 0; ; attempt++) {
-    const response = await fetcher(url, options.init);
-    if (response.status !== 429 || attempt >= maxRetries) {
-      return response;
-    }
-
-    const waitMs = retryAfterMs(response) ?? RATE_LIMIT_RETRY_FALLBACK_MS;
-    console.warn(
-      `HTTP 429 from eval target; waiting ${Math.round(waitMs / 1000)}s before retry ${attempt + 1}/${maxRetries}.`
-    );
-    await sleeper(waitMs);
+  const retries = options.retries ?? 2;
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetcher(url);
+    if (response.status !== 429 || attempt >= retries) return response;
+    await sleeper(retryDelay(response));
   }
 }
 
-async function runEvaluation(baseUrl: string): Promise<EvalResult[]> {
-  console.log(`Running evaluation against ${baseUrl}...`);
-  console.log(`Total queries: ${GOLDEN_QUERIES.length}\n`);
-
-  const evalResults: EvalResult[] = [];
-  const requestDelayMs = requestDelayForBaseUrl(baseUrl);
-  const adminToken = process.env.EVAL_ADMIN_TOKEN ?? process.env.STAGING_ADMIN_TOKEN;
-  const evalMode = evalModeForEnvironment(process.env);
-  const requestInit = adminToken
-    ? { headers: { Authorization: `Bearer ${adminToken}` } }
-    : undefined;
-  console.log(
-    evalMode === 'debug'
-      ? 'Eval mode: debug parse + public result coherence'
-      : 'Eval mode: public result coherence only'
+export async function runEvaluation(
+  baseUrl: string,
+  options: { fetcher?: Fetcher; sleeper?: Sleeper; delayMs?: number } = {},
+): Promise<EvalFailure[]> {
+  const failures: EvalFailure[] = [];
+  const cases = EVAL_SCENARIOS.flatMap(scenario =>
+    scenario.queries.map(query => ({ scenario, query }))
   );
+  const remote = !/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i.test(baseUrl);
 
-  for (const [index, query] of GOLDEN_QUERIES.entries()) {
-    try {
-      const url = evalRequestUrl(baseUrl, query.query, evalMode);
-      const response = await fetchWithRateLimitRetry(url, { init: requestInit });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-      }
-
-      const data = await response.json() as SearchResponseForEval;
-      const result = evalMode === 'debug'
-        ? evaluateSearchResponse(query, data)
-        : evaluatePublicSearchResponse(query, data);
-      evalResults.push(result);
-
-      // Progress indicator
-      const status = result.violations.length > 0 ? 'FAIL' : 'PASS';
-      const rankStatus = (query.expected_top1 || query.expected_top1_title) ? ` (RR: ${result.reciprocalRank?.toFixed(2)})` : '';
-      console.log(`${status} [${query.id}] "${query.query}" - ${result.results.length} results, ${result.parseViolations.length} parse violations, ${result.resultViolations.length} result violations${rankStatus}`);
-      for (const violation of result.violations) {
-        console.log(`  - ${violation}`);
-      }
-
-    } catch (error) {
-      console.error(`FAIL [${query.id}] "${query.query}" - ERROR: ${error}`);
-      evalResults.push({
-        query,
-        actualFilters: {},
-        results: [],
-        reciprocalRank: 0,
-        violations: [`Fetch error: ${error}`],
-        parseViolations: [`Fetch error: ${error}`],
-        resultViolations: [],
-      });
-    }
-
-    if (requestDelayMs > 0 && index < GOLDEN_QUERIES.length - 1) {
-      await sleep(requestDelayMs);
+  for (const [index, item] of cases.entries()) {
+    const failure = await evaluateCase(baseUrl, item, options);
+    if (failure) failures.push(failure);
+    if (remote && index < cases.length - 1) {
+      await (options.sleeper ?? sleep)(options.delayMs ?? REMOTE_DELAY_MS);
     }
   }
 
-  const metrics = calculateMetrics(evalResults);
-  console.log(generateReport(metrics));
-  return evalResults;
+  return failures;
 }
 
-// CLI entry point
+async function evaluateCase(
+  baseUrl: string,
+  item: { scenario: typeof EVAL_SCENARIOS[number]; query: string },
+  options: { fetcher?: Fetcher; sleeper?: Sleeper; delayMs?: number },
+): Promise<EvalFailure | null> {
+  let failures: string[];
+  try {
+    const response = await fetchWithRateLimitRetry(evalRequestUrl(baseUrl, item.query), options);
+    const body = await response.json().catch(() => undefined);
+    failures = response.ok ? evaluateScenario(item.scenario, body) : [`HTTP ${response.status}`];
+  } catch (error) {
+    failures = [error instanceof Error ? error.message : String(error)];
+  }
+  return failures.length ? { scenario: item.scenario.name, query: item.query, failures } : null;
+}
+
 declare const process: {
   argv: string[];
-  env: Record<string, string | undefined>;
   exitCode?: number;
 };
 
-function isCliEntryPoint(argv: string[]): boolean {
-  const entry = argv[1] ?? '';
-  return /(?:^|[/\\])runner\.(?:ts|js)$/.test(entry);
-}
-
-if (isCliEntryPoint(process.argv)) {
-  const baseUrl = process.argv[2] || 'http://localhost:8787';
-  runEvaluation(baseUrl)
-    .then((results) => {
-      const metrics = calculateMetrics(results);
-
-      if (metrics.violationCount > 0 || metrics.missingExpectedTopCount > 0) {
-        console.error(
-          `Evaluation failed: ${metrics.violationCount} violations, ${metrics.missingExpectedTopCount} missing expected top results.`
-        );
-        process.exitCode = 1;
-      }
-    })
-    .catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+if (/(?:^|[/\\])runner\.(?:ts|js)$/.test(process.argv[1] ?? '')) {
+  const baseUrl = process.argv[2] ?? 'http://localhost:8787';
+  runEvaluation(baseUrl).then((failures) => {
+    if (failures.length === 0) {
+      console.log(`Public search eval passed against ${baseUrl}.`);
+      return;
+    }
+    for (const failure of failures) {
+      console.error(`FAIL ${failure.scenario} (${JSON.stringify(failure.query)}): ${failure.failures.join('; ')}`);
+    }
+    process.exitCode = 1;
+  }).catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

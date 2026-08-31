@@ -1,19 +1,24 @@
-import { useId, type InputHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, ReactNode } from 'react'
 import { Field, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { ANY_SELECT_VALUE, type SelectOption } from './search-options'
 
-export function AdvancedTextField({
-  id,
-  label,
-  value,
-  placeholder,
-  inputMode,
-  maxLength,
-  error,
-  description,
-  onChange,
-}: {
+const control = 'border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border bg-transparent px-2.5 text-sm outline-none focus-visible:ring-3 disabled:opacity-50'
+
+function Shell({ id, label, note, error, children }: {
+  id: string
+  label: string
+  note?: string
+  error?: string
+  children: ReactNode
+}) {
+  return <Field>
+    <FieldLabel htmlFor={id}>{label}</FieldLabel>
+    {children}
+    {(error || note) && <p id={`${id}-note`} className={`${error ? 'text-destructive' : 'text-muted-foreground'} text-xs leading-5`}>{error ?? note}</p>}
+  </Field>
+}
+
+export function AdvancedTextField({ id, label, value, placeholder, inputMode, maxLength, error, description, onChange }: {
   id: string
   label: string
   value: string
@@ -24,54 +29,25 @@ export function AdvancedTextField({
   description?: string
   onChange: (value: string) => void
 }) {
-  const inputId = useId()
-  const descriptionId = `${inputId}-description`
-
-  return (
-    <Field>
-      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
-      <Input
-        type="search"
-        id={inputId}
-        data-search-filter-field={id}
-        autoComplete="off"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        inputMode={inputMode}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        value={value}
-        aria-invalid={Boolean(error)}
-        aria-describedby={error || description ? descriptionId : undefined}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-      {error || description ? (
-        <p
-          id={descriptionId}
-          className={
-            error
-              ? 'text-destructive text-xs leading-5'
-              : 'text-muted-foreground text-xs leading-5'
-          }
-        >
-          {error ?? description}
-        </p>
-      ) : null}
-    </Field>
-  )
+  return <Shell id={id} label={label} error={error} note={description}>
+    <input
+      id={id}
+      className={control}
+      type="search"
+      autoComplete="off"
+      spellCheck={false}
+      inputMode={inputMode}
+      maxLength={maxLength}
+      placeholder={placeholder}
+      value={value}
+      aria-invalid={Boolean(error)}
+      aria-describedby={error || description ? `${id}-note` : undefined}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    />
+  </Shell>
 }
 
-export function AdvancedSelectField({
-  id,
-  label,
-  placeholder,
-  value,
-  options,
-  disabled = false,
-  description,
-  onChange,
-}: {
+export function AdvancedSelectField({ id, label, placeholder, value, options, disabled, description, onChange }: {
   id: string
   label: string
   placeholder: string
@@ -81,67 +57,24 @@ export function AdvancedSelectField({
   description?: string
   onChange: (value: string | undefined) => void
 }) {
-  return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <select
-        id={id}
-        data-search-filter-field={id}
-        className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full min-w-0 rounded-lg border bg-transparent px-2.5 py-1 text-sm transition-colors outline-none focus-visible:ring-3 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
-        value={value ?? ANY_SELECT_VALUE}
-        disabled={disabled}
-        onChange={(event) =>
-          onChange(
-            event.currentTarget.value === ANY_SELECT_VALUE
-              ? undefined
-              : event.currentTarget.value
-          )
-        }
-      >
-        <option value={ANY_SELECT_VALUE}>{placeholder}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      {description ? (
-        <p className="text-muted-foreground text-xs leading-5">{description}</p>
-      ) : null}
-    </Field>
-  )
+  return <Shell id={id} label={label} note={description}>
+    <select id={id} className={control} value={value ?? ANY_SELECT_VALUE} disabled={disabled}
+      onChange={(event) => onChange(event.currentTarget.value === ANY_SELECT_VALUE ? undefined : event.currentTarget.value)}>
+      <option value={ANY_SELECT_VALUE}>{placeholder}</option>
+      {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+  </Shell>
 }
 
-export function AdvancedCheckboxField({
-  id,
-  label,
-  description,
-  checked,
-  onChange,
-}: {
+export function AdvancedCheckboxField({ id, label, description, checked, onChange }: {
   id: string
   label: string
   description: string
   checked: boolean
   onChange: (checked: boolean) => void
 }) {
-  return (
-    <Field className="bg-background rounded-md border px-3 py-2.5">
-      <div className="flex items-start gap-2">
-        <input
-          id={id}
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => onChange(event.currentTarget.checked)}
-          className="border-border text-primary accent-primary focus-visible:ring-ring focus-visible:ring-offset-background mt-0.5 size-5 rounded-[var(--radius-sm)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-        />
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <FieldLabel htmlFor={id}>{label}</FieldLabel>
-          <p className="text-muted-foreground text-xs leading-5">
-            {description}
-          </p>
-        </div>
-      </div>
-    </Field>
-  )
+  return <label htmlFor={id} className="bg-background flex items-start gap-2 rounded-md border px-3 py-2.5">
+    <input id={id} type="checkbox" checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} className="accent-primary mt-0.5 size-5" />
+    <span><strong className="block text-sm font-medium">{label}</strong><span className="text-muted-foreground text-xs">{description}</span></span>
+  </label>
 }

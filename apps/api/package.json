@@ -1,7 +1,6 @@
 {
   "name": "@uiuc-course-search/api",
   "private": true,
-  "version": "1.0.0",
   "scripts": {
     "dev": "wrangler dev",
     "build": "tsc --noEmit",
@@ -11,24 +10,22 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "eval": "npx tsx src/eval/runner.ts",
-    "eval:smoke": "tsx scripts/eval-smoke.ts",
+    "eval": "tsx src/eval/runner.ts",
     "check": "npm run typecheck && npm run test",
     "deploy:staging": "tsx ../../scripts/staging-api-release.ts",
     "deploy:production": "tsx ../../scripts/staging-api-release.ts --target production"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.18.8",
-    "@cloudflare/workers-types": "^5.20260728.1",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260830.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8",
-    "wrangler": "^4.114.0"
+    "wrangler": "^4.127.1"
   },
   "dependencies": {
-    "@uiuc-course-search/course-explorer-contract": "^0.0.1",
-    "@uiuc-course-search/query-types": "^0.0.1",
+    "@uiuc-course-search/query-types": "*",
     "domhandler": "^5.0.3",
-    "hono": "^4.12.32",
+    "hono": "^4.13.5",
     "htmlparser2": "^10.0.0"
   }
 }

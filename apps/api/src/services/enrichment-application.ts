@@ -1,52 +1,13 @@
-import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
-import { enrichCoursesWithGpa, enrichCoursesWithScores, coordinateEnrichment } from './enrichment.js';
-import { resetGpaSync } from './gpa-sync.js';
-import { coordinateRmpSync, processRmpBatch, type RmpTeacherNode } from './rmp-sync.js';
+import { coordinateEnrichment } from './enrichment.js';
+import { coordinateRmpSync } from './rmp-sync.js';
 import type { SyncRouteBindings } from './sync-operations.js';
 
 type EnrichmentApplicationEnv = Pick<
   SyncRouteBindings,
-  'DB' | 'SELF' | 'INTERNAL_TOKEN' | 'RMP_AUTH_TOKEN' | 'GPA_CACHE'
+  'DB' | 'RMP_AUTH_TOKEN'
 >;
 
-export async function runRmpAndScoringEnrichment(
-  env: EnrichmentApplicationEnv
-) {
-  const result = await coordinateRmpSync(env.DB, env.SELF, {
-    rmpAuthToken: env.RMP_AUTH_TOKEN,
-    internalToken: env.INTERNAL_TOKEN,
-  });
-  const enrichment = await coordinateEnrichment(env.DB);
-  return { ...result, enrichment };
-}
-
-export async function processRmpTeachers(
-  db: D1Database,
-  teachers: RmpTeacherNode[]
-): Promise<{ status: 'complete'; message: string; count: number }> {
-  await processRmpBatch(db, teachers);
-  return { status: 'complete', message: 'Batch processed', count: teachers.length };
-}
-
-export async function runScoringEnrichment(env: Pick<EnrichmentApplicationEnv, 'DB'>) {
-  const result = await coordinateEnrichment(env.DB);
-  return { message: 'Scoring enrichment complete', ...result };
-}
-
-export async function runGpaEnrichment(db: D1Database) {
-  await enrichCoursesWithGpa(db);
-  const scores = await enrichCoursesWithScores(db);
-  return { message: 'Enrichment complete', scoreUpdateCount: scores.updated };
-}
-
-export async function resetGpaCursor(db: D1Database, cache: KVNamespace) {
-  const result = await resetGpaSync(db, cache);
-  return {
-    result,
-    message: result === 'reset_initiated'
-      ? 'GPA sync cursor reset to 0.'
-      : result === 'skipped_no_changes'
-        ? 'GPA dataset is already current.'
-        : 'GPA reset skipped because another GPA mutation is in progress.',
-  };
+export async function runEnrichment(env: EnrichmentApplicationEnv) {
+  const rmp = await coordinateRmpSync(env.DB, env.RMP_AUTH_TOKEN);
+  return { rmp, enrichment: await coordinateEnrichment(env.DB) };
 }

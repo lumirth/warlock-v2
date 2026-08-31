@@ -40,25 +40,21 @@ describe('course score publication in D1', () => {
       testEnv.DB.prepare(`
         INSERT INTO rmp_cache (
           instructor_name, first_name, last_name, rmp_id,
-          rating, difficulty, num_ratings, fetched_at, expires_at
+          rating, difficulty, num_ratings, expires_at
         )
         VALUES
           ('Lovelace, Ada', 'Ada', 'Lovelace', 'score-publication-ada',
-            4.5, 3, 20, ?, ?),
+            4.5, 3, 20, ?),
           ('Hopper, Grace', 'Grace', 'Hopper', 'score-publication-grace',
-            1, 5, 1000, ?, ?),
+            1, 5, 1000, ?),
           ('Person, Sparse', 'Sparse', 'Person', 'score-publication-sparse',
-            5, 1, 4, ?, ?),
+            5, 1, 4, ?),
           ('Person, Expired', 'Expired', 'Person', 'score-publication-expired',
-            5, 5, 100, ?, ?),
+            5, 5, 100, ?),
           ('Turing, Alan', 'Alan', 'Turing', 'score-publication-alan',
-            3.5, 4, 10, ?, ?)
+            3.5, 4, 10, ?)
       `).bind(
-        now, now + 3600,
-        now, now + 3600,
-        now, now + 3600,
-        now, now - 1,
-        now, now + 3600,
+        now + 3600, now + 3600, now + 3600, now - 1, now + 3600,
       ),
       testEnv.DB.prepare(`
         INSERT INTO courses (
@@ -252,20 +248,16 @@ describe('instructor RMP link resolution in D1', () => {
       testEnv.DB.prepare(`
         INSERT INTO rmp_cache (
           instructor_name, first_name, last_name, rmp_id,
-          rating, difficulty, num_ratings, fetched_at, expires_at
+          rating, difficulty, num_ratings, expires_at
         )
         VALUES
-          ('Exactson, Ada', 'Ada', 'Exactson', 'link-match-exact', 4.5, 2, 20, ?, ?),
-          ('Exactson, Amelia', 'Amelia', 'Exactson', 'link-match-exact-collision', 3, 3, 10, ?, ?),
-          ('Fallback, Grace', 'Grace', 'Fallback', 'link-match-initial', 4, 2, 15, ?, ?),
-          ('Collision, Jane', 'Jane', 'Collision', 'link-match-ambiguous-a', 4, 2, 15, ?, ?),
-          ('Collision, John', 'John', 'Collision', 'link-match-ambiguous-b', 4, 2, 15, ?, ?)
+          ('Exactson, Ada', 'Ada', 'Exactson', 'link-match-exact', 4.5, 2, 20, ?),
+          ('Exactson, Amelia', 'Amelia', 'Exactson', 'link-match-exact-collision', 3, 3, 10, ?),
+          ('Fallback, Grace', 'Grace', 'Fallback', 'link-match-initial', 4, 2, 15, ?),
+          ('Collision, Jane', 'Jane', 'Collision', 'link-match-ambiguous-a', 4, 2, 15, ?),
+          ('Collision, John', 'John', 'Collision', 'link-match-ambiguous-b', 4, 2, 15, ?)
       `).bind(
-        now, now + 3600,
-        now, now + 3600,
-        now, now + 3600,
-        now, now + 3600,
-        now, now + 3600,
+        now + 3600, now + 3600, now + 3600, now + 3600, now + 3600,
       ),
     ]);
 

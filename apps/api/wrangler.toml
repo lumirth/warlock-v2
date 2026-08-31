@@ -1,29 +1,15 @@
 name = "uiuc-course-search"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2026-08-30"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-CURRENT_YEAR = "2026"
-CURRENT_TERM = "fall"
-
 # API endpoints
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 FEEDBACK_ALLOWED_ORIGINS = "https://uiuc-course-search-web.pages.dev"
 
 # Sync settings
 SYNC_CONCURRENCY = "25"
-# Course publication is the authoritative release gate. Vectorize has a
-# separate throughput budget, so semantic vectors are backfilled explicitly.
-SYNC_EMBEDDINGS = "false"
-
-# Rate limiting
-BACKOFF_BASE_MS = "5000"
-BACKOFF_MAX_MS = "60000"
-MAX_RETRIES = "3"
-
-# Caching
-CLIENT_CACHE_TTL_MS = "30000"
 
 [triggers]
 crons = [
@@ -35,8 +21,8 @@ crons = [
 
 [[d1_databases]]
 binding = "DB"
-database_name = "course-search-db-v2"
-database_id = "c44924e5-5ac1-40b9-bf1e-7667083d9126"
+database_name = "uiuc-course-search-db-production"
+database_id = "ed2229a8-232e-4d5d-b00a-d0a68d3ef2e8"
 
 [[kv_namespaces]]
 binding = "GPA_CACHE"
@@ -92,21 +78,13 @@ preview_urls = false
 crons = []
 
 [env.staging.vars]
-CURRENT_YEAR = "2026"
-CURRENT_TERM = "fall"
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 FEEDBACK_ALLOWED_ORIGINS = "https://staging.uiuc-course-search-web.pages.dev"
 SYNC_CONCURRENCY = "25"
-SYNC_EMBEDDINGS = "true"
-BACKOFF_BASE_MS = "5000"
-BACKOFF_MAX_MS = "60000"
-MAX_RETRIES = "3"
-CLIENT_CACHE_TTL_MS = "30000"
-
 [[env.staging.d1_databases]]
 binding = "DB"
-database_name = "course-search-db-staging"
-database_id = "76913703-61a0-4b9e-b703-a697135beaf1"
+database_name = "uiuc-course-search-db-staging"
+database_id = "418173df-c007-48ff-8560-4d7347439e6a"
 
 [[env.staging.kv_namespaces]]
 binding = "GPA_CACHE"

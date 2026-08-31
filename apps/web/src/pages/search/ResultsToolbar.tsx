@@ -10,21 +10,9 @@ import {
   type SortField,
 } from '@uiuc-course-search/query-types'
 import { Button } from '@/components/ui/button'
-import { Field, FieldLabel } from '@/components/ui/field'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { SORT_FIELD_OPTIONS } from './search-options'
-import {
-  directionLabel,
-  type ResultViewMode,
-} from './search-sort-model'
+import { directionLabel, type ResultViewMode } from './search-sort-model'
 
 export function ResultsToolbar({
   showingResultsLabel,
@@ -60,32 +48,29 @@ export function ResultsToolbar({
       )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground text-xs">Sort</span>
-        <Field className="w-40">
-          <FieldLabel htmlFor="results-sort-field" className="sr-only">
+        <div className="w-40">
+          <label htmlFor="results-sort-field" className="sr-only">
             Sort results
-          </FieldLabel>
-          <Select
+          </label>
+          <select
+            id="results-sort-field"
+            aria-label="Sort results"
+            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border bg-transparent px-2.5 text-sm outline-none focus-visible:ring-3"
             value={sort.field}
-            onValueChange={(value) => {
+            onChange={(event) => {
+              const value = event.currentTarget.value
               if (isSearchSortField(value)) {
                 onSortFieldChange(value)
               }
             }}
           >
-            <SelectTrigger id="results-sort-field" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {SORT_FIELD_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
+            {SORT_FIELD_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
         {sort.field !== 'relevance' && (
           <Button
             type="button"
@@ -102,7 +87,7 @@ export function ResultsToolbar({
           </Button>
         )}
         <div
-          className="flex rounded-md border bg-background p-0.5"
+          className="bg-background flex rounded-md border p-0.5"
           role="group"
           aria-label="Result view"
         >

@@ -2,13 +2,11 @@ import {
   SEARCH_LEVEL_VALUES,
   SEARCH_SORT_FIELDS,
   SEARCH_STATUS_VALUES,
-  SEARCH_TERM_VALUES,
   SEARCH_TIME_VALUES,
   SEARCH_INSTRUCTOR_DIFFICULTY_VALUES,
   type SortField,
 } from '@uiuc-course-search/query-types'
 
-export const SEARCH_PAGE_SIZE = 20
 export const ANY_SELECT_VALUE = '__any__'
 
 export type SelectOption = {
@@ -25,13 +23,6 @@ export type TableSortColumn = {
   label: string
   className?: string
 }
-
-const TERM_LABELS = {
-  spring: 'Spring',
-  summer: 'Summer',
-  fall: 'Fall',
-  winter: 'Winter',
-} as const satisfies Record<(typeof SEARCH_TERM_VALUES)[number], string>
 
 const TIME_LABELS = {
   early: 'Early · before 9 AM',
@@ -64,11 +55,6 @@ const SORT_FIELD_LABELS = {
   level: 'Level',
   credits: 'Credits',
 } as const satisfies Record<SortField, string>
-
-export const TERM_OPTIONS: SelectOption[] = SEARCH_TERM_VALUES.map((value) => ({
-  value,
-  label: TERM_LABELS[value],
-}))
 
 export const TIME_OPTIONS: SelectOption[] = SEARCH_TIME_VALUES.map((value) => ({
   value,

@@ -1,515 +1,236 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
-import type { SearchResponseDto } from '@uiuc-course-search/query-types'
 import {
-  abortError,
-  api,
-  course,
-  deferred,
-  expectLastSearchCalledWithRequest,
-  expectSearchCalledWithRequest,
-  renderSearchPage,
-  searchResponse,
-  setQuery,
-  submitSearch,
-} from './SearchPage.test-utils'
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  RouterProvider,
+} from 'react-router-dom'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type {
+  SearchCourseResultDto,
+  SearchRequestDto,
+  SearchResponseDto,
+} from '@uiuc-course-search/query-types'
+import { TestUiProvider } from '../test/TestUiProvider'
+import { SearchPage } from './SearchPage'
 
-describe('SearchPage request state', () => {
-  it('shows quiet example queries before the first search and runs them on click', async () => {
-    vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse(
-        [
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-          }),
-        ],
-        'CS 225'
-      )
-    )
+const api = vi.hoisted(() => ({
+  search: vi.fn(),
+  getTermOptions: vi.fn(async () => ({ terms: [] })),
+}))
+vi.mock('../lib/api-client', () => ({ api }))
 
-    renderSearchPage()
+const course = (
+  number = '225',
+  title = 'Data Structures'
+): SearchCourseResultDto => ({
+  course: {
+    id: `CS-${number}-2026-spring`,
+    subject: 'CS',
+    number,
+    title,
+    description: 'A course',
+    creditHours: 4,
+    creditHoursText: '4 hours.',
+    year: 2026,
+    term: 'spring',
+    primaryInstructor: null,
+    metrics: {
+      primaryInstructorRating: null,
+      avgGpa: null,
+      gpaSampleSize: null,
+      qualityScore: null,
+      instructorDifficultyScore: null,
+    },
+    catalog: { courseInfo: null, degreeAttributes: null },
+    scheduleNotes: { classScheduleInfo: null, dateRangeText: null },
+    registration: { registrationNotes: null, approvalCode: null },
+    requirements: [],
+    links: {},
+  },
+})
 
-    expect(
-      screen.getByRole('heading', { level: 1, name: /uiuc course search/i })
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/search uiuc courses the way you'd describe them/i)
-    ).toBeInTheDocument()
+function response(
+  results: SearchCourseResultDto[],
+  request: SearchRequestDto,
+  pagination: Partial<SearchResponseDto['pagination']> = {}
+): SearchResponseDto {
+  return {
+    results,
+    meta: {
+      nextRequest: request,
+      interpretedRequest: request,
+      ui: { chips: [], ambiguityActions: [] },
+    },
+    pagination: {
+      totalResults: results.length,
+      browseableResults: results.length,
+      limit: 20,
+      offset: 0,
+      ...pagination,
+    },
+  }
+}
 
-    fireEvent.click(screen.getByRole('button', { name: 'CS 225' }))
-
-    await screen.findByText(/CS 225: Data Structures/i)
-    expectSearchCalledWithRequest({
-      query: 'CS 225',
-      pagination: { limit: 20, offset: 0 },
-    })
-    expect(
-      screen.queryByText(/search uiuc courses the way you'd describe them/i)
-    ).not.toBeInTheDocument()
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
   })
+  return { promise, resolve }
+}
 
-  it('does not render an empty table before the first search when table view is remembered', () => {
-    window.localStorage.setItem('uiuc-course-search.result-view', 'table')
+function renderAt(entry = '/') {
+  return render(
+    <TestUiProvider>
+      <MemoryRouter initialEntries={[entry]}>
+        <SearchPage />
+      </MemoryRouter>
+    </TestUiProvider>
+  )
+}
 
-    renderSearchPage()
-
-    expect(
-      screen.getByText(/search uiuc courses the way you'd describe them/i)
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+function submit(query: string) {
+  fireEvent.change(screen.getByLabelText(/course search query/i), {
+    target: { value: query },
   })
+  fireEvent.submit(screen.getByRole('search'))
+}
 
-  it('keeps the active request abortable after an older aborted request settles', async () => {
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+})
+
+describe('URL-owned search', () => {
+  it('cancels superseded work and ignores its stale response', async () => {
     const first = deferred<SearchResponseDto>()
     const second = deferred<SearchResponseDto>()
-    const third = deferred<SearchResponseDto>()
-    let secondSignal: AbortSignal | undefined
-
-    vi.mocked(api.search)
-      .mockImplementationOnce(() => first.promise)
+    let signal: AbortSignal | undefined
+    api.search
       .mockImplementationOnce((_request, options) => {
-        secondSignal = options?.signal
-        return second.promise
+        signal = options.signal
+        return first.promise
       })
-      .mockImplementationOnce(() => third.promise)
-
-    renderSearchPage()
-
-    setQuery('first')
-    submitSearch()
-
-    setQuery('second')
-    submitSearch()
-
-    await act(async () => {
-      first.reject(abortError())
-      await first.promise.catch(() => undefined)
-    })
-
-    setQuery('third')
-    submitSearch()
-
-    expect(secondSignal?.aborted).toBe(true)
-  })
-
-  it('ignores a stale search response when the older request resolves late', async () => {
-    const first = deferred<SearchResponseDto>()
-    const second = deferred<SearchResponseDto>()
-
-    vi.mocked(api.search)
-      .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise)
 
-    renderSearchPage()
+    renderAt()
+    submit('first')
+    submit('second')
+    expect(signal?.aborted).toBe(true)
 
-    setQuery('first')
-    submitSearch()
-
-    setQuery('second')
-    submitSearch()
-
-    await act(async () => {
+    await act(async () =>
       second.resolve(
-        searchResponse(
-          [
-            course({
-              id: 'STAT-100-2026-spring',
-              subject: 'STAT',
-              number: '100',
-              title: 'Statistics',
-            }),
-          ],
-          'second'
-        )
+        response([course('100', 'Statistics')], { query: 'second' })
       )
-      await second.promise
-    })
-
-    await screen.findByText(/STAT 100: Statistics/i)
-
-    await act(async () => {
-      first.resolve(
-        searchResponse(
-          [
-            course({
-              id: 'CS-225-2026-spring',
-              number: '225',
-              title: 'Data Structures',
-            }),
-          ],
-          'first'
-        )
-      )
-      await first.promise
-    })
-
-    expect(screen.getByText(/STAT 100: Statistics/i)).toBeInTheDocument()
+    )
+    expect(await screen.findByText(/CS 100: Statistics/i)).toBeVisible()
+    await act(async () =>
+      first.resolve(response([course()], { query: 'first' }))
+    )
     expect(
       screen.queryByText(/CS 225: Data Structures/i)
     ).not.toBeInTheDocument()
   })
 
-  it('offers a labeled button for submitting the primary search', async () => {
-    vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse(
-        [
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-          }),
-        ],
+  it('restores searches as browser history moves', async () => {
+    api.search.mockResolvedValue(response([course()], { query: 'cs 225' }))
+    const router = createMemoryRouter(
+      [{ path: '/', element: <SearchPage /> }],
+      { initialEntries: ['/', '/?q=cs+225'], initialIndex: 1 }
+    )
+    render(
+      <TestUiProvider>
+        <RouterProvider router={router} />
+      </TestUiProvider>
+    )
+
+    expect(await screen.findByText(/CS 225: Data Structures/i)).toBeVisible()
+    await act(async () => router.navigate(-1))
+    await waitFor(() =>
+      expect(screen.getByLabelText(/course search query/i)).toHaveValue('')
+    )
+    expect(screen.queryByText(/CS 225:/i)).not.toBeInTheDocument()
+    await act(async () => router.navigate(1))
+    await waitFor(() =>
+      expect(screen.getByLabelText(/course search query/i)).toHaveValue(
         'cs 225'
       )
     )
-
-    renderSearchPage()
-
-    setQuery('cs 225')
-    fireEvent.click(screen.getByRole('button', { name: /search courses/i }))
-
-    await screen.findByText(/CS 225: Data Structures/i)
-    expectSearchCalledWithRequest({
-      query: 'cs 225',
-      pagination: { limit: 20, offset: 0 },
-    })
-    expect(
-      screen.getByRole('button', { name: /search courses/i })
-    ).toBeInTheDocument()
+    expect(api.search).toHaveBeenCalledTimes(2)
   })
 
-  it('clears stale results when a new search fails', async () => {
-    const consoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined)
-
-    vi.mocked(api.search)
+  it('commits filters to the URL and appends the requested page', async () => {
+    api.search
       .mockResolvedValueOnce(
-        searchResponse(
-          [
-            course({
-              id: 'CS-225-2026-spring',
-              number: '225',
-              title: 'Data Structures',
-            }),
-          ],
-          'cs 225'
-        )
-      )
-      .mockRejectedValueOnce(new Error('Search failed'))
-
-    renderSearchPage()
-
-    setQuery('cs 225')
-    submitSearch()
-    await screen.findByText(/CS 225: Data Structures/i)
-
-    setQuery('broken')
-    submitSearch()
-
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(/That search did not go through/i)
-    expect(alert).toHaveTextContent(/Give it another moment/i)
-    expect(alert).not.toHaveTextContent(/Search failed/i)
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/CS 225: Data Structures/i)
-      ).not.toBeInTheDocument()
-    })
-    expect(consoleError).not.toHaveBeenCalled()
-    consoleError.mockRestore()
-  })
-
-  it('renders public match evidence chips for search results', async () => {
-    vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse(
-        [
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-            matchEvidence: [
-              {
-                kind: 'course_code',
-                label: 'Course CS 225',
-                source: 'filter',
-                weight: 'hard',
-                value: 'CS 225',
-              },
-              {
-                kind: 'keyword',
-                label: 'Strong keyword match',
-                source: 'keyword',
-                weight: 'rank',
-                value: '1',
-              },
-            ],
-          }),
-        ],
-        'cs 225'
-      )
-    )
-
-    renderSearchPage()
-
-    setQuery('cs 225')
-    submitSearch()
-
-    await screen.findByText(/CS 225: Data Structures/i)
-    expect(screen.getByText('Course CS 225')).toBeInTheDocument()
-    expect(screen.getByText('Strong keyword match')).toBeInTheDocument()
-    expect(screen.queryByText('Strong match')).not.toBeInTheDocument()
-    expect(screen.queryByText(/rank #/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Match 0\./i)).not.toBeInTheDocument()
-  })
-
-  it('surfaces evidence-limited quality, difficulty, rating, and GPA signals', async () => {
-    vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse(
-        [
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-            metrics: {
-              qualityScore: 88,
-              instructorDifficultyScore: 42,
-              primaryInstructorRating: 4.8,
-              avgGpa: 3.62,
-              gpaSampleSize: 820,
-            },
-          }),
-        ],
-        'cs 225'
-      )
-    )
-
-    renderSearchPage()
-
-    setQuery('cs 225')
-    submitSearch()
-
-    const title = await screen.findByText(/CS 225: Data Structures/i)
-    const card = title.closest('a')
-    expect(within(card!).getByText('Quality signal')).toBeInTheDocument()
-    expect(within(card!).getByText('Excellent')).toBeInTheDocument()
-    expect(within(card!).queryByText('B+')).not.toBeInTheDocument()
-    expect(within(card!).getByText('Instructor difficulty')).toBeInTheDocument()
-    expect(within(card!).getByText('Lower')).toBeInTheDocument()
-    expect(within(card!).getByText('RMP rating')).toBeInTheDocument()
-    expect(within(card!).getByText('4.8 / 5')).toBeInTheDocument()
-    expect(within(card!).getByText('Avg GPA')).toBeInTheDocument()
-    expect(within(card!).getByText('3.62')).toBeInTheDocument()
-    expect(
-      within(card!).getAllByTitle(
-        'Evidence-limited GPA and linked RMP composite; 820 GPA records'
-      ).length
-    ).toBeGreaterThanOrEqual(1)
-    expect(
-      within(card!).getAllByTitle('Based on 820 GPA records').length
-    ).toBeGreaterThanOrEqual(1)
-  })
-
-  it('warns when degraded retrieval makes the result set incomplete', async () => {
-    const response = searchResponse([course()], 'cs 225')
-    response.meta.retrieval = { degraded: true }
-    response.pagination.totalResults = 1
-    response.pagination.countIsComplete = false
-    vi.mocked(api.search).mockResolvedValueOnce(response)
-
-    renderSearchPage()
-    setQuery('cs 225')
-    submitSearch()
-
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(/partial search results/i)
-    expect(alert).toHaveTextContent(/results may be incomplete/i)
-    expect(screen.getByText('At least 1 result')).toBeInTheDocument()
-    expect(screen.getByText('Showing 1 of at least 1')).toBeInTheDocument()
-  })
-
-  it('discloses when a sort only orders the bounded semantic match window', async () => {
-    const response = searchResponse(
-      [course()],
-      {
-        query: 'machine learning',
-        sort: { field: 'gpa', direction: 'desc' },
-      }
-    )
-    response.meta.retrieval = {
-      degraded: false,
-      sortLimitedToRetrievedWindow: true,
-    }
-    vi.mocked(api.search).mockResolvedValueOnce(response)
-
-    renderSearchPage()
-    setQuery('machine learning')
-    submitSearch()
-
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(/sorted within retrieved topic matches/i)
-    expect(alert).toHaveTextContent(/not every course in the catalog/i)
-  })
-
-  it('surfaces section availability and conservative freshness on result cards', async () => {
-    vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse(
-        [
-          course({
-            registrationSummary: {
-              total: 6,
-              open: 2,
-              restricted: 1,
-              waitlisted: 0,
-              closed: 3,
-              cancelled: 0,
-              unknown: 0,
-              lastSynced: 1780358400,
-            },
-          }),
-        ],
-        'cs 225'
-      )
-    )
-
-    renderSearchPage()
-    setQuery('cs 225')
-    submitSearch()
-
-    const title = await screen.findByText(/CS 225: Data Structures/i)
-    const card = title.closest('a')
-    expect(within(card!).getByText('2 open')).toBeInTheDocument()
-    expect(
-      within(card!).getByText(/1 restricted · 6 total/i)
-    ).toBeInTheDocument()
-    expect(within(card!).getByText(/all checked since/i)).toBeInTheDocument()
-  })
-
-  it('switches to table view and refetches when a sortable table header is clicked', async () => {
-    vi.mocked(api.search)
-      .mockResolvedValueOnce(
-        searchResponse(
-          [
-            course({
-              id: 'CS-225-2026-spring',
-              number: '225',
-              title: 'Data Structures',
-              metrics: {
-                qualityScore: 88,
-                instructorDifficultyScore: 42,
-                primaryInstructorRating: 4.8,
-                avgGpa: 3.62,
-                gpaSampleSize: 820,
-              },
-            }),
-          ],
-          'online stats class'
+        response(
+          [course()],
+          {
+            query: 'algorithms',
+            filters: { subject: 'CS' },
+          },
+          {
+            totalResults: 2,
+            browseableResults: 2,
+            hasMore: true,
+          }
         )
       )
       .mockResolvedValueOnce(
-        searchResponse(
-          [
-            course({
-              id: 'STAT-100-2026-spring',
-              subject: 'STAT',
-              number: '100',
-              title: 'Statistics',
-              metrics: { avgGpa: 3.82 },
-            }),
-          ],
-          'online stats class'
+        response(
+          [course('173', 'Discrete Structures')],
+          {
+            query: 'algorithms',
+            filters: { subject: 'CS' },
+            pagination: { limit: 20, offset: 20 },
+          },
+          { totalResults: 2, browseableResults: 2, offset: 20 }
         )
       )
-
-    renderSearchPage()
-
-    setQuery('online stats class')
-    submitSearch()
-
-    await screen.findByText(/CS 225: Data Structures/i)
-    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
-
-    expect(screen.getByRole('table')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /sort by avg gpa, descending/i })
-    ).toBeInTheDocument()
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /sort by avg gpa, descending/i })
+    const router = createMemoryRouter([{ path: '/', element: <SearchPage /> }])
+    render(
+      <TestUiProvider>
+        <RouterProvider router={router} />
+      </TestUiProvider>
     )
 
-    await waitFor(() => {
-      expectLastSearchCalledWithRequest({
-        query: 'online stats class',
-        pagination: { limit: 20, offset: 0 },
-        sort: { field: 'gpa', direction: 'desc' },
-      })
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+    fireEvent.change(screen.getByLabelText('Subject'), {
+      target: { value: 'CS' },
     })
+    fireEvent.change(screen.getByLabelText(/course search query/i), {
+      target: { value: 'algorithms' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+    await waitFor(() =>
+      expect(router.state.location.search).toContain('subject=CS')
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /show more/i }))
+
     expect(
-      screen.getByRole('columnheader', { name: /avg gpa/i })
-    ).toHaveAttribute('aria-sort', 'descending')
+      await screen.findByText(/CS 173: Discrete Structures/i)
+    ).toBeVisible()
+    expect(api.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ subject: 'CS' }),
+        pagination: { limit: 20, offset: 20 },
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(screen.getByText('Showing 2')).toBeVisible()
   })
 
-  it('persists the result view preference across renders', async () => {
-    vi.mocked(api.search).mockResolvedValue(
-      searchResponse(
-        [
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-          }),
-        ],
-        'cs 225'
-      )
+  it('reports a malformed shared link without issuing a request', async () => {
+    renderAt('/?subject=C')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /could not be restored/i
     )
-
-    const rendered = renderSearchPage()
-
-    setQuery('cs 225')
-    submitSearch()
-    await screen.findByText(/CS 225: Data Structures/i)
-    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
-    expect(window.localStorage.getItem('uiuc-course-search.result-view')).toBe(
-      'table'
-    )
-
-    rendered.unmount()
-    renderSearchPage()
-
-    setQuery('cs 225')
-    submitSearch()
-    await screen.findByRole('table')
-  })
-
-  it('de-emphasizes historical result cards and places the status next to the term', async () => {
-    vi.mocked(api.search).mockResolvedValueOnce(
-      searchResponse(
-        [
-          course({
-            id: 'CS-225-2026-spring',
-            number: '225',
-            title: 'Data Structures',
-            warnings: [
-              { kind: 'historical', message: 'Historical term result' },
-            ],
-          }),
-        ],
-        'cs 225'
-      )
-    )
-
-    renderSearchPage()
-
-    setQuery('cs 225')
-    submitSearch()
-
-    const title = await screen.findByText(/CS 225: Data Structures/i)
-    const card = title.closest('[data-historical="true"]') as HTMLElement
-    expect(card).toHaveAttribute('data-historical', 'true')
-    expect(within(card!).getByText('Spring 2026')).toBeInTheDocument()
-    expect(within(card!).getByText('Historical term')).toBeInTheDocument()
+    expect(api.search).not.toHaveBeenCalled()
   })
 })

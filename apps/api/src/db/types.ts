@@ -6,17 +6,6 @@ export type SyncRunStatus = 'pending' | 'running' | 'complete' | 'failed';
 export interface Subject {
   id: string;
   name: string;
-  college_code: string | null;
-  department_code: string | null;
-  unit_name: string | null;
-  contact_name: string | null;
-  contact_title: string | null;
-  address_line1: string | null;
-  address_line2: string | null;
-  phone_number: string | null;
-  website_url: string | null;
-  description: string | null;
-  last_synced: number | null;
 }
 
 export interface Instructor {
@@ -24,11 +13,6 @@ export interface Instructor {
   first_name: string | null;
   last_name: string;
   display_name: string;
-  rmp_rating: number | null;
-  rmp_difficulty: number | null;
-  avg_gpa: number | null;
-  median_gpa?: number | null;
-  gpa_sample_size: number | null;
 }
 
 export type InstructorLinkReadRow = Partial<{
@@ -37,12 +21,9 @@ export type InstructorLinkReadRow = Partial<{
   rmp_difficulty: number | null;
   rmp_id: string | null;
   avg_gpa: number | null;
-  median_gpa: number | null;
   gpa_sample_size: number | null;
   num_ratings: number | null;
   would_take_again_pct: number | null;
-  top_tags: string | string[] | null;
-  department: string | null;
 }>;
 
 export interface Meeting {
@@ -60,7 +41,6 @@ export interface Meeting {
 }
 
 export interface CourseGened {
-  id: number;
   course_id: string;
   category_id: string;
   category_name: string | null;
@@ -91,9 +71,6 @@ export interface Course {
   date_range_text: string | null;
   registration_notes: string | null;
   approval_code: string | null;
-  last_synced: number | null;
-  created_at: number;
-  updated_at: number;
 }
 
 export interface Section {
@@ -109,8 +86,6 @@ export interface Section {
   end_time: string | null;
   location: string | null;
   instructor: string | null;
-  instructor_rmp: number | null;
-  instructor_gpa: number | null;
   last_synced: number | null;
   section_title: string | null;
   status_code: string | null;
@@ -136,8 +111,6 @@ export interface TermState {
   courses_count: number | null;
   sections_count: number | null;
   sync_errors: string | null;
-  created_at: number;
-  updated_at: number;
 }
 
 export interface SyncState {
@@ -146,15 +119,5 @@ export interface SyncState {
   last_status: SyncRunStatus | null;
   items_synced: number | null;
   cursor: number | null;
-  etag: string | null;
-}
-
-export interface SubjectSyncState {
-  term_id: string;
-  subject: string;
-  last_sync: number | null;
-  status: SyncRunStatus;
-  courses_synced: number;
-  sections_synced: number;
-  error: string | null;
+  owner_token: string | null;
 }

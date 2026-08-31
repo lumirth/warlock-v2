@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import type { KVNamespace as WorkerKVNamespace } from '@cloudflare/workers-types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  finishGpaEnrichment,
   resetGpaSync,
   resumeGpaSync,
 } from '../gpa-sync.js';
@@ -10,6 +11,7 @@ const testEnv = env as {
   DB: D1Database;
   GPA_CACHE: WorkerKVNamespace;
 };
+const GPA_HEADER = 'Year,Term,YearTerm,Subject,Number,Course Title,Sched Type,A+,A,A-,B+,B,B-,C+,C,C-,D+,D,D-,F,W,Students,Primary Instructor';
 
 describe('GPA generation concurrency in D1', () => {
   beforeEach(async () => {
@@ -20,27 +22,24 @@ describe('GPA generation concurrency in D1', () => {
       testEnv.DB.prepare('DELETE FROM gpa_source_rows'),
       testEnv.DB.prepare('DELETE FROM gpa_stats'),
       testEnv.DB.prepare(
-        "DELETE FROM sync_state WHERE id IN ('gpa', 'gpa-mutation-lease', 'gpa-completion-enrichment')"
+        "DELETE FROM sync_state WHERE id IN ('gpa', 'gpa-lease')"
       ),
     ]);
-    await testEnv.GPA_CACHE.delete('gpa_full_dataset');
+    await testEnv.GPA_CACHE.delete('gpa-dataset');
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('nulls dependent GPA links and replaces the generation atomically with foreign keys enforced', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', {
-      status: 200,
-      headers: { etag: '"dataset-v2"' },
-    })));
+  it('keeps published GPA intact while clearing only the staged import', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 200 })));
 
     await testEnv.DB.prepare(`
       INSERT INTO gpa_stats (
-        subject, number, instructor, avg_gpa, sample_size, last_updated
+        subject, number, instructor, avg_gpa, sample_size
       )
-      VALUES ('TEST', '101', 'Teacher, Ada', 3.8, 40, unixepoch())
+      VALUES ('TEST', '101', 'Teacher, Ada', 3.8, 40)
     `).run();
     const stat = await testEnv.DB.prepare(`
       SELECT id FROM gpa_stats
@@ -74,24 +73,25 @@ describe('GPA generation concurrency in D1', () => {
       `).bind(stat?.id ?? -1),
       testEnv.DB.prepare(`
         INSERT INTO gpa_source_rows (
-          row_key, source_year, source_term, subject, number, instructor,
-          avg_gpa, sample_size, last_updated
+          row_key, subject, number, instructor, avg_gpa, sample_size
         )
         VALUES (
-          'legacy-row', 2099, 'test', 'TEST', '101', 'Teacher, Ada',
-          3.8, 40, unixepoch()
+          'legacy-row', 'TEST', '101', 'Teacher, Ada', 3.8, 40
         )
       `),
       testEnv.DB.prepare(`
         INSERT INTO sync_state (
-          id, last_sync, last_status, items_synced, cursor, etag
+          id, last_sync, last_status, items_synced, cursor, owner_token
         )
-        VALUES ('gpa', unixepoch(), 'complete', 1, 100, '"dataset-v1"')
+        VALUES ('gpa', unixepoch(), 'complete', 1, 100, NULL)
       `),
     ]);
 
     await expect(resetGpaSync(testEnv.DB, testEnv.GPA_CACHE))
       .resolves.toBe('reset_initiated');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(GPA_HEADER, { status: 200 })));
+    await expect(resumeGpaSync(testEnv.DB, testEnv.GPA_CACHE))
+      .rejects.toThrow('refusing empty GPA generation');
 
     const link = await testEnv.DB.prepare(`
       SELECT gpa_id FROM instructor_course_links
@@ -103,8 +103,8 @@ describe('GPA generation concurrency in D1', () => {
         (SELECT COUNT(*) FROM gpa_source_rows) AS source_count
     `).first<{ stats_count: number; source_count: number }>();
     const state = await testEnv.DB.prepare(`
-      SELECT last_status, cursor, etag FROM sync_state WHERE id = 'gpa'
-    `).first<{ last_status: string; cursor: number; etag: string }>();
+      SELECT last_status, cursor, owner_token FROM sync_state WHERE id = 'gpa'
+    `).first<{ last_status: string; cursor: number; owner_token: string }>();
     const course = await testEnv.DB.prepare(`
       SELECT avg_gpa, gpa_sample_size, primary_instructor_rmp,
              quality_score, difficulty_score
@@ -118,29 +118,29 @@ describe('GPA generation concurrency in D1', () => {
       difficulty_score: number | null;
     }>();
 
-    expect(link?.gpa_id).toBeNull();
-    expect(counts).toEqual({ stats_count: 0, source_count: 0 });
+    expect(link?.gpa_id).toBe(stat?.id);
+    expect(counts).toEqual({ stats_count: 1, source_count: 0 });
     expect(course).toEqual({
-      avg_gpa: null,
-      gpa_sample_size: null,
+      avg_gpa: 3.8,
+      gpa_sample_size: 40,
       primary_instructor_rmp: 4.6,
-      quality_score: null,
+      quality_score: 91,
       difficulty_score: 24,
     });
     expect(state).toEqual({
       last_status: 'pending',
       cursor: 0,
-      etag: '"dataset-v2"',
+      owner_token: expect.any(String),
     });
   });
 
   it('fences an expired resume owner with checkpoint CAS instead of regressing the cursor', async () => {
     const staleDataset = [
-      'Year,Term,YearTerm,Subject,Number,Course Title,Sched Type,A+,A,A-,B+,B,B-,C+,C,C-,D+,D,D-,F,Instructor',
+      GPA_HEADER,
       gpaLine('101'),
     ].join('\n');
     const winningDataset = [
-      'Year,Term,YearTerm,Subject,Number,Course Title,Sched Type,A+,A,A-,B+,B,B-,C+,C,C-,D+,D,D-,F,Instructor',
+      GPA_HEADER,
       gpaLine('102'),
     ].join('\n');
     const firstFetchStarted = deferred<void>();
@@ -152,17 +152,14 @@ describe('GPA generation concurrency in D1', () => {
         firstFetchStarted.resolve();
         await releaseFirstFetch.promise;
       }
-      return new Response(fetchCall === 1 ? staleDataset : winningDataset, {
-        status: 200,
-        headers: { etag: '"dataset-v1"' },
-      });
+      return new Response(fetchCall === 1 ? staleDataset : winningDataset, { status: 200 });
     }));
 
     await testEnv.DB.prepare(`
       INSERT INTO sync_state (
-        id, last_sync, last_status, items_synced, cursor, etag
+        id, last_sync, last_status, items_synced, cursor, owner_token
       )
-      VALUES ('gpa', NULL, 'pending', 0, 0, '"dataset-v1"')
+      VALUES ('gpa', NULL, 'pending', 0, 0, 'generation-1')
     `).run();
 
     const staleOwner = resumeGpaSync(testEnv.DB, testEnv.GPA_CACHE);
@@ -170,7 +167,7 @@ describe('GPA generation concurrency in D1', () => {
     await testEnv.DB.prepare(`
       UPDATE sync_state
       SET last_sync = 0
-      WHERE id = 'gpa-mutation-lease' AND last_status = 'running'
+      WHERE id = 'gpa-lease' AND last_status = 'running'
     `).run();
 
     const winner = await resumeGpaSync(testEnv.DB, testEnv.GPA_CACHE);
@@ -184,8 +181,8 @@ describe('GPA generation concurrency in D1', () => {
     await expect(staleOwner).rejects.toThrow('refusing stale data write');
 
     const state = await testEnv.DB.prepare(`
-      SELECT last_status, cursor, etag FROM sync_state WHERE id = 'gpa'
-    `).first<{ last_status: string; cursor: number; etag: string }>();
+      SELECT last_status, cursor, owner_token FROM sync_state WHERE id = 'gpa'
+    `).first<{ last_status: string; cursor: number; owner_token: string }>();
     const sourceRows = await testEnv.DB.prepare(`
       SELECT number FROM gpa_source_rows
       WHERE subject = 'TEST'
@@ -193,13 +190,13 @@ describe('GPA generation concurrency in D1', () => {
     `).all<{ number: string }>();
     const stats = await testEnv.DB.prepare(`
       SELECT number, avg_gpa, sample_size FROM gpa_stats
-      WHERE subject = 'TEST'
+      WHERE subject = 'TEST' AND instructor IS NOT NULL
       ORDER BY number
     `).all<{ number: string; avg_gpa: number; sample_size: number }>();
     expect(state).toEqual({
       last_status: 'complete',
       cursor: winningDataset.length,
-      etag: '"dataset-v1"',
+      owner_token: 'generation-1',
     });
     expect(sourceRows.results).toEqual([{ number: '102' }]);
     expect(stats.results).toEqual([{
@@ -211,22 +208,21 @@ describe('GPA generation concurrency in D1', () => {
 
   it('rebuilds derived stats before completing an already-at-EOF checkpoint', async () => {
     const cachedDataset = 'cached-generation';
-    await testEnv.GPA_CACHE.put('gpa_full_dataset', cachedDataset);
+    await testEnv.GPA_CACHE.put('gpa-dataset', cachedDataset);
     await testEnv.DB.batch([
       testEnv.DB.prepare(`
         INSERT INTO gpa_source_rows (
-          row_key, source_year, source_term, subject, number, instructor,
-          avg_gpa, sample_size, last_updated
+          row_key, subject, number, instructor, avg_gpa, sample_size
         )
         VALUES
-          ('source-a', 2099, 'test', 'TEST', '103', 'Teacher, Ada', 4.0, 10, unixepoch()),
-          ('source-b', 2099, 'test', 'TEST', '103', 'Teacher, Ada', 3.0, 30, unixepoch())
+          ('source-a', 'TEST', '103', 'Teacher, Ada', 4.0, 10),
+          ('source-b', 'TEST', '103', 'Teacher, Ada', 3.0, 30)
       `),
       testEnv.DB.prepare(`
         INSERT INTO sync_state (
-          id, last_sync, last_status, items_synced, cursor, etag
+          id, last_sync, last_status, items_synced, cursor, owner_token
         )
-        VALUES ('gpa', unixepoch(), 'running', 2, ?, '"dataset-v1"')
+        VALUES ('gpa', unixepoch(), 'running', 2, ?, 'generation-2')
       `).bind(cachedDataset.length),
     ]);
 
@@ -250,12 +246,63 @@ describe('GPA generation concurrency in D1', () => {
       items_synced: 2,
     });
     expect(stats).toEqual({ avg_gpa: 3.25, sample_size: 40 });
-    await expect(testEnv.GPA_CACHE.get('gpa_full_dataset')).resolves.toBeNull();
+    await expect(testEnv.GPA_CACHE.get('gpa-dataset')).resolves.toBeNull();
+  });
+
+  it('refuses to splice a resumed cursor into a newly fetched dataset', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('replacement dataset')));
+    await testEnv.DB.prepare(`
+      INSERT INTO sync_state (id, last_status, items_synced, cursor, owner_token)
+      VALUES ('gpa', 'running', 3, 100, 'generation-3')
+    `).run();
+
+    await expect(resumeGpaSync(testEnv.DB, testEnv.GPA_CACHE))
+      .rejects.toThrow('cache expired during import');
+  });
+
+  it('refuses to complete a generation replaced by a later reset', async () => {
+    await testEnv.DB.prepare(`
+      INSERT INTO sync_state (id, last_status, items_synced, cursor, owner_token)
+      VALUES ('gpa', 'pending', 1, 100, 'obsolete-generation')
+    `).run();
+
+    await expect(resetGpaSync(testEnv.DB, testEnv.GPA_CACHE))
+      .resolves.toBe('reset_initiated');
+    await expect(finishGpaEnrichment(testEnv.DB, 'obsolete-generation'))
+      .rejects.toThrow('refusing stale GPA publication');
+
+    const state = await testEnv.DB.prepare(`
+      SELECT last_status, cursor, owner_token FROM sync_state WHERE id = 'gpa'
+    `).first<{ last_status: string; cursor: number; owner_token: string }>();
+    expect(state).toEqual({
+      last_status: 'pending',
+      cursor: 0,
+      owner_token: expect.not.stringContaining('obsolete-generation'),
+    });
+  });
+
+  it('imports more than 1,000 source rows through one D1 statement', async () => {
+    const lines = Array.from({ length: 1_200 }, (_, index) => gpaLine(String(100 + index)));
+    const dataset = [
+      GPA_HEADER,
+      ...lines,
+    ].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(dataset, { status: 200 })));
+
+    await expect(resumeGpaSync(testEnv.DB, testEnv.GPA_CACHE)).resolves.toMatchObject({
+      success: true,
+      rowsProcessed: 1_200,
+      isComplete: true,
+    });
+    const count = await testEnv.DB.prepare(
+      "SELECT COUNT(*) AS count FROM gpa_source_rows WHERE subject = 'TEST'",
+    ).first<{ count: number }>();
+    expect(count?.count).toBe(1_200);
   });
 });
 
 function gpaLine(number: string): string {
-  const columns = Array.from({ length: 21 }, () => '0');
+  const columns = Array.from({ length: 23 }, () => '0');
   columns[0] = '2099';
   columns[1] = 'Test';
   columns[2] = '2099-test';
@@ -264,7 +311,7 @@ function gpaLine(number: string): string {
   columns[5] = 'Testing';
   columns[6] = 'Lecture';
   columns[8] = '10';
-  columns[20] = '"Teacher, Ada"';
+  columns[22] = '"Teacher, Ada"';
   return columns.join(',');
 }
 

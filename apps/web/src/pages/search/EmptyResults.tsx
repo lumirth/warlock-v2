@@ -4,14 +4,6 @@ import type {
   SearchMetaDto,
 } from '@uiuc-course-search/query-types'
 import { Button } from '@/components/ui/button'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty'
 
 export function EmptyResults({
   meta,
@@ -23,18 +15,21 @@ export function EmptyResults({
   const chip = meta.ui.chips[0]
 
   return (
-    <Empty role="status" className="border">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
+    <div
+      role="status"
+      className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-6 text-center"
+    >
+      <div className="flex max-w-sm flex-col items-center gap-2">
+        <span className="bg-muted flex size-8 items-center justify-center rounded-lg">
           <SearchIcon aria-hidden />
-        </EmptyMedia>
-        <EmptyTitle>Nothing matched that search.</EmptyTitle>
-        <EmptyDescription>
+        </span>
+        <h3 className="text-sm font-medium">Nothing matched that search.</h3>
+        <p className="text-muted-foreground text-sm">
           Try removing a filter or using a broader phrase.
-        </EmptyDescription>
-      </EmptyHeader>
+        </p>
+      </div>
       {chip ? (
-        <EmptyContent>
+        <div>
           <Button
             size="xs"
             variant="outline"
@@ -42,8 +37,8 @@ export function EmptyResults({
           >
             Remove one filter
           </Button>
-        </EmptyContent>
+        </div>
       ) : null}
-    </Empty>
+    </div>
   )
 }

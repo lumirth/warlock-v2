@@ -2,211 +2,82 @@ import {
   ANY_GENED_DISPLAY_LABEL,
   formatGenEdDisplayLabel,
   isGenericAnyRequirementFilter,
-  type MatchEvidence,
-  type MatchEvidenceKind,
-  type MatchEvidenceSource,
-  type MatchEvidenceWeight,
-  type ResultWarning,
   type SearchCourseResultDto,
-} from '@uiuc-course-search/query-types';
-import { toCourseDto } from '../dto/course.js';
-import type { Hint, SearchPlan } from './search-planner-types.js';
-import type { SearchResult } from './search-types.js';
-import {
-  courseRequirementDtoCodes,
-  matchingRequirementCodes,
-} from './search-requirements.js';
-
-type SearchResultEvidenceContext = {
-  plan: SearchPlan;
-  rawQuery: string;
-  hints?: Hint[];
-};
+} from "@uiuc-course-search/query-types";
+import { toCourseDto } from "../dto/course.js";
+import type { Hint, SearchPlan } from "./search-planner-types.js";
+import type { SearchResult } from "./search-types.js";
 
 export function presentSearchCourseResult(
   result: SearchResult,
-  context?: SearchResultEvidenceContext,
+  context?: { plan: SearchPlan; hints?: Hint[] },
 ): SearchCourseResultDto {
   return {
     course: toCourseDto(result.course, {
       requirements: result.requirements,
       registrationSummary: result.registrationSummary,
     }),
-    matchEvidence: context ? buildMatchEvidence(result, context) : undefined,
-    warnings: buildResultWarnings(result),
+    ...(context ? { matchEvidence: evidence(result, context) } : {}),
+    warnings: result.historical ? [{ kind: "historical", message: "Historical term result" }] : [],
   };
 }
 
-function instructorDifficultyEvidenceLabel(
-  difficulty: 'lower' | 'higher',
-): string {
-  return difficulty === 'lower'
-    ? 'Lower instructor-rated difficulty'
-    : 'Higher instructor-rated difficulty';
+function evidence(result: SearchResult, context: { plan: SearchPlan; hints?: Hint[] }): string[] {
+  const values: string[] = [];
+  const add: AddEvidence = label => values.push(label);
+  addIdentityEvidence(add, result, context);
+  addConstraintEvidence(add, context.plan);
+  addRankingEvidence(add, result, context.plan);
+  return values;
 }
 
-function normalizeText(value: string | null | undefined): string {
-  return (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
+type AddEvidence = (label: string) => void;
 
-function normalizeCompact(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function addEvidence(
-  evidence: MatchEvidence[],
-  seen: Set<string>,
-  kind: MatchEvidenceKind,
-  label: string,
-  source: MatchEvidenceSource,
-  weight: MatchEvidenceWeight,
-  value?: string,
-): void {
-  const key = `${kind}:${label}:${value ?? ''}`;
-  if (seen.has(key)) return;
-  seen.add(key);
-  evidence.push({ kind, label, source, weight, value });
-}
-
-function hasHint(hints: Hint[] | undefined, type: Hint['type']): boolean {
-  return hints?.some(hint => hint.type === type) ?? false;
-}
-
-function buildMatchEvidence(
+function addIdentityEvidence(
+  add: AddEvidence,
   result: SearchResult,
-  context: SearchResultEvidenceContext,
-): MatchEvidence[] {
-  const { course } = result;
-  const { filters, softPreferences } = context.plan;
-  const evidence: MatchEvidence[] = [];
-  const seen = new Set<string>();
-  const courseCode = `${course.subject} ${course.number}`;
-  const normalizedRaw = normalizeText(context.rawQuery);
-  const compactRaw = normalizeCompact(context.rawQuery);
-  const normalizedTitle = normalizeText(course.title);
-
-  const exactCourseCode =
-    (filters.subject === course.subject && filters.number === course.number)
-    || normalizedRaw.includes(normalizeText(courseCode))
-    || compactRaw.includes(normalizeCompact(courseCode));
-
-  if (exactCourseCode) {
-    addEvidence(evidence, seen, 'course_code', `Course ${courseCode}`, 'filter', 'hard', courseCode);
-  } else {
-    if (filters.subject === course.subject) {
-      addEvidence(evidence, seen, 'subject', `Subject ${course.subject}`, 'filter', 'hard', course.subject);
-    }
-    if (filters.number === course.number) {
-      addEvidence(evidence, seen, 'number', `Number ${course.number}`, 'filter', 'hard', course.number);
-    }
+  context: { plan: SearchPlan; hints?: Hint[] },
+): void {
+  const filters = context.plan.filters;
+  addCourseIdentity(add, filters);
+  if (filters.instructor_ids?.length || context.hints?.some(hint => hint.type === "instructor")) {
+    add("Instructor match");
   }
-
-  if (filters.crn) {
-    addEvidence(evidence, seen, 'crn', `CRN ${filters.crn}`, 'filter', 'hard', filters.crn);
-  }
-
-  if (normalizedRaw && normalizedTitle && (normalizedRaw.includes(normalizedTitle) || normalizedTitle.includes(normalizedRaw))) {
-    addEvidence(evidence, seen, 'title', `Title match: ${course.title}`, 'keyword', 'rank', course.title);
-  }
-
-  const requirement = filters.requirement;
-  const requirementFilters = requirement?.codes ?? [];
-  const courseRequirementCodes = courseRequirementDtoCodes(result.requirements);
-  if (requirementFilters.length > 0) {
-    const isGenericRequirement = requirement?.mode === 'any' && isGenericAnyRequirementFilter(requirement.codes);
-    const matchedCodes = matchingRequirementCodes(courseRequirementCodes, requirementFilters);
-    if (matchedCodes.length > 0) {
-      addEvidence(
-        evidence,
-        seen,
-        'requirement',
-        isGenericRequirement ? ANY_GENED_DISPLAY_LABEL : formatGenEdDisplayLabel(requirementFilters),
-        'filter',
-        'hard',
-        matchedCodes.join(', '),
-      );
-    }
-  } else if (hasHint(context.hints, 'requirement') && courseRequirementCodes.length > 0) {
-    const value = courseRequirementCodes.join(', ');
-    addEvidence(evidence, seen, 'requirement', formatGenEdDisplayLabel(courseRequirementCodes), 'query', 'soft', value);
-  }
-
-  if (filters.days) {
-    addEvidence(evidence, seen, 'schedule', `${filters.days} schedule`, 'filter', 'hard', filters.days);
-  }
-  if (filters.time) {
-    addEvidence(evidence, seen, 'schedule', `${filters.time} time`, 'filter', 'hard', filters.time);
-  }
-  if (filters.partOfTerm) {
-    addEvidence(evidence, seen, 'schedule', `Part of term ${filters.partOfTerm}`, 'filter', 'hard', filters.partOfTerm);
-  }
-  if (filters.status) {
-    addEvidence(evidence, seen, 'schedule', `${filters.status} sections`, 'filter', 'hard', filters.status);
-  }
-
-  if (filters.online !== undefined) {
-    addEvidence(
-      evidence,
-      seen,
-      'delivery',
-      filters.online ? 'Online delivery' : 'In-person delivery',
-      'filter',
-      'hard',
-      String(filters.online),
-    );
-  }
-
-  if (filters.instructor_ids?.length || hasHint(context.hints, 'instructor')) {
-    addEvidence(evidence, seen, 'instructor', 'Instructor match', 'filter', 'hard', course.primary_instructor ?? undefined);
-  }
-
-  if (filters.instructorDifficulty) {
-    addEvidence(
-      evidence,
-      seen,
-      'instructor_difficulty',
-      instructorDifficultyEvidenceLabel(filters.instructorDifficulty),
-      'filter',
-      'hard',
-      filters.instructorDifficulty,
-    );
-  }
-
-  if (softPreferences?.levelBoost && context.plan.introductoryGateway === true) {
-    const levelLabel = softPreferences.levelBoost === 100
-      ? 'Introductory course'
-      : `${softPreferences.levelBoost} level preference`;
-    addEvidence(evidence, seen, 'topic', levelLabel, 'query', 'soft', String(softPreferences.levelBoost));
-  }
-
-  if (filters.term || filters.year) {
-    addEvidence(
-      evidence,
-      seen,
-      'term',
-      [filters.term, filters.year].filter(Boolean).join(' '),
-      'term',
-      'hard',
-      `${course.term} ${course.year}`,
-    );
-  }
-
-  if (result.keywordRank !== undefined) {
-    const label = result.keywordRank === 1 ? 'Strong keyword match' : 'Keyword match';
-    addEvidence(evidence, seen, 'keyword', label, 'keyword', 'rank', String(result.keywordRank));
-  }
-  if (result.semanticRank !== undefined) {
-    const label = result.semanticRank === 1 ? 'Strong topic match' : 'Related topic match';
-    addEvidence(evidence, seen, 'semantic', label, 'semantic', 'rank', String(result.semanticRank));
-  }
-
-  return evidence;
+  if (filters.instructorDifficulty) add(filters.instructorDifficulty === "lower" ? "Lower instructor-rated difficulty" : "Higher instructor-rated difficulty");
 }
 
-function buildResultWarnings(result: SearchResult): ResultWarning[] {
-  const warnings: ResultWarning[] = [];
-  if (result.historical) {
-    warnings.push({ kind: 'historical', message: 'Historical term result' });
+function addCourseIdentity(add: AddEvidence, filters: SearchPlan["filters"]): void {
+  if (filters.subject && filters.number) add(`Course ${filters.subject} ${filters.number}`);
+  else {
+    if (filters.subject) add(`Subject ${filters.subject}`);
+    if (filters.number) add(`Number ${filters.number}`);
   }
-  return warnings;
+  if (filters.crn) add(`CRN ${filters.crn}`);
+}
+
+function addConstraintEvidence(add: AddEvidence, plan: SearchPlan): void {
+  const filters = plan.filters;
+  addRequirementEvidence(add, filters.requirement);
+  const schedule = [filters.days, filters.time, filters.status, filters.partOfTerm].filter(Boolean).join(" · ");
+  if (schedule) add(schedule);
+  if (filters.online !== undefined) add(filters.online ? "Online delivery" : "In-person delivery");
+  if (filters.term || filters.year) add([filters.term, filters.year].filter(Boolean).join(" "));
+}
+
+function addRequirementEvidence(
+  add: AddEvidence,
+  requirement: SearchPlan["filters"]["requirement"],
+): void {
+  if (!requirement) return;
+  add(isGenericAnyRequirementFilter(requirement.codes)
+    ? ANY_GENED_DISPLAY_LABEL
+    : formatGenEdDisplayLabel(requirement.codes));
+}
+
+function addRankingEvidence(add: AddEvidence, result: SearchResult, plan: SearchPlan): void {
+  const query = plan.keywordQuery.trim().toLowerCase();
+  if (query && result.course.title.toLowerCase().includes(query)) add(`Title match: ${result.course.title}`);
+  if (plan.introductoryGateway && plan.softPreferences?.levelBoost) add("Introductory course");
+  if (result.keywordRank !== undefined) add(result.keywordRank === 1 ? "Strong keyword match" : "Keyword match");
+  if (result.semanticRank !== undefined) add(result.semanticRank === 1 ? "Strong topic match" : "Related topic match");
 }

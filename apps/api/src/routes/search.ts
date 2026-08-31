@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { decodeSearchRequestQuery } from "@uiuc-course-search/query-types";
 import type {
   D1Database,
   VectorizeIndex,
@@ -6,7 +7,6 @@ import type {
   KVNamespace,
 } from "@cloudflare/workers-types";
 import { SearchPipeline } from "../services/search-pipeline.js";
-import { parseSearchHttpRequest } from "../http/search-request.js";
 import { presentSearchResponse } from "../services/search-response-presenter.js";
 import { errorFields, logger } from "../observability/logger.js";
 
@@ -19,10 +19,9 @@ type Bindings = {
 
 export const searchRoutes = new Hono<{ Bindings: Bindings }>();
 
-// Hybrid search endpoint (combines semantic + keyword with RRF)
 searchRoutes.get("/api/search", async (c) => {
   const searchParams = new URL(c.req.url).searchParams;
-  const parsedRequest = parseSearchHttpRequest(searchParams);
+  const parsedRequest = decodeSearchRequestQuery(searchParams);
   if (!parsedRequest.ok) {
     return c.json({ error: parsedRequest.error }, 400);
   }

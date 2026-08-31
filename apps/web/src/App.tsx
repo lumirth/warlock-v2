@@ -5,11 +5,6 @@ import courseSearchLogo from './assets/course-search-logo.svg'
 import { SearchPage } from './pages/SearchPage'
 import { CoursePage } from './pages/CoursePage'
 import { buttonVariants } from '@/components/ui/button'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { PageContainer } from '@/components/PageContainer'
 
@@ -108,41 +103,33 @@ function App() {
             )}
           </Link>
           <div className="ml-auto flex shrink-0 items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Switch to ${nextThemeMode} mode`}
-                  onClick={() => setThemeMode(nextThemeMode)}
-                >
-                  {themeMode === 'dark' ? (
-                    <SunIcon aria-hidden />
-                  ) : (
-                    <MoonIcon aria-hidden />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Switch to {nextThemeMode} mode</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <a
-                  href="https://github.com/lumirth/uiuc-course-search"
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="GitHub"
-                  className={buttonVariants({
-                    variant: 'ghost',
-                    size: 'icon-sm',
-                  })}
-                >
-                  <Code2Icon aria-hidden />
-                </a>
-              </TooltipTrigger>
-              <TooltipContent>GitHub</TooltipContent>
-            </Tooltip>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title={`Switch to ${nextThemeMode} mode`}
+              aria-label={`Switch to ${nextThemeMode} mode`}
+              onClick={() => setThemeMode(nextThemeMode)}
+            >
+              {themeMode === 'dark' ? (
+                <SunIcon aria-hidden />
+              ) : (
+                <MoonIcon aria-hidden />
+              )}
+            </Button>
+            <a
+              href="https://github.com/lumirth/uiuc-course-search"
+              target="_blank"
+              rel="noreferrer"
+              title="GitHub"
+              aria-label="GitHub"
+              className={buttonVariants({
+                variant: 'ghost',
+                size: 'icon-sm',
+              })}
+            >
+              <Code2Icon aria-hidden />
+            </a>
           </div>
         </PageContainer>
       </header>
@@ -184,9 +171,9 @@ function NotFoundPage() {
         <p className="text-muted-foreground mt-3 leading-7">
           That address does not match a search or course page.
         </p>
-        <Button asChild className="mt-6">
-          <Link to="/">Return to course search</Link>
-        </Button>
+        <Link to="/" className={buttonVariants({ className: 'mt-6' })}>
+          Return to course search
+        </Link>
       </div>
     </PageContainer>
   )

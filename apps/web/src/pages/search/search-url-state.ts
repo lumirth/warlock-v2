@@ -1,5 +1,6 @@
 import {
   decodeSearchRequestQuery,
+  SEARCH_QUERY_PARAM_NAMES,
   searchRequestToQueryEntries,
   searchRequestHasFilters,
   type SearchRequestDto,
@@ -12,34 +13,10 @@ export type SearchUrlState = {
   error: string | null
 }
 
-const SEARCH_PARAM_NAMES = new Set([
-  'q',
-  'subject',
-  'number',
-  'instructor',
-  'term',
-  'year',
-  'requirement',
-  'requirementMode',
-  'credits',
-  'days',
-  'time',
-  'partOfTerm',
-  'online',
-  'status',
-  'instructor_difficulty',
-  'level',
-  'scope',
-  'sort',
-  'direction',
-  'limit',
-  'offset',
-])
-
 export function readSearchUrlState(params: URLSearchParams): SearchUrlState {
   const view = params.get('view') === 'table' ? 'table' : undefined
   const hasSearchState = [...params.keys()].some((key) =>
-    SEARCH_PARAM_NAMES.has(key)
+    SEARCH_QUERY_PARAM_NAMES.includes(key)
   )
 
   if (!hasSearchState) {
@@ -63,10 +40,8 @@ export function readSearchUrlState(params: URLSearchParams): SearchUrlState {
   const hasFilters = searchRequestHasFilters({
     filters: request.filters ?? {},
   })
-  const hasNonDefaultScope = request.scope === 'all'
-
   return {
-    request: hasQuery || hasFilters || hasNonDefaultScope ? request : null,
+    request: hasQuery || hasFilters ? request : null,
     view,
     error: null,
   }
