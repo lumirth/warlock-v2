@@ -313,9 +313,10 @@ async function resolveSubject(db: D1Database, text: string): Promise<{ code: str
     .filter(candidate => new RegExp(`(?:^| )${escapeRegex(candidate.raw)}(?: |$)`).test(normalized))
     .sort((left, right) => right.raw.length - left.raw.length)[0];
   if (exact || normalized.includes(" ")) return exact ?? null;
-  return candidates
+  const fuzzy = candidates
     .filter(candidate => candidate.raw.length >= 6 && editDistance(candidate.raw, normalized) <= 2)
-    .sort((left, right) => editDistance(left.raw, normalized) - editDistance(right.raw, normalized))[0] ?? null;
+    .sort((left, right) => editDistance(left.raw, normalized) - editDistance(right.raw, normalized))[0];
+  return fuzzy ? { ...fuzzy, raw: normalized } : null;
 }
 
 async function resolveInstructor(db: D1Database, name: string): Promise<{ ids: number[]; residual: string }> {

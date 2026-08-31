@@ -48,6 +48,12 @@ describe("search planning boundary", () => {
     });
   });
 
+  it("consumes the user's spelling when a fuzzy subject name matches", async () => {
+    const result = await createSearchPlan(db, "philosphy");
+    expect(result.plan.filters.subject).toBe("PHIL");
+    expect(result.residual).toBe("");
+  });
+
   it("lets explicit request filters override interpreted text", async () => {
     const result = await createSearchPlan(db, "online CS", { online: false, level: 300 });
     expect(result.plan.filters).toMatchObject({ subject: "CS", online: false, level: 300 });
