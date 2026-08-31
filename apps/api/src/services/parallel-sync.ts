@@ -6,7 +6,8 @@ import { writeSubjectSnapshotToD1, type SubjectSnapshotPublicationFence } from '
 
 export const SUBJECT_LEASE_TTL_SECONDS = 5 * 60;
 
-export type ParallelSyncConfig = { cisapiBase: string; concurrency: number };
+export type ParallelSyncConfig = { cisapiBase: string };
+const SUBJECTS_PER_WAVE = 5;
 export type SubjectSyncResult = {
   subject: string;
   success: boolean;
@@ -78,9 +79,9 @@ export async function syncSubjects(
   const started = Date.now();
   const results: SubjectSyncResult[] = [];
 
-  for (let offset = 0; offset < subjects.length; offset += config.concurrency) {
+  for (let offset = 0; offset < subjects.length; offset += SUBJECTS_PER_WAVE) {
     results.push(...await Promise.all(
-      subjects.slice(offset, offset + config.concurrency)
+      subjects.slice(offset, offset + SUBJECTS_PER_WAVE)
         .map(subject => syncSubject(db, config, year, term, subject)),
     ));
   }

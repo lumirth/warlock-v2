@@ -152,7 +152,7 @@ function fakeDb(terms: Term[], state: Map<string, State>): D1Database {
 }
 
 function env(db: D1Database) {
-  return { DB: db, CISAPI_BASE: 'https://courses.test', SYNC_CONCURRENCY: '5' };
+  return { DB: db, CISAPI_BASE: 'https://courses.test' };
 }
 
 function makeTerm(termId: string, year: number, term: string): Term {

@@ -8,9 +8,6 @@ compatibility_flags = ["nodejs_compat"]
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 FEEDBACK_ALLOWED_ORIGINS = "https://uiuc-course-search-web.pages.dev"
 
-# Sync settings
-SYNC_CONCURRENCY = "25"
-
 [triggers]
 crons = [
   "0 10,22 * * *",
@@ -64,7 +61,6 @@ crons = []
 [env.staging.vars]
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
 FEEDBACK_ALLOWED_ORIGINS = "https://staging.uiuc-course-search-web.pages.dev"
-SYNC_CONCURRENCY = "25"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "uiuc-course-search-db-staging"

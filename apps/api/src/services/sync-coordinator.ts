@@ -8,14 +8,12 @@ import {
   syncSubjects,
 } from './parallel-sync.js';
 import { reconcileTermSubjectManifest } from './term-subject-manifest.js';
-import { syncConcurrency } from './sync-operations.js';
 
 const SUBJECTS_PER_STEP = 20;
 
 type Env = {
   DB: D1Database;
   CISAPI_BASE: string;
-  SYNC_CONCURRENCY: string;
 };
 
 type SubjectState = {
@@ -56,10 +54,7 @@ export async function coordinateCourseSync(
   options: { runId?: string; refresh?: boolean } = {},
 ): Promise<CourseSyncStep> {
   const runId = options.runId ?? createRunId('course-sync');
-  const config = {
-    cisapiBase: env.CISAPI_BASE,
-    concurrency: syncConcurrency(env.SYNC_CONCURRENCY),
-  };
+  const config = { cisapiBase: env.CISAPI_BASE };
   let plans = await loadPlans(env.DB, config, runId);
   const work = chooseRecoveryWork(plans) ?? (options.refresh ? chooseRefreshWork(plans) : null);
   let processed: CourseSyncStep['processed'] = null;

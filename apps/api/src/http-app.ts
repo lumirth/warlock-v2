@@ -17,7 +17,6 @@ export type Bindings = {
   FEEDBACK_RATE_LIMITER: RateLimit;
   CISAPI_BASE: string;
   FEEDBACK_ALLOWED_ORIGINS: string;
-  SYNC_CONCURRENCY: string;
   ADMIN_TOKEN?: string;
   RMP_AUTH_TOKEN?: string;
 };

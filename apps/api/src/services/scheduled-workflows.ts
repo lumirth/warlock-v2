@@ -13,7 +13,6 @@ type Env = {
   DB: D1Database;
   GPA_CACHE: KVNamespace;
   CISAPI_BASE: string;
-  SYNC_CONCURRENCY: string;
   RMP_AUTH_TOKEN?: string;
 };
 

@@ -33,7 +33,6 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             CISAPI_BASE: "https://courses.illinois.edu/cisapp/explorer/catalog",
             FEEDBACK_ALLOWED_ORIGINS: "http://local.test",
-            SYNC_CONCURRENCY: "1",
             ADMIN_TOKEN: "admin-token",
           },
         },

@@ -40,7 +40,7 @@ describe("subject snapshot reconciliation", () => {
 
     const result = await syncSubjects(
       testEnv.DB,
-      { cisapiBase: "https://courses.test", concurrency: 1 },
+      { cisapiBase: "https://courses.test" },
       2026,
       "spring",
       ["TST"],
