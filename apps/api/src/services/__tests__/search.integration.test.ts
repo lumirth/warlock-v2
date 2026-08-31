@@ -122,31 +122,18 @@ describe("Worker API integration", () => {
     expect(data.results).toEqual([]);
   });
 
-  it("passes a full semantic window through one D1 JSON binding", async () => {
-    const ids = Array.from({ length: 60 }, (_, index) => {
-      const number = String(600 + index);
-      return `SEM-${number}-2026-spring`;
-    });
-    await testEnv.DB.batch(ids.map((id, index) => testEnv.DB.prepare(`
-      INSERT INTO courses (id, subject, number, title, year, term)
-      VALUES (?, 'SEM', ?, ?, 2026, 'spring')
-    `).bind(id, String(600 + index), `Semantic result ${index}`)));
-
+  it("retrieves deterministic topic expansions through D1 full-text search", async () => {
     const result = await executeSearch(
       testEnv.DB,
       {
-        query: async () => ({
-          matches: ids.map((id, index) => ({ id, score: 1 - index / 100 })),
-        }),
-      } as unknown as VectorizeIndex,
-      { run: async () => ({ data: [[0.1, 0.2]] }) } as unknown as Ai,
-      plan({ subject: "SEM" }, "semantic capacity probe"),
+        ...plan({ subject: "CS" }, "unmatched phrase"),
+        softPreferences: { topicExpansions: ["data structures"] },
+      },
       { scope: "all", sort: { field: "relevance", direction: "desc" } },
     );
 
-    expect(result.totalResults).toBe(60);
-    expect(result.results).toHaveLength(60);
-    expect(result.results[0]?.course.id).toBe(ids[0]);
+    expect(result.totalResults).toBe(1);
+    expect(result.results[0]?.course.id).toBe(COURSE_ID);
     expect(result.failedLanes).toEqual([]);
   });
 
@@ -161,9 +148,7 @@ describe("Worker API integration", () => {
 
     const result = await executeSearch(
       testEnv.DB,
-      {} as VectorizeIndex,
-      {} as Ai,
-      plan({ subject: "LONG" }, "", title.toLowerCase()),
+      plan({ subject: "LONG" }, title.toLowerCase()),
       { scope: "all", sort: { field: "relevance", direction: "desc" } },
     );
 
@@ -374,8 +359,7 @@ async function seedSearchFixture(): Promise<void> {
 
 function plan(
   filters: SearchPlan["filters"],
-  semanticQuery: string,
   keywordQuery = "",
 ): SearchPlan {
-  return { filters, semanticQuery, keywordQuery };
+  return { filters, keywordQuery };
 }

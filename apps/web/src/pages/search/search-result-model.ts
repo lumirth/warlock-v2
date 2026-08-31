@@ -109,7 +109,7 @@ export function getCourseMetrics(
 export function getChipClass(chip: SearchChipDto): string {
   return cn(
     'border-border bg-secondary text-secondary-foreground',
-    chip.type === 'semantic' && 'text-muted-foreground'
+    chip.type === 'topic' && 'text-muted-foreground'
   )
 }
 

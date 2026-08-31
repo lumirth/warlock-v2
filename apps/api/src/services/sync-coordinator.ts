@@ -1,185 +1,251 @@
-import type { D1Database, Fetcher, VectorizeIndex } from '@cloudflare/workers-types';
+import type { D1Database } from '@cloudflare/workers-types';
 import type { TermState } from '../db/types.js';
-import { internalAuthHeaders } from '../middleware/auth.js';
-import { errorFields, logger } from '../observability/logger.js';
+import { createRunId, errorFields, logger } from '../observability/logger.js';
 import {
   getSubjectsForTerm,
-  summarizeTermSync,
-  type SubjectSyncResult,
-  type TermSyncResult,
+  type ParallelSyncConfig,
+  SUBJECT_LEASE_TTL_SECONDS,
+  syncSubjects,
 } from './parallel-sync.js';
 import { reconcileTermSubjectManifest } from './term-subject-manifest.js';
 import { syncConcurrency } from './sync-operations.js';
 
-const SUBJECTS_PER_REQUEST = 20;
+const SUBJECTS_PER_STEP = 20;
 
 type Env = {
   DB: D1Database;
-  SELF: Fetcher;
   CISAPI_BASE: string;
   SYNC_CONCURRENCY: string;
-  VECTORIZE: VectorizeIndex;
-  INTERNAL_TOKEN?: string;
 };
 
-export async function coordinateCourseSync(env: Env, options: { runId: string }) {
-  const terms = await env.DB.prepare(`
+type SubjectState = {
+  subject: string;
+  status: 'pending' | 'running' | 'complete' | 'failed' | null;
+  lastSync: number | null;
+};
+
+type TermPlan = {
+  term: TermState;
+  subjects: string[];
+  states: SubjectState[];
+};
+
+type Work = {
+  plan: TermPlan;
+  subjects: string[];
+};
+
+export type CourseSyncStep = {
+  catalogReady: boolean;
+  processed: {
+    termId: string;
+    subjects: string[];
+    failedSubjects: number;
+  } | null;
+  terms: Array<{
+    termId: string;
+    total: number;
+    complete: number;
+    failed: number;
+    running: number;
+  }>;
+};
+
+export async function coordinateCourseSync(
+  env: Env,
+  options: { runId?: string; refresh?: boolean } = {},
+): Promise<CourseSyncStep> {
+  const runId = options.runId ?? createRunId('course-sync');
+  const config = {
+    cisapiBase: env.CISAPI_BASE,
+    concurrency: syncConcurrency(env.SYNC_CONCURRENCY),
+  };
+  let plans = await loadPlans(env.DB, config, runId);
+  const work = chooseRecoveryWork(plans) ?? (options.refresh ? chooseRefreshWork(plans) : null);
+  let processed: CourseSyncStep['processed'] = null;
+
+  if (work) {
+    const result = await syncSubjects(
+      env.DB,
+      config,
+      work.plan.term.year,
+      work.plan.term.term,
+      work.subjects,
+    );
+    processed = {
+      termId: work.plan.term.term_id,
+      subjects: work.subjects,
+      failedSubjects: result.failedSubjects,
+    };
+    if (result.failedSubjects) {
+      logger.error('courseSync.step.failed', {
+        runId,
+        termId: work.plan.term.term_id,
+        failedSubjects: result.failedSubjects,
+      });
+    }
+    plans = await reloadPlan(env.DB, plans, work.plan.term.term_id);
+  }
+
+  for (const plan of plans.filter(isReady)) await publishTerm(env.DB, plan);
+  return response(plans, processed);
+}
+
+async function loadPlans(
+  db: D1Database,
+  config: ParallelSyncConfig,
+  runId: string,
+): Promise<TermPlan[]> {
+  const terms = await db.prepare(`
     SELECT * FROM term_state WHERE status IN ('registrable', 'active')
     ORDER BY CASE status WHEN 'registrable' THEN 0 ELSE 1 END, year DESC
   `).all<TermState>();
-  const results = [];
-  for (const term of terms.results) results.push(await syncTerm(env, term, options.runId));
+  return Promise.all(terms.results.map(async term => {
+    let subjects: string[];
+    try {
+      subjects = await getSubjectsForTerm(config, term.year, term.term);
+      rejectImplausibleShrink(term, subjects.length);
+    } catch (error) {
+      logger.error('courseSync.term.failed', { runId, termId: term.term_id, ...errorFields(error) });
+      return { term, subjects: [], states: [] };
+    }
+    return { term, subjects, states: await loadStates(db, term.term_id, subjects) };
+  }));
+}
+
+async function loadStates(
+  db: D1Database,
+  termId: string,
+  subjects: string[],
+): Promise<SubjectState[]> {
+  const result = await db.prepare(`
+    SELECT CAST(manifest.value AS TEXT) AS subject,
+      state.status, state.last_sync AS lastSync
+    FROM json_each(?) AS manifest
+    LEFT JOIN subject_sync_state AS state
+      ON state.term_id = ? AND state.subject = CAST(manifest.value AS TEXT)
+    ORDER BY subject
+  `).bind(JSON.stringify(subjects), termId).all<SubjectState>();
+  return result.results;
+}
+
+function chooseRecoveryWork(plans: TermPlan[]): Work | null {
+  const now = Math.floor(Date.now() / 1_000);
+  const candidates = plans.flatMap((plan, termOrder) => plan.states
+    .map(state => ({ plan, state, termOrder, priority: recoveryPriority(state, now) }))
+    .filter(candidate => candidate.priority !== null)
+  ).sort((left, right) =>
+    (left.priority ?? 0) - (right.priority ?? 0)
+      || (left.state.lastSync ?? 0) - (right.state.lastSync ?? 0)
+      || left.termOrder - right.termOrder
+      || left.state.subject.localeCompare(right.state.subject));
+  const selected = candidates[0];
+  if (!selected) return null;
   return {
-    termCount: results.length,
-    results,
-    failedTermCount: results.filter(result => !result.success).length,
+    plan: selected.plan,
+    subjects: candidates
+      .filter(candidate => candidate.plan === selected.plan)
+      .slice(0, SUBJECTS_PER_STEP)
+      .map(candidate => candidate.state.subject),
   };
 }
 
-async function syncTerm(env: Env, term: TermState, runId: string) {
-  try {
-    return await syncTermOrThrow(env, term, runId);
-  } catch (error) {
-    logger.error('courseSync.term.failed', { runId, termId: term.term_id, ...errorFields(error) });
-    await recordFailure(env.DB, term.term_id, error);
-    return outcome(term.term_id, false);
-  }
+function recoveryPriority(state: SubjectState, now: number): number | null {
+  if (state.status === null || state.status === 'pending') return 0;
+  if (state.status === 'failed') return 1;
+  if (state.status === 'running'
+    && (state.lastSync === null || state.lastSync <= now - SUBJECT_LEASE_TTL_SECONDS)) return 1;
+  return null;
 }
 
-async function syncTermOrThrow(env: Env, term: TermState, runId: string) {
-  const subjects = await getSubjectsForTerm({
-    cisapiBase: env.CISAPI_BASE,
-    concurrency: syncConcurrency(env.SYNC_CONCURRENCY),
-  }, term.year, term.term);
-  rejectImplausibleShrink(term, subjects.length);
+function chooseRefreshWork(plans: TermPlan[]): Work | null {
+  if (!plans.length || plans.some(plan => !isReady(plan))) return null;
+  const plan = [...plans].sort((left, right) =>
+    oldestSync(left) - oldestSync(right)
+      || plans.indexOf(left) - plans.indexOf(right))[0];
+  if (!plan) return null;
+  return {
+    plan,
+    subjects: [...plan.states]
+      .sort((left, right) => (left.lastSync ?? 0) - (right.lastSync ?? 0)
+        || left.subject.localeCompare(right.subject))
+      .slice(0, SUBJECTS_PER_STEP)
+      .map(state => state.subject),
+  };
+}
 
-  const batches = chunk(subjects, SUBJECTS_PER_REQUEST);
-  const { results, failedBatchCount } = await runBatches(env, term, batches, runId);
-  const aggregate = summarizeTermSync(
-    term.year,
-    term.term,
-    results.flatMap(result => result.subjectResults),
-    results.reduce((sum, result) => sum + result.durationMs, 0),
-  );
-  const skipped = aggregate.subjectResults.filter(result => result.skipped).length;
-  const complete = failedBatchCount === 0
-    && aggregate.failedSubjects === 0
-    && skipped === 0
-    && aggregate.subjectResults.length === subjects.length;
+function oldestSync(plan: TermPlan): number {
+  return Math.min(...plan.states.map(state => state.lastSync ?? 0));
+}
 
-  let deletedCourseCount = 0;
-  if (complete) {
-    const reconciliation = await reconcileTermSubjectManifest(env.DB, {
-      year: term.year,
-      term: term.term,
-      authoritativeSubjects: subjects,
-      syncResult: aggregate,
-      vectorize: env.VECTORIZE,
-    });
-    if (!reconciliation.applied) throw new Error('refused incomplete term publication');
-    deletedCourseCount = reconciliation.deletedCourseCount;
-  }
+async function reloadPlan(db: D1Database, plans: TermPlan[], termId: string): Promise<TermPlan[]> {
+  const plan = plans.find(candidate => candidate.term.term_id === termId);
+  if (!plan) return plans;
+  const replacement = { ...plan, states: await loadStates(db, termId, plan.subjects) };
+  return plans.map(candidate => candidate === plan ? replacement : candidate);
+}
 
-  await recordResult(env.DB, term.term_id, aggregate, subjects.length, complete);
-  return outcome(term.term_id, complete, {
-    subjectCount: subjects.length,
-    batchCount: batches.length,
-    failedBatchCount,
-    failedSubjectCount: aggregate.failedSubjects,
-    skippedSubjectCount: skipped,
-    deletedCourseCount,
+async function publishTerm(db: D1Database, plan: TermPlan): Promise<void> {
+  const reconciliation = await reconcileTermSubjectManifest(db, {
+    year: plan.term.year,
+    term: plan.term.term,
+    authoritativeSubjects: plan.subjects,
   });
-}
-
-async function runBatches(
-  env: Env,
-  term: TermState,
-  batches: string[][],
-  runId: string,
-): Promise<{ results: TermSyncResult[]; failedBatchCount: number }> {
-  const results: TermSyncResult[] = [];
-  let failedBatchCount = 0;
-  for (const subjects of batches) {
-    try {
-      results.push(await dispatchBatch(env, term, subjects));
-    } catch (error) {
-      failedBatchCount += 1;
-      logger.error('courseSync.batch.failed', { runId, termId: term.term_id, ...errorFields(error) });
-      const failed: SubjectSyncResult[] = subjects.map(subject => ({
-        subject,
-        success: false,
-        coursesCount: 0,
-        sectionsCount: 0,
-        durationMs: 0,
-        error: error instanceof Error ? error.message : String(error),
-      }));
-      results.push(summarizeTermSync(term.year, term.term, failed, 0));
-    }
-  }
-  return { results, failedBatchCount };
-}
-
-async function dispatchBatch(env: Env, term: TermState, subjects: string[]): Promise<TermSyncResult> {
-  const response = await env.SELF.fetch('http://internal/internal/sync-batch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...internalAuthHeaders(env.INTERNAL_TOKEN) },
-    body: JSON.stringify({ year: term.year, term: term.term, subjects }),
-  });
-  if (!response.ok) throw new Error(`sync batch returned HTTP ${response.status}`);
-  return response.json<TermSyncResult>();
-}
-
-async function recordResult(
-  db: D1Database,
-  termId: string,
-  result: TermSyncResult,
-  subjectCount: number,
-  complete: boolean,
-): Promise<void> {
-  const errors = result.subjectResults
-    .filter(subject => !subject.success || subject.skipped)
-    .map(subject => ({ subject: subject.subject, error: subject.error ?? 'not refreshed' }));
+  if (!reconciliation.applied) return;
+  const manifest = JSON.stringify(plan.subjects);
   await db.prepare(`
     UPDATE term_state SET
-      last_synced = CASE WHEN ? THEN unixepoch() ELSE last_synced END,
-      subjects_count = CASE WHEN ? THEN ? ELSE subjects_count END,
-      courses_count = CASE WHEN ? THEN ? ELSE courses_count END,
-      sections_count = CASE WHEN ? THEN ? ELSE sections_count END,
-      sync_errors = ?
+      last_synced = (
+        SELECT MIN(state.last_sync) FROM json_each(?) AS manifest
+        JOIN subject_sync_state AS state
+          ON state.term_id = ? AND state.subject = CAST(manifest.value AS TEXT)
+      ),
+      subjects_count = ?,
+      courses_count = (SELECT COUNT(*) FROM courses WHERE year = ? AND term = ?),
+      sections_count = (
+        SELECT COUNT(*) FROM sections JOIN courses ON courses.id = sections.course_id
+        WHERE courses.year = ? AND courses.term = ?
+      ),
+      sync_errors = NULL
     WHERE term_id = ?
   `).bind(
-    complete, complete, subjectCount, complete, result.totalCourses,
-    complete, result.totalSections, complete ? null : JSON.stringify(errors), termId,
+    manifest,
+    plan.term.term_id,
+    plan.subjects.length,
+    plan.term.year,
+    plan.term.term,
+    plan.term.year,
+    plan.term.term,
+    plan.term.term_id,
   ).run();
 }
 
-async function recordFailure(db: D1Database, termId: string, error: unknown): Promise<void> {
-  await db.prepare(`
-    UPDATE term_state SET sync_errors = ? WHERE term_id = ?
-  `).bind(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), termId).run();
+function response(plans: TermPlan[], processed: CourseSyncStep['processed']): CourseSyncStep {
+  return {
+    catalogReady: plans.length > 0 && plans.every(isReady),
+    processed,
+    terms: plans.map(plan => ({
+      termId: plan.term.term_id,
+      total: plan.states.length,
+      complete: count(plan, 'complete'),
+      failed: count(plan, 'failed'),
+      running: count(plan, 'running'),
+    })),
+  };
 }
 
-function outcome(termId: string, success: boolean, counts = {}) {
-  return {
-    termId,
-    subjectCount: 0,
-    batchCount: 0,
-    failedBatchCount: 0,
-    failedSubjectCount: 0,
-    skippedSubjectCount: 0,
-    deletedCourseCount: 0,
-    ...counts,
-    success,
-  };
+function isReady(plan: TermPlan): boolean {
+  return plan.subjects.length > 0
+    && plan.states.length === plan.subjects.length
+    && plan.states.every(state => state.status === 'complete');
+}
+
+function count(plan: TermPlan, status: SubjectState['status']): number {
+  return plan.states.filter(state => state.status === status).length;
 }
 
 function rejectImplausibleShrink(term: TermState, nextCount: number): void {
   if (term.subjects_count && term.subjects_count >= 20 && nextCount * 4 < term.subjects_count * 3) {
     throw new Error(`refusing subject shrink from ${term.subjects_count} to ${nextCount}`);
   }
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
-    items.slice(index * size, (index + 1) * size));
 }

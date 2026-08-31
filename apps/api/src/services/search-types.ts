@@ -11,13 +11,11 @@ export type RetrievalLane =
   | "exact"
   | "official_text"
   | "structured_course"
-  | "section_text"
-  | "topic_semantic";
+  | "section_text";
 
 export type SearchResult = {
   course: Course;
   score: number;
-  semanticRank?: number;
   keywordRank?: number;
   requirements?: CourseRequirementDto[];
   registrationSummary?: CourseRegistrationSummaryDto;

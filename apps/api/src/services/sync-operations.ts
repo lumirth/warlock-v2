@@ -1,16 +1,12 @@
-import type { Ai, D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
+import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
 
 export type SyncRouteBindings = {
   DB: D1Database;
-  VECTORIZE: VectorizeIndex;
-  AI: Ai;
-  SELF: Fetcher;
   GPA_CACHE: KVNamespace;
 
   CISAPI_BASE: string;
 
   SYNC_CONCURRENCY: string;
-  INTERNAL_TOKEN?: string;
   RMP_AUTH_TOKEN?: string;
 };
 

@@ -1,4 +1,4 @@
-import type { Ai, D1Database, VectorizeIndex } from "@cloudflare/workers-types";
+import type { D1Database } from "@cloudflare/workers-types";
 import {
   canonicalRequirementCodes,
   SEARCH_BROWSEABLE_RESULT_LIMIT,
@@ -9,7 +9,6 @@ import {
 import type { Course } from "../db/types.js";
 import { errorFields, logger } from "../observability/logger.js";
 import { courseRequirementRowToDto, type CourseRequirementSourceRow } from "../transforms/course-requirements.js";
-import { searchCourses } from "./embeddings.js";
 import { normalizeSectionAvailability } from "./section-availability-policy.js";
 import type { SearchFilters, SearchPlan } from "./search-planner-types.js";
 import type { RetrievalLane, SearchPipelineResult, SearchResult } from "./search-types.js";
@@ -21,10 +20,7 @@ type CandidateRow = {
   lanes: string;
   lane_priority: number;
   text_score: number | null;
-  semantic_score: number | null;
 };
-type SemanticHit = { id: string; score: number };
-type SemanticRun = { attempted: boolean; succeeded: boolean; hits: SemanticHit[] };
 type CandidateRun = { succeeded: boolean; rows: CandidateRow[]; total: number };
 type SqlValue = string | number;
 type AddClause = (sql: string, ...values: SqlValue[]) => void;
@@ -52,18 +48,16 @@ const SORT_VALUE: Record<SearchSort["field"], (result: SearchResult) => number |
 
 export async function executeSearch(
   db: D1Database,
-  vectorize: VectorizeIndex,
-  ai: Ai,
   plan: SearchPlan,
   requested: Controls,
 ): Promise<Pick<SearchPipelineResult, "results" | "totalResults"> & Pick<SearchPipelineResult["meta"], "controls" | "lanes" | "failedLanes">> {
   const controls = searchControls(requested, plan);
   const exact = isExactSearch(plan.filters);
   const keyword = plan.keywordQuery.trim();
-  const lanes = retrievalLanes(exact, keyword, plan.semanticQuery.trim());
+  const fullText = fullTextQuery(keyword, plan.softPreferences?.topicExpansions);
+  const lanes = retrievalLanes(exact, fullText);
   const terms = await loadTerms(db);
-  const semantic = await runSemanticLane(vectorize, ai, plan, controls, terms, lanes);
-  const candidates = await runCandidateLane(db, plan.filters, controls, keyword, semantic.hits, exact);
+  const candidates = await runCandidateLane(db, plan.filters, controls, keyword, fullText, exact);
   const results = await hydrateResults(db, candidates.rows, plan, terms);
   results.sort(resultComparator(controls.sort, Boolean(plan.filters.term || plan.filters.year)));
   const limited = results.slice(0, SEARCH_BROWSEABLE_RESULT_LIMIT);
@@ -71,7 +65,7 @@ export async function executeSearch(
     results: limited,
     totalResults: candidates.total,
     controls,
-    ...laneOutcomes(lanes, semantic, candidates.succeeded),
+    ...laneOutcomes(lanes, candidates.succeeded),
   };
 }
 
@@ -84,11 +78,19 @@ function isExactSearch(filters: SearchFilters): boolean {
   return Boolean(filters.crn || (filters.subject && filters.number));
 }
 
-function retrievalLanes(exact: boolean, keyword: string, semantic: string): RetrievalLane[] {
+function retrievalLanes(exact: boolean, fullText: string): RetrievalLane[] {
   if (exact) return ["exact"];
-  const lanes: RetrievalLane[] = keyword ? ["official_text", "section_text"] : ["structured_course"];
-  if (semantic) lanes.push("topic_semantic");
-  return lanes;
+  return fullText ? ["official_text", "section_text"] : ["structured_course"];
+}
+
+function fullTextQuery(keyword: string, expansions: string[] = []): string {
+  const clean = (value: string) => value.toLowerCase()
+    .replace(/["'’]/g, " ").replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  const primary = clean(keyword);
+  const alternatives = [...new Set(expansions.map(clean))]
+    .filter(value => value && value !== primary)
+    .map(value => value.includes(" ") ? `"${value}"` : value);
+  return [primary, ...alternatives].filter(Boolean).join(" OR ");
 }
 
 async function loadTerms(db: D1Database): Promise<TermRow[]> {
@@ -96,47 +98,19 @@ async function loadTerms(db: D1Database): Promise<TermRow[]> {
     .all<TermRow>().then(result => result.results).catch(() => []);
 }
 
-async function runSemanticLane(
-  vectorize: VectorizeIndex,
-  ai: Ai,
-  plan: SearchPlan,
-  controls: Controls,
-  terms: TermRow[],
-  lanes: RetrievalLane[],
-): Promise<SemanticRun> {
-  if (!lanes.includes("topic_semantic")) return { attempted: false, succeeded: false, hits: [] };
-  try {
-    const hits = await searchCourses(vectorize, ai, plan.semanticQuery.trim(), {
-      filters: plan.filters,
-      topK: 100,
-      termIds: semanticTermIds(controls, plan.filters, terms),
-    });
-    return { attempted: true, succeeded: true, hits };
-  } catch (error) {
-    logger.warn("search.semantic.failed", { ...errorFields(error) });
-    return { attempted: true, succeeded: false, hits: [] };
-  }
-}
-
-function semanticTermIds(controls: Controls, filters: SearchFilters, terms: TermRow[]): string[] {
-  if (controls.scope !== "active" || filters.term || filters.year) return [];
-  return terms.map(row => row.term_id);
-}
-
 async function runCandidateLane(
   db: D1Database,
   filters: SearchFilters,
   controls: Controls,
   keyword: string,
-  semantic: SemanticHit[],
+  fullText: string,
   exact: boolean,
 ): Promise<CandidateRun> {
   try {
-    return { succeeded: true, ...await queryCandidates(db, candidateQuery(filters, controls, keyword, semantic, exact)) };
+    return { succeeded: true, ...await queryCandidates(db, candidateQuery(filters, controls, keyword, fullText, exact)) };
   } catch (error) {
     logger.warn("search.sql.failed", { ...errorFields(error) });
-    if (!semantic.length) return { succeeded: false, rows: [], total: 0 };
-    return { succeeded: false, ...await queryCandidates(db, candidateQuery(filters, controls, "", semantic, false)) };
+    return { succeeded: false, rows: [], total: 0 };
   }
 }
 
@@ -148,12 +122,8 @@ async function queryCandidates(db: D1Database, query: ReturnType<typeof candidat
   return { rows: candidates.results, total: count?.count ?? candidates.results.length };
 }
 
-function laneOutcomes(lanes: RetrievalLane[], semantic: SemanticRun, sqlSucceeded: boolean): Pick<SearchPipelineResult["meta"], "lanes" | "failedLanes"> {
-  const sql = lanes.filter(lane => lane !== "topic_semantic");
-  const successful: RetrievalLane[] = sqlSucceeded ? sql : [];
-  const failed: RetrievalLane[] = sqlSucceeded ? [] : sql;
-  if (semantic.attempted) (semantic.succeeded ? successful : failed).push("topic_semantic");
-  return { lanes: successful, failedLanes: failed };
+function laneOutcomes(lanes: RetrievalLane[], succeeded: boolean): Pick<SearchPipelineResult["meta"], "lanes" | "failedLanes"> {
+  return { lanes: succeeded ? lanes : [], failedLanes: succeeded ? [] : lanes };
 }
 
 async function hydrateResults(db: D1Database, candidateRows: CandidateRow[], plan: SearchPlan, terms: TermRow[]): Promise<SearchResult[]> {
@@ -162,14 +132,12 @@ async function hydrateResults(db: D1Database, candidateRows: CandidateRow[], pla
     loadCourses(db, ids), loadRequirements(db, ids), loadRegistration(db, ids),
   ]);
   let keywordRank = 0;
-  let semanticRank = 0;
   const termRank = termPriority(terms);
   return candidateRows.flatMap(row => {
     const course = courseMap.get(row.id);
     if (!course) return [];
     const laneMatches = row.lanes.split(",").filter(isLane);
     const hasKeyword = laneMatches.some(lane => lane === "official_text" || lane === "section_text");
-    const hasSemantic = laneMatches.includes("topic_semantic");
     return [{
       course,
       requirements: requirements.get(row.id) ?? [],
@@ -178,7 +146,6 @@ async function hydrateResults(db: D1Database, candidateRows: CandidateRow[], pla
       termPriority: termRank.get(`${course.year}-${course.term}`) ?? 2,
       historical: !termRank.has(`${course.year}-${course.term}`),
       ...(hasKeyword ? { keywordRank: ++keywordRank } : {}),
-      ...(hasSemantic ? { semanticRank: ++semanticRank } : {}),
     }];
   });
 }
@@ -187,55 +154,44 @@ function candidateQuery(
   filters: SearchFilters,
   controls: Controls,
   keyword: string,
-  semantic: SemanticHit[],
+  fullText: string,
   exact: boolean,
 ): { rowsSql: string; countSql: string; params: SqlValue[] } {
   const eligible = eligibleQuery(filters, controls.scope);
   const params: Array<string | number> = [...eligible.params];
   const ctes = [`eligible AS (${eligible.sql})`];
-  if (semantic.length) {
-    ctes.push(`semantic(id, score) AS (
-      SELECT CAST(json_extract(value, '$.id') AS TEXT),
-        CAST(json_extract(value, '$.score') AS REAL)
-      FROM json_each(?)
-    )`);
-    params.push(JSON.stringify(semantic));
-  }
   const matches: string[] = [];
-  if (exact || (!keyword && semantic.length === 0)) {
-    matches.push(`SELECT id, '${exact ? "exact" : "structured_course"}' lane, ${exact ? 0 : 3} lane_priority, NULL text_score, NULL semantic_score FROM eligible`);
+  if (exact || !fullText) {
+    matches.push(`SELECT id, '${exact ? "exact" : "structured_course"}' lane, ${exact ? 0 : 3} lane_priority, NULL text_score FROM eligible`);
   }
-  if (keyword) {
-    matches.push(`SELECT c.id, 'official_text', 1, bm25(courses_fts), NULL
+  if (fullText) {
+    matches.push(`SELECT c.id, 'official_text', 1, bm25(courses_fts)
       FROM courses_fts JOIN courses c ON c.rowid = courses_fts.rowid JOIN eligible e ON e.id = c.id
       WHERE courses_fts MATCH ?`);
-    params.push(keyword);
+    params.push(fullText);
     const title = keyword.replace(/"/g, "").toLowerCase();
     const escapedTitle = escapeLike(title);
     const prefixPattern = `${escapedTitle}%`;
     const containsPattern = `%${escapedTitle}%`;
     if (utf8Length(containsPattern) <= 50) {
       matches.push(`SELECT c.id, 'official_text', 0,
-          CASE WHEN lower(c.title) = ? THEN 0 WHEN lower(c.title) LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END, NULL
+          CASE WHEN lower(c.title) = ? THEN 0 WHEN lower(c.title) LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END
         FROM courses c JOIN eligible e ON e.id = c.id WHERE lower(c.title) LIKE ? ESCAPE '\\'`);
       params.push(title, prefixPattern, containsPattern);
     } else {
-      matches.push(`SELECT c.id, 'official_text', 0, 0, NULL
+      matches.push(`SELECT c.id, 'official_text', 0, 0
         FROM courses c JOIN eligible e ON e.id = c.id WHERE lower(c.title) = ?`);
       params.push(title);
     }
-    matches.push(`SELECT c.id, 'section_text', 2, bm25(sections_fts), NULL
+    matches.push(`SELECT c.id, 'section_text', 2, bm25(sections_fts)
       FROM sections_fts JOIN sections s ON s.rowid = sections_fts.rowid
       JOIN courses c ON c.id = s.course_id JOIN eligible e ON e.id = c.id
       WHERE sections_fts MATCH ?`);
-    params.push(keyword);
+    params.push(fullText);
   }
-  if (semantic.length) {
-    matches.push("SELECT semantic.id, 'topic_semantic', 4, NULL, semantic.score FROM semantic JOIN eligible e ON e.id = semantic.id");
-  }
-  const withSql = `WITH ${ctes.join(",")}, matches(id,lane,lane_priority,text_score,semantic_score) AS (${matches.join(" UNION ALL ")}), ranked AS (
+  const withSql = `WITH ${ctes.join(",")}, matches(id,lane,lane_priority,text_score) AS (${matches.join(" UNION ALL ")}), ranked AS (
     SELECT id, group_concat(DISTINCT lane) lanes, min(lane_priority) lane_priority,
-      min(text_score) text_score, max(semantic_score) semantic_score
+      min(text_score) text_score
     FROM matches GROUP BY id
   )`;
   const order = sqlOrder(controls.sort);
@@ -388,7 +344,6 @@ function addRelationExclusions(filters: SearchFilters, add: AddClause): void {
 
 function relevanceScore(course: Course, plan: SearchPlan, row: CandidateRow): number {
   return (row.lanes.includes("exact") ? 100 : 10 - row.lane_priority)
-    + (row.semantic_score ?? 0) * 2
     + (course.quality_score ?? 0) / 500
     + titleScore(course, plan.keywordQuery)
     + gatewayScore(course, plan.introductoryGateway)
@@ -447,7 +402,7 @@ function compareNullable(left: number | null, right: number | null, direction: n
 }
 
 function sqlOrder(sort: SearchSort): string {
-  if (sort.field === "relevance") return "lane_priority, text_score, semantic_score DESC, c.year DESC, c.subject, c.number";
+  if (sort.field === "relevance") return "lane_priority, text_score, c.year DESC, c.subject, c.number";
   const column: Record<Exclude<SearchSort["field"], "relevance">, string> = {
     gpa: "c.avg_gpa", quality: "c.quality_score", instructor_difficulty: "c.difficulty_score",
     instructor_rating: "c.primary_instructor_rmp", level: "CAST(c.number AS INTEGER)", credits: "c.credit_hours",
@@ -498,7 +453,7 @@ function termPriority(rows: TermRow[]): Map<string, number> {
   return new Map(rows.map(row => [row.term_id, row.status === "registrable" ? 0 : 1]));
 }
 function isLane(value: string): value is RetrievalLane {
-  return ["exact", "official_text", "structured_course", "section_text", "topic_semantic"].includes(value);
+  return ["exact", "official_text", "structured_course", "section_text"].includes(value);
 }
 function chunks<T>(values: T[], size = 80): T[][] {
   return Array.from({ length: Math.ceil(values.length / size) }, (_, index) => values.slice(index * size, (index + 1) * size));

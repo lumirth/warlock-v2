@@ -1,4 +1,4 @@
-import type { D1Database, Fetcher, KVNamespace, VectorizeIndex } from '@cloudflare/workers-types';
+import type { D1Database, KVNamespace } from '@cloudflare/workers-types';
 import { createRunId, errorFields, logger } from '../observability/logger.js';
 import { coordinateEnrichment } from './enrichment.js';
 import {
@@ -11,18 +11,15 @@ import { discoverAndClassifyTerms } from './term-discovery.js';
 
 type Env = {
   DB: D1Database;
-  SELF: Fetcher;
-  VECTORIZE: VectorizeIndex;
   GPA_CACHE: KVNamespace;
   CISAPI_BASE: string;
   SYNC_CONCURRENCY: string;
-  INTERNAL_TOKEN?: string;
   RMP_AUTH_TOKEN?: string;
 };
 
 const schedules: Record<string, (env: Env, runId: string) => Promise<void>> = {
   '0 10,22 * * *': discoverTerms,
-  '30 10,22 * * *': syncCourses,
+  '*/15 * * * *': syncCourses,
   '0 8 * * SUN': weeklyEnrichment,
   '*/5 * * * *': resumeGpa,
 };
@@ -47,6 +44,7 @@ async function discoverTerms(env: Env): Promise<void> {
 async function syncCourses(env: Env, runId: string): Promise<void> {
   await coordinateCourseSync(env, {
     runId,
+    refresh: true,
   });
 }
 

@@ -1,23 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { app, isAllowedFeedbackOrigin, type Bindings } from '../http-app.js';
 
-const TOKENS = {
-  ADMIN_TOKEN: 'admin-secret',
-  INTERNAL_TOKEN: 'internal-secret',
-} as Bindings;
+const TOKENS = { ADMIN_TOKEN: 'admin-secret' } as Bindings;
 
-function protectedRoutes(prefix: '/admin/' | '/internal/') {
+function protectedRoutes() {
   return app.routes.filter(route =>
-    route.method !== 'ALL' && route.path.startsWith(prefix)
+    route.method !== 'ALL' && route.path.startsWith('/admin/')
   );
 }
 
 describe('actual application security boundaries', () => {
-  it.each([
-    ['/admin/', 'admin-secret'],
-    ['/internal/', 'internal-secret'],
-  ] as const)('protects every mounted %s route', async (prefix, validToken) => {
-    const routes = protectedRoutes(prefix);
+  it('protects every mounted admin route', async () => {
+    const routes = protectedRoutes();
     expect(routes.length).toBeGreaterThan(0);
 
     for (const route of routes) {
@@ -26,7 +20,7 @@ describe('actual application security boundaries', () => {
 
       const wrong = await app.request(route.path, {
         method: route.method,
-        headers: { Authorization: `Bearer wrong-${validToken}` },
+        headers: { Authorization: 'Bearer wrong-admin-secret' },
       }, TOKENS);
       expect(wrong.status, `${route.method} ${route.path} with wrong token`).toBe(403);
     }

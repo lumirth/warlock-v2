@@ -350,7 +350,7 @@ export type SearchChipType =
   | "courseCode" | "crn" | "subject" | "instructor" | "days" | "time"
   | "level" | "levelBoost" | "credits" | "online" | "status"
   | "instructorDifficulty" | "requirement" | "term" | "partOfTerm"
-  | "negation" | "semantic";
+  | "negation" | "topic";
 export type SearchChipDto = {
   id: string;
   type: SearchChipType;
@@ -366,7 +366,7 @@ export type SearchMetaDto = {
   nextRequest: SearchRequestDto;
   interpretedRequest: SearchRequestDto;
   ui: { chips: SearchChipDto[]; ambiguityActions: SearchAmbiguityActionDto[] };
-  retrieval?: { degraded: boolean; sortLimitedToRetrievedWindow?: boolean };
+  retrieval?: { degraded: boolean };
 };
 export type SearchResponseDto = {
   results: SearchCourseResultDto[];

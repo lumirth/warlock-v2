@@ -41,7 +41,6 @@ export type SearchFilters = {
 
 export type SearchPlan = {
   filters: SearchFilters;
-  semanticQuery: string;
   keywordQuery: string;
   introductoryGateway?: true;
   softPreferences?: {
@@ -79,7 +78,7 @@ type HintValues = {
   term: { term: SearchTermFilter; year?: number };
   partOfTerm: string;
   negation: { target: string; value: string };
-  semantic: string;
+  topic: string;
 };
 type HintMetadata = {
   source: "regex" | "alias" | "nlp" | "request";

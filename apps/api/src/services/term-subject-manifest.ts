@@ -1,14 +1,9 @@
-import type { D1Database, VectorizeIndex } from '@cloudflare/workers-types';
-import { errorFields, logger } from '../observability/logger.js';
-import { deleteCourseEmbeddings } from './embeddings.js';
-import type { TermSyncResult } from './parallel-sync.js';
+import type { D1Database } from '@cloudflare/workers-types';
 
 type Options = {
   year: number;
   term: string;
   authoritativeSubjects: string[];
-  syncResult: TermSyncResult;
-  vectorize?: VectorizeIndex;
 };
 
 export type TermSubjectManifestReconciliation = {
@@ -22,11 +17,17 @@ export async function reconcileTermSubjectManifest(
   options: Options,
 ): Promise<TermSubjectManifestReconciliation> {
   const subjects = normalizeManifest(options.authoritativeSubjects);
-  if (!completedExactly(options.syncResult, subjects, options.year, options.term)) {
+  const manifest = JSON.stringify(subjects);
+  const incomplete = await db.prepare(`
+    SELECT 1 AS incomplete FROM json_each(?) AS manifest
+    LEFT JOIN subject_sync_state AS state
+      ON state.term_id = ? AND state.subject = CAST(manifest.value AS TEXT)
+    WHERE state.status IS NOT 'complete' LIMIT 1
+  `).bind(manifest, `${options.year}-${options.term}`).first();
+  if (incomplete) {
     return { applied: false, deletedCourseCount: 0, reason: 'incomplete_sync' };
   }
 
-  const manifest = JSON.stringify(subjects);
   const stale = await db.prepare(`
     SELECT id FROM courses WHERE year = ? AND term = ?
       AND subject NOT IN (SELECT CAST(value AS TEXT) FROM json_each(?))
@@ -51,18 +52,6 @@ export async function reconcileTermSubjectManifest(
     `).bind(options.year, options.term, manifest),
   ]);
   if (deleted.some(result => !result.success)) throw new Error(`failed to reconcile ${termId}`);
-  if (options.vectorize) {
-    for (let offset = 0; offset < staleIds.length; offset += 1_000) {
-      const ids = staleIds.slice(offset, offset + 1_000);
-      await deleteCourseEmbeddings(options.vectorize, ids).catch(error => {
-        logger.warn('courseSync.embeddings.deleteFailed', {
-          termId,
-          courseCount: ids.length,
-          ...errorFields(error),
-        });
-      });
-    }
-  }
   return { applied: true, deletedCourseCount: staleIds.length };
 }
 
@@ -74,24 +63,4 @@ function normalizeManifest(input: string[]): string[] {
     throw new Error('refusing invalid authoritative subject manifest');
   }
   return subjects;
-}
-
-function completedExactly(
-  result: TermSyncResult,
-  subjects: string[],
-  year: number,
-  term: string,
-): boolean {
-  const completed = result.subjectResults
-    .filter(subject => subject.success && !subject.skipped)
-    .map(subject => subject.subject.trim().toUpperCase());
-  return result.year === year
-    && result.term === term
-    && result.termId === `${year}-${term}`
-    && result.subjectResults.length === subjects.length
-    && result.failedSubjects === 0
-    && result.successfulSubjects === subjects.length
-    && completed.length === subjects.length
-    && new Set(completed).size === subjects.length
-    && completed.every(subject => subjects.includes(subject));
 }

@@ -51,9 +51,6 @@ export function presentSearchResponse(input: {
       },
       retrieval: {
         degraded: failed.length > 0,
-        ...(applied.sort.field !== "relevance" && result.meta.lanes.includes("topic_semantic")
-          ? { sortLimitedToRetrievedWindow: true as const }
-          : {}),
       },
     },
     pagination: {
@@ -118,10 +115,10 @@ function searchChips(
       },
     });
   }
-  if (residual && !seen.has(`semantic:${residual}`)) {
+  if (residual && !seen.has(`topic:${residual}`)) {
     chips.push({
-      id: `semantic:${residual}`,
-      type: "semantic",
+      id: `topic:${residual}`,
+      type: "topic",
       label: `Topic: ${residual}`,
       removeRequest: { ...request, query: removePhrase(request.query, residual) },
     });
@@ -131,7 +128,7 @@ function searchChips(
 
 function hintFilterKey(type: Hint["type"]): keyof SearchRequestFiltersDto | null {
   if (type === "courseCode") return "number";
-  if (type === "levelBoost" || type === "negation" || type === "semantic" || type === "crn") return null;
+  if (type === "levelBoost" || type === "negation" || type === "topic" || type === "crn") return null;
   return type as keyof SearchRequestFiltersDto;
 }
 

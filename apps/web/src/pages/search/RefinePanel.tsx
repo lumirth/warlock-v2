@@ -159,7 +159,7 @@ function SearchChipBadge({
 }) {
   return (
     <Badge
-      variant={chip.type === 'semantic' ? 'outline' : 'secondary'}
+      variant={chip.type === 'topic' ? 'outline' : 'secondary'}
       className={cn('h-auto min-h-5 py-0.5 normal-case', getChipClass(chip))}
     >
       {chip.label}

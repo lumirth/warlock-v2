@@ -71,13 +71,9 @@ function loadingLabel({ loadingMore, loading, results }: Props) {
 function Notices({ meta, showInitialSkeleton }: Props) {
   if (showInitialSkeleton) return null
   const degraded = meta?.retrieval?.degraded
-  const bounded = meta?.retrieval?.sortLimitedToRetrievedWindow
   return <>
     {degraded && <Notice icon="warning" title="Partial search results">
       Some search sources did not respond, so these results may be incomplete. Try again later for the full set.
-    </Notice>}
-    {bounded && <Notice title="Sorted within retrieved topic matches">
-      This sort orders the bounded set of semantic matches, not every course. Refine the search to narrow the comparison.
     </Notice>}
   </>
 }

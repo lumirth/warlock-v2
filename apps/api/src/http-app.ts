@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { MiddlewareHandler } from 'hono';
-import type { Ai, D1Database, Fetcher, KVNamespace, RateLimit, VectorizeIndex } from '@cloudflare/workers-types';
-import { requireBearerToken } from './middleware/auth.js';
+import type { D1Database, KVNamespace, RateLimit } from '@cloudflare/workers-types';
+import { requireAdminToken } from './middleware/auth.js';
 import { courseRoutes } from './routes/course.js';
 import { feedbackRoutes } from './routes/feedback.js';
 import { healthRoutes } from './routes/health.js';
@@ -11,11 +11,7 @@ import { syncRoutes } from './routes/sync.js';
 
 export type Bindings = {
   DB: D1Database;
-  VECTORIZE: VectorizeIndex;
-  AI: Ai;
-  SELF: Fetcher;
   GPA_CACHE: KVNamespace;
-  SEARCH_CACHE?: KVNamespace;
   SEARCH_RATE_LIMITER: RateLimit;
   COURSE_RATE_LIMITER: RateLimit;
   FEEDBACK_RATE_LIMITER: RateLimit;
@@ -23,7 +19,6 @@ export type Bindings = {
   FEEDBACK_ALLOWED_ORIGINS: string;
   SYNC_CONCURRENCY: string;
   ADMIN_TOKEN?: string;
-  INTERNAL_TOKEN?: string;
   RMP_AUTH_TOKEN?: string;
 };
 
@@ -94,8 +89,7 @@ app.use('/api/*', cors({
   allowHeaders: ['Content-Type'],
 }));
 
-app.use('/admin/*', requireBearerToken('ADMIN_TOKEN'));
-app.use('/internal/*', requireBearerToken('INTERNAL_TOKEN'));
+app.use('/admin/*', requireAdminToken());
 app.use('/api/search', publicRateLimit('SEARCH_RATE_LIMITER', 'search'));
 app.use('/api/course/*', publicRateLimit('COURSE_RATE_LIMITER', 'course'));
 app.use('/api/feedback', feedbackWriteOrigin());

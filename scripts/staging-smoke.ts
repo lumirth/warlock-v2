@@ -31,14 +31,12 @@ function hasArrays(body: Json, names: string[]): boolean {
 async function main(): Promise<void> {
   const baseUrl = required('STAGING_API_BASE_URL');
   const adminToken = required('STAGING_ADMIN_TOKEN');
-  const internalToken = required('STAGING_INTERNAL_TOKEN');
   const webOrigin = required('STAGING_WEB_ORIGIN');
   const subject = process.env.STAGING_SMOKE_SUBJECT ?? 'CS';
   const number = process.env.STAGING_SMOKE_NUMBER ?? '225';
   const term = process.env.STAGING_SMOKE_TERM ?? 'fall';
   const year = process.env.STAGING_SMOKE_YEAR ?? '2026';
   const admin = { Authorization: `Bearer ${adminToken}` };
-  const batchBody = JSON.stringify({ year: Number(year), term, subjects: [] });
 
   const checks: Check[] = [
     {
@@ -83,27 +81,6 @@ async function main(): Promise<void> {
       request: new Request(endpoint(baseUrl, 'admin/sync/status'), { headers: admin }),
       expectedStatus: 200,
       validate: body => hasArrays(body, ['terms', 'jobs', 'incompleteSubjects']),
-    },
-    {
-      name: 'internal rejects missing token',
-      request: new Request(endpoint(baseUrl, 'internal/sync-batch'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: batchBody,
-      }),
-      expectedStatus: 401,
-    },
-    {
-      name: 'internal accepts token before validation',
-      request: new Request(endpoint(baseUrl, 'internal/sync-batch'), {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${internalToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: batchBody,
-      }),
-      expectedStatus: 400,
     },
   ];
 

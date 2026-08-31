@@ -1,9 +1,8 @@
 # UIUC Course Search
 
-UIUC Course Search is a React application backed by a Cloudflare Worker, D1,
-and optional Vectorize recall. It supports course-code navigation, structured
-filters, natural-language search, course details, and scheduled catalog and
-enrichment refreshes.
+UIUC Course Search is a React application backed by a Cloudflare Worker and D1.
+It supports course-code navigation, structured filters, natural-language search,
+course details, and scheduled catalog and enrichment refreshes.
 
 ## Develop
 
@@ -38,7 +37,7 @@ with `VITE_API_PROXY_TARGET` when Wrangler uses another port.
 
 Public reads are `/`, `/health`, `/api/search`, `/api/course/:subject/:number`,
 and `/api/terms`. `POST /api/feedback` is origin-, size-, and rate-limited.
-`/admin/*` and `/internal/*` use separate bearer tokens.
+`/admin/*` uses a bearer token.
 
 Search interpretation, retrieval, ranking, and presentation are separate API
 modules, but the public request and response are the stable contract. D1
@@ -54,5 +53,3 @@ the rollback. Deployment probes the schema and requires a populated active term.
 
 See [docs/operations.md](docs/operations.md) for database recovery, release,
 live verification, manual refresh, feedback inspection, and rollback commands.
-
-Operational commands and recovery procedures live in [docs/operations.md](docs/operations.md).

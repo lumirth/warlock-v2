@@ -79,5 +79,4 @@ function addRankingEvidence(add: AddEvidence, result: SearchResult, plan: Search
   if (query && result.course.title.toLowerCase().includes(query)) add(`Title match: ${result.course.title}`);
   if (plan.introductoryGateway && plan.softPreferences?.levelBoost) add("Introductory course");
   if (result.keywordRank !== undefined) add(result.keywordRank === 1 ? "Strong keyword match" : "Keyword match");
-  if (result.semanticRank !== undefined) add(result.semanticRank === 1 ? "Strong topic match" : "Related topic match");
 }

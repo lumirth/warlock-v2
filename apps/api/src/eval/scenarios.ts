@@ -73,7 +73,7 @@ export const EVAL_SCENARIOS: EvalScenario[] = [
     top: [{ titleIncludes: 'Compiler' }],
   },
   {
-    name: 'semantic navigation',
+    name: 'topic navigation',
     queries: ['data structures'],
     nonEmpty: true,
     top: [{ titleIncludes: 'Data Structures' }],

@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { request } from 'node:https';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCli } from './lib/run-cli.ts';
@@ -57,19 +56,32 @@ async function catalogReady(baseUrl: string): Promise<boolean> {
 async function bootstrapCatalog(
   baseUrl: string,
   prefix: string,
-): Promise<Record<string, string> | null> {
-  if (await catalogReady(baseUrl)) return null;
+): Promise<Record<string, string>> {
   const headers = { Authorization: `Bearer ${required(`${prefix}_ADMIN_TOKEN`)}` };
   await adminRequest(baseUrl, '/admin/discover-terms', headers);
-  const sync = await adminRequest(baseUrl, '/admin/sync', headers) as {
-    termCount?: number;
-    failedTermCount?: number;
-  };
-  if (!sync.termCount || sync.failedTermCount) throw new Error('Initial catalog sync did not complete.');
-  return headers;
+  for (let step = 0; step < 64; step += 1) {
+    const sync = await adminRequest(baseUrl, '/admin/sync', headers) as {
+      catalogReady?: boolean;
+      processed?: { termId?: string; subjects?: string[]; failedSubjects?: number } | null;
+    };
+    if (sync.catalogReady) return headers;
+    if (sync.processed) {
+      console.log(`Catalog step ${step + 1}: ${sync.processed.termId} `
+        + `${sync.processed.subjects?.length ?? 0} subjects, `
+        + `${sync.processed.failedSubjects ?? 0} failed.`);
+    } else {
+      await new Promise(resolve => setTimeout(resolve, 5_000));
+    }
+  }
+  throw new Error('Initial catalog sync exceeded 64 bounded steps.');
 }
 
 async function bootstrapGpa(baseUrl: string, headers: Record<string, string>): Promise<void> {
+  const status = await adminRequest(baseUrl, '/admin/sync/status', headers, 'GET') as {
+    jobs?: Array<{ id?: string; last_status?: string; items_synced?: number }>;
+  };
+  if (status.jobs?.some(job => job.id === 'gpa'
+    && job.last_status === 'complete' && (job.items_synced ?? 0) > 0)) return;
   const reset = await adminRequest(baseUrl, '/admin/gpa', headers, 'DELETE') as { result?: string };
   if (reset.result !== 'reset_initiated') throw new Error('Initial GPA reset was not accepted.');
   for (let chunk = 0; chunk < 64; chunk += 1) {
@@ -85,25 +97,14 @@ async function adminRequest(
   headers: Record<string, string>,
   method = 'POST',
 ): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const req = request(`${baseUrl}${path}`, { method, headers }, response => {
-      let text = '';
-      response.setEncoding('utf8');
-      response.on('data', chunk => { text += chunk; });
-      response.on('end', () => {
-        const status = response.statusCode ?? 0;
-        if (status < 200 || status >= 300) {
-          reject(new Error(`${path} returned HTTP ${status}.`));
-          return;
-        }
-        try { resolve(text ? JSON.parse(text) : null); }
-        catch { reject(new Error(`${path} returned invalid JSON.`)); }
-      });
-    });
-    req.setTimeout(30 * 60_000, () => req.destroy(new Error(`${path} timed out.`)));
-    req.on('error', reject);
-    req.end();
+  const response = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers,
+    signal: AbortSignal.timeout(4 * 60_000),
   });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}.`);
+  return body;
 }
 
 async function main(): Promise<void> {
@@ -121,7 +122,7 @@ async function main(): Promise<void> {
   ], profile.environment);
   wrangler(['deploy', '--strict'], profile.environment);
   const admin = await bootstrapCatalog(profile.baseUrl, profile.prefix);
-  if (admin) await bootstrapGpa(profile.baseUrl, admin);
+  await bootstrapGpa(profile.baseUrl, admin);
   await healthcheck(profile.baseUrl);
   console.log(`${target} Worker release passed migration, deploy, and health gates.`);
 }

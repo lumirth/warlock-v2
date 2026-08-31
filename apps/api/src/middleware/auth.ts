@@ -1,11 +1,6 @@
 import { createMiddleware } from 'hono/factory';
 
-type AuthBindings = {
-  ADMIN_TOKEN?: string;
-  INTERNAL_TOKEN?: string;
-};
-
-type TokenBinding = keyof AuthBindings;
+type AuthBindings = { ADMIN_TOKEN?: string };
 
 function getBearerToken(header: string | undefined): string | null {
   if (!header) return null;
@@ -31,7 +26,7 @@ function constantTimeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-export function requireBearerToken(binding: TokenBinding) {
+export function requireAdminToken() {
   return createMiddleware<{ Bindings: AuthBindings }>(async (c, next) => {
     const provided = getBearerToken(c.req.header('Authorization'));
 
@@ -39,9 +34,9 @@ export function requireBearerToken(binding: TokenBinding) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const expected = c.env[binding];
+    const expected = c.env.ADMIN_TOKEN;
     if (!expected) {
-      return c.json({ error: `${binding} is not configured` }, 503);
+      return c.json({ error: 'ADMIN_TOKEN is not configured' }, 503);
     }
 
     if (!constantTimeEqual(provided, expected)) {
@@ -50,8 +45,4 @@ export function requireBearerToken(binding: TokenBinding) {
 
     await next();
   });
-}
-
-export function internalAuthHeaders(token?: string): Record<string, string> {
-  return token ? { Authorization: `Bearer ${token}` } : {};
 }

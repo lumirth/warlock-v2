@@ -14,7 +14,7 @@ export default defineConfig(async () => {
           compatibilityDate: "2024-01-01",
           compatibilityFlags: ["nodejs_compat"],
           d1Databases: ["DB"],
-          kvNamespaces: ["GPA_CACHE", "SEARCH_CACHE"],
+          kvNamespaces: ["GPA_CACHE"],
           ratelimits: {
             SEARCH_RATE_LIMITER: {
               namespace_id: "26060101",
@@ -35,7 +35,6 @@ export default defineConfig(async () => {
             FEEDBACK_ALLOWED_ORIGINS: "http://local.test",
             SYNC_CONCURRENCY: "1",
             ADMIN_TOKEN: "admin-token",
-            INTERNAL_TOKEN: "internal-token",
           },
         },
       }),

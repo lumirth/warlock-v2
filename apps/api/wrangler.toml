@@ -14,7 +14,7 @@ SYNC_CONCURRENCY = "25"
 [triggers]
 crons = [
   "0 10,22 * * *",
-  "30 10,22 * * *",
+  "*/15 * * * *",
   "0 8 * * SUN",
   "*/5 * * * *"
 ]
@@ -26,11 +26,6 @@ database_id = "ed2229a8-232e-4d5d-b00a-d0a68d3ef2e8"
 
 [[kv_namespaces]]
 binding = "GPA_CACHE"
-id = "d7e1138ab1344bd2b102ed3502eb0b9f"
-preview_id = "d6493db5a2db45ca8568c9d220a8e2b6"
-
-[[kv_namespaces]]
-binding = "SEARCH_CACHE"
 id = "d7e1138ab1344bd2b102ed3502eb0b9f"
 preview_id = "d6493db5a2db45ca8568c9d220a8e2b6"
 
@@ -58,17 +53,6 @@ namespace_id = "26060103"
   limit = 20
   period = 60
 
-[[vectorize]]
-binding = "VECTORIZE"
-index_name = "course-embeddings"
-
-[ai]
-binding = "AI"
-
-[[services]]
-binding = "SELF"
-service = "uiuc-course-search"
-
 [env.staging]
 name = "uiuc-course-search-staging"
 workers_dev = true
@@ -88,10 +72,6 @@ database_id = "418173df-c007-48ff-8560-4d7347439e6a"
 
 [[env.staging.kv_namespaces]]
 binding = "GPA_CACHE"
-id = "ad02afba85fb40aa9c7d2abceb15d896"
-
-[[env.staging.kv_namespaces]]
-binding = "SEARCH_CACHE"
 id = "ad02afba85fb40aa9c7d2abceb15d896"
 
 [[env.staging.ratelimits]]
@@ -117,14 +97,3 @@ namespace_id = "26060113"
   [env.staging.ratelimits.simple]
   limit = 20
   period = 60
-
-[[env.staging.vectorize]]
-binding = "VECTORIZE"
-index_name = "course-embeddings-staging"
-
-[env.staging.ai]
-binding = "AI"
-
-[[env.staging.services]]
-binding = "SELF"
-service = "uiuc-course-search-staging"

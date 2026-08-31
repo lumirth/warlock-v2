@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-import type { Ai, VectorizeIndex } from "@cloudflare/workers-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubjectSnapshot } from "../../transforms/course.js";
 import { writeSubjectSnapshotToD1 } from "../course-snapshot-writer.js";
@@ -12,7 +11,7 @@ const SECTION_ID = "2026-spring-98765";
 const LATE_SECTION_ID = "2026-spring-99999";
 const CASCADE_XML = `
   <subject id="TST"><label>Test Studies</label>
-    <cascadingCourse id="TST 100"><label>Published despite vector failure</label><creditHours>3</creditHours>
+    <cascadingCourse id="TST 100"><label>Published test course</label><creditHours>3</creditHours>
       <detailedSection id="98765"><sectionNumber>A</sectionNumber><enrollmentStatus>Open</enrollmentStatus></detailedSection>
     </cascadingCourse>
   </subject>`;
@@ -36,14 +35,8 @@ describe("subject snapshot reconciliation", () => {
     await testEnv.DB.prepare("DROP TRIGGER IF EXISTS snapshot_test_abort").run();
   });
 
-  it("publishes the D1 snapshot when embedding upsert fails", async () => {
+  it("publishes the fetched subject snapshot", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(CASCADE_XML));
-    const ai = {
-      run: vi.fn(async () => ({ data: [[0.1, 0.2]] })),
-    } as unknown as Ai;
-    const vectorize = {
-      upsert: vi.fn(async () => { throw new Error("vector unavailable"); }),
-    } as unknown as VectorizeIndex;
 
     const result = await syncSubjects(
       testEnv.DB,
@@ -51,16 +44,13 @@ describe("subject snapshot reconciliation", () => {
       2026,
       "spring",
       ["TST"],
-      vectorize,
-      ai,
     );
 
     expect(result).toMatchObject({ successfulSubjects: 1, failedSubjects: 0 });
-    expect(vectorize.upsert).toHaveBeenCalledOnce();
     await expect(testEnv.DB.prepare(
       "SELECT title FROM courses WHERE id = ?",
     ).bind(COURSE_ID).first()).resolves.toEqual({
-      title: "Published despite vector failure",
+      title: "Published test course",
     });
     await expect(testEnv.DB.prepare(`
       SELECT status, courses_synced, owner_token

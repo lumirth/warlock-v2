@@ -44,8 +44,8 @@ the Worker or Cloudflare directly and verify the resulting boundary.
 - Only a complete authoritative subject run may publish freshness or prune
   vanished course data.
 - D1 snapshot publication and fencing updates remain atomic.
-- `/admin/*` and `/internal/*` have distinct credentials; public feedback has a
-  configured-origin, body-size, and dedicated rate-limit boundary.
+- `/admin/*` requires its credential; public feedback has a configured-origin,
+  body-size, and dedicated rate-limit boundary.
 - `apps/api/migrations/0001_schema.sql` is the current canonical schema. Do not
   recreate `src/db/schema.sql` or a verifier that compares two schema copies.
 - The pre-alpha schema has no historical upgrade path; bind a fresh D1 database

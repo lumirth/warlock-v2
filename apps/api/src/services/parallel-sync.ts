@@ -1,16 +1,10 @@
-import type { Ai, D1Database, VectorizeIndex } from '@cloudflare/workers-types';
+import type { D1Database } from '@cloudflare/workers-types';
 import { parseSubjectCascadeXml, parseSubjectsXml, type ParsedSubjectCascade } from '../cisapi/parser.js';
 import { browserFetch } from '../http/browser-fetch.js';
-import { errorFields, logger } from '../observability/logger.js';
 import { fromSubjectCascade } from '../transforms/course.js';
 import { writeSubjectSnapshotToD1, type SubjectSnapshotPublicationFence } from './course-snapshot-writer.js';
-import {
-  courseSnapshotToEmbeddingData,
-  deleteCourseEmbeddings,
-  upsertCourseEmbeddingsInBatches,
-} from './embeddings.js';
 
-const LOCK_TTL_SECONDS = 30 * 60;
+export const SUBJECT_LEASE_TTL_SECONDS = 5 * 60;
 
 export type ParallelSyncConfig = { cisapiBase: string; concurrency: number };
 export type SubjectSyncResult = {
@@ -80,8 +74,6 @@ export async function syncSubjects(
   year: number,
   term: string,
   subjects: string[],
-  vectorize: VectorizeIndex,
-  ai: Ai,
 ): Promise<TermSyncResult> {
   const started = Date.now();
   const results: SubjectSyncResult[] = [];
@@ -89,7 +81,7 @@ export async function syncSubjects(
   for (let offset = 0; offset < subjects.length; offset += config.concurrency) {
     results.push(...await Promise.all(
       subjects.slice(offset, offset + config.concurrency)
-        .map(subject => syncSubject(db, config, year, term, subject, vectorize, ai)),
+        .map(subject => syncSubject(db, config, year, term, subject)),
     ));
   }
 
@@ -102,8 +94,6 @@ async function syncSubject(
   year: number,
   term: string,
   subject: string,
-  vectorize: VectorizeIndex,
-  ai: Ai,
 ): Promise<SubjectSyncResult> {
   const started = Date.now();
   const lease = await acquireLease(db, `${year}-${term}`, subject);
@@ -114,13 +104,8 @@ async function syncSubject(
   try {
     const parsed = await fetchSubject(config.cisapiBase, year, term, subject);
     const snapshot = fromSubjectCascade(parsed, year, term);
-    const existingIds = await loadCourseIds(db, subject, year, term);
     await renewLease(db, lease);
     const counts = await writeSubjectSnapshotToD1(db, snapshot, { publicationFence: lease });
-
-    await updateEmbeddings(vectorize, ai, snapshot, existingIds).catch(error => {
-      logger.warn('courseSync.embeddings.failed', { subject, ...errorFields(error) });
-    });
     await renewLease(db, lease);
     if (!await finishLease(db, lease, 'complete', counts)) {
       throw new Error('subject lease changed before completion');
@@ -140,21 +125,6 @@ async function syncSubject(
   }
 }
 
-async function updateEmbeddings(
-  vectorize: VectorizeIndex,
-  ai: Ai,
-  snapshot: ReturnType<typeof fromSubjectCascade>,
-  existingIds: string[],
-): Promise<void> {
-  const currentIds = new Set(snapshot.courses.map(course => course.course.id));
-  await upsertCourseEmbeddingsInBatches(
-    vectorize,
-    ai,
-    snapshot.courses.map(courseSnapshotToEmbeddingData),
-  );
-  await deleteCourseEmbeddings(vectorize, existingIds.filter(id => !currentIds.has(id)));
-}
-
 async function fetchSubject(
   base: string,
   year: number,
@@ -167,18 +137,6 @@ async function fetchSubject(
   );
   if (!response.ok || !response.body) throw new Error(`${subject} returned HTTP ${response.status}`);
   return parseSubjectCascadeXml(response.body);
-}
-
-async function loadCourseIds(
-  db: D1Database,
-  subject: string,
-  year: number,
-  term: string,
-): Promise<string[]> {
-  const result = await db.prepare(
-    'SELECT id FROM courses WHERE subject = ? AND year = ? AND term = ?',
-  ).bind(subject, year, term).all<{ id: string }>();
-  return result.results.map(row => row.id);
 }
 
 async function acquireLease(
@@ -196,7 +154,7 @@ async function acquireLease(
       sections_synced = 0, error = NULL, owner_token = excluded.owner_token
     WHERE subject_sync_state.status != 'running'
        OR subject_sync_state.last_sync <= unixepoch() - ?
-  `).bind(termId, subject, ownerToken, LOCK_TTL_SECONDS).run();
+  `).bind(termId, subject, ownerToken, SUBJECT_LEASE_TTL_SECONDS).run();
   return (result.meta?.changes ?? 0) === 1 ? { termId, subject, ownerToken } : null;
 }
 

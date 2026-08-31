@@ -108,7 +108,6 @@ export async function createSearchPlan(
   const plan: SearchPlan = {
     filters: state.filters,
     keywordQuery: sanitizeFtsQuery(residual),
-    semanticQuery: [residual, ...(softPreferences.topicExpansions ?? [])].join(" ").trim(),
     ...(state.filters.subject && state.levelBoost ? { introductoryGateway: true as const } : {}),
     ...(Object.keys(softPreferences).length ? { softPreferences } : {}),
   };

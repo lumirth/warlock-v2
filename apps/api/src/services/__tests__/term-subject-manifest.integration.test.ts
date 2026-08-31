@@ -1,7 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { VectorizeIndex } from '@cloudflare/workers-types';
-import type { TermSyncResult } from '../parallel-sync.js';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { reconcileTermSubjectManifest } from '../term-subject-manifest.js';
 
 const testEnv = env as { DB: D1Database };
@@ -51,62 +49,30 @@ describe('term subject manifest reconciliation', () => {
   });
 
   it('never prunes from partial or failed sync evidence', async () => {
-    const partial = completeResult([]);
+    await testEnv.DB.prepare(`
+      DELETE FROM subject_sync_state WHERE term_id = ? AND subject = 'NEW'
+    `).bind(TERM_ID).run();
 
     await expect(reconcileTermSubjectManifest(testEnv.DB, {
       year: YEAR,
       term: TERM,
       authoritativeSubjects: ['NEW'],
-      syncResult: partial,
     })).resolves.toEqual({
       applied: false,
       deletedCourseCount: 0,
       reason: 'incomplete_sync',
     });
 
-    const failed = completeResult(['NEW']);
-    failed.subjectResults[0] = {
-      ...failed.subjectResults[0],
-      success: false,
-      error: 'upstream failure',
-    };
-    failed.successfulSubjects = 0;
-    failed.failedSubjects = 1;
+    await testEnv.DB.prepare(`
+      INSERT INTO subject_sync_state (
+        term_id, subject, last_sync, status, courses_synced, sections_synced, error
+      ) VALUES (?, 'NEW', unixepoch(), 'failed', 0, 0, 'upstream')
+    `).bind(TERM_ID).run();
 
     await expect(reconcileTermSubjectManifest(testEnv.DB, {
       year: YEAR,
       term: TERM,
       authoritativeSubjects: ['NEW'],
-      syncResult: failed,
-    })).resolves.toMatchObject({ applied: false });
-
-    const wrongTerm = {
-      ...completeResult(['NEW']),
-      termId: `${YEAR + 1}-${TERM}`,
-      year: YEAR + 1,
-    };
-    await expect(reconcileTermSubjectManifest(testEnv.DB, {
-      year: YEAR,
-      term: TERM,
-      authoritativeSubjects: ['NEW'],
-      syncResult: wrongTerm,
-    })).resolves.toMatchObject({ applied: false });
-
-    const extraFailed = completeResult(['NEW']);
-    extraFailed.subjectResults.push({
-      subject: 'OLD',
-      success: false,
-      coursesCount: 0,
-      sectionsCount: 0,
-      durationMs: 1,
-      error: 'unexpected extra failure',
-    });
-    extraFailed.failedSubjects = 1;
-    await expect(reconcileTermSubjectManifest(testEnv.DB, {
-      year: YEAR,
-      term: TERM,
-      authoritativeSubjects: ['NEW'],
-      syncResult: extraFailed,
     })).resolves.toMatchObject({ applied: false });
 
     await expect(courseIds()).resolves.toEqual([
@@ -115,15 +81,11 @@ describe('term subject manifest reconciliation', () => {
     ]);
   });
 
-  it('deletes missing D1 subjects after exact full-run evidence despite vector failure', async () => {
-    const deleteByIds = vi.fn().mockRejectedValue(new Error('vector unavailable'));
-    const vectorize = { deleteByIds } as unknown as VectorizeIndex;
+  it('deletes missing D1 subjects after exact durable completion evidence', async () => {
     const options = {
       year: YEAR,
       term: TERM,
       authoritativeSubjects: ['NEW'],
-      syncResult: completeResult(['NEW']),
-      vectorize,
     };
 
     await expect(
@@ -132,8 +94,6 @@ describe('term subject manifest reconciliation', () => {
       applied: true,
       deletedCourseCount: 1,
     });
-    expect(deleteByIds).toHaveBeenCalledOnce();
-    expect(deleteByIds).toHaveBeenCalledWith([STALE_COURSE_ID]);
     await expect(courseIds()).resolves.toEqual([CURRENT_COURSE_ID]);
 
     const section = await testEnv.DB.prepare(
@@ -188,26 +148,4 @@ async function courseIds(): Promise<string[]> {
     ORDER BY id
   `).bind(YEAR, TERM).all<{ id: string }>();
   return result.results.map(course => course.id);
-}
-
-function completeResult(subjects: string[]): TermSyncResult {
-  const subjectResults = subjects.map(subject => ({
-    subject,
-    success: true,
-    coursesCount: 1,
-    sectionsCount: 1,
-    durationMs: 1,
-  }));
-  return {
-    termId: TERM_ID,
-    year: YEAR,
-    term: TERM,
-    subjectResults,
-    totalCourses: subjectResults.length,
-    totalSections: subjectResults.length,
-    successfulSubjects: subjectResults.length,
-    failedSubjects: 0,
-    durationMs: subjectResults.length,
-    rateLimitHits: 0,
-  };
 }
