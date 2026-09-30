@@ -4,7 +4,7 @@ Find University of Illinois Urbana-Champaign courses by code, topic, instructor,
 GenEd requirement, or meeting time. Search in your own words, refine the results,
 and open a course to compare its sections and follow the official listing.
 
-[Open Course Warlock v2 Beta](https://warlock-v2.pages.dev/)
+[Open Course Warlock v2 Beta](https://course-warlock.pages.dev/)
 
 Try `CS 225`, `400 level CS`, `humanities gen ed`, or `data structures with fagen`.
 Recognized constraints appear as removable filters. Advanced search lets you

@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     ?? `https://warlock${target === 'staging' ? '-staging' : ''}.lumirth.workers.dev`;
   const adminToken = required(`${prefix}_ADMIN_TOKEN`);
   const webOrigin = process.env[`${prefix}_WEB_ORIGIN`]
-    ?? `https://${target === 'staging' ? 'staging.' : ''}warlock-v2.pages.dev`;
+    ?? `https://${target === 'staging' ? 'staging.' : ''}course-warlock.pages.dev`;
   const subject = process.env.SMOKE_SUBJECT || 'CS';
   const number = process.env.SMOKE_NUMBER || '225';
   const readiness = await fetch(endpoint(baseUrl, '/'), {

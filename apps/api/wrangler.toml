@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # API endpoints
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
-FEEDBACK_ALLOWED_ORIGINS = "https://warlock-v2.pages.dev"
+FEEDBACK_ALLOWED_ORIGINS = "https://course-warlock.pages.dev"
 
 [triggers]
 crons = [
@@ -60,7 +60,7 @@ crons = []
 
 [env.staging.vars]
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
-FEEDBACK_ALLOWED_ORIGINS = "https://staging.warlock-v2.pages.dev"
+FEEDBACK_ALLOWED_ORIGINS = "https://staging.course-warlock.pages.dev"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "uiuc-course-search-db-staging"

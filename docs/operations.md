@@ -9,8 +9,8 @@ in `apps/web/dist`.
 
 | Environment | API | Web | Wrangler environment |
 | --- | --- | --- | --- |
-| Staging | `https://warlock-staging.lumirth.workers.dev` | `https://staging.warlock-v2.pages.dev` | `--env staging` |
-| Production | `https://warlock.lumirth.workers.dev` | `https://warlock-v2.pages.dev` | Default |
+| Staging | `https://warlock-staging.lumirth.workers.dev` | `https://staging.course-warlock.pages.dev` | `--env staging` |
+| Production | `https://warlock.lumirth.workers.dev` | `https://course-warlock.pages.dev` | Default |
 
 Staging has no cron triggers. Production discovers terms twice daily, advances
 the catalog every 15 minutes, starts weekly enrichment, and advances GPA imports
@@ -31,11 +31,10 @@ and [KV setup](https://developers.cloudflare.com/kv/get-started/) explain the
 resource commands. Update the names and IDs in both sets of bindings in
 `apps/api/wrangler.toml`.
 
-Create the Pages project with production branch `main`:
-
-```bash
-npx wrangler pages project create warlock-v2 --production-branch main
-```
+The existing Pages project is `course-warlock`, with production branch `main`.
+For another installation, create a
+[Direct Upload project](https://developers.cloudflare.com/pages/get-started/direct-upload/)
+and set its production branch to `main` before deploying.
 
 If you change deployment names, update the Worker names, Pages project and API
 URLs in `apps/web/package.json`, the default API URL in

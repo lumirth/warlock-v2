@@ -2,13 +2,13 @@
 
 ## 2.0.0-beta.1 · 2026-09-30
 
-Open [Course Warlock v2 Beta](https://warlock-v2.pages.dev/).
+Open [Course Warlock v2 Beta](https://course-warlock.pages.dev/).
 This release retains the current schema and Cloudflare hosting.
 
 - Renamed the application and repository to Course Warlock v2 Beta and
   `warlock-v2`. The production API is `warlock.lumirth.workers.dev`;
   staging uses `warlock-staging.lumirth.workers.dev` and
-  `staging.warlock-v2.pages.dev`.
+  `staging.course-warlock.pages.dev`.
 
 - Licensed original code under MIT. Web builds include dependency notices and
   the Geist font license alongside their assets.
