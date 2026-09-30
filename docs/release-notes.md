@@ -10,6 +10,9 @@ This release retains the current schema and Cloudflare hosting.
   staging uses `warlock-staging.lumirth.workers.dev` and
   `staging.course-warlock.pages.dev`.
 
+- Corrected GPA, quality, and instructor difficulty values appearing under
+  the wrong headings in table view.
+
 - Licensed original code under MIT. Web builds include dependency notices and
   the Geist font license alongside their assets.
 - Documented the student search experience, local database setup, catalog

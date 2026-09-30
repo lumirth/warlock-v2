@@ -46,9 +46,9 @@ function ResultRow({ result, returnTo }: { result: SearchCourseResultDto; return
     <CourseCell course={course} returnTo={returnTo} />
     <RegistrationCell course={course} />
     <TermCell course={course} historical={historical} />
+    <TableCell className="tabular-nums">{formatNumber(course.metrics.avgGpa, 2)}</TableCell>
     <MetricCell value={qualityLabel(course)} tone="quality" />
     <MetricCell value={difficultyLabel(course)} tone="difficulty" />
-    <TableCell className="tabular-nums">{formatNumber(course.metrics.avgGpa, 2)}</TableCell>
     <TableCell className="tabular-nums">{formatNumber(course.metrics.primaryInstructorRating, 1)}</TableCell>
     <TableCell className="tabular-nums">{formatCourseLevel(course)}</TableCell>
     <TableCell className="tabular-nums">{formatCredits(course.creditHours, course.creditHoursText)}</TableCell>

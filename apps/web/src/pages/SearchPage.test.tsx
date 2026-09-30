@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import {
   createMemoryRouter,
@@ -109,6 +110,34 @@ afterEach(() => {
 })
 
 describe('URL-owned search', () => {
+  it('displays each course metric under its matching table heading', async () => {
+    const result = course()
+    result.course.metrics = {
+      primaryInstructorRating: 3.4,
+      avgGpa: 3.28,
+      gpaSampleSize: 100,
+      qualityScore: 50,
+      instructorDifficultyScore: 60,
+    }
+    api.search.mockResolvedValue(response([result], { query: 'CS 225' }))
+    renderAt('/?q=CS+225&view=table')
+
+    const table = await screen.findByRole('table')
+    const row = await within(table).findByRole('row', { name: /CS 225 Data Structures/ })
+    const headings = within(table).getAllByRole('columnheader')
+    const cells = within(row).getAllByRole('cell')
+    for (const [heading, value] of [
+      ['Avg GPA', '3.28'],
+      ['Quality signal', 'Fair'],
+      ['Instructor difficulty', 'Moderate'],
+      ['RMP rating', '3.4'],
+    ]) {
+      const column = headings.findIndex(cell => cell.textContent === heading)
+      expect(column).toBeGreaterThanOrEqual(0)
+      expect(cells[column]).toHaveTextContent(value)
+    }
+  })
+
   it('cancels superseded work and ignores its stale response', async () => {
     const first = deferred<SearchResponseDto>()
     const second = deferred<SearchResponseDto>()
