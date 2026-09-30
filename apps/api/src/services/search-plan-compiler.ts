@@ -12,7 +12,7 @@ import {
   type SearchRequestFiltersDto,
   type SearchSort,
   type SearchTermFilter,
-} from "@uiuc-course-search/query-types";
+} from "@warlock-v2/query-types";
 import type { Hint, SearchFilters, SearchPlan } from "./search-planner-types.js";
 
 export type SearchPlanningResult = { hints: Hint[]; residual: string; plan: SearchPlan };

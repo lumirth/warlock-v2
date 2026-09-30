@@ -3,7 +3,7 @@ import {
   type CourseRegistrationSummaryDto,
   type CourseRequirementDto,
   type CourseSummaryDto,
-} from '@uiuc-course-search/query-types';
+} from '@warlock-v2/query-types';
 import type { Course } from '../db/types.js';
 
 type Options = {

@@ -6,7 +6,7 @@ import {
   type SearchCourseResultDto,
   type SearchSort,
   type SortField,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'

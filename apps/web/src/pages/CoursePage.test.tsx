@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { expect, it, vi } from 'vitest'
-import type { CourseDetailResponseDto } from '@uiuc-course-search/query-types'
+import type { CourseDetailResponseDto } from '@warlock-v2/query-types'
 import { api } from '../lib/api-client'
 import { CoursePage } from './CoursePage'
 

@@ -4,7 +4,7 @@ import {
   decodeFeedbackSubmitDto,
   FEEDBACK_BODY_MAX_BYTES,
   type FeedbackSubmitDto,
-} from '@uiuc-course-search/query-types';
+} from '@warlock-v2/query-types';
 import { readBoundedJsonBody } from '../http/bounded-json-body.js';
 import { errorFields, logger } from '../observability/logger.js';
 

@@ -1,6 +1,7 @@
 {
-  "name": "uiuc-course-search-monorepo",
+  "name": "warlock-v2",
   "private": true,
+  "license": "MIT",
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.0.0"
@@ -10,7 +11,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev -w @uiuc-course-search/api\" \"npm run dev -w @uiuc-course-search/web\"",
+    "dev": "concurrently \"npm run dev -w @warlock-v2/api\" \"npm run dev -w @warlock-v2/web\"",
     "build": "npm run build --workspaces && npm run typecheck:scripts",
     "test": "npm test --workspaces && npm run test:scripts",
     "test:workspaces": "npm test --workspaces",
@@ -21,13 +22,14 @@
     "lint": "eslint .",
     "bundle:budget": "tsx scripts/check-bundle-budget.ts",
     "security:secrets": "tsx scripts/check-secrets.ts",
-    "eval:staging": "if [ -z \"$EVAL_BASE_URL\" ]; then echo \"EVAL_BASE_URL is required, for example https://api-staging.example.workers.dev\" >&2; exit 1; fi; npm run eval -w @uiuc-course-search/api -- \"$EVAL_BASE_URL\"",
-    "test:staging": "tsx scripts/staging-smoke.ts",
-    "deploy:api:staging": "npm run deploy:staging -w @uiuc-course-search/api",
-    "deploy:web:staging": "npm run deploy:staging -w @uiuc-course-search/web",
+    "eval:staging": "if [ -z \"$EVAL_BASE_URL\" ]; then echo \"EVAL_BASE_URL is required, for example https://api-staging.example.workers.dev\" >&2; exit 1; fi; npm run eval -w @warlock-v2/api -- \"$EVAL_BASE_URL\"",
+    "test:staging": "tsx scripts/smoke.ts",
+    "test:production": "tsx scripts/smoke.ts --target production",
+    "deploy:api:staging": "npm run deploy:staging -w @warlock-v2/api",
+    "deploy:web:staging": "npm run deploy:staging -w @warlock-v2/web",
     "deploy:staging": "npm run deploy:api:staging && npm run deploy:web:staging",
-    "deploy:api:production": "npm run deploy:production -w @uiuc-course-search/api",
-    "deploy:web:production": "npm run deploy:production -w @uiuc-course-search/web",
+    "deploy:api:production": "npm run deploy:production -w @warlock-v2/api",
+    "deploy:web:production": "npm run deploy:production -w @warlock-v2/web",
     "deploy:production": "npm run deploy:api:production && npm run deploy:web:production"
   },
   "devDependencies": {
@@ -45,6 +47,9 @@
     "wrangler": "^4.127.1"
   },
   "overrides": {
-    "esbuild": "0.28.1"
-  }
+    "esbuild": "0.28.1",
+    "sharp": "0.35.4",
+    "undici": "7.29.1"
+  },
+  "version": "2.0.0-beta.1"
 }

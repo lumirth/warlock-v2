@@ -2,7 +2,7 @@ import { SearchIcon } from 'lucide-react'
 import type {
   SearchChipDto,
   SearchMetaDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { Button } from '@/components/ui/button'
 
 export function EmptyResults({

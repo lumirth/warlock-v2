@@ -1,5 +1,7 @@
 {
-  "name": "@uiuc-course-search/query-types",
+  "name": "@warlock-v2/query-types",
+  "private": true,
+  "license": "MIT",
   "main": "index.ts",
   "types": "index.ts",
   "scripts": {
@@ -7,5 +9,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint ."
-  }
+  },
+  "version": "2.0.0-beta.1"
 }

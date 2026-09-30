@@ -3,7 +3,7 @@ import {
   getInstructorDifficultyTierLabel,
   type QualityTierLabel,
   type InstructorDifficultyTierLabel,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 
 type QualityLabel = QualityTierLabel
 type InstructorDifficultyLabel = InstructorDifficultyTierLabel

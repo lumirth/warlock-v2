@@ -1,4 +1,4 @@
-import type { TermStatus } from '@uiuc-course-search/query-types';
+import type { TermStatus } from '@warlock-v2/query-types';
 
 export type TermStateStatus = TermStatus;
 export type SyncRunStatus = 'pending' | 'running' | 'complete' | 'failed';

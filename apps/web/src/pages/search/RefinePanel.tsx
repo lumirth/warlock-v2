@@ -8,7 +8,7 @@ import type {
   SearchMetaDto,
   SearchScope,
   SearchTermOptionDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -67,11 +67,7 @@ export function RefinePanel({
             <h2 className="text-sm font-semibold">
               {meta ? 'Refine results' : 'Search filters'}
             </h2>
-            <p className="text-muted-foreground text-xs">
-              {meta
-                ? resultCountLabel
-                : 'Choose filters before or after searching.'}
-            </p>
+            {meta && <p className="text-muted-foreground text-xs">{resultCountLabel}</p>}
           </div>
           <Button
             size="xs"
@@ -101,12 +97,10 @@ export function RefinePanel({
             />
 
             <div className="bg-card sticky bottom-0 -mx-1 mt-4 flex flex-col gap-3 border-t px-1 py-4 sm:static sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-muted-foreground text-xs">
-                {hasAdvancedDraftErrors
-                  ? 'Correct the highlighted fields before applying.'
-                  : 'Filters apply to the current search text.'}
-              </p>
-              <div className="flex gap-2">
+              {hasAdvancedDraftErrors && <p className="text-muted-foreground text-xs">
+                Correct the highlighted fields before applying.
+              </p>}
+              <div className="flex gap-2 sm:ml-auto">
                 <Button
                   size="xs"
                   variant="outline"
@@ -140,7 +134,7 @@ function Interpretation({ meta, onRemoveChip, onAmbiguityAction }: {
   return <>
     {chips.length ? <div aria-label="Active search filters" className="flex flex-wrap gap-2">
       {chips.map((chip) => <SearchChipBadge key={chip.id} chip={chip} onRemoveChip={onRemoveChip} />)}
-    </div> : meta ? <p className="text-muted-foreground text-sm">Searching by topic.</p> : null}
+    </div> : null}
     {meta?.ui.ambiguityActions.length ? <div className="flex flex-col gap-2">
       <p className="text-muted-foreground text-xs">Did you mean a different interpretation?</p>
       <div className="flex flex-wrap gap-2">{meta.ui.ambiguityActions.map((action) =>

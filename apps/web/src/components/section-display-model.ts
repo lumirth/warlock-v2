@@ -2,7 +2,7 @@ import {
   type CourseSectionAvailabilityStatus,
   type CourseSectionDto,
   type CourseSectionMeetingDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { formatTime } from '../utils/formatters'
 
 export type SectionTone = 'success' | 'warning' | 'destructive' | 'muted'

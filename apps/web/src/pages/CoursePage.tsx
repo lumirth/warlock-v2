@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { AlertCircleIcon, ArrowLeftIcon, ExternalLinkIcon } from 'lucide-react'
-import type { CourseDetailDto } from '@uiuc-course-search/query-types'
-import { courseRequirementLabel } from '@uiuc-course-search/query-types'
+import type { CourseDetailDto } from '@warlock-v2/query-types'
+import { courseRequirementLabel } from '@warlock-v2/query-types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -47,8 +47,8 @@ export function CoursePage() {
 
   useEffect(() => {
     document.title = course
-      ? `${course.subject} ${course.number}: ${course.title} · UIUC Course Search`
-      : `${subject ?? 'Course'} ${number ?? ''} · UIUC Course Search`.trim()
+      ? `${course.subject} ${course.number}: ${course.title} · Course Warlock v2 Beta`
+      : `${subject ?? 'Course'} ${number ?? ''} · Course Warlock v2 Beta`.trim()
   }, [course, number, subject])
 
   if (loading) return <PageContainer className="py-8">

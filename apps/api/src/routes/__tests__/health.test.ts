@@ -19,7 +19,7 @@ describe('health routes', () => {
     expect(root.status).toBe(200);
     await expect(root.json()).resolves.toEqual({
       status: 'ok',
-      message: 'UIUC Course Search API',
+      message: 'Course Warlock v2 Beta API',
       term: 'spring 2026',
     });
 

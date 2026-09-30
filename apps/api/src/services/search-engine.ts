@@ -5,7 +5,7 @@ import {
   type CourseRegistrationSummaryDto,
   type SearchScope,
   type SearchSort,
-} from "@uiuc-course-search/query-types";
+} from "@warlock-v2/query-types";
 import type { Course } from "../db/types.js";
 import { errorFields, logger } from "../observability/logger.js";
 import { courseRequirementRowToDto, type CourseRequirementSourceRow } from "../transforms/course-requirements.js";

@@ -6,11 +6,11 @@ import {
   type SearchRequestDto,
   type SearchResponseDto,
   type SearchTermOptionsDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 
 const DEFAULT_API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.PROD ? 'https://uiuc-course-search.lumirth.workers.dev' : '')
+  (import.meta.env.PROD ? 'https://warlock.lumirth.workers.dev' : '')
 
 type ApiRequestOptions = {
   signal?: AbortSignal

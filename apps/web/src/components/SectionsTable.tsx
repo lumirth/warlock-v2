@@ -1,5 +1,5 @@
 import { ChevronDownIcon, ExternalLinkIcon } from 'lucide-react'
-import type { CourseInstructorDto, CourseSectionDto } from '@uiuc-course-search/query-types'
+import type { CourseInstructorDto, CourseSectionDto } from '@warlock-v2/query-types'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'

@@ -45,7 +45,7 @@ describe('actual application security boundaries', () => {
   });
 
   it('allows only exact configured feedback origins', async () => {
-    const configured = 'https://uiuc-course-search-web.pages.dev';
+    const configured = 'https://warlock-v2.pages.dev';
     expect(isAllowedFeedbackOrigin(configured, configured)).toBe(true);
     expect(isAllowedFeedbackOrigin(`${configured}.evil.example`, configured)).toBe(false);
     expect(isAllowedFeedbackOrigin(undefined, configured)).toBe(false);

@@ -8,7 +8,7 @@ import {
   isSearchSortField,
   type SearchSort,
   type SortField,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { SORT_FIELD_OPTIONS } from './search-options'

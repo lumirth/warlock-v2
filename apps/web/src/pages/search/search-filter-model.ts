@@ -3,7 +3,7 @@ import {
   type SearchRequestFilterKey,
   type SearchRequestFiltersDto,
   type SearchRequestDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 
 export type AdvancedFilterErrors = Partial<
   Record<SearchRequestFilterKey, string>

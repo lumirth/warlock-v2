@@ -3,7 +3,7 @@ import {
   type SearchCourseResultDto,
   type CourseSummaryDto,
   type SearchChipDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import {
   getQualityLabel,
   getQualityTone,

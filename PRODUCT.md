@@ -1,33 +1,29 @@
 # Product
 
-## Register
+UIUC students use this tool while choosing classes, checking alternatives,
+and comparing sections. The main task is course discovery for registration.
 
-product
+A student should be able to describe a course, recognize useful results,
+adjust constraints, inspect an offering, and reach the official university
+listing. Search should accept familiar course codes and student language.
+Recognized filters should remain visible and removable.
 
-## Users
+## Product decisions
 
-UIUC students use this while choosing classes, checking alternatives, comparing sections, and resolving vague course ideas into specific offerings. They may be planning for current registration, browsing upcoming terms, or checking historical context, but the primary task is practical course discovery.
+- Prioritize current offerings. Label retained historical offerings so students
+  can distinguish them when they include past terms.
+- Keep advanced filters separate from the visible search text.
+- Present GPA and instructor ratings with their source and coverage limits.
+  Avoid implying that they predict a student's experience.
+- Show section details and provide official links beside registration decisions.
+- Let students report a search or course issue from the relevant page, with its
+  context attached.
+- Keep the tool usable on narrow screens and with a keyboard or screen reader.
 
-## Product Purpose
+The interface is an academic utility. Compact controls and readable course data
+take priority over promotional headings, decorative charts, and animated cards.
+Use shared UI components and native form behavior where they fit the task.
 
-UIUC Course Search helps students search courses in natural language, understand active versus historical offerings, compare quality and workload signals, and reach official university course information quickly. Success means a student can type an intuitive query, recognize why results appeared, adjust filters without fighting the search box, and submit low-friction feedback when the system behaves unexpectedly.
-
-## Brand Personality
-
-Clear, calm, rigorous. The product should feel like a dependable academic utility for everyone, not an internal analytics tool or a marketing page.
-
-## Anti-references
-
-Do not make the interface look like a generic AI dashboard, a decorative SaaS landing page, or an internal-only admin tool. Avoid pseudo-hero sections, pill overload, excessive badges, oversized rounded cards, glassy shells, dramatic shadows, decorative gradients, unexplained technical copy, and score visualizations that make course quality look more precise than it is.
-
-## Design Principles
-
-- Start with the task: search, refine, compare, inspect, and report feedback.
-- Preserve student language over implementation language.
-- Treat active/registrable offerings as primary and historical offerings as clearly secondary.
-- Keep richer quality, GPA, rating, and section data visible without turning it into decoration.
-- Prefer consistent shadcn/ui product surfaces over bespoke one-off styling.
-
-## Accessibility & Inclusion
-
-Target WCAG AA for contrast, focus visibility, keyboard navigation, form labels, and screen-reader names. Avoid interaction patterns that rely only on color, animation, or hover. Maintain reduced-motion support and keep the interface readable on narrow mobile screens.
+The product is unofficial. Course Explorer remains the place to confirm
+registration details. [Design](DESIGN.md) records interface choices;
+[architecture](docs/architecture.md) describes current behavior and data limits.

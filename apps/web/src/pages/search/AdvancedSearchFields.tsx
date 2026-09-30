@@ -7,7 +7,7 @@ import {
   type SearchRequestFiltersDto,
   type SearchScope,
   type SearchTermOptionDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { FieldGroup, FieldLegend, FieldSet } from '@/components/ui/field'
 import {
   CREDIT_OPTIONS, DELIVERY_OPTIONS, INSTRUCTOR_DIFFICULTY_OPTIONS, LEVEL_OPTIONS,
@@ -98,7 +98,7 @@ function TermFields({ advancedDraft, availableTerms, termOptionsError, termOptio
         parse={(value) => isSearchTimeFilter(value) ? value : undefined} />
       <Select change={change} keyName="partOfTerm" label="Part of term" placeholder="Any part" value={filters.partOfTerm} options={PART_OF_TERM_OPTIONS} />
     </FieldGroup>
-    <AdvancedCheckboxField id="advanced-include-past" label="Include past terms" description="Add historical offerings to the result pool."
+    <AdvancedCheckboxField id="advanced-include-past" label="Include past terms"
       checked={advancedDraft.scope === 'all'} onChange={(checked) => changeScope(checked ? 'all' : undefined)} />
   </FieldSet>
 }

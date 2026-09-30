@@ -29,13 +29,29 @@ function hasArrays(body: Json, names: string[]): boolean {
 }
 
 async function main(): Promise<void> {
-  const baseUrl = required('STAGING_API_BASE_URL');
-  const adminToken = required('STAGING_ADMIN_TOKEN');
-  const webOrigin = required('STAGING_WEB_ORIGIN');
-  const subject = process.env.STAGING_SMOKE_SUBJECT ?? 'CS';
-  const number = process.env.STAGING_SMOKE_NUMBER ?? '225';
-  const term = process.env.STAGING_SMOKE_TERM ?? 'fall';
-  const year = process.env.STAGING_SMOKE_YEAR ?? '2026';
+  const args = process.argv.slice(2);
+  const target = args.length === 0 ? 'staging'
+    : args.length === 2 && args[0] === '--target' ? args[1] : undefined;
+  if (target !== 'staging' && target !== 'production') {
+    throw new Error('Usage: smoke.ts [--target staging|production]');
+  }
+  const prefix = target === 'production' ? 'PRODUCTION' : 'STAGING';
+  const baseUrl = process.env[`${prefix}_API_BASE_URL`]
+    ?? `https://warlock${target === 'staging' ? '-staging' : ''}.lumirth.workers.dev`;
+  const adminToken = required(`${prefix}_ADMIN_TOKEN`);
+  const webOrigin = process.env[`${prefix}_WEB_ORIGIN`]
+    ?? `https://${target === 'staging' ? 'staging.' : ''}warlock-v2.pages.dev`;
+  const subject = process.env.SMOKE_SUBJECT || 'CS';
+  const number = process.env.SMOKE_NUMBER || '225';
+  const readiness = await fetch(endpoint(baseUrl, '/'), {
+    signal: AbortSignal.timeout(30_000),
+  });
+  const published = object(await readiness.json().catch(() => undefined));
+  const offering = typeof published.term === 'string'
+    ? /^(winter|spring|summer|fall) (\d{4})$/.exec(published.term) : null;
+  if (!readiness.ok || !offering) throw new Error('No populated current catalog term.');
+  const term = process.env.SMOKE_TERM || offering[1];
+  const year = process.env.SMOKE_YEAR || offering[2];
   const admin = { Authorization: `Bearer ${adminToken}` };
 
   const checks: Check[] = [
@@ -46,9 +62,13 @@ async function main(): Promise<void> {
     },
     {
       name: 'search contract',
-      request: new Request(endpoint(baseUrl, 'api/search?q=CS%20225')),
+      request: new Request(endpoint(baseUrl, `api/search?q=${encodeURIComponent(`${subject} ${number}`)}&term=${term}&year=${year}`)),
       expectedStatus: 200,
-      validate: body => Array.isArray(body.results),
+      validate: body => Array.isArray(body.results)
+        && body.results.some(value => {
+          const result = object(object(value).course);
+          return result.subject === subject && result.number === number;
+        }),
     },
     {
       name: 'course contract',
@@ -85,14 +105,14 @@ async function main(): Promise<void> {
   ];
 
   const failures = await runChecks(checks);
-  if (failures.length > 0) throw new Error(`Staging smoke failed: ${failures.join(', ')}`);
+  if (failures.length > 0) throw new Error(`${target} smoke failed: ${failures.join(', ')}`);
 }
 
 async function runChecks(checks: Check[]): Promise<string[]> {
   const failures: string[] = [];
   for (const check of checks) {
     try {
-      const response = await fetch(check.request);
+      const response = await fetch(check.request, { signal: AbortSignal.timeout(30_000) });
       const body = object(await response.json().catch(() => undefined));
       const passed = response.status === check.expectedStatus
         && (!check.validate || check.validate(body));

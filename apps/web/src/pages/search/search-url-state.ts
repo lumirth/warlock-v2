@@ -4,7 +4,7 @@ import {
   searchRequestToQueryEntries,
   searchRequestHasFilters,
   type SearchRequestDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import type { ResultViewMode } from './search-sort-model'
 
 export type SearchUrlState = {

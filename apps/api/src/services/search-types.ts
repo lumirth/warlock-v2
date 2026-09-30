@@ -3,7 +3,7 @@ import type {
   CourseRequirementDto,
   SearchScope,
   SearchSort,
-} from "@uiuc-course-search/query-types";
+} from "@warlock-v2/query-types";
 import type { Course } from "../db/types.js";
 import type { Hint, SearchPlan } from "./search-planner-types.js";
 

@@ -1,4 +1,4 @@
-name = "uiuc-course-search"
+name = "warlock"
 main = "src/index.ts"
 compatibility_date = "2026-08-30"
 compatibility_flags = ["nodejs_compat"]
@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # API endpoints
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
-FEEDBACK_ALLOWED_ORIGINS = "https://uiuc-course-search-web.pages.dev"
+FEEDBACK_ALLOWED_ORIGINS = "https://warlock-v2.pages.dev"
 
 [triggers]
 crons = [
@@ -51,7 +51,7 @@ namespace_id = "26060103"
   period = 60
 
 [env.staging]
-name = "uiuc-course-search-staging"
+name = "warlock-staging"
 workers_dev = true
 preview_urls = false
 
@@ -60,7 +60,7 @@ crons = []
 
 [env.staging.vars]
 CISAPI_BASE = "https://courses.illinois.edu/cisapp/explorer"
-FEEDBACK_ALLOWED_ORIGINS = "https://staging.uiuc-course-search-web.pages.dev"
+FEEDBACK_ALLOWED_ORIGINS = "https://staging.warlock-v2.pages.dev"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "uiuc-course-search-db-staging"

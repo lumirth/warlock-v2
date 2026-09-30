@@ -3,7 +3,7 @@ import {
   formatGenEdDisplayLabel,
   isGenericAnyRequirementFilter,
   type SearchCourseResultDto,
-} from "@uiuc-course-search/query-types";
+} from "@warlock-v2/query-types";
 import { toCourseDto } from "../dto/course.js";
 import type { Hint, SearchPlan } from "./search-planner-types.js";
 import type { SearchResult } from "./search-types.js";

@@ -1,20 +1,21 @@
 {
-  "name": "@uiuc-course-search/web",
+  "name": "@warlock-v2/web",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "deploy:staging": "VITE_API_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev npm run build && wrangler pages deploy dist --project-name uiuc-course-search-web --branch staging",
-    "deploy:production": "VITE_API_BASE_URL=https://uiuc-course-search.lumirth.workers.dev npm run build && wrangler pages deploy dist --project-name uiuc-course-search-web --branch main",
+    "deploy:staging": "VITE_API_BASE_URL=https://warlock-staging.lumirth.workers.dev npm run build && wrangler pages deploy dist --project-name warlock-v2 --branch staging",
+    "deploy:production": "VITE_API_BASE_URL=https://warlock.lumirth.workers.dev npm run build && wrangler pages deploy dist --project-name warlock-v2 --branch main",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint src"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
-    "@uiuc-course-search/query-types": "*",
+    "@warlock-v2/query-types": "*",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
     "react": "^18.3.1",
@@ -37,5 +38,6 @@
     "vite": "^8.0.16",
     "vitest": "^4.1.8",
     "wrangler": "^4.127.1"
-  }
+  },
+  "version": "2.0.0-beta.1"
 }

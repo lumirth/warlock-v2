@@ -1,7 +1,7 @@
 import { AlertCircleIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import type { SearchTermOptionsDto } from '@uiuc-course-search/query-types'
+import type { SearchTermOptionsDto } from '@warlock-v2/query-types'
 import { FeedbackButton } from '../components/FeedbackButton'
 import { PageContainer } from '@/components/PageContainer'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -22,8 +22,8 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
 
   useEffect(() => {
     document.title = search.meta
-      ? `${search.resultsHeadingLabel} · UIUC Course Search`
-      : 'UIUC Course Search'
+      ? `${search.resultsHeadingLabel} · Course Warlock v2 Beta`
+      : 'Course Warlock v2 Beta'
   }, [search.meta, search.resultsHeadingLabel])
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function SearchPage({ includeH1 = true }: { includeH1?: boolean }) {
 
   return (
     <PageContainer className="py-4 sm:py-6">
-      {includeH1 && <h1 className="sr-only">UIUC Course Search</h1>}
+      {includeH1 && <h1 className="sr-only">Course Warlock v2 Beta</h1>}
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <SearchForm
           query={search.query}

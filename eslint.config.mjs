@@ -11,7 +11,7 @@ const restricted = (files, group, message) => ({
 export default [
   { ignores: [
     '**/.wrangler/**', '**/.worktrees/**', '**/dist/**', '**/node_modules/**',
-    '**/coverage/**', '**/*.config.js', '**/*.config.cjs',
+    '**/coverage/**', 'artifacts/**', '**/*.config.js', '**/*.config.cjs',
   ] },
   js.configs.recommended,
   ...tseslint.configs.recommended,

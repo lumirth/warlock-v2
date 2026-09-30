@@ -9,7 +9,7 @@ import type {
   SearchResponseDto,
   SearchSort,
   SortField,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

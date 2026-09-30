@@ -6,7 +6,7 @@ import {
   type CourseDetailResponseDto,
   type CourseInstructorDto,
   type CourseSectionDto,
-} from '@uiuc-course-search/query-types';
+} from '@warlock-v2/query-types';
 import type { Course, CourseGened, InstructorLinkReadRow, Meeting, Section } from '../db/types.js';
 import { makeCourseId } from '../db/ids.js';
 import { toCourseDto } from '../dto/course.js';

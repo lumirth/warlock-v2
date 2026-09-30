@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react'
 import { SearchIcon } from 'lucide-react'
-import { SEARCH_QUERY_MAX_LENGTH } from '@uiuc-course-search/query-types'
+import { SEARCH_QUERY_MAX_LENGTH } from '@warlock-v2/query-types'
 import { Button } from '@/components/ui/button'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { FIRST_RUN_EXAMPLE_QUERIES } from './search-options'

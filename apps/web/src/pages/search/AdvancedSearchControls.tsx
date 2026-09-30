@@ -69,12 +69,12 @@ export function AdvancedSelectField({ id, label, placeholder, value, options, di
 export function AdvancedCheckboxField({ id, label, description, checked, onChange }: {
   id: string
   label: string
-  description: string
+  description?: string
   checked: boolean
   onChange: (checked: boolean) => void
 }) {
   return <label htmlFor={id} className="bg-background flex items-start gap-2 rounded-md border px-3 py-2.5">
     <input id={id} type="checkbox" checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} className="accent-primary mt-0.5 size-5" />
-    <span><strong className="block text-sm font-medium">{label}</strong><span className="text-muted-foreground text-xs">{description}</span></span>
+    <span><strong className="block text-sm font-medium">{label}</strong>{description && <span className="text-muted-foreground text-xs">{description}</span>}</span>
   </label>
 }

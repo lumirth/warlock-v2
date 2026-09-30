@@ -7,7 +7,7 @@ import {
   FEEDBACK_EXPECTED_MAX_LENGTH,
   FEEDBACK_MESSAGE_MAX_LENGTH,
   type FeedbackSubmitDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { api } from '../lib/api-client'
 
 type Context = Omit<Partial<FeedbackSubmitDto>, 'page' | 'expected' | 'message'>
@@ -26,8 +26,8 @@ function defaults(props: Props) {
   return {
     ...props,
     context: props.context ?? {},
-    expectedPlaceholder: props.expectedPlaceholder ?? 'What did you expect instead?',
-    messagePlaceholder: props.messagePlaceholder ?? 'Anything else we should know?',
+    expectedPlaceholder: props.expectedPlaceholder,
+    messagePlaceholder: props.messagePlaceholder,
     buttonVariant: props.buttonVariant ?? 'ghost',
   }
 }
@@ -105,9 +105,6 @@ export function FeedbackButton(rawProps: Props) {
         <XIcon aria-hidden />
       </Button>
       <h2 id={`${id}-title`} className="pr-8 text-base font-semibold">What looked wrong?</h2>
-      <p className="text-muted-foreground mt-1 text-sm leading-6">
-        {page === 'search' ? 'Tell us what the result set missed.' : 'Tell us which course signal or source looks wrong.'}
-      </p>
       <form className="mt-4 flex flex-col gap-3" onSubmit={submit}>
         <label className="text-sm font-medium" htmlFor={`${id}-expected`}>What did you expect?</label>
         <input

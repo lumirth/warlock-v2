@@ -8,7 +8,7 @@ import {
   type SearchRequestFiltersDto,
   type SearchRequestPaginationDto,
   type SearchResponseDto,
-} from "@uiuc-course-search/query-types";
+} from "@warlock-v2/query-types";
 import type { Hint, SearchFilters } from "./search-planner-types.js";
 import { presentSearchCourseResult } from "./search-result-presentation.js";
 import type { SearchPipelineResult } from "./search-types.js";

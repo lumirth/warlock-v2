@@ -1,4 +1,4 @@
-import { canonicalRequirementCode } from '@uiuc-course-search/query-types';
+import { canonicalRequirementCode } from '@warlock-v2/query-types';
 
 export type ResultRule = {
   subjects?: string[];

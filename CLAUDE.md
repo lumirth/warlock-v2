@@ -1,6 +1,6 @@
 # Repository guidance
 
-UIUC Course Search is a Cloudflare Worker/D1 API with a React/Vite client. Keep
+Course Warlock v2 Beta is a Cloudflare Worker/D1 API with a React/Vite client. Keep
 changes at the narrowest owning boundary and prefer observable behavior over
 tests of call wiring, SQL strings, or duplicated intermediate objects.
 
@@ -48,7 +48,7 @@ the Worker or Cloudflare directly and verify the resulting boundary.
   body-size, and dedicated rate-limit boundary.
 - `apps/api/migrations/0001_schema.sql` is the current canonical schema. Do not
   recreate `src/db/schema.sql` or a verifier that compares two schema copies.
-- The pre-alpha schema has no historical upgrade path; bind a fresh D1 database
+- The current schema has no historical upgrade path; bind a fresh D1 database
   after schema changes.
 
 ## Verification placement

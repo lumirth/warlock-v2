@@ -29,8 +29,7 @@ export class AppErrorBoundary extends Component<
           <div className="mx-auto max-w-xl">
             <h1 className="text-3xl font-semibold">The app needs a fresh start</h1>
             <p className="text-muted-foreground mt-3 leading-7">
-              An unexpected error interrupted this page. Reload to restore a
-              clean search session.
+              An unexpected error interrupted this page. Reload to try again.
             </p>
             <Button
               type="button"

@@ -48,7 +48,7 @@ describe('application boundary', () => {
       screen.getByRole('button', { name: /switch to dark mode/i })
     )
     expect(document.documentElement).toHaveClass('dark')
-    expect(localStorage.getItem('uiuc-course-search-theme')).toBe('dark')
+    expect(localStorage.getItem('warlock-v2-theme')).toBe('dark')
   })
 
   it('contains unexpected render failures', () => {

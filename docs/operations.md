@@ -1,124 +1,195 @@
 # Operations
 
-The repository keeps operational policy at executable boundaries. Cloudflare,
-the deployed Worker, and D1 are evidence; copied route inventories and prose
-reports are not.
+Run the [local gate](../README.md#verify-changes) before deployment. Use the
+committed lockfile and keep the tested source revision available for rollback.
+The hosted release consists of a Worker, its D1/KV bindings, and the web assets
+in `apps/web/dist`.
 
-## Local gate
+## Environments and resources
 
-Use Node 22 and the lockfile:
+| Environment | API | Web | Wrangler environment |
+| --- | --- | --- | --- |
+| Staging | `https://warlock-staging.lumirth.workers.dev` | `https://staging.warlock-v2.pages.dev` | `--env staging` |
+| Production | `https://warlock.lumirth.workers.dev` | `https://warlock-v2.pages.dev` | Default |
+
+Staging has no cron triggers. Production discovers terms twice daily, advances
+the catalog every 15 minutes, starts weekly enrichment, and advances GPA imports
+every five minutes. Cron expressions in `apps/api/wrangler.toml` use UTC.
+
+The databases retain their original `uiuc-course-search-db-production` and
+`uiuc-course-search-db-staging` names and binding IDs. They contain the existing
+catalog, ratings, and feedback; the application rename does not replace them.
+
+Full-catalog refresh requires Workers Paid because subject batches exceed the
+Free plan's D1 query limit. Authenticate Wrangler with `npx wrangler login` or
+the account's configured API credentials before deploying.
+
+The checked-in bindings belong to this deployment. For a new Cloudflare account,
+create separate D1 databases and GPA-cache KV namespaces for staging and
+production. Cloudflare's [D1 setup](https://developers.cloudflare.com/d1/get-started/)
+and [KV setup](https://developers.cloudflare.com/kv/get-started/) explain the
+resource commands. Update the names and IDs in both sets of bindings in
+`apps/api/wrangler.toml`.
+
+Create the Pages project with production branch `main`:
 
 ```bash
-npm ci
-npm run build
-npm test
-npm run lint
-npm run bundle:budget
-npm run security:secrets
-npm audit --audit-level=high
+npx wrangler pages project create warlock-v2 --production-branch main
 ```
 
-`npm run build` already compiles every workspace and produces the web bundle.
-The API integration suite applies the canonical migration to a real local D1
-database. There is no second bootstrap schema or generated schema verifier.
-The single migration is intentionally clean-slate: recreate the pre-alpha D1
-database and update its `database_id` binding after schema changes instead of
-carrying upgrade compatibility. The release command rejects an old schema;
-readiness requires every current term to have complete subject evidence and
-stored courses.
+If you change deployment names, update the Worker names, Pages project and API
+URLs in `apps/web/package.json`, the default API URL in
+`apps/web/src/lib/api-client.ts`, and the defaults in `scripts/release-api.ts`
+and `scripts/smoke.ts`. Set `FEEDBACK_ALLOWED_ORIGINS` to each web deployment's
+actual origin. These are comma-separated origins; preview URLs need explicit
+permission to submit feedback.
 
-## Worker release
+## Secrets
 
-The full-catalog refresh requires Workers Paid; one subject batch intentionally exceeds the Free plan's D1 query limit.
-
-Create a fresh D1 database, put its ID in the target binding, and keep the old
-database intact. The API release applies the clean schema, rejects a stale
-schema, deploys with strict configuration checks, advances the D1-backed
-catalog in bounded subject batches, imports GPA, and requires every current
-catalog term to be fully published. Interrupted releases resume from D1; there
-is no monolithic sync request or separate queue.
+Set `ADMIN_TOKEN` separately on each Worker. The release and smoke commands
+need the matching token in the operator's environment as `STAGING_ADMIN_TOKEN`
+or `PRODUCTION_ADMIN_TOKEN`. They do not install the Worker secret.
 
 ```bash
-export STAGING_ADMIN_TOKEN=<secret>
+npx wrangler secret put ADMIN_TOKEN --config apps/api/wrangler.toml --env staging
+npx wrangler secret put ADMIN_TOKEN --config apps/api/wrangler.toml
+```
+
+Set `RMP_AUTH_TOKEN` the same way when enabling instructor-rating enrichment.
+Catalog loading and GPA imports do not require that token. `/admin/enrich` and
+the weekly ratings refresh do require it. Store secrets in your credential
+manager rather than repository files.
+
+## Release staging
+
+Set `STAGING_ADMIN_TOKEN` to the staging Worker's credential, then run:
+
+```bash
 npm run deploy:api:staging
 ```
 
-For production, use `PRODUCTION_ADMIN_TOKEN` and `npm run deploy:api:production`. Wrangler's
-`--strict` deployment mode rejects conflicting remote configuration.
+The API command validates its target and local credential before running
+Wrangler. It applies migrations, probes the schema, deploys with `--strict`,
+discovers terms, and calls bounded catalog steps until every current term is
+complete. It then imports GPA data and checks that the root endpoint exposes
+a populated current term. Strict deployment rejects conflicting remote
+configuration.
 
-Deploy the web application only after the API gate succeeds:
+If a release stops, inspect the reported failure and rerun the command after
+correcting it. Catalog progress and in-progress GPA imports remain in D1.
+Completed imports are reused. A transport timeout can leave a subject or GPA
+lease running; wait for its expiry before retrying if status reports it busy.
+The command limits catalog loading to 64 steps and GPA loading to 64 chunks.
+
+`STAGING_API_BASE_URL` can override the API URL the release command calls. It
+must identify the Worker Wrangler deploys. An override changes neither the
+deployment target nor the web bundle's API URL.
+
+After the API gate succeeds:
 
 ```bash
 npm run deploy:web:staging
-# or
-npm run deploy:web:production
-```
-
-## Live verification
-
-The staging smoke command exercises the actual health, search, course,
-feedback, admin-auth, and sync-status boundaries:
-
-```bash
-export STAGING_API_BASE_URL=https://uiuc-course-search-staging.lumirth.workers.dev
-export STAGING_WEB_ORIGIN=https://staging.uiuc-course-search-web.pages.dev
-export STAGING_ADMIN_TOKEN=<secret>
 npm run test:staging
+EVAL_BASE_URL=https://warlock-staging.lumirth.workers.dev npm run eval:staging
 ```
 
-Then run the compact public-search behavior corpus against the same deployment:
+The web command builds with the staging API URL and uploads `dist` to the
+Pages staging branch. The smoke command checks readiness, a populated search,
+course details, feedback validation, and admin authentication/status. It sends
+invalid feedback only, so it does not create a feedback record.
+
+Open the staging web URL and exercise search, filter removal, advanced search,
+the table view, a course page, and the return link. Check keyboard navigation,
+a narrow layout, and both themes. API smoke and public eval do not verify the
+rendered client.
+
+## Release production
+
+Use the staging-tested revision. Set `PRODUCTION_ADMIN_TOKEN`, then run:
 
 ```bash
-EVAL_BASE_URL="$STAGING_API_BASE_URL" npm run eval:staging
+npm run deploy:api:production
+npm run deploy:web:production
+npm run test:production
+EVAL_BASE_URL=https://warlock.lumirth.workers.dev npm run eval:staging
 ```
 
-## Data refresh
+The public eval command uses `EVAL_BASE_URL` despite its `eval:staging` name.
+`PRODUCTION_API_BASE_URL` and `PRODUCTION_WEB_ORIGIN` override production smoke
+defaults. Staging uses the corresponding `STAGING_` variables. Smoke chooses a
+published current term from the API root; `SMOKE_SUBJECT`, `SMOKE_NUMBER`,
+`SMOKE_TERM`, and `SMOKE_YEAR` select another known offering when needed.
 
-Scheduled Worker workflows are the normal refresh mechanism. Operators should
-use the same Worker application boundary for an exceptional manual run:
+Record the source revision, Worker version, and Pages deployment URL returned
+by Wrangler. Repeat the browser workflow on the production URL and confirm its
+requests use the production Worker.
+
+## Refresh data
+
+Production cron triggers normally own refreshes. For manual recovery, set `API`
+and `ADMIN_TOKEN` for the intended environment:
 
 ```bash
-AUTH="Authorization: Bearer $ADMIN_TOKEN"
-curl -fsS -X POST -H "$AUTH" "$API/admin/discover-terms"
-curl -fsS -X POST -H "$AUTH" "$API/admin/sync" # repeat until catalogReady
-curl -fsS -X DELETE -H "$AUTH" "$API/admin/gpa"
-curl -fsS -X POST -H "$AUTH" "$API/admin/gpa" # repeat until isComplete
-curl -fsS -X POST -H "$AUTH" "$API/admin/enrich"
-curl -fsS -H "$AUTH" "$API/admin/sync/status"
+curl -fsS -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API/admin/discover-terms"
+curl -fsS -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API/admin/sync"
+curl -fsS -H "Authorization: Bearer $ADMIN_TOKEN" "$API/admin/sync/status"
 ```
 
-Each `/admin/sync` call owns at most one subject batch; `subject_sync_state` is
-the durable queue and publication fence. The 15-minute course schedule advances
-one batch at a time and rotates through the oldest completed subjects after the
-catalog is ready.
+Repeat sync until `catalogReady` is `true`. Each call processes at most 20
+subjects for one term. The scheduled sync also rotates through the oldest
+completed subjects after initial publication. An ordinary manual sync recovers
+incomplete subjects; it does not force a refresh of an already complete catalog.
 
-`DELETE /admin/gpa` starts a staged GPA generation without removing the
-currently published one. Each `POST /admin/gpa` imports one bounded chunk; the
-final call atomically replaces GPA statistics, rebuilds derived links/scores,
-and reports `isComplete`. `/admin/enrich` refreshes RMP data and rebuilds links
-and scores from the published GPA generation.
-
-Do not maintain a second queue, cursor, run generation, or release state
-machine. The existing subject rows own both progress and safe retry.
-
-## Feedback inspection
-
-Feedback remains ordinary D1 data. Inspect it directly rather than exporting it
-through a second schema and classification pipeline:
+To start a new GPA generation:
 
 ```bash
-npx wrangler d1 execute DB --remote \
+curl -fsS -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" "$API/admin/gpa"
+curl -fsS -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API/admin/gpa"
+```
+
+DELETE must report `reset_initiated`. Repeat POST until `success` and
+`isComplete` are both `true`. After an interruption, resume with POST.
+If the cached dataset expires during an import, start a new generation with
+DELETE. Reset retains published GPA statistics while new source rows load.
+The final import rebuilds GPA statistics and derived comparison data.
+
+With `RMP_AUTH_TOKEN` configured, `POST /admin/enrich` refreshes Rate My
+Professors data and rebuilds instructor links and scores. Failed subjects and
+job state appear in `/admin/sync/status`; use `npx wrangler tail` with the target
+configuration to inspect Worker errors. Progress and retry policy belong to
+the Worker, so operational scripts call it rather than maintain a second queue.
+
+## Inspect feedback
+
+Select the target environment explicitly. For staging:
+
+```bash
+npx wrangler d1 execute DB --remote --env staging \
   --config apps/api/wrangler.toml \
-  --command 'SELECT id, page, query, message, created_at FROM feedback_events ORDER BY created_at DESC LIMIT 100'
+  --command 'SELECT id, page, query, expected, message, created_at FROM feedback_events ORDER BY created_at DESC LIMIT 100'
 ```
 
-When a report exposes a missing search behavior, add the smallest reproducer to
-the owning unit test or to `apps/api/src/eval/scenarios.ts` when it is a deployed
-public-contract promise.
+Omit `--env staging` for production. Feedback stores the submitted text and
+page/search context in D1. When a report identifies missing search behavior,
+add a reproducer to the owning test or the public eval when the promise belongs
+to the deployed API.
 
-## Rollback
+## Database changes and rollback
 
-Stop on the first failed release or smoke gate. Roll the Worker back using
-Cloudflare's version history and restore the previous D1 binding ID from Git.
-The clean-slate release never mutates that database. Re-run health, staging
-smoke, and public eval after rollback.
+`apps/api/migrations/0001_schema.sql` is the canonical current schema. It
+initializes a fresh database and does not upgrade the retired schema history.
+For a schema change, create a new D1 database and update the target binding.
+Keep the previous database intact; it contains the prior catalog and feedback.
+Applying the same migration name to an old database does not upgrade it. The
+release's schema probe rejects incompatible state.
+
+For a Worker regression without a schema change, use Cloudflare's
+[Worker rollback](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/rollbacks/)
+to restore a known version. For a database replacement, deploy the known source
+revision with its previous binding ID. Check the previous database's schema
+matches that Worker. Restore the corresponding web deployment through
+[Pages rollback](https://developers.cloudflare.com/pages/configuration/rollbacks/).
+
+Run the target smoke, public eval, and browser workflow after rollback. Avoid
+the catalog-bootstrap release command during an urgent rollback if you only
+intend to restore the previous Worker and binding.

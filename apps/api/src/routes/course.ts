@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
-import { SEARCH_TERM_VALUES } from '@uiuc-course-search/query-types';
+import { SEARCH_TERM_VALUES } from '@warlock-v2/query-types';
 import { errorFields, logger } from '../observability/logger.js';
 import { loadCourseDetail } from '../services/course-detail.js';
 

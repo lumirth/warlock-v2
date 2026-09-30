@@ -3,9 +3,9 @@ import {
   type SearchSort,
   type SortDirection,
   type SortField,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 
-const RESULT_VIEW_STORAGE_KEY = 'uiuc-course-search.result-view'
+const RESULT_VIEW_STORAGE_KEY = 'warlock-v2.result-view'
 
 export type ResultViewMode = 'cards' | 'table'
 

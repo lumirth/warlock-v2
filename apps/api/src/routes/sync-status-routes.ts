@@ -3,7 +3,7 @@ import {
   type SearchTermFilter,
   type SearchTermOptionsDto,
   type TermStatus,
-} from '@uiuc-course-search/query-types';
+} from '@warlock-v2/query-types';
 import { Hono } from 'hono';
 import { errorFields, logger } from '../observability/logger.js';
 import type { SyncRouteBindings } from '../services/sync-operations.js';

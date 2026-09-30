@@ -1,5 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { FEEDBACK_BODY_MAX_BYTES } from '@uiuc-course-search/query-types';
+import { FEEDBACK_BODY_MAX_BYTES } from '@warlock-v2/query-types';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 import { feedbackRoutes } from '../feedback.js';

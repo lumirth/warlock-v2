@@ -62,7 +62,7 @@ async function fetchPage(
     headers: {
       Authorization: authToken,
       'Content-Type': 'application/json',
-      'User-Agent': 'UIUC-Course-Search/1.0',
+      'User-Agent': 'Course-Warlock/2.0-beta',
     },
     body: JSON.stringify({ query: QUERY, variables: { cursor } }),
     signal: AbortSignal.timeout(60_000),

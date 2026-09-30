@@ -15,7 +15,7 @@ import {
   type SearchResponseDto,
   type SearchScope,
   type SortField,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import {
   useCallback,
   useEffect,
@@ -147,7 +147,6 @@ export function useSearch() {
     return params.toString()
   }, [location.search])
   const [query, setQueryState] = useState(url.request?.query ?? '')
-  const [queryDirty, setQueryDirty] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedSearchStateDto>(
     () => advancedFor(url.request)
@@ -223,7 +222,6 @@ export function useSearch() {
       setLoading(false)
       setLoadingMore(false)
       setQueryState('')
-      setQueryDirty(false)
       setAdvancedDraft({ filters: {} })
       return
     }
@@ -232,7 +230,6 @@ export function useSearch() {
     // the user is still editing.
     if (mode !== 'refresh') {
       setQueryState(url.request.query)
-      setQueryDirty(false)
       setAdvancedDraft(advancedStateFromRequest(url.request))
     }
     void run(url.request, mode)
@@ -282,7 +279,7 @@ export function useSearch() {
   )
 
   const derived = deriveResults(response, url.request)
-  const { activeRequest, interpretedRequest, activeAdvanced, sort, results, pagination, meta } = derived
+  const { activeRequest, activeAdvanced, sort, results, pagination, meta } = derived
   const validation = validateAdvancedFilters(advancedDraft)
   const display = displayFlags(response, loading, activeRequest, error, meta, activeAdvanced, advancedDraft)
 
@@ -302,7 +299,6 @@ export function useSearch() {
     query,
     setQuery(value: string) {
       setQueryState(value)
-      setQueryDirty(true)
     },
     advancedOpen,
     setAdvancedOpen,
@@ -325,11 +321,8 @@ export function useSearch() {
         return
       }
       const { filters, scope } = splitAdvancedSearchState(validation.value)
-      const appliedQuery = queryDirty
-        ? query.trim()
-        : (interpretedRequest?.query ?? query).trim()
       setAdvancedOpen(false)
-      go({ query: appliedQuery, filters, scope, sort }, 'refine')
+      go({ query: query.trim(), filters, scope, sort }, 'refine')
     },
     resetAdvanced() {
       setAdvancedDraft(activeAdvanced)

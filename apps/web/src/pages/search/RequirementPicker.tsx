@@ -4,7 +4,7 @@ import {
   GENED_REQUIREMENT_GROUPS,
   requirementFilter,
   type SearchRequestFiltersDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 
 type Requirement = SearchRequestFiltersDto['requirement']
 type Mode = 'any' | 'all'

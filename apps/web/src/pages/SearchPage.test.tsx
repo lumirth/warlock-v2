@@ -16,7 +16,7 @@ import type {
   SearchCourseResultDto,
   SearchRequestDto,
   SearchResponseDto,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 import { TestUiProvider } from '../test/TestUiProvider'
 import { SearchPage } from './SearchPage'
 
@@ -232,5 +232,34 @@ describe('URL-owned search', () => {
       /could not be restored/i
     )
     expect(api.search).not.toHaveBeenCalled()
+  })
+
+  it('keeps an interpreted course query when applying advanced filters', async () => {
+    const initial = response([course()], { query: 'CS 225' })
+    initial.meta.interpretedRequest = {
+      query: '', filters: { subject: 'CS', number: '225' },
+    }
+    api.search
+      .mockResolvedValueOnce(initial)
+      .mockImplementation(async (request: SearchRequestDto) => response(
+        request.query === 'CS 225' ? [course()] : [course('173', 'Discrete Structures')],
+        request,
+      ))
+    const router = createMemoryRouter(
+      [{ path: '/', element: <SearchPage /> }],
+      { initialEntries: ['/?q=CS+225'] },
+    )
+    render(<TestUiProvider><RouterProvider router={router} /></TestUiProvider>)
+
+    expect(await screen.findByText(/CS 225: Data Structures/i)).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: /advanced search/i }))
+    fireEvent.change(screen.getByLabelText('Level'), { target: { value: '200' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply filters/i }))
+
+    expect(await screen.findByText(/CS 225: Data Structures/i)).toBeVisible()
+    expect(screen.getByLabelText(/course search query/i)).toHaveValue('CS 225')
+    expect(new URLSearchParams(router.state.location.search).get('q')).toBe('CS 225')
+    expect(new URLSearchParams(router.state.location.search).get('level')).toBe('200')
+    expect(screen.queryByText(/CS 173: Discrete Structures/i)).not.toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { searchTermRank } from '@uiuc-course-search/query-types';
+import { searchTermRank } from '@warlock-v2/query-types';
 import { parseEnrollmentStatusesXml, parseSubjectsXml, parseTermListXml } from '../cisapi/parser.js';
 import { makeTermId } from '../db/ids.js';
 import type { TermStateStatus } from '../db/types.js';

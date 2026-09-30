@@ -2,7 +2,7 @@ import {
   canonicalRequirementCode,
   normalizeRequirementCodes,
   type CourseRequirementDto,
-} from '@uiuc-course-search/query-types';
+} from '@warlock-v2/query-types';
 import type { CourseSnapshot } from './course.js';
 
 export type CourseRequirementSourceRow = {

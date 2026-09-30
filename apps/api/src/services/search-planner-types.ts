@@ -7,7 +7,7 @@ import type {
   SearchStatusFilter,
   SearchTermFilter,
   SearchTimeFilter,
-} from "@uiuc-course-search/query-types";
+} from "@warlock-v2/query-types";
 
 /** The one executable representation shared by planning, SQL, and ranking. */
 export type SearchFilters = {

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { decodeSearchRequestQuery } from "@uiuc-course-search/query-types";
+import { decodeSearchRequestQuery } from "@warlock-v2/query-types";
 import type { D1Database } from "@cloudflare/workers-types";
 import { search } from "../services/search-pipeline.js";
 import { presentSearchResponse } from "../services/search-response-presenter.js";

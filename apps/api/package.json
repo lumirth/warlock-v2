@@ -1,8 +1,10 @@
 {
-  "name": "@uiuc-course-search/api",
+  "name": "@warlock-v2/api",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "wrangler dev",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "build": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --config vitest.config.ts",
@@ -12,8 +14,8 @@
     "lint": "eslint src",
     "eval": "tsx src/eval/runner.ts",
     "check": "npm run typecheck && npm run test",
-    "deploy:staging": "tsx ../../scripts/staging-api-release.ts",
-    "deploy:production": "tsx ../../scripts/staging-api-release.ts --target production"
+    "deploy:staging": "tsx ../../scripts/release-api.ts",
+    "deploy:production": "tsx ../../scripts/release-api.ts --target production"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
@@ -23,9 +25,10 @@
     "wrangler": "^4.127.1"
   },
   "dependencies": {
-    "@uiuc-course-search/query-types": "*",
+    "@warlock-v2/query-types": "*",
     "domhandler": "^5.0.3",
     "hono": "^4.13.5",
     "htmlparser2": "^10.0.0"
-  }
+  },
+  "version": "2.0.0-beta.1"
 }

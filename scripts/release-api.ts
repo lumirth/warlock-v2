@@ -10,12 +10,12 @@ const PROFILES = {
   staging: {
     prefix: 'STAGING',
     environment: 'staging',
-    baseUrl: 'https://uiuc-course-search-staging.lumirth.workers.dev',
+    baseUrl: 'https://warlock-staging.lumirth.workers.dev',
   },
   production: {
     prefix: 'PRODUCTION',
-    environment: undefined,
-    baseUrl: 'https://uiuc-course-search.lumirth.workers.dev',
+    environment: '',
+    baseUrl: 'https://warlock.lumirth.workers.dev',
   },
 } as const;
 
@@ -25,14 +25,14 @@ function required(name: string): string {
   return value;
 }
 
-function wrangler(args: string[], environment?: string): void {
+function wrangler(args: string[], environment: string): void {
   const result = spawnSync('npx', [
     '--no-install',
     'wrangler',
     ...args,
     '--config',
     join(repoRoot, 'apps/api/wrangler.toml'),
-    ...(environment ? ['--env', environment] : []),
+    '--env', environment,
   ], { cwd: repoRoot, stdio: 'inherit' });
   if (result.status !== 0) throw new Error(`Wrangler failed: ${args.join(' ')}`);
 }
@@ -55,9 +55,9 @@ async function catalogReady(baseUrl: string): Promise<boolean> {
 
 async function bootstrapCatalog(
   baseUrl: string,
-  prefix: string,
+  adminToken: string,
 ): Promise<Record<string, string>> {
-  const headers = { Authorization: `Bearer ${required(`${prefix}_ADMIN_TOKEN`)}` };
+  const headers = { Authorization: `Bearer ${adminToken}` };
   await adminRequest(baseUrl, '/admin/discover-terms', headers);
   for (let step = 0; step < 64; step += 1) {
     let sync: {
@@ -88,12 +88,17 @@ async function bootstrapGpa(baseUrl: string, headers: Record<string, string>): P
   const status = await adminRequest(baseUrl, '/admin/sync/status', headers, 'GET') as {
     jobs?: Array<{ id?: string; last_status?: string; items_synced?: number }>;
   };
-  if (status.jobs?.some(job => job.id === 'gpa'
-    && job.last_status === 'complete' && (job.items_synced ?? 0) > 0)) return;
-  const reset = await adminRequest(baseUrl, '/admin/gpa', headers, 'DELETE') as { result?: string };
-  if (reset.result !== 'reset_initiated') throw new Error('Initial GPA reset was not accepted.');
+  const gpa = status.jobs?.find(job => job.id === 'gpa');
+  if (gpa?.last_status === 'complete' && (gpa.items_synced ?? 0) > 0) return;
+  if (!gpa || gpa.last_status === 'complete') {
+    const reset = await adminRequest(baseUrl, '/admin/gpa', headers, 'DELETE') as { result?: string };
+    if (reset.result !== 'reset_initiated') throw new Error('Initial GPA reset was not accepted.');
+  }
   for (let chunk = 0; chunk < 64; chunk += 1) {
-    const result = await adminRequest(baseUrl, '/admin/gpa', headers) as { isComplete?: boolean };
+    const result = await adminRequest(baseUrl, '/admin/gpa', headers) as {
+      success?: boolean; isComplete?: boolean; message?: string;
+    };
+    if (!result.success) throw new Error(result.message ?? 'GPA import failed.');
     if (result.isComplete) return;
   }
   throw new Error('Initial GPA import exceeded 64 chunks.');
@@ -116,22 +121,29 @@ async function adminRequest(
 }
 
 async function main(): Promise<void> {
-  const target = process.argv.includes('--target')
-    ? process.argv[process.argv.indexOf('--target') + 1]
-    : 'staging';
+  const args = process.argv.slice(2);
+  const target = args.length === 0 ? 'staging'
+    : args.length === 2 && args[0] === '--target' ? args[1] : undefined;
   if (target !== 'staging' && target !== 'production') {
-    throw new Error('Usage: staging-api-release.ts [--target staging|production]');
+    throw new Error('Usage: release-api.ts [--target staging|production]');
   }
   const profile = PROFILES[target as Target];
+  const adminToken = required(`${profile.prefix}_ADMIN_TOKEN`);
+  const baseUrl = process.env[`${profile.prefix}_API_BASE_URL`]?.trim() || profile.baseUrl;
+  const url = new URL(baseUrl);
+  if (url.protocol !== 'https:'
+    && !(url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname))) {
+    throw new Error('The API base URL must use HTTPS.');
+  }
   wrangler(['d1', 'migrations', 'apply', 'DB', '--remote'], profile.environment);
   wrangler([
     'd1', 'execute', 'DB', '--remote',
     '--command', 'SELECT owner_token FROM sync_state LIMIT 0',
   ], profile.environment);
   wrangler(['deploy', '--strict'], profile.environment);
-  const admin = await bootstrapCatalog(profile.baseUrl, profile.prefix);
-  await bootstrapGpa(profile.baseUrl, admin);
-  await healthcheck(profile.baseUrl);
+  const admin = await bootstrapCatalog(baseUrl.replace(/\/+$/, ''), adminToken);
+  await bootstrapGpa(baseUrl.replace(/\/+$/, ''), admin);
+  await healthcheck(baseUrl);
   console.log(`${target} Worker release passed migration, deploy, and health gates.`);
 }
 

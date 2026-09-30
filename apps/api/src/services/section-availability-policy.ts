@@ -1,7 +1,7 @@
 import type {
   CourseSectionAvailabilityDto,
   CourseSectionAvailabilityStatus,
-} from "@uiuc-course-search/query-types";
+} from "@warlock-v2/query-types";
 
 type SectionAvailabilityInput = {
   status?: string | null;

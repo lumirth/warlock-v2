@@ -35,8 +35,7 @@ export function Scorecard(props: Props) {
   })
   return <Card>
     <CardHeader>
-      <CardTitle>Evidence-limited signals</CardTitle>
-      <p className="text-muted-foreground text-xs leading-5">Historical GPA and linked Rate My Professors data, not official evaluations.</p>
+      <CardTitle>GPA and instructor ratings</CardTitle>
     </CardHeader>
     <CardContent>
       <dl className="flex flex-col gap-2">
@@ -48,7 +47,7 @@ export function Scorecard(props: Props) {
         </div>)}
       </dl>
       <p className="text-muted-foreground mt-3 border-t pt-3 text-xs leading-5">
-        Quality uses GPA and linked RMP evidence only with enough samples. Instructor difficulty is an RMP signal, not assigned work.
+        Quality combines historical GPA and Rate My Professors ratings when both have enough samples. Difficulty comes from instructor ratings.
       </p>
     </CardContent>
   </Card>

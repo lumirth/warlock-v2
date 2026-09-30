@@ -5,7 +5,7 @@ import {
   SEARCH_TIME_VALUES,
   SEARCH_INSTRUCTOR_DIFFICULTY_VALUES,
   type SortField,
-} from '@uiuc-course-search/query-types'
+} from '@warlock-v2/query-types'
 
 export const ANY_SELECT_VALUE = '__any__'
 

@@ -18,7 +18,7 @@ healthRoutes.get('/', async (c) => {
   `).first<{ term: string; year: number }>();
   return c.json({
     status: 'ok',
-    message: 'UIUC Course Search API',
+    message: 'Course Warlock v2 Beta API',
     term: current ? `${current.term} ${current.year}` : null,
   });
 });

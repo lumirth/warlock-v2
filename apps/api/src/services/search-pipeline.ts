@@ -1,5 +1,5 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { NormalizedSearchRequestDto } from "@uiuc-course-search/query-types";
+import type { NormalizedSearchRequestDto } from "@warlock-v2/query-types";
 import { executeSearch } from "./search-engine.js";
 import { createSearchPlan } from "./search-plan-compiler.js";
 import type { SearchPipelineResult } from "./search-types.js";

@@ -10,7 +10,7 @@ import { PageContainer } from '@/components/PageContainer'
 
 type ThemeMode = 'light' | 'dark'
 
-const THEME_STORAGE_KEY = 'uiuc-course-search-theme'
+const THEME_STORAGE_KEY = 'warlock-v2-theme'
 
 function readStoredTheme(): ThemeMode | null {
   try {
@@ -84,7 +84,7 @@ function App() {
           <Link
             to="/"
             className="text-foreground flex min-w-0 items-center gap-2 no-underline"
-            aria-label="UIUC Course Search home"
+            aria-label="Course Warlock v2 Beta home"
           >
             <img
               src={courseSearchLogo}
@@ -93,12 +93,14 @@ function App() {
               className="size-9 shrink-0"
             />
             {isSearchPage ? (
-              <h1 className="truncate text-lg leading-6 font-semibold sm:text-2xl">
-                UIUC Course Search
+              <h1 className="text-base leading-5 font-semibold sm:text-2xl sm:leading-6">
+                Course Warlock{' '}
+                <span className="block text-xs font-medium sm:inline sm:text-sm">v2 Beta</span>
               </h1>
             ) : (
-              <span className="truncate text-lg leading-6 font-semibold sm:text-2xl">
-                UIUC Course Search
+              <span className="text-base leading-5 font-semibold sm:text-2xl sm:leading-6">
+                Course Warlock{' '}
+                <span className="block text-xs font-medium sm:inline sm:text-sm">v2 Beta</span>
               </span>
             )}
           </Link>
@@ -118,7 +120,7 @@ function App() {
               )}
             </Button>
             <a
-              href="https://github.com/lumirth/uiuc-course-search"
+              href="https://github.com/lumirth/warlock-v2"
               target="_blank"
               rel="noreferrer"
               title="GitHub"
@@ -143,7 +145,7 @@ function App() {
       </main>
       <footer className="mt-8 border-t">
         <PageContainer className="text-muted-foreground flex flex-wrap justify-between gap-2 py-5 text-xs">
-          <p>Unofficial planning tool. Confirm details before registering.</p>
+          <p>Beta · Unofficial planning tool. Results may be incomplete; confirm details before registering.</p>
           <a
             href="https://courses.illinois.edu/"
             target="_blank"
@@ -160,7 +162,7 @@ function App() {
 
 function NotFoundPage() {
   useEffect(() => {
-    document.title = 'Page not found · UIUC Course Search'
+    document.title = 'Page not found · Course Warlock v2 Beta'
   }, [])
 
   return (
