@@ -1,6 +1,6 @@
 # Local development
 
-Run commands from the repository root with Node 22 or later and npm 10 or later.
+Run commands from the repository root with Node 22.13+ or Node 24+ and npm 10 or later.
 Install the locked dependencies with `npm ci`.
 
 ## Start the application

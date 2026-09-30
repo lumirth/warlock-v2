@@ -2,9 +2,8 @@
 
 ## 2.0.0-beta.1 · 2026-09-30
 
-Course Warlock v2 Beta is available at [warlock-v2.pages.dev](https://warlock-v2.pages.dev/).
-Search interpretation, catalog coverage, and comparison signals are still being
-refined. This release retains the current schema and Cloudflare hosting.
+Open [Course Warlock v2 Beta](https://warlock-v2.pages.dev/).
+This release retains the current schema and Cloudflare hosting.
 
 - Renamed the application and repository to Course Warlock v2 Beta and
   `warlock-v2`. The production API is `warlock.lumirth.workers.dev`;

@@ -4,11 +4,7 @@ Find University of Illinois Urbana-Champaign courses by code, topic, instructor,
 GenEd requirement, or meeting time. Search in your own words, refine the results,
 and open a course to compare its sections and follow the official listing.
 
-[Open course search](https://warlock-v2.pages.dev/)
-
-Course Warlock v2 is available now as a beta. Search interpretation, catalog
-coverage, and comparison signals are still being refined. Report a problem from
-the search or course page when a result looks wrong.
+[Open Course Warlock v2 Beta](https://warlock-v2.pages.dev/)
 
 Try `CS 225`, `400 level CS`, `humanities gen ed`, or `data structures with fagen`.
 Recognized constraints appear as removable filters. Advanced search lets you
@@ -27,7 +23,7 @@ where you found the problem.
 
 ## Run locally
 
-Use Node 22 or later and npm 10 or later. The lockfile fixes dependency versions.
+Use Node 22.13+ or Node 24+, with npm 10 or later. The lockfile fixes dependency versions.
 From a clone of this repository:
 
 ```bash

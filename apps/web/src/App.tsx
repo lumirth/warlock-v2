@@ -145,7 +145,7 @@ function App() {
       </main>
       <footer className="mt-8 border-t">
         <PageContainer className="text-muted-foreground flex flex-wrap justify-between gap-2 py-5 text-xs">
-          <p>Beta · Unofficial planning tool. Results may be incomplete; confirm details before registering.</p>
+          <p>Unofficial planning tool. Confirm details before registering.</p>
           <a
             href="https://courses.illinois.edu/"
             target="_blank"
